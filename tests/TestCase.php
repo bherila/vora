@@ -28,5 +28,13 @@ namespace Tests;
  */
 abstract class TestCase extends SafeTestCase
 {
-    //
+    /**
+     * Prepare each feature test.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutVite();
+    }
 }
