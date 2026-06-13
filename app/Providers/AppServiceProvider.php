@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
-use App\Models\ClientManagement\ClientCompany;
+use App\Models\User;
+use App\Services\Auth\VoraAuthUserPolicy;
+use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
@@ -18,7 +20,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // App-specific auth policy consumed by the bherila/auth-laravel package.
+        $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
     }
 
     /**
@@ -26,35 +29,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Register login event listener
+        // Keep last_login_at fresh on each login.
         Event::listen(Login::class, UpdateLastLoginDate::class);
 
-        // Admin gate - check if user has admin role
-        Gate::define('admin', function ($user) {
-            return $user->hasRole('admin');
-        });
-
-        // Alias for backward compatibility (uppercase)
-        Gate::define('Admin', function ($user) {
-            return $user->hasRole('admin');
-        });
-
-        // Gate for accessing client company resources
-        // User must be a member of the client company OR be an admin
-        Gate::define('ClientCompanyMember', function ($user, $clientCompanyId) {
-            // Admin users have access
-            if ($user->hasRole('admin')) {
-                return true;
-            }
-
-            // Check if user is a member of the client company
-            $company = ClientCompany::find($clientCompanyId);
-            if (! $company) {
-                return false;
-            }
-
-            return $company->users()->where('user_id', $user->id)->exists();
-        });
+        // Admin gate — user id 1 or the is_admin flag. Used by admin routes and the
+        // package's audit-log endpoints (see config/bherila-auth.php audit.admin_ability).
+        Gate::define('admin-only', fn (User $user): bool => $user->isAdmin());
 
         // Register the Spatie CSP middleware globally if the HTTP kernel is available.
         if ($this->app->bound(Kernel::class)) {

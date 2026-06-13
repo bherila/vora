@@ -1,6 +1,8 @@
-import {Laptop, Moon, Sun } from 'lucide-react';
+import { ChevronDown, Laptop, Moon, Sun } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
+
+import { fetchWrapper } from '@/fetchWrapper';
 
 type NavbarProps = {
   authenticated: boolean;
@@ -18,7 +20,11 @@ function applyTheme(mode: ThemeMode) {
 
 export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const toolsRef = useRef<HTMLLIElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const adminMenuRef = useRef<HTMLLIElement | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
 
   useEffect(() => {
@@ -30,6 +36,8 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
     const handler = (e: MouseEvent) => {
       if (!toolsRef.current) return;
       if (!toolsRef.current.contains(e.target as Node)) setToolsOpen(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setAdminMenuOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -45,6 +53,14 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await fetchWrapper.post('/logout', {});
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <nav className='mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4'>
       {/* Left: Branding + Main nav */}
@@ -54,11 +70,85 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
         </a>
         <ul className='hidden md:flex items-center gap-4 text-sm'>
           <li><a className='hover:underline underline-offset-4' href='/'>Home</a></li>
+          {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/dashboard'>Dashboard</a></li>
+          )}
+          {authenticated && isAdmin && (
+            <li className='relative' ref={adminMenuRef}>
+              <button
+                type='button'
+                className='flex items-center gap-1 hover:underline underline-offset-4'
+                onClick={() => setAdminMenuOpen((v) => !v)}
+                aria-expanded={adminMenuOpen}
+              >
+                Admin <ChevronDown className='w-3 h-3' />
+              </button>
+              {adminMenuOpen && (
+                <div className='absolute left-0 top-full mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19] z-50'>
+                  <a
+                    href='/admin/users'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Users
+                  </a>
+                  <a
+                    href='/admin/audit-log'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Audit log
+                  </a>
+                </div>
+              )}
+            </li>
+          )}
         </ul>
       </div>
 
-      {/* Right: Theme toggle */}
+      {/* Right: Auth links + Theme toggle */}
       <div className='flex items-center gap-3'>
+        {!authenticated ? (
+          <div className='flex items-center gap-2 text-sm'>
+            <a href='/login' className='hover:underline underline-offset-4'>Log in</a>
+            <a
+              href='/register'
+              className='rounded-md bg-foreground px-3 py-1.5 text-background hover:opacity-90'
+            >
+              Sign up
+            </a>
+          </div>
+        ) : (
+          <div className='relative' ref={userMenuRef}>
+            <button
+              type='button'
+              className='flex items-center gap-1 text-sm hover:underline underline-offset-4'
+              onClick={() => setUserMenuOpen((v) => !v)}
+              aria-expanded={userMenuOpen}
+            >
+              Account <ChevronDown className='w-3 h-3' />
+            </button>
+            {userMenuOpen && (
+              <div className='absolute right-0 top-full mt-1 w-44 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19] z-50'>
+                <a
+                  href='/user/settings'
+                  className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  Settings
+                </a>
+                <button
+                  type='button'
+                  className='w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                  onClick={() => void handleLogout()}
+                >
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tri-state theme toggle */}
         <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]'>
           <button

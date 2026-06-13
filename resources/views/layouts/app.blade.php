@@ -25,7 +25,7 @@
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
       <div id="navbar" 
         data-authenticated="{{ auth()->check() ? 'true' : 'false' }}" 
-        data-is-admin="{{ auth()->check() && (auth()->id() === 1 || auth()->user()->user_role === 'Admin') ? 'true' : 'false' }}" 
+        data-is-admin="{{ auth()->check() && auth()->user()->isAdmin() ? 'true' : 'false' }}"
       />
     </header>
 

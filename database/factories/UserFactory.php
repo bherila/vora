@@ -31,4 +31,45 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /**
+     * Admin-approved account ready to use the app.
+     */
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_admin' => true,
+            'approved_at' => now(),
+        ]);
+    }
+
+    /**
+     * Verified + admin-approved (non-admin) account.
+     */
+    public function approved(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'approved_at' => now(),
+        ]);
+    }
+
+    /**
+     * Verified but awaiting admin approval.
+     */
+    public function pendingApproval(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'approved_at' => null,
+        ]);
+    }
+
+    /**
+     * Hard-disabled / rejected account.
+     */
+    public function disabled(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_disabled' => true,
+        ]);
+    }
 }
