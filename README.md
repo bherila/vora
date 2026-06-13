@@ -4,7 +4,9 @@ A web application.
 
 ## Features
 
-- None yet
+- **Video media pipeline (infrastructure ready)** — Cloudflare R2 buckets and an out-of-band
+  HLS transcoder are provisioned for adaptive-bitrate video. The app-side upload/playback
+  feature is not built yet. See [docs/s3-hls-integration.md](docs/s3-hls-integration.md).
 
 ## Tech Stack
 
