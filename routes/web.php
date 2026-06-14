@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\InterestController;
 use Illuminate\Support\Facades\Route;
 
 // Home page (public).
@@ -56,6 +58,7 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
+    Route::get('/interests', [InterestController::class, 'index'])->name('interests');
 });
 
 /*
@@ -66,6 +69,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
+    Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
@@ -76,4 +80,15 @@ Route::middleware(['auth', 'can:admin-only'])->prefix('api/admin')->group(functi
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
+
+    Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
+    Route::post('/interests', [AdminInterestController::class, 'store']);
+    Route::put('/interests/{interest}', [AdminInterestController::class, 'update']);
+    Route::delete('/interests/{interest}', [AdminInterestController::class, 'destroy']);
+});
+
+Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
+    Route::get('/', [InterestController::class, 'apiIndex']);
+    Route::post('/{interest}/rate', [InterestController::class, 'rate']);
+    Route::delete('/{interest}/rate', [InterestController::class, 'destroyRate']);
 });
