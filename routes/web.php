@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\InterestController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +63,19 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     Route::get('/interests', [InterestController::class, 'index'])->name('interests');
+
+    // Media library + shareable single-media view.
+    Route::get('/media', [MediaController::class, 'library'])->name('media');
+    Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
+
+    Route::prefix('api/media')->group(function () {
+        Route::get('/', [MediaController::class, 'index']);
+        Route::post('/', [MediaController::class, 'store']);
+        Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
+        Route::post('/{media}/complete', [MediaController::class, 'complete']);
+        Route::get('/{media}', [MediaController::class, 'show']);
+        Route::delete('/{media}', [MediaController::class, 'destroy']);
+    });
 });
 
 /*
