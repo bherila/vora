@@ -6,7 +6,7 @@
     "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "bherila/auth-laravel": "^0.5",
         "erusev/parsedown": "^1.7",
         "laravel/framework": "^12.0",
