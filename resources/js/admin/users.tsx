@@ -29,7 +29,7 @@ interface AdminUser {
   is_disabled: boolean;
   is_approved: boolean;
   id_verified: boolean;
-  email_verified: boolean | null;
+  email_verified: boolean;
   name_locked: boolean;
   email_locked: boolean;
   approved_at: string | null;
@@ -203,6 +203,7 @@ function AdminUsersPage() {
                     {user.is_disabled && <Badge variant="destructive">Disabled</Badge>}
                     {!user.is_approved && <Badge variant="secondary">Pending</Badge>}
                     {user.email_verified && <Badge variant="outline">Verified</Badge>}
+                    {!user.email_verified && <Badge variant="outline">Email Unverified</Badge>}
                     {user.id_verified && <Badge>ID Verified</Badge>}
                     {user.name_locked && <Badge variant="outline">Name Locked</Badge>}
                     {user.email_locked && <Badge variant="outline">Email Locked</Badge>}
@@ -216,7 +217,8 @@ function AdminUsersPage() {
                     {!user.is_approved && (
                       <Button
                         size="sm"
-                        disabled={actionLoading === user.id}
+                        disabled={actionLoading === user.id || !user.email_verified}
+                        title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
                         onClick={() => void approveUser(user)}
                         data-test="admin-users-approve"
                       >

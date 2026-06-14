@@ -50,6 +50,13 @@ class AdminUserController extends Controller
      */
     public function approve(Request $request, User $user): JsonResponse
     {
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Users must verify their email before they can be approved.',
+            ], 422);
+        }
+
         $user->forceFill([
             'approved_at' => now(),
             'approved_by_user_id' => $request->user()->id,

@@ -69,6 +69,21 @@ class AdminUserTest extends TestCase
     }
 
     #[Test]
+    public function test_admin_cannot_approve_an_unverified_user(): void
+    {
+        $admin = $this->admin();
+        $pending = User::factory()->pendingApproval()->unverified()->create();
+
+        $this->actingAs($admin)->postJson("/api/admin/users/{$pending->id}/approve")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Users must verify their email before they can be approved.');
+
+        $pending->refresh();
+        $this->assertNull($pending->approved_at);
+        $this->assertNull($pending->email_verified_at);
+    }
+
+    #[Test]
     public function test_admin_can_toggle_admin_and_disabled_flags(): void
     {
         $admin = $this->admin();
