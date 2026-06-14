@@ -102,6 +102,25 @@ class MediaApiTest extends TestCase
         $response->assertJsonMissingPath('data.0.moderation_notes');
     }
 
+    public function test_index_is_paginated(): void
+    {
+        $this->fakeStorage();
+        config(['media.page_size' => 2]);
+        $user = User::factory()->approved()->create();
+        Media::factory()->for($user)->count(3)->create();
+
+        $this->actingAs($user)->getJson('/api/media')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('meta.has_more', true);
+
+        $this->actingAs($user)->getJson('/api/media?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.has_more', false);
+    }
+
     public function test_user_cannot_complete_or_delete_another_users_media(): void
     {
         $this->fakeStorage();
