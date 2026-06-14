@@ -79,6 +79,7 @@ class MediaController extends Controller
             'success' => true,
             'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
             'upload_url' => $result['upload_url'],
+            'upload_headers' => $result['upload_headers'],
         ], 201);
     }
 
@@ -92,7 +93,7 @@ class MediaController extends Controller
         if (! $this->uploads->completeUpload($media)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Uploaded file was not found in storage.',
+                'message' => 'Upload could not be verified — the file is missing or exceeds the size limit.',
             ], 422);
         }
 

@@ -18,7 +18,10 @@ class MediaApiTest extends TestCase
     private function fakeStorage(): void
     {
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('getSignedUploadUrl')->andReturn('https://r2.example/put');
+            $mock->shouldReceive('getSignedUploadUrl')->andReturn([
+                'url' => 'https://r2.example/put',
+                'headers' => ['Content-Type' => 'image/jpeg'],
+            ]);
             $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
             $mock->shouldReceive('get')->andReturn(null);
             $mock->shouldReceive('fileExists')->andReturn(true);
@@ -45,6 +48,7 @@ class MediaApiTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('success', true)
             ->assertJsonPath('upload_url', 'https://r2.example/put')
+            ->assertJsonPath('upload_headers.Content-Type', 'image/jpeg')
             ->assertJsonPath('data.upload_status', 'pending');
 
         // The owner response must never carry moderation state.

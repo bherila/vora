@@ -65,6 +65,31 @@ class AdminMediaApiTest extends TestCase
         ])->assertOk()->assertJsonPath('data.moderation_status', 'rejected');
     }
 
+    public function test_pending_uploads_are_excluded_from_review_queue(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        Media::factory()->create();                 // ready, reviewable
+        Media::factory()->pendingUpload()->create(); // not yet uploaded
+
+        $this->actingAs($admin)->getJson('/api/admin/media')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_cannot_moderate_a_pending_upload(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        $media = Media::factory()->pendingUpload()->create();
+
+        $this->actingAs($admin)->postJson("/api/admin/media/{$media->id}/moderate", [
+            'action' => 'approve',
+        ])->assertStatus(422);
+
+        $this->assertTrue($media->fresh()->isPendingReview());
+    }
+
     public function test_status_filter(): void
     {
         $this->fakeStorage();
