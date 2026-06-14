@@ -22,11 +22,19 @@
     <script>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen flex flex-col">
+    @php
+      $__currentUser = auth()->user();
+      $__isAuthenticated = ! is_null($__currentUser);
+      $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
+    @endphp
+    <script id="navbar-initial-data" type="application/json">
+      {!! json_encode([
+        'authenticated' => $__isAuthenticated,
+        'isAdmin' => $__isAdmin,
+      ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+    </script>
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
-      <div id="navbar" 
-        data-authenticated="{{ auth()->check() ? 'true' : 'false' }}" 
-        data-is-admin="{{ auth()->check() && auth()->user()->isAdmin() ? 'true' : 'false' }}"
-      />
+      <div id="navbar"></div>
     </header>
 
     <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
