@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6873f82dad374441c6958e5c555641b8",
+    "content-hash": "cf2063ef0862f82a6ec6418ed401c938",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -159,16 +159,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.4.3",
+            "version": "v0.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth.git",
-                "reference": "d2a78a33685f5e6b35c2b245d3ffc827c682bbb5"
+                "reference": "f5707cd42df725342c5926b6b762199b939a5b56"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth/zipball/d2a78a33685f5e6b35c2b245d3ffc827c682bbb5",
-                "reference": "d2a78a33685f5e6b35c2b245d3ffc827c682bbb5",
+                "url": "https://api.github.com/repos/bherila/auth/zipball/f5707cd42df725342c5926b6b762199b939a5b56",
+                "reference": "f5707cd42df725342c5926b6b762199b939a5b56",
                 "shasum": ""
             },
             "require": {
@@ -199,12 +199,12 @@
             },
             "autoload": {
                 "psr-4": {
-                    "BWH\\Auth\\": "laravel/src/"
+                    "BWH\\Auth\\": "php/src/"
                 }
             },
             "autoload-dev": {
                 "psr-4": {
-                    "BWH\\Auth\\Tests\\": "laravel/tests/"
+                    "BWH\\Auth\\Tests\\": "php/tests/"
                 }
             },
             "scripts": {
@@ -217,10 +217,10 @@
             ],
             "description": "Shared Laravel authentication services for BWH applications.",
             "support": {
-                "source": "https://github.com/bherila/auth/tree/v0.4.3",
+                "source": "https://github.com/bherila/auth/tree/v0.5.0",
                 "issues": "https://github.com/bherila/auth/issues"
             },
-            "time": "2026-06-08T05:54:47+00:00"
+            "time": "2026-06-14T00:53:17+00:00"
         },
         {
             "name": "brick/math",
