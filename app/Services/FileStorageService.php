@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use Aws\S3\S3Client;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -117,80 +116,5 @@ class FileStorageService
         } catch (\Exception) {
             return null;
         }
-    }
-
-    /**
-     * Begin a multipart upload and return its upload id. The browser then PUTs
-     * each part to a presigned URL (see presignUploadPart) and the server
-     * finalises with completeMultipartUpload.
-     */
-    public function createMultipartUpload(string $disk, string $key, string $contentType): string
-    {
-        $result = $this->client($disk)->createMultipartUpload([
-            'Bucket' => $this->bucket($disk),
-            'Key' => $key,
-            'ContentType' => $contentType,
-        ]);
-
-        return (string) $result['UploadId'];
-    }
-
-    /**
-     * Presigned URL the browser PUTs a single part to. Part numbers are 1-based.
-     */
-    public function presignUploadPart(string $disk, string $key, string $uploadId, int $partNumber, int $ttlMinutes = 60): string
-    {
-        $client = $this->client($disk);
-        $command = $client->getCommand('UploadPart', [
-            'Bucket' => $this->bucket($disk),
-            'Key' => $key,
-            'UploadId' => $uploadId,
-            'PartNumber' => $partNumber,
-        ]);
-
-        return (string) $client->createPresignedRequest($command, now()->addMinutes($ttlMinutes))->getUri();
-    }
-
-    /**
-     * Finalise a multipart upload from the per-part ETags the browser collected.
-     *
-     * @param  list<array{PartNumber: int, ETag: string}>  $parts
-     */
-    public function completeMultipartUpload(string $disk, string $key, string $uploadId, array $parts): bool
-    {
-        $this->client($disk)->completeMultipartUpload([
-            'Bucket' => $this->bucket($disk),
-            'Key' => $key,
-            'UploadId' => $uploadId,
-            'MultipartUpload' => ['Parts' => $parts],
-        ]);
-
-        return true;
-    }
-
-    /**
-     * Abort an in-flight multipart upload, discarding any uploaded parts.
-     */
-    public function abortMultipartUpload(string $disk, string $key, string $uploadId): bool
-    {
-        $this->client($disk)->abortMultipartUpload([
-            'Bucket' => $this->bucket($disk),
-            'Key' => $key,
-            'UploadId' => $uploadId,
-        ]);
-
-        return true;
-    }
-
-    /**
-     * The underlying S3 client for the disk (used for multipart, which Flysystem
-     * does not expose directly).
-     */
-    protected function client(string $disk): S3Client
-    {
-        $adapter = $this->storage($disk);
-
-        // @phpstan-ignore-next-line getClient() is provided by the S3 adapter.
-        return $adapter->getClient();
     }
 }
