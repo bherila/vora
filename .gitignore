@@ -4,6 +4,7 @@
 package-lock.json
 .env.backup
 .env.production
+.env.prod
 .phpactor.json
 .phpunit.result.cache
 /.fleet
