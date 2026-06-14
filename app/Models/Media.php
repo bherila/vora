@@ -31,6 +31,16 @@ class Media extends Model
     protected $table = 'media';
 
     /**
+     * HLS resolution fields are internal plumbing, not part of API responses.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'hls_content_id',
+        'hls_checked_at',
+    ];
+
+    /**
      * Owner-settable attributes only. Moderation columns are intentionally
      * excluded — they are written solely through the Moderatable trait.
      *
@@ -60,8 +70,18 @@ class Media extends Model
             'visibility' => Visibility::class,
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
+            'hls_checked_at' => 'datetime',
             'size_bytes' => 'integer',
         ];
+    }
+
+    /**
+     * Whether the transcoder has produced HLS output for this video (its
+     * content id has been resolved and cached).
+     */
+    public function isHlsReady(): bool
+    {
+        return $this->type === MediaType::Video && $this->hls_content_id !== null;
     }
 
     /**

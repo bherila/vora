@@ -4,8 +4,8 @@ export type ModerationStatusValue = 'pending' | 'approved' | 'rejected';
 
 export interface VideoStatus {
   status: 'processing' | 'ready' | 'not_applicable';
-  playback_url: string | null;
-  hls_root: string | null;
+  /** App-relative URL of the HLS playback proxy master playlist when ready. */
+  master_url: string | null;
 }
 
 export interface MediaInterest {

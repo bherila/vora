@@ -23,16 +23,25 @@ conventions — there is no shared database or API between them.
 
    containing (among other fields) an `hlsRoot` pointing at the master playlist,
    e.g. `by-id/<content-hash>/master.m3u8`.
-4. To play a video, the app reads that mapping
-   (`HlsMappingService::resolve()`):
+4. To play a video, the app resolves the mapping (`HlsService::ensureResolved()`),
+   caching the `contentId` on the media row:
    - **missing** → still `processing`;
-   - **present** → `ready`, and the playback URL is
-     `MEDIA_HLS_BASE_URL` + `hlsRoot`.
+   - **present** → `ready`, and the app exposes a `master_url` pointing at the
+     authenticated playback proxy.
 
-`MEDIA_HLS_BASE_URL` is the public/CDN base that serves the HLS-output bucket to
-browsers. Until it is set, the app reports videos as ready but cannot produce a
-playback URL; the frontend then falls back to a signed URL for the original
-source file.
+### Authenticated playback proxy
+
+Playback does **not** expose the HLS bucket publicly. `MediaController@streamHls`
+(`GET /api/media/{media}/hls/{path?}`, gated by `MediaPolicy@view`) serves it:
+
+- **Manifests** (`.m3u8`) are fetched from the HLS bucket and returned inline
+  with every child URI rewritten back through the proxy (so access stays gated
+  and relative URIs resolve).
+- **Segments / init** objects are **302-redirected** to short-lived presigned R2
+  URLs, so R2 — not the app — carries the segment bandwidth.
+
+The frontend points hls.js (or native HLS on Safari) at the `master_url` and
+falls back to a signed URL for the original source file on error.
 
 ## Content-hash deduplication and deletion
 
@@ -52,7 +61,7 @@ source maps to it.
 
 ## Playback notes
 
-`resources/js/media/MediaPlayer.tsx` plays HLS natively where the browser
-supports it (e.g. Safari) and otherwise falls back to the signed source URL.
-Adaptive HLS playback in other browsers (via a JS HLS player) is a possible
-future enhancement.
+`resources/js/media/HlsVideoPlayer.tsx` plays the adaptive HLS stream via hls.js
+(native HLS on Safari/iOS) against the proxy `master_url`, falling back to the
+signed source URL on unrecoverable error. The HLS bucket needs a CORS policy
+allowing `GET`/`HEAD` so the browser can fetch the 302-redirected segments.
