@@ -2,12 +2,19 @@ import { ChangePasswordForm, PasskeySection } from 'bwh-auth';
 import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ProfileOptionCheckboxGroup } from '@/components/profile-option-checkbox-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import {
+  GENDER_OPTIONS,
+  hasProfileOptionValue,
+  normalizeProfileSelections,
+  USER_TYPE_OPTIONS,
+} from '@/profile-options';
 
 import { getAuthComponents } from './shared-components';
 
@@ -16,6 +23,12 @@ interface UserSettingsInitialData {
   display_name: string;
   birth_date: string;
   email: string;
+  gender: string;
+  gender_other: string;
+  user_type: string;
+  user_type_other: string;
+  preferred_user_types: string[];
+  preferred_genders: string[];
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
@@ -28,6 +41,12 @@ interface UserSettingsResponse {
     name: string;
     display_name: string;
     email: string;
+    gender: string;
+    gender_other: string | null;
+    user_type: string;
+    user_type_other: string | null;
+    preferred_user_types: string[];
+    preferred_genders: string[];
   };
 }
 
@@ -39,6 +58,12 @@ function getInitialData(): UserSettingsInitialData {
       display_name: '',
       birth_date: '',
       email: '',
+      gender: 'male',
+      gender_other: '',
+      user_type: 'human',
+      user_type_other: '',
+      preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, null),
+      preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, null),
       id_verified_at: null,
       name_locked: false,
       email_locked: false,
@@ -52,6 +77,12 @@ function getInitialData(): UserSettingsInitialData {
       display_name: parsed.display_name ?? '',
       birth_date: parsed.birth_date ?? '',
       email: parsed.email ?? '',
+      gender: parsed.gender ?? 'male',
+      gender_other: parsed.gender_other ?? '',
+      user_type: parsed.user_type ?? 'human',
+      user_type_other: parsed.user_type_other ?? '',
+      preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, parsed.preferred_user_types),
+      preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, parsed.preferred_genders),
       id_verified_at: parsed.id_verified_at ?? null,
       name_locked: parsed.name_locked ?? false,
       email_locked: parsed.email_locked ?? false,
@@ -62,6 +93,12 @@ function getInitialData(): UserSettingsInitialData {
       display_name: '',
       birth_date: '',
       email: '',
+      gender: 'male',
+      gender_other: '',
+      user_type: 'human',
+      user_type_other: '',
+      preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, null),
+      preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, null),
       id_verified_at: null,
       name_locked: false,
       email_locked: false,
@@ -76,6 +113,12 @@ function UserSettingsPage() {
   const [accountDisplayName, setAccountDisplayName] = useState(initialData.display_name);
   const [accountBirthDate] = useState(initialData.birth_date);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
+  const [accountGender, setAccountGender] = useState(initialData.gender);
+  const [accountGenderOther, setAccountGenderOther] = useState(initialData.gender_other);
+  const [accountUserType, setAccountUserType] = useState(initialData.user_type);
+  const [accountUserTypeOther, setAccountUserTypeOther] = useState(initialData.user_type_other);
+  const [preferredUserTypes, setPreferredUserTypes] = useState(initialData.preferred_user_types);
+  const [preferredGenders, setPreferredGenders] = useState(initialData.preferred_genders);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
@@ -97,6 +140,36 @@ function UserSettingsPage() {
       return;
     }
 
+    if (!hasProfileOptionValue(USER_TYPE_OPTIONS, accountUserType)) {
+      setAccountError('Please choose a user type.');
+      return;
+    }
+
+    if (accountUserType === 'other' && accountUserTypeOther.trim().length === 0) {
+      setAccountError('Please specify your user type when choosing Other.');
+      return;
+    }
+
+    if (!hasProfileOptionValue(GENDER_OPTIONS, accountGender)) {
+      setAccountError('Please choose a gender option.');
+      return;
+    }
+
+    if (accountGender === 'other' && accountGenderOther.trim().length === 0) {
+      setAccountError('Please specify your gender when choosing Other.');
+      return;
+    }
+
+    if (preferredUserTypes.length === 0) {
+      setAccountError('Please choose at least one user type you want to see.');
+      return;
+    }
+
+    if (preferredGenders.length === 0) {
+      setAccountError('Please choose at least one gender you want to see.');
+      return;
+    }
+
     setAccountSaving(true);
     setAccountError('');
     setAccountMessage('');
@@ -106,6 +179,12 @@ function UserSettingsPage() {
         name,
         display_name: displayName,
         email,
+        gender: accountGender,
+        gender_other: accountGender === 'other' ? accountGenderOther.trim() : '',
+        user_type: accountUserType,
+        user_type_other: accountUserType === 'other' ? accountUserTypeOther.trim() : '',
+        preferred_user_types: preferredUserTypes,
+        preferred_genders: preferredGenders,
       }) as UserSettingsResponse;
 
       setAccountMessage(response.message ?? 'Account updated.');
@@ -113,6 +192,12 @@ function UserSettingsPage() {
         setAccountName(response.data.name);
         setAccountDisplayName(response.data.display_name);
         setAccountEmail(response.data.email);
+        setAccountGender(response.data.gender);
+        setAccountGenderOther(response.data.gender_other ?? '');
+        setAccountUserType(response.data.user_type);
+        setAccountUserTypeOther(response.data.user_type_other ?? '');
+        setPreferredUserTypes(response.data.preferred_user_types);
+        setPreferredGenders(response.data.preferred_genders);
       }
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to update account.');
@@ -186,6 +271,72 @@ function UserSettingsPage() {
                 required
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="account-user-type">User type</Label>
+              <select
+                id="account-user-type"
+                value={accountUserType}
+                onChange={(event) => setAccountUserType(event.target.value)}
+                required
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {USER_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            {accountUserType === 'other' && (
+              <div className="space-y-1">
+                <Label htmlFor="account-user-type-other">Other user type</Label>
+                <Input
+                  id="account-user-type-other"
+                  value={accountUserTypeOther}
+                  onChange={(event) => setAccountUserTypeOther(event.target.value)}
+                  required
+                />
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor="account-gender">Gender</Label>
+              <select
+                id="account-gender"
+                value={accountGender}
+                onChange={(event) => setAccountGender(event.target.value)}
+                required
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            {accountGender === 'other' && (
+              <div className="space-y-1">
+                <Label htmlFor="account-gender-other">Other gender</Label>
+                <Input
+                  id="account-gender-other"
+                  value={accountGenderOther}
+                  onChange={(event) => setAccountGenderOther(event.target.value)}
+                  required
+                />
+              </div>
+            )}
+            <ProfileOptionCheckboxGroup
+              legend="User types you want to see"
+              description="Used for discovery and matching. You can update this at any time."
+              name="account-preferred-user-types"
+              options={USER_TYPE_OPTIONS}
+              values={preferredUserTypes}
+              onChange={setPreferredUserTypes}
+            />
+            <ProfileOptionCheckboxGroup
+              legend="Genders you want to see"
+              description="Used for discovery and matching. You can update this at any time."
+              name="account-preferred-genders"
+              options={GENDER_OPTIONS}
+              values={preferredGenders}
+              onChange={setPreferredGenders}
+            />
             <p className="text-sm text-muted-foreground">
               {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
             </p>

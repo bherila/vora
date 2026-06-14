@@ -17,6 +17,26 @@ class AuthFlowTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function validRegistrationPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'name' => 'Test User',
+            'display_name' => 'Test',
+            'birth_date' => today()->subYears(21)->toDateString(),
+            'email' => 'test@example.com',
+            'gender' => 'male',
+            'user_type' => 'human',
+            'preferred_user_types' => ['human', 'furry', 'other'],
+            'preferred_genders' => ['male', 'female', 'other'],
+            'password' => 'password-123',
+            'password_confirmation' => 'password-123',
+        ], $overrides);
+    }
+
     // ─── Registration ───────────────────────────────────────
 
     #[Test]
@@ -24,15 +44,14 @@ class AuthFlowTest extends TestCase
     {
         Event::fake([Registered::class]);
 
-        $response = $this->post('/register', [
+        $response = $this->post('/register', $this->validRegistrationPayload([
             'name' => 'First User',
             'display_name' => 'First',
-            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'first@example.com',
-            'gender' => 'm',
-            'password' => 'password-123',
-            'password_confirmation' => 'password-123',
-        ]);
+            'user_type' => 'furry',
+            'preferred_user_types' => ['furry', 'other'],
+            'preferred_genders' => ['female', 'other'],
+        ]));
 
         $response->assertRedirect(route('verification.notice'));
         Event::assertDispatched(Registered::class);
@@ -42,6 +61,10 @@ class AuthFlowTest extends TestCase
         $this->assertTrue($user->isAdmin());
         $this->assertSame('First', $user->display_name);
         $this->assertSame(today()->subYears(21)->toDateString(), $user->birth_date?->toDateString());
+        $this->assertSame('male', $user->gender);
+        $this->assertSame('furry', $user->user_type);
+        $this->assertSame(['furry', 'other'], $user->preferred_user_types);
+        $this->assertSame(['female', 'other'], $user->preferred_genders);
         $this->assertNotNull($user->approved_at);
         $this->assertAuthenticatedAs($user);
     }
@@ -51,15 +74,11 @@ class AuthFlowTest extends TestCase
     {
         User::factory()->admin()->create();
 
-        $this->post('/register', [
+        $this->post('/register', $this->validRegistrationPayload([
             'name' => 'Second User',
             'display_name' => 'Second',
-            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'second@example.com',
-            'gender' => 'm',
-            'password' => 'password-123',
-            'password_confirmation' => 'password-123',
-        ])->assertRedirect(route('verification.notice', ['signup_status' => 'pending-approval']));
+        ]))->assertRedirect(route('verification.notice', ['signup_status' => 'pending-approval']));
 
         $user = User::firstWhere('email', 'second@example.com');
         $this->assertFalse($user->isAdmin());
@@ -71,15 +90,12 @@ class AuthFlowTest extends TestCase
     #[Test]
     public function test_underage_registration_is_rejected(): void
     {
-        $this->post('/register', [
+        $this->post('/register', $this->validRegistrationPayload([
             'name' => 'Underage User',
             'display_name' => 'Too Young',
             'birth_date' => today()->subYears(18)->addDay()->toDateString(),
             'email' => 'underage@example.com',
-            'gender' => 'm',
-            'password' => 'password-123',
-            'password_confirmation' => 'password-123',
-        ])->assertSessionHasErrors('birth_date');
+        ]))->assertSessionHasErrors('birth_date');
 
         $this->assertDatabaseMissing('users', ['email' => 'underage@example.com']);
     }
@@ -87,17 +103,38 @@ class AuthFlowTest extends TestCase
     #[Test]
     public function test_registration_rejects_timestamp_birth_date(): void
     {
-        $this->post('/register', [
+        $this->post('/register', $this->validRegistrationPayload([
             'name' => 'Timestamp User',
             'display_name' => 'Timestamp',
             'birth_date' => '1990-01-15T00:00:00Z',
             'email' => 'timestamp@example.com',
-            'gender' => 'm',
-            'password' => 'password-123',
-            'password_confirmation' => 'password-123',
-        ])->assertSessionHasErrors('birth_date');
+        ]))->assertSessionHasErrors('birth_date');
 
         $this->assertDatabaseMissing('users', ['email' => 'timestamp@example.com']);
+    }
+
+    #[Test]
+    public function test_registration_requires_discovery_preferences(): void
+    {
+        $this->post('/register', $this->validRegistrationPayload([
+            'email' => 'missing-preferences@example.com',
+            'preferred_user_types' => [],
+            'preferred_genders' => [],
+        ]))->assertSessionHasErrors(['preferred_user_types', 'preferred_genders']);
+
+        $this->assertDatabaseMissing('users', ['email' => 'missing-preferences@example.com']);
+    }
+
+    #[Test]
+    public function test_registration_requires_other_descriptions(): void
+    {
+        $this->post('/register', $this->validRegistrationPayload([
+            'email' => 'other-required@example.com',
+            'gender' => 'other',
+            'user_type' => 'other',
+        ]))->assertSessionHasErrors(['gender_other', 'user_type_other']);
+
+        $this->assertDatabaseMissing('users', ['email' => 'other-required@example.com']);
     }
 
     #[Test]
@@ -105,15 +142,11 @@ class AuthFlowTest extends TestCase
     {
         Notification::fake();
 
-        $this->post('/register', [
+        $this->post('/register', $this->validRegistrationPayload([
             'name' => 'Notification User',
             'display_name' => 'Notify',
-            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'verifyme@example.com',
-            'gender' => 'm',
-            'password' => 'password-123',
-            'password_confirmation' => 'password-123',
-        ]);
+        ]));
 
         $user = User::firstWhere('email', 'verifyme@example.com');
         $this->assertNotNull($user);
