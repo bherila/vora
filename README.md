@@ -1,202 +1,108 @@
-# Ben Herila's Skeleton Project
+# Vora
 
-A web application.
+A Laravel + React application with approval-gated accounts, admin-managed interest
+taxonomy, and user interest ratings.
 
 ## Features
 
-- **Video media pipeline (infrastructure ready)** — Cloudflare R2 buckets and an out-of-band
-  HLS transcoder are provisioned for adaptive-bitrate video. The app-side upload/playback
-  feature is not built yet. See [docs/s3-hls-integration.md](docs/s3-hls-integration.md).
+- **Approval-gated registration**: users register, verify their email, then wait
+  for admin approval before accessing the app.
+- **Account settings**: users can update editable account fields, change
+  password, and manage passkeys. Admins can lock name/email edits and manually
+  record ID verification.
+- **Admin users**: admins can view users, approve verified users, toggle admin
+  and disabled flags, and manage lock/verification fields.
+- **Interests**: admins define a hierarchical interest catalog. Users browse the
+  hierarchy and rate each predefined interest from `-10` to `+10`.
+- **Interest requests**: users can request new interests for admin review.
+  Admins can edit, approve, reject, or delete pending requests.
+- **Audit log**: auth audit data is available through the admin UI.
+- **Video media pipeline (infrastructure ready)**: Cloudflare R2 buckets and an
+  out-of-band HLS transcoder are provisioned for adaptive-bitrate video. The
+  app-side upload/playback feature is not built yet. See
+  [docs/s3-hls-integration.md](docs/s3-hls-integration.md).
 
 ## Tech Stack
 
-- **Backend**: Laravel 12 (PHP 8.1+)
-- **Frontend**: React 19 with TypeScript
-- **UI Components**: shadcn/ui + Radix UI primitives
+- **Backend**: Laravel 12 on PHP `^8.2`
+- **Frontend**: React 19 + TypeScript
+- **UI**: shadcn-style components using Base UI primitives
 - **Styling**: Tailwind CSS v4
 - **Build**: Vite
-- **Database**: MySQL/SQLite
+- **Package managers**: Composer and pnpm
+- **Database**: configured by `.env`; tests always use SQLite in-memory
 
 ## Getting Started
 
-### Prerequisites
-
-- PHP 8.1 or higher
-- Composer
-- Node.js 18+ and pnpm
-- MySQL or SQLite
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd k1flow
-   ```
-
-2. **Install dependencies**
-   ```bash
-   composer install
-   pnpm install
-   ```
-
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   php artisan key:generate
-   ```
-   
-   Update `.env` with your database credentials.
-
-4. **Run migrations**
-   ```bash
-   php artisan migrate
-   ```
-
-5. **Build assets**
-   ```bash
-   pnpm run build
-   ```
-
-### Development
-
-Run the development server:
 ```bash
-# Start Laravel server and Vite dev server concurrently
-pnpm run dev
-php artisan serve
+composer install
+pnpm install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Or use multiple terminals:
-- Terminal 1: `php artisan serve`
-- Terminal 2: `pnpm run dev`
+Configure `.env`, then run migrations when you intend to update that database:
 
-## Database Schema
+```bash
+php artisan migrate
+```
 
-### Core Tables
+Start development services:
 
-- None yet
+```bash
+composer dev
+```
 
-## API Endpoints
+Or run them separately:
 
-- None yet
+```bash
+php artisan serve
+pnpm run dev
+```
+
+## Validation
+
+Frontend:
+
+```bash
+pnpm run type-check
+pnpm run lint
+pnpm run test
+pnpm run build
+```
+
+Backend:
+
+```bash
+./vendor/bin/pint --test
+composer test
+```
+
+Tests are configured to use SQLite in-memory regardless of local `.env`
+database credentials. This is enforced by `phpunit.xml` and `Tests\SafeTestCase`.
+
+## Key Routes
+
+- `/register`, `/login`, `/email/verify`, `/pending-approval`
+- `/dashboard`
+- `/user/settings`
+- `/interests`
+- `/admin/users`
+- `/admin/interests`
+- `/admin/audit-log`
 
 ## Deployment
 
-See [Deployment Instructions](#deployment-instructions) below for deploying to a cPanel-hosted Apache server.
-
-### Deployment Instructions
-
-1. **Upload Project Files**
-   - Upload all project files to your server, excluding `node_modules/`, `vendor/`, and `.env`
-   - Place files in a directory outside of `public_html`, e.g., `~/bwh-php/`
-
-2. **Install Dependencies**
-   ```bash
-   cd ~/bwh-php
-   composer install --no-dev --optimize-autoloader
-   pnpm install
-   pnpm run build
-   ```
-
-3. **Configure Environment**
-   - Create `.env` and configure database, `APP_KEY`, and `APP_URL`
-
-4. **Set Up Public Directory**
-   - Copy `~/bwh-php/public/` contents to `~/public_html/`
-   - Update `index.php` paths as needed
-
-5. **Database Setup**
-   ```bash
-   php artisan migrate --force
-   ```
-
-6. **Set Permissions**
-   ```bash
-   chmod -R 775 storage bootstrap/cache
-   ```
-
-7. **Cache Configuration**
-   ```bash
-   php artisan config:cache
-   php artisan route:cache
-   php artisan view:cache
-   ```
-
-## Testing
-
-### Running Tests
+The GitHub Actions deployment workflow installs Composer and pnpm dependencies,
+builds Vite assets, syncs the Laravel app to the server, and runs:
 
 ```bash
-# Run all PHP tests
-composer test
-
-# Or directly with artisan
-php artisan test
-
-# Run specific test file
-php artisan test tests/Feature/ExampleTest.php
-
-# Run with coverage (requires Xdebug)
-php artisan test --coverage
+php artisan migrate --force --no-interaction
+php artisan config:clear
+php artisan config:cache
 ```
 
-### Database Safety
-
-**Important:** Tests are configured to ALWAYS use SQLite in-memory database, never MySQL.
-
-This is enforced at multiple levels:
-1. `phpunit.xml` sets `DB_CONNECTION=sqlite` and `DB_DATABASE=:memory:`
-2. `Tests\SafeTestCase` verifies SQLite is active and throws an error if not
-
-Even if your `.env` file contains MySQL credentials, tests will use SQLite. This prevents accidentally running tests against a production database.
-
-### Writing Tests
-
-**Feature Tests** (tests that need the Laravel application):
-```php
-namespace Tests\Feature;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
-
-class MyFeatureTest extends TestCase
-{
-    use RefreshDatabase; // Safe to use - only affects SQLite in-memory
-
-    public function test_something(): void
-    {
-        // Your test code here
-    }
-}
-```
-
-**Unit Tests** (pure PHP tests without Laravel):
-```php
-namespace Tests\Unit;
-
-use PHPUnit\Framework\TestCase;
-
-class MyUnitTest extends TestCase
-{
-    public function test_something(): void
-    {
-        // Your test code here
-    }
-}
-```
-
-### Test Structure
-
-```
-tests/
-├── Feature/           # Tests requiring full Laravel application
-│   └── ExampleTest.php
-├── Unit/              # Pure PHP unit tests
-│   └── ExampleTest.php
-├── SafeTestCase.php   # Base class enforcing SQLite safety
-└── TestCase.php       # Base class for feature tests
-```
+See `.github/workflows/deploy.yml` for the current production deployment flow.
 
 ## License
 
