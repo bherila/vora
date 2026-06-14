@@ -1,9 +1,18 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast, Toaster } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { fetchWrapper } from '@/fetchWrapper';
 
 interface UserInterest {
@@ -16,6 +25,11 @@ interface UserInterest {
 
 interface TreeInterest extends UserInterest {
   children: TreeInterest[];
+}
+
+interface TableInterestRow {
+  interest: UserInterest;
+  depth: number;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -51,6 +65,19 @@ function buildInterestTree(interests: UserInterest[]): TreeInterest[] {
   return roots;
 }
 
+function flattenInterestTree(nodes: TreeInterest[], depth = 0): TableInterestRow[] {
+  const rows: TableInterestRow[] = [];
+
+  for (const node of nodes) {
+    rows.push({ interest: { ...node }, depth });
+    if (node.children.length > 0) {
+      rows.push(...flattenInterestTree(node.children, depth + 1));
+    }
+  }
+
+  return rows;
+}
+
 function UserInterestsPage() {
   const [interests, setInterests] = useState<UserInterest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,17 +107,29 @@ function UserInterestsPage() {
     void loadInterests();
   }, []);
 
-  const tree = useMemo<TreeInterest[]>(() => buildInterestTree(interests), [interests]);
+  const rows = useMemo<TableInterestRow[]>(() => flattenInterestTree(buildInterestTree(interests)), [interests]);
 
   const saveRating = async (event: FormEvent<HTMLFormElement>, id: number): Promise<void> => {
     event.preventDefault();
+    const nextRating = ratings[id] ?? 0;
+
     setSaving((current) => ({ ...current, [id]: true }));
     setError('');
     try {
       await fetchWrapper.post(`/api/interests/${id}/rate`, {
-        level: ratings[id] ?? 0,
+        level: nextRating,
       });
-      await loadInterests();
+
+      setInterests((current) => current.map((interest) => (
+        interest.id === id
+          ? {
+            ...interest,
+            rating: nextRating,
+          }
+          : interest
+      )));
+
+      toast.success('Interest rating saved.');
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -103,8 +142,21 @@ function UserInterestsPage() {
     setError('');
     try {
       await fetchWrapper.delete(`/api/interests/${id}/rate`, {});
-      setRatings((current) => ({ ...current, [id]: 0 }));
-      await loadInterests();
+
+      setRatings((current) => ({
+        ...current,
+        [id]: 0,
+      }));
+      setInterests((current) => current.map((interest) => (
+        interest.id === id
+          ? {
+            ...interest,
+            rating: null,
+          }
+          : interest
+      )));
+
+      toast.success('Interest rating cleared.');
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -112,57 +164,8 @@ function UserInterestsPage() {
     }
   };
 
-  const renderNode = (node: TreeInterest, depth = 0) => (
-    <li key={node.id} className="rounded border border-border bg-background p-3">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="font-medium" style={{ marginLeft: `${depth * 1.25}rem` }}>
-              {node.name}
-            </p>
-            {node.description && <p className="text-sm text-muted-foreground">{node.description}</p>}
-          </div>
-        </div>
-        <form onSubmit={(event) => void saveRating(event, node.id)} className="flex flex-wrap items-center gap-3">
-          <label className="grid gap-1">
-            <span className="text-xs text-muted-foreground">Your level (-10 to 10)</span>
-            <Input
-              type="range"
-              min={-10}
-              max={10}
-              value={ratings[node.id] ?? 0}
-              onChange={(event) => setRatings((current) => ({ ...current, [node.id]: Number(event.target.value) }))}
-              className="w-56"
-            />
-          </label>
-          <Input
-            type="number"
-            min={-10}
-            max={10}
-            value={ratings[node.id] ?? 0}
-            onChange={(event) => setRatings((current) => ({ ...current, [node.id]: Number(event.target.value) }))}
-            className="w-20"
-          />
-          <Button type="submit" size="sm" disabled={saving[node.id]}>
-            {saving[node.id] ? 'Saving…' : 'Save'}
-          </Button>
-          {interests.find((interest) => interest.id === node.id)?.rating !== null && (
-            <Button type="button" size="sm" variant="outline" onClick={() => void clearRating(node.id)}>
-              Clear
-            </Button>
-          )}
-        </form>
-      </div>
-      {node.children.length > 0 && (
-        <ul className="mt-3 space-y-2 pl-6">
-          {node.children.map((child) => renderNode(child, depth + 1))}
-        </ul>
-      )}
-    </li>
-  );
-
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-4 text-2xl font-bold">Interests</h1>
       <p className="mb-6 text-muted-foreground">
         Browse all interests and rate them on a scale from -10 (fully uninterested) to +10 (fully interested).
@@ -184,12 +187,72 @@ function UserInterestsPage() {
             <CardTitle>Available Interests</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
-              {tree.map((node) => renderNode(node))}
-            </ul>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Interest</TableHead>
+                  <TableHead className="w-[460px] text-right">Your rating</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map(({ interest, depth }) => {
+                  const rowRating = ratings[interest.id] ?? 0;
+                  return (
+                    <TableRow key={interest.id}>
+                      <TableCell>
+                        <div className="space-y-1" style={{ marginLeft: `${depth * 1.25}rem` }}>
+                          <p className="font-medium">{interest.name}</p>
+                          {interest.description && <p className="text-sm text-muted-foreground">{interest.description}</p>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <form
+                          onSubmit={(event) => void saveRating(event, interest.id)}
+                          className="flex items-center justify-end gap-3"
+                        >
+                          <label className="grid gap-1 text-left">
+                            <span className="text-xs text-muted-foreground">Level (-10 to 10)</span>
+                            <Input
+                              type="range"
+                              min={-10}
+                              max={10}
+                              value={rowRating}
+                              onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
+                              className="w-48"
+                            />
+                          </label>
+                          <Input
+                            type="number"
+                            min={-10}
+                            max={10}
+                            value={rowRating}
+                            onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
+                            className="w-20"
+                          />
+                          <Button type="submit" size="sm" disabled={saving[interest.id]}>
+                            {saving[interest.id] ? 'Saving…' : 'Save'}
+                          </Button>
+                          {interest.rating !== null && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void clearRating(interest.id)}
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </form>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }
