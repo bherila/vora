@@ -49,6 +49,110 @@ class MediaUploadService
         Visibility $visibility,
         array $interestIds,
     ): array {
+        $media = $this->persistPending($user, $type, $filename, $mimeType, $title, $visibility, $interestIds);
+
+        $signed = $this->storage->getSignedUploadUrl(
+            $media->disk,
+            $media->object_key,
+            $mimeType,
+            (int) config('media.upload_url_ttl', 30),
+        );
+
+        return [
+            'media' => $media,
+            'upload_url' => $signed['url'],
+            'upload_headers' => $signed['headers'],
+        ];
+    }
+
+    /**
+     * Create a pending record and begin a multipart upload for large files. The
+     * client uploads each part to a presigned URL (presignPart) and finalises
+     * with completeMultipart.
+     *
+     * @param  list<int>  $interestIds
+     * @return array{media: Media, upload_id: string, part_size: int}
+     */
+    public function createPendingMultipart(
+        User $user,
+        MediaType $type,
+        string $filename,
+        string $mimeType,
+        ?string $title,
+        Visibility $visibility,
+        array $interestIds,
+    ): array {
+        $media = $this->persistPending($user, $type, $filename, $mimeType, $title, $visibility, $interestIds);
+
+        $uploadId = $this->storage->createMultipartUpload($media->disk, $media->object_key, $mimeType);
+
+        return [
+            'media' => $media,
+            'upload_id' => $uploadId,
+            'part_size' => (int) config('media.multipart_part_size', 16 * 1024 * 1024),
+        ];
+    }
+
+    /**
+     * Presign one part of an in-flight multipart upload (part numbers are 1-based).
+     */
+    public function presignPart(Media $media, string $uploadId, int $partNumber): string
+    {
+        return $this->storage->presignUploadPart(
+            $media->disk,
+            $media->object_key,
+            $uploadId,
+            $partNumber,
+            (int) config('media.upload_url_ttl', 30),
+        );
+    }
+
+    /**
+     * Finalise a multipart upload, then run the standard completion checks
+     * (size/limit verification, mark ready, (re)enter review).
+     *
+     * @param  list<array{PartNumber: int, ETag: string}>  $parts
+     */
+    public function completeMultipart(Media $media, string $uploadId, array $parts): bool
+    {
+        if ($media->isReady()) {
+            return true;
+        }
+
+        $this->storage->completeMultipartUpload($media->disk, $media->object_key, $uploadId, $parts);
+
+        return $this->completeUpload($media);
+    }
+
+    /**
+     * Abort an in-flight multipart upload and discard the pending record.
+     */
+    public function abortMultipart(Media $media, string $uploadId): void
+    {
+        try {
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $uploadId);
+        } catch (\Throwable) {
+            // The upload may already be gone; drop the record regardless.
+        }
+
+        $media->delete();
+    }
+
+    /**
+     * Persist a pending media row plus its interests, and remember the user's
+     * interest selection. Shared by the single-PUT and multipart entry points.
+     *
+     * @param  list<int>  $interestIds
+     */
+    private function persistPending(
+        User $user,
+        MediaType $type,
+        string $filename,
+        string $mimeType,
+        ?string $title,
+        Visibility $visibility,
+        array $interestIds,
+    ): Media {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
 
@@ -74,18 +178,7 @@ class MediaUploadService
         $user->last_media_interest_ids = array_values($interestIds);
         $user->save();
 
-        $signed = $this->storage->getSignedUploadUrl(
-            $media->disk,
-            $key,
-            $mimeType,
-            (int) config('media.upload_url_ttl', 30),
-        );
-
-        return [
-            'media' => $media,
-            'upload_url' => $signed['url'],
-            'upload_headers' => $signed['headers'],
-        ];
+        return $media;
     }
 
     /**

@@ -63,6 +63,31 @@ The app never serves object bytes itself. `FileStorageService` issues:
 
 Their lifetimes are `MEDIA_UPLOAD_URL_TTL` and `MEDIA_VIEW_URL_TTL` minutes.
 
+## Uploads: single PUT vs multipart
+
+Files smaller than `MEDIA_MULTIPART_THRESHOLD` (default 100 MiB) upload with a
+single presigned PUT. Larger files use a **presigned multipart upload**: the
+server initiates it (`createMultipartUpload`), the browser uploads chunks of
+`MEDIA_MULTIPART_PART_SIZE` (default 16 MiB) each to a presigned part URL with
+per-part retry, then the server finalises (`completeMultipartUpload`) or aborts.
+
+Two R2 prerequisites for multipart in the browser:
+
+- **CORS** on the upload bucket must allow `PUT` from the app origin **and expose
+  the `ETag` response header** (`ExposeHeaders: ["ETag"]`) — the client needs each
+  part's ETag to complete the upload.
+- A short **lifecycle rule** to abort incomplete multipart uploads (e.g. after
+  1 day) is recommended so abandoned parts don't accrue storage cost. This is the
+  backstop for the object side of orphan cleanup (see below).
+
+## Orphan cleanup
+
+The upload flow creates a `pending` row before the object lands, so abandoned
+uploads can leave orphans. The scheduled `media:prune-orphans` command (hourly)
+deletes `pending` rows older than `--hours` (default 24) and removes any object
+they left behind. Truly orphaned objects with no row are handled by the R2
+lifecycle rule above.
+
 ## CSP
 
 `app/Csp/CloudflareCspPolicy.php` adds the configured R2 endpoint origins to
