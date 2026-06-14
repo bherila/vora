@@ -26,7 +26,20 @@ class AdminUserController extends Controller
     {
         $users = User::query()
             ->orderByDesc('id')
-            ->get(['id', 'name', 'email', 'is_admin', 'is_disabled', 'approved_at', 'email_verified_at', 'last_login_at', 'created_at'])
+            ->get([
+                'id',
+                'name',
+                'email',
+                'is_admin',
+                'is_disabled',
+                'approved_at',
+                'email_verified_at',
+                'id_verified_at',
+                'name_locked',
+                'email_locked',
+                'last_login_at',
+                'created_at',
+            ])
             ->map(fn (User $u): array => $this->present($u));
 
         return response()->json(['success' => true, 'data' => $users]);
@@ -37,6 +50,13 @@ class AdminUserController extends Controller
      */
     public function approve(Request $request, User $user): JsonResponse
     {
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Users must verify their email before they can be approved.',
+            ], 422);
+        }
+
         $user->forceFill([
             'approved_at' => now(),
             'approved_by_user_id' => $request->user()->id,
@@ -66,6 +86,18 @@ class AdminUserController extends Controller
                 return $this->forbidden('The primary admin cannot be modified.');
             }
             $user->is_admin = (bool) $data['is_admin'];
+        }
+
+        if (array_key_exists('name_locked', $data)) {
+            $user->name_locked = (bool) $data['name_locked'];
+        }
+
+        if (array_key_exists('email_locked', $data)) {
+            $user->email_locked = (bool) $data['email_locked'];
+        }
+
+        if (array_key_exists('id_verified', $data)) {
+            $user->id_verified_at = (bool) $data['id_verified'] ? now() : null;
         }
 
         $user->save();
@@ -100,6 +132,10 @@ class AdminUserController extends Controller
             'is_disabled' => (bool) $user->is_disabled,
             'is_approved' => $user->isApproved(),
             'email_verified' => $user->hasVerifiedEmail(),
+            'id_verified' => $user->id_verified_at !== null,
+            'name_locked' => (bool) $user->name_locked,
+            'email_locked' => (bool) $user->email_locked,
+            'id_verified_at' => $user->id_verified_at?->toIso8601String(),
             'approved_at' => $user->approved_at?->toIso8601String(),
             'last_login_at' => $user->last_login_at?->toIso8601String(),
             'created_at' => $user->created_at?->toIso8601String(),

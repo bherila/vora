@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -23,6 +24,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'email',
         'password',
+        'gender',
+        'gender_other',
         'last_login_at',
     ];
 
@@ -43,9 +46,12 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'approved_at' => 'datetime',
+            'id_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
+            'name_locked' => 'boolean',
+            'email_locked' => 'boolean',
             'force_change_pw' => 'boolean',
         ];
     }
@@ -98,5 +104,21 @@ class User extends Authenticatable implements MustVerifyEmail
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    /**
+     * @return HasMany<InterestRating, $this>
+     */
+    public function interestRatings(): HasMany
+    {
+        return $this->hasMany(InterestRating::class);
+    }
+
+    /**
+     * @return HasMany<InterestRequest, $this>
+     */
+    public function interestRequests(): HasMany
+    {
+        return $this->hasMany(InterestRequest::class);
     }
 }

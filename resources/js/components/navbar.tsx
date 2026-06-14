@@ -1,5 +1,4 @@
 import { ChevronDown, Laptop, Moon, Sun } from 'lucide-react';
-import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
@@ -69,6 +68,9 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
           {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/dashboard'>Dashboard</a></li>
           )}
+          {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/interests'>Interests</a></li>
+          )}
           {authenticated && isAdmin && (
             <li className='relative' ref={adminMenuRef}>
               <button
@@ -85,8 +87,15 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
                     href='/admin/users'
                     className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
                     onClick={() => setAdminMenuOpen(false)}
-                  >
+                >
                     Users
+                  </a>
+                  <a
+                    href='/admin/interests'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Interests
                   </a>
                   <a
                     href='/admin/audit-log'

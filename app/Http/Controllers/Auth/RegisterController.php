@@ -23,11 +23,14 @@ class RegisterController extends Controller
         $data = $request->validated();
 
         $isFirstUser = User::count() === 0;
+        $signupRedirect = route('verification.notice', ! $isFirstUser ? ['signup_status' => 'pending-approval'] : []);
 
         $user = new User;
         $user->name = $data['name'];
         $user->email = $data['email'];
         $user->password = $data['password']; // hashed via the model cast
+        $user->gender = $data['gender'];
+        $user->gender_other = $data['gender'] === 'other' ? ($data['gender_other'] ?? null) : null;
         // Bootstrap: the very first account is an approved admin so the app is usable.
         if ($isFirstUser) {
             $user->is_admin = true;
@@ -39,9 +42,18 @@ class RegisterController extends Controller
         Auth::login($user);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'redirect' => route('verification.notice')]);
+            $payload = [
+                'success' => true,
+                'redirect' => $signupRedirect,
+            ];
+
+            if (! $isFirstUser) {
+                $payload['status'] = 'Your account has been created and is pending admin approval.';
+            }
+
+            return response()->json($payload);
         }
 
-        return redirect()->route('verification.notice');
+        return redirect($signupRedirect);
     }
 }

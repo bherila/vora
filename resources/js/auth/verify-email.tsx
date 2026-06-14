@@ -7,7 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { fetchWrapper } from '@/fetchWrapper';
 
 function VerifyEmailPage() {
-  const [status, setStatus] = useState('');
+  const initialStatus = typeof window === 'undefined'
+    ? ''
+    : window.location.search.includes('signup_status=pending-approval')
+      ? 'Thank you for signing up. Your account is pending admin approval while we review it.'
+      : '';
+  const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(false);
 
   const handleResend = async (e: FormEvent) => {

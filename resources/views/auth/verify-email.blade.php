@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-  <div id="verify-email"></div>
+  <div id="verify-email" data-signup-status="{{ request('signup_status') }}"></div>
 @endsection
 
 @push('scripts')

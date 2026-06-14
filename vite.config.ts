@@ -22,6 +22,8 @@ export default defineConfig({
                 'resources/js/auth/user-settings.tsx',
                 'resources/js/admin/users.tsx',
                 'resources/js/admin/audit-log.tsx',
+                'resources/js/admin/interests.tsx',
+                'resources/js/user/interests.tsx',
             ],
       refresh: true,
     }),
