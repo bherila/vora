@@ -13,6 +13,15 @@ use Illuminate\Http\Request;
  */
 class VoraAuthUserPolicy implements AuthUserPolicy
 {
+    public function canLogin(Authenticatable $user, Request $request): bool
+    {
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        return $user->canLogin();
+    }
+
     public function canPasskeyLogin(Authenticatable $user, Request $request): bool
     {
         if (! $user instanceof User) {
