@@ -7,6 +7,8 @@
   <script id="user-settings-initial-data" type="application/json" @cspNonce>
     @json([
       'name' => $__currentUser->name,
+      'display_name' => $__currentUser->display_name,
+      'birth_date' => $__currentUser->birth_date?->toDateString(),
       'email' => $__currentUser->email,
       'id_verified_at' => $__currentUser->id_verified_at?->toIso8601String(),
       'name_locked' => (bool) $__currentUser->name_locked,

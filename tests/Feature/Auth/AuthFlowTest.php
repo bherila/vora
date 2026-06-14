@@ -26,6 +26,8 @@ class AuthFlowTest extends TestCase
 
         $response = $this->post('/register', [
             'name' => 'First User',
+            'display_name' => 'First',
+            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'first@example.com',
             'gender' => 'm',
             'password' => 'password-123',
@@ -38,6 +40,8 @@ class AuthFlowTest extends TestCase
         $user = User::firstWhere('email', 'first@example.com');
         $this->assertNotNull($user);
         $this->assertTrue($user->isAdmin());
+        $this->assertSame('First', $user->display_name);
+        $this->assertSame(today()->subYears(21)->toDateString(), $user->birth_date?->toDateString());
         $this->assertNotNull($user->approved_at);
         $this->assertAuthenticatedAs($user);
     }
@@ -49,6 +53,8 @@ class AuthFlowTest extends TestCase
 
         $this->post('/register', [
             'name' => 'Second User',
+            'display_name' => 'Second',
+            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'second@example.com',
             'gender' => 'm',
             'password' => 'password-123',
@@ -57,8 +63,41 @@ class AuthFlowTest extends TestCase
 
         $user = User::firstWhere('email', 'second@example.com');
         $this->assertFalse($user->isAdmin());
+        $this->assertSame('Second', $user->display_name);
         $this->assertNull($user->approved_at);
         $this->assertTrue($user->isPendingApproval());
+    }
+
+    #[Test]
+    public function test_underage_registration_is_rejected(): void
+    {
+        $this->post('/register', [
+            'name' => 'Underage User',
+            'display_name' => 'Too Young',
+            'birth_date' => today()->subYears(18)->addDay()->toDateString(),
+            'email' => 'underage@example.com',
+            'gender' => 'm',
+            'password' => 'password-123',
+            'password_confirmation' => 'password-123',
+        ])->assertSessionHasErrors('birth_date');
+
+        $this->assertDatabaseMissing('users', ['email' => 'underage@example.com']);
+    }
+
+    #[Test]
+    public function test_registration_rejects_timestamp_birth_date(): void
+    {
+        $this->post('/register', [
+            'name' => 'Timestamp User',
+            'display_name' => 'Timestamp',
+            'birth_date' => '1990-01-15T00:00:00Z',
+            'email' => 'timestamp@example.com',
+            'gender' => 'm',
+            'password' => 'password-123',
+            'password_confirmation' => 'password-123',
+        ])->assertSessionHasErrors('birth_date');
+
+        $this->assertDatabaseMissing('users', ['email' => 'timestamp@example.com']);
     }
 
     #[Test]
@@ -68,6 +107,8 @@ class AuthFlowTest extends TestCase
 
         $this->post('/register', [
             'name' => 'Notification User',
+            'display_name' => 'Notify',
+            'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'verifyme@example.com',
             'gender' => 'm',
             'password' => 'password-123',

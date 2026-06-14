@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { DatePicker } from '@/components/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,14 +25,18 @@ import { fetchWrapper } from '@/fetchWrapper';
 interface AdminUser {
   id: number;
   name: string;
+  display_name: string | null;
+  birth_date: string | null;
   email: string;
   is_admin: boolean;
   is_disabled: boolean;
   is_approved: boolean;
   id_verified: boolean;
+  birth_date_verified: boolean;
   email_verified: boolean;
   name_locked: boolean;
   email_locked: boolean;
+  id_verified_at: string | null;
   approved_at: string | null;
   last_login_at: string | null;
   created_at: string;
@@ -39,6 +44,17 @@ interface AdminUser {
 
 function getCsrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+}
+
+function getAdultBirthDateLimit(): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 18);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 
 async function patchUser(id: number, body: Record<string, unknown>) {
@@ -63,7 +79,10 @@ function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [birthDateTarget, setBirthDateTarget] = useState<AdminUser | null>(null);
+  const [birthDateValue, setBirthDateValue] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const adultBirthDateLimit = getAdultBirthDateLimit();
 
   const loadUsers = async () => {
     setLoading(true);
@@ -156,6 +175,29 @@ function AdminUsersPage() {
     }
   };
 
+  const beginBirthDateEdit = (user: AdminUser) => {
+    setBirthDateTarget(user);
+    setBirthDateValue(user.birth_date ?? '');
+  };
+
+  const saveBirthDate = async () => {
+    if (!birthDateTarget || !birthDateValue) {
+      return;
+    }
+
+    setActionLoading(birthDateTarget.id);
+    try {
+      await patchUser(birthDateTarget.id, { birth_date: birthDateValue });
+      setBirthDateTarget(null);
+      setBirthDateValue('');
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to update birth date.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const deleteUser = async (user: AdminUser) => {
     setActionLoading(user.id);
     setDeleteTarget(null);
@@ -185,7 +227,9 @@ function AdminUsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>Real Name</TableHead>
+              <TableHead>Display Name</TableHead>
+              <TableHead>Birth Date</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
@@ -196,6 +240,21 @@ function AdminUsersPage() {
             {users.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell>{user.display_name ?? user.name}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-1">
+                    <span>{user.birth_date ?? '—'}</span>
+                    {user.birth_date && (
+                      <Badge
+                        variant={user.birth_date_verified ? 'default' : 'outline'}
+                        className="w-fit"
+                        title={user.id_verified_at ? `Verified ${new Date(user.id_verified_at).toLocaleString()}` : undefined}
+                      >
+                        {user.birth_date_verified ? 'Birth Date Verified' : 'Birth Date Unverified'}
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
@@ -204,8 +263,8 @@ function AdminUsersPage() {
                     {!user.is_approved && <Badge variant="secondary">Pending</Badge>}
                     {user.email_verified && <Badge variant="outline">Verified</Badge>}
                     {!user.email_verified && <Badge variant="outline">Email Unverified</Badge>}
-                    {user.id_verified && <Badge>ID Verified</Badge>}
-                    {user.name_locked && <Badge variant="outline">Name Locked</Badge>}
+                    {user.id_verified && <Badge>ID/Age Verified</Badge>}
+                    {user.name_locked && <Badge variant="outline">Real Name Locked</Badge>}
                     {user.email_locked && <Badge variant="outline">Email Locked</Badge>}
                   </div>
                 </TableCell>
@@ -250,7 +309,7 @@ function AdminUsersPage() {
                       onClick={() => void toggleNameLock(user)}
                       data-test="admin-users-toggle-name-lock"
                     >
-                      {user.name_locked ? 'Unlock Name' : 'Lock Name'}
+                      {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
                     </Button>
                     <Button
                       size="sm"
@@ -268,7 +327,16 @@ function AdminUsersPage() {
                       onClick={() => void toggleIdVerification(user)}
                       data-test="admin-users-toggle-id-verified"
                     >
-                      {user.id_verified ? 'Clear ID Verification' : 'Verify ID'}
+                      {user.id_verified ? 'Clear ID/Age Verification' : 'Verify ID/Age'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoading === user.id}
+                      onClick={() => beginBirthDateEdit(user)}
+                      data-test="admin-users-edit-birth-date"
+                    >
+                      Edit Birth Date
                     </Button>
                     <Button
                       size="sm"
@@ -306,6 +374,48 @@ function AdminUsersPage() {
               data-test="admin-users-delete-confirm"
             >
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={birthDateTarget !== null} onOpenChange={(open) => {
+        if (!open) {
+          setBirthDateTarget(null);
+          setBirthDateValue('');
+        }
+      }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Birth Date</DialogTitle>
+            <DialogDescription>
+              Update the date of birth for <strong>{birthDateTarget?.name}</strong>. Store this as the literal calendar date shown on the user's ID.
+            </DialogDescription>
+          </DialogHeader>
+          <DatePicker
+            id="admin-user-birth-date"
+            value={birthDateValue}
+            max={adultBirthDateLimit}
+            onChange={setBirthDateValue}
+            placeholder="Select birth date"
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBirthDateTarget(null);
+                setBirthDateValue('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveBirthDate()}
+              disabled={!birthDateValue || actionLoading === birthDateTarget?.id}
+              data-test="admin-users-birth-date-save"
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

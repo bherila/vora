@@ -13,6 +13,8 @@ import { getAuthComponents } from './shared-components';
 
 interface UserSettingsInitialData {
   name: string;
+  display_name: string;
+  birth_date: string;
   email: string;
   id_verified_at: string | null;
   name_locked: boolean;
@@ -24,6 +26,7 @@ interface UserSettingsResponse {
   message?: string;
   data?: {
     name: string;
+    display_name: string;
     email: string;
   };
 }
@@ -33,6 +36,8 @@ function getInitialData(): UserSettingsInitialData {
   if (!element || !element.textContent) {
     return {
       name: '',
+      display_name: '',
+      birth_date: '',
       email: '',
       id_verified_at: null,
       name_locked: false,
@@ -44,6 +49,8 @@ function getInitialData(): UserSettingsInitialData {
     const parsed = JSON.parse(element.textContent) as UserSettingsInitialData;
     return {
       name: parsed.name ?? '',
+      display_name: parsed.display_name ?? '',
+      birth_date: parsed.birth_date ?? '',
       email: parsed.email ?? '',
       id_verified_at: parsed.id_verified_at ?? null,
       name_locked: parsed.name_locked ?? false,
@@ -52,6 +59,8 @@ function getInitialData(): UserSettingsInitialData {
   } catch {
     return {
       name: '',
+      display_name: '',
+      birth_date: '',
       email: '',
       id_verified_at: null,
       name_locked: false,
@@ -64,6 +73,8 @@ function UserSettingsPage() {
   const initialData = getInitialData();
 
   const [accountName, setAccountName] = useState(initialData.name);
+  const [accountDisplayName, setAccountDisplayName] = useState(initialData.display_name);
+  const [accountBirthDate] = useState(initialData.birth_date);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
@@ -79,9 +90,10 @@ function UserSettingsPage() {
     event.preventDefault();
 
     const name = accountName.trim();
+    const displayName = accountDisplayName.trim();
     const email = accountEmail.trim();
-    if (!name || !email) {
-      setAccountError('Name and email are required.');
+    if (!name || !displayName || !email) {
+      setAccountError('Real name, display name, and email are required.');
       return;
     }
 
@@ -92,12 +104,14 @@ function UserSettingsPage() {
     try {
       const response = await fetchWrapper.patch('/api/account', {
         name,
+        display_name: displayName,
         email,
       }) as UserSettingsResponse;
 
       setAccountMessage(response.message ?? 'Account updated.');
       if (response.data) {
         setAccountName(response.data.name);
+        setAccountDisplayName(response.data.display_name);
         setAccountEmail(response.data.email);
       }
     } catch (err) {
@@ -128,7 +142,7 @@ function UserSettingsPage() {
           )}
           <form className="space-y-4" onSubmit={(event) => void handleProfileSubmit(event)}>
             <div className="space-y-1">
-              <Label htmlFor="account-name">Name</Label>
+              <Label htmlFor="account-name">Real name</Label>
               <Input
                 id="account-name"
                 value={accountName}
@@ -137,6 +151,28 @@ function UserSettingsPage() {
                 autoComplete="name"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Used for account review and ID verification. Your real name is never displayed to others.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="account-display-name">Display name</Label>
+              <Input
+                id="account-display-name"
+                value={accountDisplayName}
+                onChange={(event) => setAccountDisplayName(event.target.value)}
+                autoComplete="nickname"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Birth date</Label>
+              <p className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                {accountBirthDate || 'Not provided'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Used to verify age eligibility and never displayed to others. Contact an administrator if this date is incorrect.
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="account-email">Email</Label>
@@ -151,7 +187,7 @@ function UserSettingsPage() {
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              {nameLocked ? 'Name is locked by an administrator.' : 'You can edit your name.'}
+              {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
             </p>
             <p className="text-sm text-muted-foreground">
               {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
@@ -159,7 +195,7 @@ function UserSettingsPage() {
             <p className="text-sm text-muted-foreground">
               ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
             </p>
-            <Button type="submit" disabled={accountSaving || (nameLocked && emailLocked)}>
+            <Button type="submit" disabled={accountSaving}>
               {accountSaving ? 'Saving…' : 'Save account details'}
             </Button>
           </form>

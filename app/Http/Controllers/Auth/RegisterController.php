@@ -27,6 +27,8 @@ class RegisterController extends Controller
 
         $user = new User;
         $user->name = $data['name'];
+        $user->display_name = $data['display_name'];
+        $user->birth_date = $data['birth_date'];
         $user->email = $data['email'];
         $user->password = $data['password']; // hashed via the model cast
         $user->gender = $data['gender'];

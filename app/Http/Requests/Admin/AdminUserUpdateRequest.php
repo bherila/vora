@@ -22,6 +22,7 @@ class AdminUserUpdateRequest extends FormRequest
             'id_verified' => ['sometimes', 'boolean'],
             'name_locked' => ['sometimes', 'boolean'],
             'email_locked' => ['sometimes', 'boolean'],
+            'birth_date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
         ];
     }
 }

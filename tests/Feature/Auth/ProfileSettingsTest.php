@@ -20,18 +20,23 @@ class ProfileSettingsTest extends TestCase
 
         $user = User::factory()->approved()->create([
             'name' => 'Original Name',
+            'display_name' => 'Original Display',
+            'birth_date' => '1990-01-15',
             'email' => 'original@example.com',
             'email_verified_at' => now(),
         ]);
 
         $this->actingAs($user)->patchJson('/api/account', [
             'name' => 'Updated Name',
+            'display_name' => 'Updated Display',
             'email' => 'updated@example.com',
         ])->assertOk()
             ->assertJsonPath('success', true);
 
         $user->refresh();
         $this->assertSame('Updated Name', $user->name);
+        $this->assertSame('Updated Display', $user->display_name);
+        $this->assertSame('1990-01-15', $user->birth_date?->toDateString());
         $this->assertSame('updated@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
         Notification::assertSentTo($user, VerifyEmail::class);
@@ -47,9 +52,31 @@ class ProfileSettingsTest extends TestCase
 
         $this->actingAs($user)->patchJson('/api/account', [
             'name' => 'Updated Name',
+            'display_name' => $user->display_name,
             'email' => $user->email,
         ])->assertStatus(403)
-            ->assertJsonPath('message', 'Your name is locked and cannot be changed.');
+            ->assertJsonPath('message', 'Your real name is locked and cannot be changed.');
+    }
+
+    #[Test]
+    public function users_can_change_display_name_when_real_name_is_locked(): void
+    {
+        $user = User::factory()->approved()->create([
+            'name' => 'Original Name',
+            'display_name' => 'Original Display',
+            'name_locked' => true,
+        ]);
+
+        $this->actingAs($user)->patchJson('/api/account', [
+            'name' => 'Original Name',
+            'display_name' => 'Updated Display',
+            'email' => $user->email,
+        ])->assertOk()
+            ->assertJsonPath('data.display_name', 'Updated Display');
+
+        $user->refresh();
+        $this->assertSame('Original Name', $user->name);
+        $this->assertSame('Updated Display', $user->display_name);
     }
 
     #[Test]
@@ -62,6 +89,7 @@ class ProfileSettingsTest extends TestCase
 
         $this->actingAs($user)->patchJson('/api/account', [
             'name' => $user->name,
+            'display_name' => $user->display_name,
             'email' => 'updated@example.com',
         ])->assertStatus(403)
             ->assertJsonPath('message', 'Your email is locked and cannot be changed.');
@@ -75,8 +103,26 @@ class ProfileSettingsTest extends TestCase
 
         $this->actingAs($user)->patchJson('/api/account', [
             'name' => 'Updated Name',
+            'display_name' => $user->display_name,
             'email' => 'existing@example.com',
         ])->assertStatus(422)
             ->assertJsonValidationErrors('email');
+    }
+
+    #[Test]
+    public function users_cannot_change_birth_date_from_account_settings(): void
+    {
+        $user = User::factory()->approved()->create([
+            'birth_date' => '1990-01-15',
+        ]);
+
+        $this->actingAs($user)->patchJson('/api/account', [
+            'name' => $user->name,
+            'display_name' => $user->display_name,
+            'birth_date' => '1989-01-15',
+            'email' => $user->email,
+        ])->assertOk();
+
+        $this->assertSame('1990-01-15', $user->fresh()->birth_date?->toDateString());
     }
 }

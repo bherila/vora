@@ -39,6 +39,9 @@ function PendingApprovalPage() {
           <p className="text-center text-sm text-muted-foreground">
             {sourceMessage} Our team will review your account and notify you once approved.
           </p>
+          <p className="text-center text-sm text-muted-foreground">
+            ID verification will be required to verify your age before age-restricted content is available.
+          </p>
           <Button
             type="button"
             variant="outline"

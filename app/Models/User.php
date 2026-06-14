@@ -22,6 +22,8 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     protected $fillable = [
         'name',
+        'display_name',
+        'birth_date',
         'email',
         'password',
         'gender',
@@ -47,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'last_login_at' => 'datetime',
             'approved_at' => 'datetime',
             'id_verified_at' => 'datetime',
+            'birth_date' => 'date',
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',

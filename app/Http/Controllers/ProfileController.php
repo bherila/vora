@@ -19,10 +19,11 @@ class ProfileController extends Controller
         $data = $request->validated();
         $emailChanged = $user->email !== $data['email'];
         $nameChanged = $user->name !== $data['name'];
+        $displayNameChanged = $user->display_name !== $data['display_name'];
         if ($nameChanged && $user->name_locked) {
             return response()->json([
                 'success' => false,
-                'message' => 'Your name is locked and cannot be changed.',
+                'message' => 'Your real name is locked and cannot be changed.',
             ], 403);
         }
 
@@ -35,6 +36,9 @@ class ProfileController extends Controller
 
         if ($nameChanged) {
             $user->name = $data['name'];
+        }
+        if ($displayNameChanged) {
+            $user->display_name = $data['display_name'];
         }
         if ($emailChanged) {
             $user->email = $data['email'];
@@ -53,6 +57,7 @@ class ProfileController extends Controller
             'message' => $emailChanged ? 'Account updated. Please verify your new email address.' : 'Account updated.',
             'data' => [
                 'name' => $user->name,
+                'display_name' => $user->display_name,
                 'email' => $user->email,
             ],
         ]);
