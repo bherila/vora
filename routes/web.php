@@ -2,11 +2,13 @@
 
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
+use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\InterestController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,6 +64,23 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     Route::get('/interests', [InterestController::class, 'index'])->name('interests');
+
+    // Media library + shareable single-media view.
+    Route::get('/media', [MediaController::class, 'library'])->name('media');
+    Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
+
+    Route::prefix('api/media')->group(function () {
+        Route::get('/', [MediaController::class, 'index']);
+        Route::post('/', [MediaController::class, 'store']);
+        Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
+        // HLS playback proxy: manifests served inline (rewritten), segments 302-redirected to R2.
+        Route::get('/{media}/hls/{path?}', [MediaController::class, 'streamHls'])
+            ->where('path', '.*')
+            ->name('media.hls');
+        Route::post('/{media}/complete', [MediaController::class, 'complete']);
+        Route::get('/{media}', [MediaController::class, 'show']);
+        Route::delete('/{media}', [MediaController::class, 'destroy']);
+    });
 });
 
 /*
@@ -73,6 +92,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
+    Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
@@ -93,6 +113,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::delete('/interest-requests/{interestRequest}', [AdminInterestController::class, 'destroyRequest']);
     Route::post('/interest-requests/{interestRequest}/approve', [AdminInterestController::class, 'approveRequest']);
     Route::post('/interest-requests/{interestRequest}/reject', [AdminInterestController::class, 'rejectRequest']);
+
+    Route::get('/media', [AdminMediaController::class, 'apiIndex']);
+    Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {

@@ -56,6 +56,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'birth_date' => 'date',
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
+            'last_media_interest_ids' => 'array',
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
@@ -129,5 +130,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function interestRequests(): HasMany
     {
         return $this->hasMany(InterestRequest::class);
+    }
+
+    /**
+     * @return HasMany<Media, $this>
+     */
+    public function media(): HasMany
+    {
+        return $this->hasMany(Media::class);
     }
 }
