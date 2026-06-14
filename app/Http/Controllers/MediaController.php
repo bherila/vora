@@ -11,6 +11,7 @@ use App\Services\Media\HlsService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use App\Support\MediaPresenter;
+use App\Support\PaginationMeta;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,18 +45,26 @@ class MediaController extends Controller
     }
 
     /**
-     * List the current user's own media (every status).
+     * List the current user's own media (every status), newest first, paginated.
      */
     public function index(Request $request): JsonResponse
     {
-        $items = Media::query()
+        $paginator = Media::query()
             ->where('user_id', $request->user()->id)
             ->with('interests')
             ->latest()
-            ->get()
-            ->map(fn (Media $m): array => MediaPresenter::ownerView($m, $this->extrasFor($m)));
+            ->paginate((int) config('media.page_size', 24));
 
-        return response()->json(['success' => true, 'data' => $items]);
+        $data = collect($paginator->items())
+            // resolveHls: false — listings must not do a per-item R2 read.
+            ->map(fn (Media $m): array => MediaPresenter::ownerView($m, $this->extrasFor($m, resolveHls: false)))
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'meta' => PaginationMeta::from($paginator),
+        ]);
     }
 
     /**
@@ -148,7 +157,7 @@ class MediaController extends Controller
      *
      * @return array{url: ?string, video: ?array<string, mixed>}
      */
-    private function extrasFor(Media $media): array
+    private function extrasFor(Media $media, bool $resolveHls = true): array
     {
         $extras = ['url' => null, 'video' => null];
 
@@ -164,7 +173,7 @@ class MediaController extends Controller
         );
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media);
+            $extras['video'] = $this->hls->status($media, $resolveHls);
         }
 
         return $extras;

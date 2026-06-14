@@ -13,6 +13,19 @@ export interface MediaInterest {
   name: string;
 }
 
+export interface PageMeta {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  has_more: boolean;
+}
+
+export interface PagedResponse<T> {
+  data: T[];
+  meta?: PageMeta;
+}
+
 export interface MediaItem {
   id: number;
   ulid: string;

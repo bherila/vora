@@ -90,6 +90,25 @@ class AdminMediaApiTest extends TestCase
         $this->assertTrue($media->fresh()->isPendingReview());
     }
 
+    public function test_review_queue_is_paginated(): void
+    {
+        $this->fakeStorage();
+        config(['media.page_size' => 2]);
+        $admin = User::factory()->admin()->create();
+        Media::factory()->count(3)->create(); // ready, pending
+
+        $this->actingAs($admin)->getJson('/api/admin/media')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 3)
+            ->assertJsonPath('meta.has_more', true);
+
+        $this->actingAs($admin)->getJson('/api/admin/media?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.has_more', false);
+    }
+
     public function test_status_filter(): void
     {
         $this->fakeStorage();

@@ -76,4 +76,15 @@ return [
     'upload_url_ttl' => (int) env('MEDIA_UPLOAD_URL_TTL', 30),
     'view_url_ttl' => (int) env('MEDIA_VIEW_URL_TTL', 60),
 
+    /*
+    |--------------------------------------------------------------------------
+    | List pagination
+    |--------------------------------------------------------------------------
+    |
+    | Page size for the user library and admin review queue list endpoints.
+    |
+    */
+
+    'page_size' => (int) env('MEDIA_PAGE_SIZE', 24),
+
 ];
