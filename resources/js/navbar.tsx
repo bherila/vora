@@ -4,7 +4,24 @@ import Navbar from '@/components/navbar';
 
 const mount = document.getElementById('navbar');
 if (mount) {
-  const authenticated = (mount.getAttribute('data-authenticated') || 'false') === 'true';
-  const isAdmin = (mount.getAttribute('data-is-admin') || 'false') === 'true';
+  const script = document.getElementById('navbar-initial-data');
+  const payload = script?.textContent?.trim();
+
+  let authenticated = false;
+  let isAdmin = false;
+
+  if (payload) {
+    try {
+      const appData = JSON.parse(payload) as Record<string, unknown>;
+      if (typeof appData === 'object' && appData !== null) {
+        authenticated = appData.authenticated === true;
+        isAdmin = appData.isAdmin === true;
+      }
+    } catch {
+      authenticated = false;
+      isAdmin = false;
+    }
+  }
+
   createRoot(mount).render(<Navbar authenticated={authenticated} isAdmin={isAdmin} />);
 }

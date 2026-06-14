@@ -4,7 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 
+const mountEl = document.getElementById('pending-approval');
+
 function PendingApprovalPage() {
+  const querySource = typeof window === 'undefined'
+    ? ''
+    : new URLSearchParams(window.location.search).get('source') || '';
+  const dataSource = typeof mountEl === 'object' && mountEl !== null
+    ? mountEl.getAttribute('data-source')
+    : '';
+  const source = querySource || dataSource || '';
+  const sourceMessage = source === 'login'
+    ? 'If you just logged in, your account is still waiting for admin approval.'
+    : 'Your account is waiting for admin approval.';
+
   const handleLogout = async () => {
     try {
       await fetchWrapper.post('/logout', {});
@@ -19,12 +32,12 @@ function PendingApprovalPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Account Pending Approval</CardTitle>
           <CardDescription>
-            Your account is pending admin approval. You&apos;ll be notified once approved.
+            Your account is pending admin approval.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-sm text-muted-foreground">
-            Thank you for signing up! Our team will review your account shortly.
+            {sourceMessage} Our team will review your account and notify you once approved.
           </p>
           <Button
             type="button"
@@ -40,7 +53,6 @@ function PendingApprovalPage() {
   );
 }
 
-const mountEl = document.getElementById('pending-approval');
 if (mountEl) {
   createRoot(mountEl).render(<PendingApprovalPage />);
 }

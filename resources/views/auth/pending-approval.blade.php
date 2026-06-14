@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-  <div id="pending-approval"></div>
+  <div id="pending-approval" data-source="{{ request('source') }}"></div>
 @endsection
 
 @push('scripts')

@@ -28,7 +28,10 @@ interface AdminUser {
   is_admin: boolean;
   is_disabled: boolean;
   is_approved: boolean;
-  email_verified: boolean | null;
+  id_verified: boolean;
+  email_verified: boolean;
+  name_locked: boolean;
+  email_locked: boolean;
   approved_at: string | null;
   last_login_at: string | null;
   created_at: string;
@@ -117,6 +120,42 @@ function AdminUsersPage() {
     }
   };
 
+  const toggleNameLock = async (user: AdminUser) => {
+    setActionLoading(user.id);
+    try {
+      await patchUser(user.id, { name_locked: !user.name_locked });
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to update user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleEmailLock = async (user: AdminUser) => {
+    setActionLoading(user.id);
+    try {
+      await patchUser(user.id, { email_locked: !user.email_locked });
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to update user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleIdVerification = async (user: AdminUser) => {
+    setActionLoading(user.id);
+    try {
+      await patchUser(user.id, { id_verified: !user.id_verified });
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to update user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const deleteUser = async (user: AdminUser) => {
     setActionLoading(user.id);
     setDeleteTarget(null);
@@ -164,6 +203,10 @@ function AdminUsersPage() {
                     {user.is_disabled && <Badge variant="destructive">Disabled</Badge>}
                     {!user.is_approved && <Badge variant="secondary">Pending</Badge>}
                     {user.email_verified && <Badge variant="outline">Verified</Badge>}
+                    {!user.email_verified && <Badge variant="outline">Email Unverified</Badge>}
+                    {user.id_verified && <Badge>ID Verified</Badge>}
+                    {user.name_locked && <Badge variant="outline">Name Locked</Badge>}
+                    {user.email_locked && <Badge variant="outline">Email Locked</Badge>}
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
@@ -174,7 +217,8 @@ function AdminUsersPage() {
                     {!user.is_approved && (
                       <Button
                         size="sm"
-                        disabled={actionLoading === user.id}
+                        disabled={actionLoading === user.id || !user.email_verified}
+                        title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
                         onClick={() => void approveUser(user)}
                         data-test="admin-users-approve"
                       >
@@ -198,6 +242,33 @@ function AdminUsersPage() {
                       data-test="admin-users-toggle-disabled"
                     >
                       {user.is_disabled ? 'Enable' : 'Disable'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoading === user.id}
+                      onClick={() => void toggleNameLock(user)}
+                      data-test="admin-users-toggle-name-lock"
+                    >
+                      {user.name_locked ? 'Unlock Name' : 'Lock Name'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoading === user.id}
+                      onClick={() => void toggleEmailLock(user)}
+                      data-test="admin-users-toggle-email-lock"
+                    >
+                      {user.email_locked ? 'Unlock Email' : 'Lock Email'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoading === user.id}
+                      onClick={() => void toggleIdVerification(user)}
+                      data-test="admin-users-toggle-id-verified"
+                    >
+                      {user.id_verified ? 'Clear ID Verification' : 'Verify ID'}
                     </Button>
                     <Button
                       size="sm"

@@ -11,10 +11,13 @@ import { fetchWrapper } from '@/fetchWrapper';
 function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [gender, setGender] = useState('');
+  const [genderOther, setGenderOther] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const isOtherGender = gender === 'other';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,10 +36,24 @@ function RegisterPage() {
       return;
     }
 
+    if (!['m', 'f', 'other'].includes(gender)) {
+      setError('Please choose a gender option.');
+      setLoading(false);
+      return;
+    }
+
+    if (isOtherGender && genderOther.trim().length === 0) {
+      setError('Please specify your gender when choosing Other.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetchWrapper.post('/api/auth/register', {
         name,
         email,
+        gender,
+        gender_other: isOtherGender ? genderOther.trim() : '',
         password,
         password_confirmation: passwordConfirmation,
       });
@@ -96,6 +113,35 @@ function RegisterPage() {
                 autoComplete="email"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="gender">Gender</Label>
+              <select
+                id="gender"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                required
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select gender</option>
+                <option value="m">M</option>
+                <option value="f">F</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            {isOtherGender && (
+              <div className="space-y-2">
+                <Label htmlFor="gender_other">Other</Label>
+                <Input
+                  id="gender_other"
+                  type="text"
+                  placeholder="Prefer to self-describe"
+                  value={genderOther}
+                  onChange={(e) => setGenderOther(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input

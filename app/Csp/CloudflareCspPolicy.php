@@ -15,6 +15,7 @@ class CloudflareCspPolicy extends Policy
                 "'self'",
                 'https://static.cloudflareinsights.com',
             ])
+            ->addNonce(Directive::SCRIPT_SRC)
             ->addDirective(Directive::CONNECT_SRC, [
                 "'self'",
                 'https://static.cloudflareinsights.com',

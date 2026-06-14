@@ -5,8 +5,10 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -25,6 +27,7 @@ class AuthFlowTest extends TestCase
         $response = $this->post('/register', [
             'name' => 'First User',
             'email' => 'first@example.com',
+            'gender' => 'm',
             'password' => 'password-123',
             'password_confirmation' => 'password-123',
         ]);
@@ -47,14 +50,33 @@ class AuthFlowTest extends TestCase
         $this->post('/register', [
             'name' => 'Second User',
             'email' => 'second@example.com',
+            'gender' => 'm',
             'password' => 'password-123',
             'password_confirmation' => 'password-123',
-        ])->assertRedirect(route('verification.notice'));
+        ])->assertRedirect(route('verification.notice', ['signup_status' => 'pending-approval']));
 
         $user = User::firstWhere('email', 'second@example.com');
         $this->assertFalse($user->isAdmin());
         $this->assertNull($user->approved_at);
         $this->assertTrue($user->isPendingApproval());
+    }
+
+    #[Test]
+    public function test_registration_dispatches_email_verification_notification(): void
+    {
+        Notification::fake();
+
+        $this->post('/register', [
+            'name' => 'Notification User',
+            'email' => 'verifyme@example.com',
+            'gender' => 'm',
+            'password' => 'password-123',
+            'password_confirmation' => 'password-123',
+        ]);
+
+        $user = User::firstWhere('email', 'verifyme@example.com');
+        $this->assertNotNull($user);
+        Notification::assertSentTo($user, VerifyEmail::class);
     }
 
     // ─── Login + two-factor ─────────────────────────────────
@@ -117,7 +139,7 @@ class AuthFlowTest extends TestCase
     {
         $user = User::factory()->pendingApproval()->create();
 
-        $this->actingAs($user)->get('/dashboard')->assertRedirect(route('approval.pending'));
+        $this->actingAs($user)->get('/dashboard')->assertRedirect(route('approval.pending', ['source' => 'login']));
     }
 
     #[Test]

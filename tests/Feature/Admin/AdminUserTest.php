@@ -69,6 +69,21 @@ class AdminUserTest extends TestCase
     }
 
     #[Test]
+    public function test_admin_cannot_approve_an_unverified_user(): void
+    {
+        $admin = $this->admin();
+        $pending = User::factory()->pendingApproval()->unverified()->create();
+
+        $this->actingAs($admin)->postJson("/api/admin/users/{$pending->id}/approve")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Users must verify their email before they can be approved.');
+
+        $pending->refresh();
+        $this->assertNull($pending->approved_at);
+        $this->assertNull($pending->email_verified_at);
+    }
+
+    #[Test]
     public function test_admin_can_toggle_admin_and_disabled_flags(): void
     {
         $admin = $this->admin();
@@ -79,6 +94,22 @@ class AdminUserTest extends TestCase
 
         $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['is_disabled' => true])->assertOk();
         $this->assertTrue($target->fresh()->is_disabled);
+    }
+
+    #[Test]
+    public function admin_can_toggle_identity_and_field_lock_flags(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create();
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['id_verified' => true])->assertOk();
+        $this->assertNotNull($target->fresh()->id_verified_at);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['name_locked' => true])->assertOk();
+        $this->assertTrue($target->fresh()->name_locked);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['email_locked' => true])->assertOk();
+        $this->assertTrue($target->fresh()->email_locked);
     }
 
     #[Test]
