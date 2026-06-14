@@ -28,10 +28,6 @@ class AuthFlowTest extends TestCase
             'display_name' => 'Test',
             'birth_date' => today()->subYears(21)->toDateString(),
             'email' => 'test@example.com',
-            'gender' => 'male',
-            'user_type' => 'human',
-            'preferred_user_types' => ['human', 'furry', 'other'],
-            'preferred_genders' => ['male', 'female', 'other'],
             'password' => 'password-123',
             'password_confirmation' => 'password-123',
         ], $overrides);
@@ -48,9 +44,6 @@ class AuthFlowTest extends TestCase
             'name' => 'First User',
             'display_name' => 'First',
             'email' => 'first@example.com',
-            'user_type' => 'furry',
-            'preferred_user_types' => ['furry', 'other'],
-            'preferred_genders' => ['female', 'other'],
         ]));
 
         $response->assertRedirect(route('verification.notice'));
@@ -61,10 +54,10 @@ class AuthFlowTest extends TestCase
         $this->assertTrue($user->isAdmin());
         $this->assertSame('First', $user->display_name);
         $this->assertSame(today()->subYears(21)->toDateString(), $user->birth_date?->toDateString());
-        $this->assertSame('male', $user->gender);
-        $this->assertSame('furry', $user->user_type);
-        $this->assertSame(['furry', 'other'], $user->preferred_user_types);
-        $this->assertSame(['female', 'other'], $user->preferred_genders);
+        $this->assertNull($user->gender);
+        $this->assertNull($user->user_type);
+        $this->assertNull($user->preferred_user_types);
+        $this->assertNull($user->preferred_genders);
         $this->assertNotNull($user->approved_at);
         $this->assertAuthenticatedAs($user);
     }
@@ -114,27 +107,24 @@ class AuthFlowTest extends TestCase
     }
 
     #[Test]
-    public function test_registration_requires_discovery_preferences(): void
+    public function test_registration_ignores_profile_fields_until_settings(): void
     {
         $this->post('/register', $this->validRegistrationPayload([
-            'email' => 'missing-preferences@example.com',
+            'email' => 'profile-later@example.com',
+            'gender' => 'other',
+            'gender_other' => '',
+            'user_type' => 'other',
+            'user_type_other' => '',
             'preferred_user_types' => [],
             'preferred_genders' => [],
-        ]))->assertSessionHasErrors(['preferred_user_types', 'preferred_genders']);
+        ]))->assertRedirect(route('verification.notice'));
 
-        $this->assertDatabaseMissing('users', ['email' => 'missing-preferences@example.com']);
-    }
-
-    #[Test]
-    public function test_registration_requires_other_descriptions(): void
-    {
-        $this->post('/register', $this->validRegistrationPayload([
-            'email' => 'other-required@example.com',
-            'gender' => 'other',
-            'user_type' => 'other',
-        ]))->assertSessionHasErrors(['gender_other', 'user_type_other']);
-
-        $this->assertDatabaseMissing('users', ['email' => 'other-required@example.com']);
+        $user = User::firstWhere('email', 'profile-later@example.com');
+        $this->assertNotNull($user);
+        $this->assertNull($user->gender);
+        $this->assertNull($user->user_type);
+        $this->assertNull($user->preferred_user_types);
+        $this->assertNull($user->preferred_genders);
     }
 
     #[Test]

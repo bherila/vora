@@ -15,12 +15,12 @@ export const GENDER_OPTIONS: readonly ProfileOption[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export function allOptionValues(options: readonly ProfileOption[]): string[] {
-  return options.map((option) => option.value);
-}
-
 export function hasProfileOptionValue(options: readonly ProfileOption[], value: string): boolean {
   return options.some((option) => option.value === value);
+}
+
+export function normalizeProfileOptionValue(options: readonly ProfileOption[], value: unknown): string {
+  return typeof value === 'string' && hasProfileOptionValue(options, value) ? value : '';
 }
 
 export function normalizeProfileSelections(options: readonly ProfileOption[], values: unknown): string[] {

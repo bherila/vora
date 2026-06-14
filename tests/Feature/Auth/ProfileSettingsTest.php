@@ -137,6 +137,40 @@ class ProfileSettingsTest extends TestCase
     }
 
     #[Test]
+    public function users_can_update_account_fields_when_profile_choices_are_blank(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->approved()->create([
+            'email' => 'blank-profile@example.com',
+            'email_verified_at' => now(),
+            'gender' => null,
+            'gender_other' => null,
+            'user_type' => null,
+            'user_type_other' => null,
+            'preferred_user_types' => null,
+            'preferred_genders' => null,
+        ]);
+
+        $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
+            'name' => 'Blank Profile Updated',
+            'email' => 'blank-profile-updated@example.com',
+        ]))->assertOk()
+            ->assertJsonPath('data.gender', null)
+            ->assertJsonPath('data.user_type', null)
+            ->assertJsonPath('data.preferred_user_types', null)
+            ->assertJsonPath('data.preferred_genders', null);
+
+        $user->refresh();
+        $this->assertSame('Blank Profile Updated', $user->name);
+        $this->assertSame('blank-profile-updated@example.com', $user->email);
+        $this->assertNull($user->gender);
+        $this->assertNull($user->user_type);
+        $this->assertNull($user->preferred_user_types);
+        $this->assertNull($user->preferred_genders);
+    }
+
+    #[Test]
     public function users_can_update_identity_and_discovery_preferences(): void
     {
         $user = User::factory()->approved()->create([
@@ -171,15 +205,20 @@ class ProfileSettingsTest extends TestCase
     }
 
     #[Test]
-    public function users_must_keep_at_least_one_discovery_preference(): void
+    public function users_can_clear_discovery_preferences(): void
     {
         $user = User::factory()->approved()->create();
 
         $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
             'preferred_user_types' => [],
             'preferred_genders' => [],
-        ]))->assertStatus(422)
-            ->assertJsonValidationErrors(['preferred_user_types', 'preferred_genders']);
+        ]))->assertOk()
+            ->assertJsonPath('data.preferred_user_types', [])
+            ->assertJsonPath('data.preferred_genders', []);
+
+        $user->refresh();
+        $this->assertSame([], $user->preferred_user_types);
+        $this->assertSame([], $user->preferred_genders);
     }
 
     #[Test]
