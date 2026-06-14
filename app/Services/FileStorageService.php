@@ -32,11 +32,15 @@ class FileStorageService
 
     /**
      * Generate a presigned URL the browser can PUT a file to directly, avoiding
-     * server upload size limits.
+     * server upload size limits. The S3/R2 adapter returns both the URL and the
+     * headers (e.g. Content-Type) that were signed and which the client must
+     * send on the PUT, so both are returned here.
+     *
+     * @return array{url: string, headers: array<string, string>}
      */
-    public function getSignedUploadUrl(string $disk, string $key, string $contentType, int $ttlMinutes = 30): string
+    public function getSignedUploadUrl(string $disk, string $key, string $contentType, int $ttlMinutes = 30): array
     {
-        return $this->storage($disk)->temporaryUploadUrl(
+        $result = $this->storage($disk)->temporaryUploadUrl(
             $key,
             now()->addMinutes($ttlMinutes),
             [
@@ -44,6 +48,11 @@ class FileStorageService
                 'ContentType' => $contentType,
             ],
         );
+
+        return [
+            'url' => $result['url'],
+            'headers' => $result['headers'] ?? [],
+        ];
     }
 
     /**

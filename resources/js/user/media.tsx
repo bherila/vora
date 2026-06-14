@@ -26,6 +26,7 @@ interface InitialData {
 interface StoreResponse {
   data: MediaItem;
   upload_url: string;
+  upload_headers: Record<string, string>;
 }
 
 function getInitialData(): InitialData {
@@ -106,7 +107,7 @@ function UserMediaPage() {
         interest_ids: interestIds,
       })) as StoreResponse;
 
-      await putToSignedUrl(created.upload_url, file, file.type, (fraction) => {
+      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
         setProgress(Math.round(fraction * 100));
       });
 

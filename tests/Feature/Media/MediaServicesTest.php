@@ -22,7 +22,10 @@ class MediaServicesTest extends TestCase
     public function test_create_pending_upload_persists_record_and_interests(): void
     {
         $this->mock(FileStorageService::class, function ($mock): void {
-            $mock->shouldReceive('getSignedUploadUrl')->once()->andReturn('https://r2.example/signed-put');
+            $mock->shouldReceive('getSignedUploadUrl')->once()->andReturn([
+                'url' => 'https://r2.example/signed-put',
+                'headers' => ['Content-Type' => 'image/jpeg'],
+            ]);
         });
 
         $user = User::factory()->approved()->create();
@@ -68,6 +71,43 @@ class MediaServicesTest extends TestCase
 
         $this->assertFalse(app(MediaUploadService::class)->completeUpload($media));
         $this->assertSame('pending', $media->fresh()->upload_status);
+    }
+
+    public function test_complete_upload_rejects_oversized_object(): void
+    {
+        Storage::fake('photos');
+        config(['media.photo.max_bytes' => 10]);
+        $media = Media::factory()->pendingUpload()->create(['disk' => 'photos']);
+        Storage::disk('photos')->put($media->object_key, str_repeat('x', 100));
+
+        $this->assertFalse(app(MediaUploadService::class)->completeUpload($media));
+        Storage::disk('photos')->assertMissing($media->object_key);
+        $this->assertDatabaseMissing('media', ['id' => $media->id]);
+    }
+
+    public function test_complete_upload_resets_premature_approval_to_pending(): void
+    {
+        Storage::fake('photos');
+        $admin = User::factory()->admin()->create();
+        $media = Media::factory()->pendingUpload()->create(['disk' => 'photos']);
+        // Simulate the bypass: approved before the object was uploaded.
+        $media->approve($admin, 'too soon');
+        Storage::disk('photos')->put($media->object_key, 'data');
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+
+        $fresh = $media->fresh();
+        $this->assertTrue($fresh->isPendingReview());
+        $this->assertNull($fresh->moderated_by_user_id);
+    }
+
+    public function test_complete_upload_is_idempotent_and_keeps_review_when_already_ready(): void
+    {
+        Storage::fake('photos');
+        $media = Media::factory()->approved()->create(['disk' => 'photos']); // ready + approved
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+        $this->assertTrue($media->fresh()->isApprovedContent());
     }
 
     public function test_hls_status_processing_then_ready_with_proxy_url(): void

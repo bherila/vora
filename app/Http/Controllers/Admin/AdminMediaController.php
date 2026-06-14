@@ -40,6 +40,10 @@ class AdminMediaController extends Controller
 
         $items = Media::query()
             ->with(['interests', 'user'])
+            // Only uploaded content is reviewable. Rows still pending their R2
+            // PUT must never be approvable (the owner could complete the upload
+            // afterwards and make unreviewed content visible).
+            ->where('upload_status', 'ready')
             ->when(in_array($status, ModerationStatus::values(), true), function (Builder $q) use ($status): void {
                 $q->where('moderation_status', $status);
             })
@@ -57,6 +61,15 @@ class AdminMediaController extends Controller
      */
     public function moderate(ModerateMediaRequest $request, Media $media): JsonResponse
     {
+        // Guard the same bypass as the listing: never let a not-yet-uploaded row
+        // be approved/rejected.
+        if (! $media->isReady()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This upload has not completed yet and cannot be reviewed.',
+            ], 422);
+        }
+
         $admin = $request->user();
         $notes = $request->validated()['notes'] ?? null;
 
