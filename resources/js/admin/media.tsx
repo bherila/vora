@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
 import { MediaPlayer } from '@/media/MediaPlayer';
-import { type AdminMediaItem, formatBytes, type ModerationStatusValue } from '@/media/types';
+import { type AdminMediaItem, formatBytes, type ModerationStatusValue, type PagedResponse } from '@/media/types';
 
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
@@ -32,19 +32,35 @@ function AdminMediaPage() {
   const [items, setItems] = useState<AdminMediaItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('pending');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
 
-  const load = async (next: StatusFilter): Promise<void> => {
-    setLoading(true);
+  // page 1 replaces the list (filter change / after a moderation action); higher
+  // pages append for the "Load more" control.
+  const load = async (next: StatusFilter, nextPage = 1): Promise<void> => {
+    if (nextPage > 1) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const query = next === 'all' ? '' : `?status=${next}`;
-      const response = (await fetchWrapper.get(`/api/admin/media${query}`)) as { data: AdminMediaItem[] };
-      setItems(response.data ?? []);
+      const params = new URLSearchParams({ page: String(nextPage) });
+      if (next !== 'all') {
+        params.set('status', next);
+      }
+      const response = (await fetchWrapper.get(`/api/admin/media?${params.toString()}`)) as PagedResponse<AdminMediaItem>;
+      const rows = response.data ?? [];
+      setItems((current) => (nextPage > 1 ? [...current, ...rows] : rows));
+      setHasMore(response.meta?.has_more ?? false);
+      setPage(nextPage);
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -151,6 +167,13 @@ function AdminMediaPage() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+      {hasMore && (
+        <div className="mt-6 flex justify-center">
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void load(filter, page + 1)}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </Button>
         </div>
       )}
       <Toaster position="top-right" richColors closeButton />
