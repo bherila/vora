@@ -31,8 +31,6 @@ return new class extends Migration
             $table->index('user_id');
             $table->index('parent_interest_id');
             $table->index('reviewed_by_user_id');
-
-            $table->check("status in ('pending', 'approved', 'rejected')");
         });
     }
 
@@ -44,4 +42,3 @@ return new class extends Migration
         Schema::dropIfExists('interest_requests');
     }
 };
-

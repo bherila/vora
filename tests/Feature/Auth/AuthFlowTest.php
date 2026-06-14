@@ -53,7 +53,7 @@ class AuthFlowTest extends TestCase
             'gender' => 'm',
             'password' => 'password-123',
             'password_confirmation' => 'password-123',
-        ])->assertRedirect(route('verification.notice'));
+        ])->assertRedirect(route('verification.notice', ['signup_status' => 'pending-approval']));
 
         $user = User::firstWhere('email', 'second@example.com');
         $this->assertFalse($user->isAdmin());
@@ -139,7 +139,7 @@ class AuthFlowTest extends TestCase
     {
         $user = User::factory()->pendingApproval()->create();
 
-        $this->actingAs($user)->get('/dashboard')->assertRedirect(route('approval.pending'));
+        $this->actingAs($user)->get('/dashboard')->assertRedirect(route('approval.pending', ['source' => 'login']));
     }
 
     #[Test]

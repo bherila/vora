@@ -39,4 +39,3 @@ class InterestRating extends Model
         return $this->belongsTo(Interest::class);
     }
 }
-

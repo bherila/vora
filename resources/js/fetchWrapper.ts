@@ -17,6 +17,7 @@ const JSON_HEADERS = {
 export const fetchWrapper = {
   get,
   post,
+  patch,
   put,
   delete: _delete,
 }
@@ -46,6 +47,16 @@ function post(url: string, body: any) {
 function put(url: string, body: any) {
   const requestOptions: RequestInit = {
     method: 'PUT',
+    headers: { ...JSON_HEADERS, 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+    credentials: 'include' as RequestCredentials,
+    body: JSON.stringify(body),
+  }
+  return fetch(url, requestOptions).then(handleResponse)
+}
+
+function patch(url: string, body: any) {
+  const requestOptions: RequestInit = {
+    method: 'PATCH',
     headers: { ...JSON_HEADERS, 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
     credentials: 'include' as RequestCredentials,
     body: JSON.stringify(body),

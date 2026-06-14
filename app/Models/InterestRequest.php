@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class InterestRequest extends Model
 {
@@ -29,7 +29,9 @@ class InterestRequest extends Model
     ];
 
     public const string STATUS_PENDING = 'pending';
+
     public const string STATUS_APPROVED = 'approved';
+
     public const string STATUS_REJECTED = 'rejected';
 
     /**
@@ -56,4 +58,3 @@ class InterestRequest extends Model
         return $this->belongsTo(User::class, 'reviewed_by_user_id');
     }
 }
-

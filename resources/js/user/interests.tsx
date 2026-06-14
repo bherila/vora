@@ -43,6 +43,12 @@ function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : 'Request failed.';
 }
 
+function getDepthPaddingClass(depth: number): string {
+  const classes = ['pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20', 'pl-24', 'pl-28', 'pl-32'];
+
+  return classes[Math.min(depth, classes.length - 1)] ?? 'pl-32';
+}
+
 function buildInterestTree(interests: UserInterest[]): TreeInterest[] {
   const map = new Map<number, TreeInterest>();
   const roots: TreeInterest[] = [];
@@ -294,7 +300,7 @@ function UserInterestsPage() {
                   return (
                     <TableRow key={interest.id}>
                       <TableCell>
-                        <div className="space-y-1" style={{ marginLeft: `${depth * 1.25}rem` }}>
+                        <div className={`space-y-1 ${getDepthPaddingClass(depth)}`}>
                           <p className="font-medium">{interest.name}</p>
                           {interest.description && <p className="text-sm text-muted-foreground">{interest.description}</p>}
                         </div>

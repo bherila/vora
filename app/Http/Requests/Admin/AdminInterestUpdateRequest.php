@@ -4,8 +4,8 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Interest;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class AdminInterestUpdateRequest extends FormRequest
 {

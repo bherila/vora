@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminAuditController;
-use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminInterestController;
+use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;

@@ -41,4 +41,3 @@ class Interest extends Model
         return $this->hasMany(InterestRating::class);
     }
 }
-

@@ -44,6 +44,10 @@ class ProfileController extends Controller
         }
         $user->save();
 
+        if ($emailChanged) {
+            $user->sendEmailVerificationNotification();
+        }
+
         return response()->json([
             'success' => true,
             'message' => $emailChanged ? 'Account updated. Please verify your new email address.' : 'Account updated.',

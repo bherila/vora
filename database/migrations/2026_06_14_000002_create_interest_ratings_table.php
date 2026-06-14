@@ -20,8 +20,6 @@ return new class extends Migration
 
             $table->unique(['user_id', 'interest_id']);
             $table->index('interest_id');
-
-            $table->check('level >= -10 and level <= 10');
         });
     }
 
@@ -33,4 +31,3 @@ return new class extends Migration
         Schema::dropIfExists('interest_ratings');
     }
 };
-

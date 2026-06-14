@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Interest;
 
-use App\Models\Interest;
 use App\Models\InterestRequest;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;

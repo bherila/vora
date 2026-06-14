@@ -3,7 +3,9 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -14,6 +16,8 @@ class ProfileSettingsTest extends TestCase
     #[Test]
     public function authenticated_users_can_update_name_and_email(): void
     {
+        Notification::fake();
+
         $user = User::factory()->approved()->create([
             'name' => 'Original Name',
             'email' => 'original@example.com',
@@ -30,6 +34,7 @@ class ProfileSettingsTest extends TestCase
         $this->assertSame('Updated Name', $user->name);
         $this->assertSame('updated@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
+        Notification::assertSentTo($user, VerifyEmail::class);
     }
 
     #[Test]

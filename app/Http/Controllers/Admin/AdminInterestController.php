@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AdminInterestRequestCrudRequest;
+use App\Http\Requests\Admin\AdminInterestRequestDecisionRequest;
 use App\Http\Requests\Admin\AdminInterestStoreRequest;
 use App\Http\Requests\Admin\AdminInterestUpdateRequest;
-use App\Http\Requests\Admin\AdminInterestRequestDecisionRequest;
-use App\Http\Requests\Admin\AdminInterestRequestCrudRequest;
 use App\Models\Interest;
 use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
@@ -218,6 +218,7 @@ class AdminInterestController extends Controller
             });
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Could not approve the request.',

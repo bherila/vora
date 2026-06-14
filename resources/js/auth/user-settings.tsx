@@ -90,7 +90,7 @@ function UserSettingsPage() {
     setAccountMessage('');
 
     try {
-      const response = await fetchWrapper.put('/api/account', {
+      const response = await fetchWrapper.patch('/api/account', {
         name,
         email,
       }) as UserSettingsResponse;

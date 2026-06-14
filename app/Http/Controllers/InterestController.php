@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Interest\RequestInterestRequest;
 use App\Http\Requests\Interest\RateInterestRequest;
+use App\Http\Requests\Interest\RequestInterestRequest;
 use App\Models\Interest;
-use App\Models\InterestRequest;
 use App\Models\InterestRating;
+use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -87,7 +87,7 @@ class InterestController extends Controller
         if ($user === null) {
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
-        
+
         InterestRating::query()
             ->where('user_id', $user->id)
             ->where('interest_id', $interest->id)
