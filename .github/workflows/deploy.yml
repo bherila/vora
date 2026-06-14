@@ -92,4 +92,4 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=yes \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
-            "cd ~/laravel && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:cache && cd ~ && rm -rf public_html && rm -rf web && ln -s laravel/public public_html && ln -s laravel/public web"
+            "chmod 755 ~/laravel && cd ~/laravel && /opt/cpanel/ea-php85/root/usr/bin/php artisan migrate --force --no-interaction && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:cache && cd ~ && rm -rf public_html && rm -rf web && ln -s laravel/public public_html && ln -s laravel/public web"
