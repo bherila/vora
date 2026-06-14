@@ -11,7 +11,12 @@ class AdminInterestUpdateRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isAdmin() === true;
+        $user = $this->user();
+        if ($user === null) {
+            return false;
+        }
+
+        return $user->isAdmin() && $user->isApproved() && $user->canLogin();
     }
 
     /**

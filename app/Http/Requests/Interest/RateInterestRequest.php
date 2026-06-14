@@ -8,7 +8,12 @@ class RateInterestRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+        if ($user === null) {
+            return false;
+        }
+
+        return $user->isApproved() && $user->canLogin();
     }
 
     /**
@@ -21,4 +26,3 @@ class RateInterestRequest extends FormRequest
         ];
     }
 }
-
