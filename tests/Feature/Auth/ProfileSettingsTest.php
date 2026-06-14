@@ -181,4 +181,35 @@ class ProfileSettingsTest extends TestCase
         ]))->assertStatus(422)
             ->assertJsonValidationErrors(['preferred_user_types', 'preferred_genders']);
     }
+
+    #[Test]
+    public function account_settings_do_not_default_blank_identity_fields(): void
+    {
+        $user = User::factory()->approved()->create([
+            'gender' => null,
+            'gender_other' => null,
+            'user_type' => null,
+            'user_type_other' => null,
+            'preferred_user_types' => null,
+            'preferred_genders' => null,
+        ]);
+
+        $content = $this->actingAs($user)->get('/user/settings')
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<script id="user-settings-initial-data"[^>]*>\s*(.*?)\s*<\/script>/s',
+            $content,
+        );
+        preg_match('/<script id="user-settings-initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $content, $matches);
+
+        /** @var array<string, mixed> $data */
+        $data = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertNull($data['gender']);
+        $this->assertNull($data['user_type']);
+        $this->assertSame([], $data['preferred_user_types']);
+        $this->assertSame([], $data['preferred_genders']);
+    }
 }

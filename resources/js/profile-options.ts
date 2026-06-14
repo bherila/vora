@@ -25,11 +25,11 @@ export function hasProfileOptionValue(options: readonly ProfileOption[], value: 
 
 export function normalizeProfileSelections(options: readonly ProfileOption[], values: unknown): string[] {
   if (!Array.isArray(values)) {
-    return allOptionValues(options);
+    return [];
   }
 
   const allowedValues = new Set(options.map((option) => option.value));
   const normalized = values.filter((value): value is string => typeof value === 'string' && allowedValues.has(value));
 
-  return normalized.length > 0 ? normalized : allOptionValues(options);
+  return normalized;
 }

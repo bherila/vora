@@ -58,9 +58,9 @@ function getInitialData(): UserSettingsInitialData {
       display_name: '',
       birth_date: '',
       email: '',
-      gender: 'male',
+      gender: '',
       gender_other: '',
-      user_type: 'human',
+      user_type: '',
       user_type_other: '',
       preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, null),
       preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, null),
@@ -77,9 +77,9 @@ function getInitialData(): UserSettingsInitialData {
       display_name: parsed.display_name ?? '',
       birth_date: parsed.birth_date ?? '',
       email: parsed.email ?? '',
-      gender: parsed.gender ?? 'male',
+      gender: parsed.gender ?? '',
       gender_other: parsed.gender_other ?? '',
-      user_type: parsed.user_type ?? 'human',
+      user_type: parsed.user_type ?? '',
       user_type_other: parsed.user_type_other ?? '',
       preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, parsed.preferred_user_types),
       preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, parsed.preferred_genders),
@@ -93,9 +93,9 @@ function getInitialData(): UserSettingsInitialData {
       display_name: '',
       birth_date: '',
       email: '',
-      gender: 'male',
+      gender: '',
       gender_other: '',
-      user_type: 'human',
+      user_type: '',
       user_type_other: '',
       preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, null),
       preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, null),
@@ -280,6 +280,7 @@ function UserSettingsPage() {
                 required
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
+                <option value="">Select user type</option>
                 {USER_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
@@ -305,6 +306,7 @@ function UserSettingsPage() {
                 required
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
+                <option value="">Select gender</option>
                 {GENDER_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
