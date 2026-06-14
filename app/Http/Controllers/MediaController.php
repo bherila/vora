@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Enums\MediaType;
 use App\Enums\Visibility;
+use App\Http\Requests\Media\AbortMultipartRequest;
+use App\Http\Requests\Media\CompleteMultipartRequest;
+use App\Http\Requests\Media\PresignPartRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
 use App\Services\FileStorageService;
@@ -11,6 +14,7 @@ use App\Services\Media\HlsService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use App\Support\MediaPresenter;
+use App\Support\PaginationMeta;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,32 +48,68 @@ class MediaController extends Controller
     }
 
     /**
-     * List the current user's own media (every status).
+     * List the current user's own media (every status), newest first, paginated.
      */
     public function index(Request $request): JsonResponse
     {
-        $items = Media::query()
+        $paginator = Media::query()
             ->where('user_id', $request->user()->id)
             ->with('interests')
             ->latest()
-            ->get()
-            ->map(fn (Media $m): array => MediaPresenter::ownerView($m, $this->extrasFor($m)));
+            ->paginate((int) config('media.page_size', 24));
 
-        return response()->json(['success' => true, 'data' => $items]);
+        $data = collect($paginator->items())
+            // resolveHls: false — listings must not do a per-item R2 read.
+            ->map(fn (Media $m): array => MediaPresenter::ownerView($m, $this->extrasFor($m, resolveHls: false)))
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'meta' => PaginationMeta::from($paginator),
+        ]);
     }
 
     /**
-     * Create a pending media record and return a presigned upload URL.
+     * Create a pending media record and return upload instructions: a single
+     * presigned PUT, or — for large files — a multipart upload to chunk against.
      */
     public function store(StoreMediaRequest $request): JsonResponse
     {
+        $type = MediaType::from($request->validated('type'));
+        $visibility = Visibility::from($request->validated('visibility'));
+        $size = (int) ($request->validated('size') ?? 0);
+
+        if ($size >= (int) config('media.multipart_threshold', PHP_INT_MAX)) {
+            $result = $this->uploads->createPendingMultipart(
+                $request->user(),
+                $type,
+                $request->validated('filename'),
+                $request->validated('content_type'),
+                $request->validated('title'),
+                $visibility,
+                $request->interestIds(),
+            );
+
+            $media = $result['media']->load('interests');
+
+            return response()->json([
+                'success' => true,
+                'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+                'multipart' => [
+                    'upload_id' => $result['upload_id'],
+                    'part_size' => $result['part_size'],
+                ],
+            ], 201);
+        }
+
         $result = $this->uploads->createPendingUpload(
             $request->user(),
-            MediaType::from($request->validated('type')),
+            $type,
             $request->validated('filename'),
             $request->validated('content_type'),
             $request->validated('title'),
-            Visibility::from($request->validated('visibility')),
+            $visibility,
             $request->interestIds(),
         );
 
@@ -81,6 +121,61 @@ class MediaController extends Controller
             'upload_url' => $result['upload_url'],
             'upload_headers' => $result['upload_headers'],
         ], 201);
+    }
+
+    /**
+     * Presign one part of an in-flight multipart upload.
+     */
+    public function presignPart(PresignPartRequest $request, Media $media): JsonResponse
+    {
+        Gate::authorize('complete', $media);
+
+        $url = $this->uploads->presignPart(
+            $media,
+            $request->validated('upload_id'),
+            (int) $request->validated('part_number'),
+        );
+
+        return response()->json(['success' => true, 'url' => $url]);
+    }
+
+    /**
+     * Finalise a multipart upload from the client's collected part ETags.
+     */
+    public function completeMultipart(CompleteMultipartRequest $request, Media $media): JsonResponse
+    {
+        Gate::authorize('complete', $media);
+
+        $parts = array_map(
+            fn (array $p): array => ['PartNumber' => (int) $p['part_number'], 'ETag' => (string) $p['etag']],
+            $request->validated('parts'),
+        );
+
+        if (! $this->uploads->completeMultipart($media, $request->validated('upload_id'), $parts)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload could not be verified — the file is missing or exceeds the size limit.',
+            ], 422);
+        }
+
+        $media->load('interests');
+
+        return response()->json([
+            'success' => true,
+            'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+        ]);
+    }
+
+    /**
+     * Abort an in-flight multipart upload and discard the pending record.
+     */
+    public function abortMultipart(AbortMultipartRequest $request, Media $media): JsonResponse
+    {
+        Gate::authorize('complete', $media);
+
+        $this->uploads->abortMultipart($media, $request->validated('upload_id'));
+
+        return response()->json(['success' => true, 'message' => 'Upload aborted.']);
     }
 
     /**
@@ -148,7 +243,7 @@ class MediaController extends Controller
      *
      * @return array{url: ?string, video: ?array<string, mixed>}
      */
-    private function extrasFor(Media $media): array
+    private function extrasFor(Media $media, bool $resolveHls = true): array
     {
         $extras = ['url' => null, 'video' => null];
 
@@ -164,7 +259,7 @@ class MediaController extends Controller
         );
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media);
+            $extras['video'] = $this->hls->status($media, $resolveHls);
         }
 
         return $extras;

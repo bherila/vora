@@ -76,4 +76,30 @@ return [
     'upload_url_ttl' => (int) env('MEDIA_UPLOAD_URL_TTL', 30),
     'view_url_ttl' => (int) env('MEDIA_VIEW_URL_TTL', 60),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Multipart uploads
+    |--------------------------------------------------------------------------
+    |
+    | Files at or above multipart_threshold bytes use a presigned multipart
+    | upload (init → presign part → complete/abort) instead of a single PUT,
+    | enabling resumable/chunked uploads of large videos. part_size is the
+    | client chunk size (R2/S3 require parts >= 5 MiB except the last).
+    |
+    */
+
+    'multipart_threshold' => (int) env('MEDIA_MULTIPART_THRESHOLD', 100 * 1024 * 1024),
+    'multipart_part_size' => (int) env('MEDIA_MULTIPART_PART_SIZE', 16 * 1024 * 1024),
+
+    /*
+    |--------------------------------------------------------------------------
+    | List pagination
+    |--------------------------------------------------------------------------
+    |
+    | Page size for the user library and admin review queue list endpoints.
+    |
+    */
+
+    'page_size' => (int) env('MEDIA_PAGE_SIZE', 24),
+
 ];

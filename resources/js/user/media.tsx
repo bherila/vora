@@ -16,8 +16,8 @@ import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { fetchWrapper } from '@/fetchWrapper';
 import { MediaPlayer } from '@/media/MediaPlayer';
-import { formatBytes, type MediaItem, mediaTypeForFile, type VisibilityValue } from '@/media/types';
-import { putToSignedUrl } from '@/media/upload';
+import { formatBytes, type MediaItem, mediaTypeForFile, type PagedResponse, type VisibilityValue } from '@/media/types';
+import { type MultipartInfo, putToSignedUrl, uploadMultipart } from '@/media/upload';
 
 interface InitialData {
   last_interest_ids: number[];
@@ -25,8 +25,9 @@ interface InitialData {
 
 interface StoreResponse {
   data: MediaItem;
-  upload_url: string;
-  upload_headers: Record<string, string>;
+  upload_url?: string;
+  upload_headers?: Record<string, string>;
+  multipart?: MultipartInfo;
 }
 
 function getInitialData(): InitialData {
@@ -50,6 +51,9 @@ function UserMediaPage() {
   const initial = useMemo(() => getInitialData(), []);
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -59,20 +63,30 @@ function UserMediaPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const loadItems = async (): Promise<void> => {
-    setLoading(true);
+  // Load a page. page 1 replaces the list (initial load / after upload); higher
+  // pages append for the "Load more" control.
+  const loadPage = async (page: number): Promise<void> => {
+    if (page > 1) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const response = (await fetchWrapper.get('/api/media')) as { data: MediaItem[] };
-      setItems(response.data ?? []);
+      const response = (await fetchWrapper.get(`/api/media?page=${page}`)) as PagedResponse<MediaItem>;
+      const next = response.data ?? [];
+      setItems((current) => (page > 1 ? [...current, ...next] : next));
+      setHasMore(response.meta?.has_more ?? false);
+      setPage(page);
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    void loadItems();
+    void loadPage(1);
   }, []);
 
   const resetForm = (): void => {
@@ -107,16 +121,40 @@ function UserMediaPage() {
         interest_ids: interestIds,
       })) as StoreResponse;
 
-      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
-        setProgress(Math.round(fraction * 100));
-      });
+      const reportProgress = (fraction: number): void => setProgress(Math.round(fraction * 100));
 
-      await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+      if (created.multipart) {
+        const { upload_id } = created.multipart;
+        try {
+          const parts = await uploadMultipart(
+            file,
+            created.multipart,
+            async (partNumber) => {
+              const res = (await fetchWrapper.post(`/api/media/${created.data.id}/multipart/part`, {
+                upload_id,
+                part_number: partNumber,
+              })) as { url: string };
+              return res.url;
+            },
+            reportProgress,
+          );
+          await fetchWrapper.post(`/api/media/${created.data.id}/multipart/complete`, { upload_id, parts });
+        } catch (err) {
+          // Best-effort abort so the partial upload and pending row don't linger.
+          await fetchWrapper.post(`/api/media/${created.data.id}/multipart/abort`, { upload_id }).catch(() => undefined);
+          throw err;
+        }
+      } else if (created.upload_url) {
+        await putToSignedUrl(created.upload_url, file, created.upload_headers ?? {}, reportProgress);
+        await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+      } else {
+        throw new Error('The server did not return upload instructions.');
+      }
 
       toast.success('Upload complete. It will be reviewed before others can see it.');
       setDialogOpen(false);
       resetForm();
-      await loadItems();
+      await loadPage(1);
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -240,6 +278,13 @@ function UserMediaPage() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+      {hasMore && (
+        <div className="mt-6 flex justify-center">
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void loadPage(page + 1)}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </Button>
         </div>
       )}
       <Toaster position="top-right" richColors closeButton />

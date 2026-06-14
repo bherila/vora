@@ -9,6 +9,7 @@ use App\Models\Media;
 use App\Services\FileStorageService;
 use App\Services\Media\HlsService;
 use App\Support\MediaPresenter;
+use App\Support\PaginationMeta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,7 +39,7 @@ class AdminMediaController extends Controller
     {
         $status = $request->query('status');
 
-        $items = Media::query()
+        $paginator = Media::query()
             ->with(['interests', 'user'])
             // Only uploaded content is reviewable. Rows still pending their R2
             // PUT must never be approvable (the owner could complete the upload
@@ -50,10 +51,18 @@ class AdminMediaController extends Controller
             // Pending first so the review queue surfaces new uploads, then newest.
             ->orderByRaw('CASE WHEN moderation_status = ? THEN 0 ELSE 1 END', [ModerationStatus::Pending->value])
             ->latest()
-            ->get()
-            ->map(fn (Media $m): array => MediaPresenter::adminView($m, $this->extrasFor($m)));
+            ->paginate((int) config('media.page_size', 24));
 
-        return response()->json(['success' => true, 'data' => $items]);
+        $data = collect($paginator->items())
+            // resolveHls: false — the review queue must not do a per-item R2 read.
+            ->map(fn (Media $m): array => MediaPresenter::adminView($m, $this->extrasFor($m, resolveHls: false)))
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'meta' => PaginationMeta::from($paginator),
+        ]);
     }
 
     /**
@@ -87,7 +96,7 @@ class AdminMediaController extends Controller
     /**
      * @return array{url: ?string, video: ?array<string, mixed>}
      */
-    private function extrasFor(Media $media): array
+    private function extrasFor(Media $media, bool $resolveHls = true): array
     {
         $extras = ['url' => null, 'video' => null];
 
@@ -103,7 +112,7 @@ class AdminMediaController extends Controller
         );
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media);
+            $extras['video'] = $this->hls->status($media, $resolveHls);
         }
 
         return $extras;

@@ -68,15 +68,22 @@ class HlsService
      * Status payload for serialization: processing until the mapping exists, then
      * ready with the proxy master-playlist URL.
      *
+     * Pass $resolve = false on list endpoints to avoid a per-item R2 mapping read:
+     * the status is then derived solely from the already-cached content id, so a
+     * not-yet-resolved video reads as "processing" until it is opened (the single
+     * show/stream endpoints resolve it). This keeps listings at O(1) network I/O.
+     *
      * @return array{status: string, master_url: ?string}
      */
-    public function status(Media $video): array
+    public function status(Media $video, bool $resolve = true): array
     {
         if (! $video->type->isVideo()) {
             return ['status' => 'not_applicable', 'master_url' => null];
         }
 
-        if (! $this->ensureResolved($video)) {
+        $ready = $resolve ? $this->ensureResolved($video) : $video->isHlsReady();
+
+        if (! $ready) {
             return ['status' => 'processing', 'master_url' => null];
         }
 
