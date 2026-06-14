@@ -19,10 +19,8 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
-  const toolsRef = useRef<HTMLLIElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const adminMenuRef = useRef<HTMLLIElement | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
@@ -34,8 +32,6 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!toolsRef.current) return;
-      if (!toolsRef.current.contains(e.target as Node)) setToolsOpen(false);
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
       if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setAdminMenuOpen(false);
     };

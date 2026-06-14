@@ -155,6 +155,21 @@ class AuthFlowTest extends TestCase
             'hash' => sha1($user->email),
         ]);
 
+        // An already-approved user lands in the app, not on the pending page.
+        $this->actingAs($user)->get($url)->assertRedirect($user->getLoginRedirectUrl());
+        $this->assertNotNull($user->fresh()->email_verified_at);
+    }
+
+    #[Test]
+    public function test_unapproved_user_verifying_email_lands_on_pending(): void
+    {
+        $user = User::factory()->pendingApproval()->unverified()->create();
+
+        $url = URL::temporarySignedRoute('verification.verify', now()->addMinutes(60), [
+            'id' => $user->id,
+            'hash' => sha1($user->email),
+        ]);
+
         $this->actingAs($user)->get($url)->assertRedirect(route('approval.pending'));
         $this->assertNotNull($user->fresh()->email_verified_at);
     }

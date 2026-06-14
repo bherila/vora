@@ -32,9 +32,12 @@ class AppServiceProvider extends ServiceProvider
         // Keep last_login_at fresh on each login.
         Event::listen(Login::class, UpdateLastLoginDate::class);
 
-        // Admin gate — user id 1 or the is_admin flag. Used by admin routes and the
-        // package's audit-log endpoints (see config/bherila-auth.php audit.admin_ability).
-        Gate::define('admin-only', fn (User $user): bool => $user->isAdmin());
+        // Admin gate — admin flag plus the full login access model (approved and not
+        // disabled). Used by admin routes and the package's audit-log endpoints
+        // (see config/bherila-auth.php audit.admin_ability), including JSON endpoints
+        // that do not otherwise pass the `approved` middleware, so a pending or
+        // disabled admin must not slip through here.
+        Gate::define('admin-only', fn (User $user): bool => $user->isAdmin() && $user->isApproved() && $user->canLogin());
 
         // Register the Spatie CSP middleware globally if the HTTP kernel is available.
         if ($this->app->bound(Kernel::class)) {

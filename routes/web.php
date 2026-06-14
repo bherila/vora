@@ -68,7 +68,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
 });
 
-// Admin JSON API — session-authenticated (web middleware), admin-gated.
+// Admin JSON API — session-authenticated (web middleware), admin-gated. The
+// admin-only ability already enforces the full access model (admin + approved +
+// not disabled) and returns a clean 403 for JSON callers.
 Route::middleware(['auth', 'can:admin-only'])->prefix('api/admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);

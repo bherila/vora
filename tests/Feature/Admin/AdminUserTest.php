@@ -31,6 +31,19 @@ class AdminUserTest extends TestCase
     }
 
     #[Test]
+    public function test_pending_or_disabled_admin_cannot_reach_admin_api(): void
+    {
+        User::factory()->admin()->create(); // occupy id 1 (always-admin)
+
+        // is_admin is set but the account is not through the access model yet.
+        $pendingAdmin = User::factory()->admin()->state(['approved_at' => null])->create();
+        $disabledAdmin = User::factory()->admin()->disabled()->create();
+
+        $this->actingAs($pendingAdmin)->getJson('/api/admin/users')->assertForbidden();
+        $this->actingAs($disabledAdmin)->getJson('/api/admin/users')->assertForbidden();
+    }
+
+    #[Test]
     public function test_admin_can_list_users(): void
     {
         $admin = $this->admin();

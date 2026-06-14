@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -23,6 +24,11 @@ return new class extends Migration
             // Forces the user to set a new password before using the app.
             $table->boolean('force_change_pw')->default(false)->after('approved_by_user_id');
         });
+
+        // Grandfather every pre-existing account as approved. These users predate the
+        // approval gate; leaving approved_at null would redirect them (including the
+        // primary admin, id 1) to /pending-approval and lock existing deployments out.
+        DB::table('users')->whereNull('approved_at')->update(['approved_at' => now()]);
     }
 
     /**
