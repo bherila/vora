@@ -47,6 +47,8 @@ return [
             'report' => false,
         ],
 
+        // Source bucket for uploaded videos. Written by the app; read-only by the
+        // external s3-hls transcoder, which renders HLS into the "hls" disk below.
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
@@ -56,6 +58,39 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // Uploaded photos live in their own bucket so the video transcoder never
+        // scans them. Falls back to the AWS_* R2 account/endpoint when PHOTOS_*
+        // values are not set, so a single R2 account can host all buckets.
+        // Note: `?:` (not env() defaults) so that a blank PHOTOS_* value — which
+        // dotenv treats as set ('') — still falls back to the AWS_* credentials
+        // rather than producing empty config.
+        'photos' => [
+            'driver' => 's3',
+            'key' => env('PHOTOS_ACCESS_KEY_ID') ?: env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('PHOTOS_SECRET_ACCESS_KEY') ?: env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('PHOTOS_REGION') ?: env('AWS_DEFAULT_REGION'),
+            'bucket' => env('PHOTOS_BUCKET'),
+            'endpoint' => env('PHOTOS_ENDPOINT') ?: env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => filter_var(env('PHOTOS_USE_PATH_STYLE_ENDPOINT') ?: env('AWS_USE_PATH_STYLE_ENDPOINT', false), FILTER_VALIDATE_BOOLEAN),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // HLS output bucket written by the s3-hls transcoder. The app reads
+        // mapping objects (mappings/<source-key>.json) from here to resolve a
+        // playable master playlist; it never writes here.
+        'hls' => [
+            'driver' => 's3',
+            'key' => env('HLS_ACCESS_KEY_ID') ?: env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('HLS_SECRET_ACCESS_KEY') ?: env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('HLS_REGION') ?: env('AWS_DEFAULT_REGION'),
+            'bucket' => env('HLS_BUCKET'),
+            'endpoint' => env('HLS_ENDPOINT') ?: env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => filter_var(env('HLS_USE_PATH_STYLE_ENDPOINT') ?: env('AWS_USE_PATH_STYLE_ENDPOINT', false), FILTER_VALIDATE_BOOLEAN),
             'throw' => false,
             'report' => false,
         ],

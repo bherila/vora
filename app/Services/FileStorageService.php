@@ -2,189 +2,119 @@
 
 namespace App\Services;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Service for handling file storage operations with S3.
- * Provides upload, download, and deletion capabilities with signed URLs.
+ * Stateless wrapper around S3-compatible (R2) filesystem disks providing
+ * presigned upload URLs, signed view/download URLs, and object operations.
+ * The disk is passed per call so the service can be injected and mocked.
+ * Bucket names come from the disk config, never from code.
  */
 class FileStorageService
 {
-    /**
-     * The S3 disk name.
-     */
-    protected string $disk = 's3';
-
-    /**
-     * Maximum file size that can be uploaded directly (50MB).
-     * Files larger than this should use signed URL upload.
-     */
-    public const DIRECT_UPLOAD_MAX_SIZE = 50 * 1024 * 1024;
-
-    /**
-     * Get the S3 disk instance.
-     */
-    protected function storage()
+    protected function storage(string $disk): Filesystem
     {
-        return Storage::disk($this->disk);
+        return Storage::disk($disk);
     }
 
-    /**
-     * Upload a file directly to S3.
-     *
-     * @param  UploadedFile  $file  The uploaded file
-     * @param  string  $s3Path  The destination path in S3
-     * @return bool Whether the upload was successful
-     */
-    public function uploadFile(UploadedFile $file, string $s3Path): bool
+    protected function bucket(string $disk): string
     {
-        return $this->storage()->putFileAs(
-            dirname($s3Path),
-            $file,
-            basename($s3Path)
-        ) !== false;
-    }
+        $bucket = config("filesystems.disks.{$disk}.bucket");
 
-    /**
-     * Upload file content directly to S3.
-     *
-     * @param  string  $content  The file content
-     * @param  string  $s3Path  The destination path in S3
-     * @return bool Whether the upload was successful
-     */
-    public function uploadContent(string $content, string $s3Path): bool
-    {
-        return $this->storage()->put($s3Path, $content);
-    }
-
-    /**
-     * Generate a signed URL for uploading a large file directly to S3.
-     *
-     * @param  string  $s3Path  The destination path in S3
-     * @param  string  $contentType  The MIME type of the file
-     * @param  int  $expiration  URL expiration time in minutes
-     * @return string The signed upload URL
-     */
-    public function getSignedUploadUrl(string $s3Path, string $contentType, int $expiration = 60): string
-    {
-        $bucket = config('filesystems.disks.s3.bucket');
         if (empty($bucket)) {
-            throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
+            throw new \RuntimeException("Bucket is not configured for disk [{$disk}].");
         }
 
-        return $this->storage()->temporaryUploadUrl(
-            $s3Path,
-            now()->addMinutes($expiration),
+        return $bucket;
+    }
+
+    /**
+     * Generate a presigned URL the browser can PUT a file to directly, avoiding
+     * server upload size limits. The S3/R2 adapter returns both the URL and the
+     * headers (e.g. Content-Type) that were signed and which the client must
+     * send on the PUT, so both are returned here.
+     *
+     * @return array{url: string, headers: array<string, string>}
+     */
+    public function getSignedUploadUrl(string $disk, string $key, string $contentType, int $ttlMinutes = 30): array
+    {
+        $result = $this->storage($disk)->temporaryUploadUrl(
+            $key,
+            now()->addMinutes($ttlMinutes),
             [
-                'Bucket' => $bucket,
+                'Bucket' => $this->bucket($disk),
                 'ContentType' => $contentType,
-            ]
+            ],
         );
+
+        return [
+            'url' => $result['url'],
+            'headers' => $result['headers'] ?? [],
+        ];
     }
 
     /**
-     * Generate a signed URL for downloading a file from S3.
-     *
-     * @param  string  $s3Path  The file path in S3
-     * @param  string  $downloadFilename  The filename to use for the download
-     * @param  int  $expiration  URL expiration time in minutes
-     * @return string The signed download URL
+     * Signed URL for viewing an object inline in the browser (img/video src).
      */
-    public function getSignedDownloadUrl(string $s3Path, string $downloadFilename, int $expiration = 60): string
+    public function getSignedViewUrl(string $disk, string $key, int $ttlMinutes = 60, ?string $contentType = null): string
     {
-        $bucket = config('filesystems.disks.s3.bucket');
-        if (empty($bucket)) {
-            throw new \RuntimeException('S3 Bucket is not configured in filesystems.disks.s3.bucket');
+        $options = [
+            'Bucket' => $this->bucket($disk),
+            'ResponseContentDisposition' => 'inline',
+        ];
+
+        if ($contentType !== null) {
+            $options['ResponseContentType'] = $contentType;
         }
 
-        return $this->storage()->temporaryUrl(
-            $s3Path,
-            now()->addMinutes($expiration),
+        return $this->storage($disk)->temporaryUrl($key, now()->addMinutes($ttlMinutes), $options);
+    }
+
+    /**
+     * Signed URL that forces a download with the given filename.
+     */
+    public function getSignedDownloadUrl(string $disk, string $key, string $downloadFilename, int $ttlMinutes = 60): string
+    {
+        return $this->storage($disk)->temporaryUrl(
+            $key,
+            now()->addMinutes($ttlMinutes),
             [
-                'Bucket' => $bucket,
+                'Bucket' => $this->bucket($disk),
                 'ResponseContentDisposition' => 'attachment; filename="'.addslashes($downloadFilename).'"',
-            ]
+            ],
         );
     }
 
-    /**
-     * Delete a file from S3.
-     *
-     * @param  string  $s3Path  The file path in S3
-     * @return bool Whether the deletion was successful
-     */
-    public function deleteFile(string $s3Path): bool
+    public function uploadFile(string $disk, UploadedFile $file, string $key): bool
     {
-        return $this->storage()->delete($s3Path);
+        return $this->storage($disk)->putFileAs(dirname($key), $file, basename($key)) !== false;
     }
 
-    /**
-     * Check if a file exists in S3.
-     *
-     * @param  string  $s3Path  The file path in S3
-     * @return bool Whether the file exists
-     */
-    public function fileExists(string $s3Path): bool
+    public function get(string $disk, string $key): ?string
     {
-        return $this->storage()->exists($s3Path);
+        $storage = $this->storage($disk);
+
+        return $storage->exists($key) ? $storage->get($key) : null;
     }
 
-    /**
-     * Get file size from S3.
-     *
-     * @param  string  $s3Path  The file path in S3
-     * @return int|null The file size in bytes, or null if file doesn't exist
-     */
-    public function getFileSize(string $s3Path): ?int
+    public function deleteFile(string $disk, string $key): bool
+    {
+        return $this->storage($disk)->delete($key);
+    }
+
+    public function fileExists(string $disk, string $key): bool
+    {
+        return $this->storage($disk)->exists($key);
+    }
+
+    public function getFileSize(string $disk, string $key): ?int
     {
         try {
-            return $this->storage()->size($s3Path);
-        } catch (\Exception $e) {
+            return $this->storage($disk)->size($key);
+        } catch (\Exception) {
             return null;
         }
-    }
-
-    /**
-     * Create a file record and upload the file.
-     *
-     * @param  Model  $fileModel  The file model instance (not yet saved)
-     * @param  UploadedFile  $file  The uploaded file
-     * @return Model The saved file model
-     */
-    public function createFileRecord(Model $fileModel, UploadedFile $file): Model
-    {
-        // Upload to S3
-        $uploaded = $this->uploadFile($file, $fileModel->s3_path);
-
-        if (! $uploaded) {
-            throw new \RuntimeException('Failed to upload file to S3');
-        }
-
-        // Save the model
-        $fileModel->save();
-
-        return $fileModel;
-    }
-
-    /**
-     * Delete a file record and its S3 file.
-     *
-     * @param  Model  $fileModel  The file model to delete
-     * @param  bool  $forceDelete  Whether to hard delete (default: soft delete)
-     * @return bool Whether the deletion was successful
-     */
-    public function deleteFileRecord(Model $fileModel, bool $forceDelete = false): bool
-    {
-        // Delete from S3
-        $this->deleteFile($fileModel->s3_path);
-
-        // Delete the record
-        if ($forceDelete) {
-            return $fileModel->forceDelete();
-        }
-
-        return $fileModel->delete();
     }
 }

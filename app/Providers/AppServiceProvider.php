@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
+use App\Models\Media;
 use App\Models\User;
+use App\Policies\MediaPolicy;
 use App\Services\Auth\VoraAuthUserPolicy;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
@@ -38,6 +40,8 @@ class AppServiceProvider extends ServiceProvider
         // that do not otherwise pass the `approved` middleware, so a pending or
         // disabled admin must not slip through here.
         Gate::define('admin-only', fn (User $user): bool => $user->isAdmin() && $user->isApproved() && $user->canLogin());
+
+        Gate::policy(Media::class, MediaPolicy::class);
 
         // Register the Spatie CSP middleware globally if the HTTP kernel is available.
         if ($this->app->bound(Kernel::class)) {
