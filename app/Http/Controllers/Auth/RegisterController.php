@@ -31,12 +31,6 @@ class RegisterController extends Controller
         $user->birth_date = $data['birth_date'];
         $user->email = $data['email'];
         $user->password = $data['password']; // hashed via the model cast
-        $user->gender = $data['gender'];
-        $user->gender_other = $data['gender'] === 'other' ? ($data['gender_other'] ?? null) : null;
-        $user->user_type = $data['user_type'];
-        $user->user_type_other = $data['user_type'] === 'other' ? ($data['user_type_other'] ?? null) : null;
-        $user->preferred_user_types = $data['preferred_user_types'];
-        $user->preferred_genders = $data['preferred_genders'];
         // Bootstrap: the very first account is an approved admin so the app is usable.
         if ($isFirstUser) {
             $user->is_admin = true;

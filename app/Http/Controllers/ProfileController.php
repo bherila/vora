@@ -43,12 +43,21 @@ class ProfileController extends Controller
         if ($emailChanged) {
             $user->email = $data['email'];
         }
-        $user->gender = $data['gender'];
-        $user->gender_other = $data['gender'] === 'other' ? ($data['gender_other'] ?? null) : null;
-        $user->user_type = $data['user_type'];
-        $user->user_type_other = $data['user_type'] === 'other' ? ($data['user_type_other'] ?? null) : null;
-        $user->preferred_user_types = $data['preferred_user_types'];
-        $user->preferred_genders = $data['preferred_genders'];
+        $gender = array_key_exists('gender', $data) ? $data['gender'] : $user->gender;
+        $genderOther = array_key_exists('gender_other', $data) ? $data['gender_other'] : $user->gender_other;
+        $userType = array_key_exists('user_type', $data) ? $data['user_type'] : $user->user_type;
+        $userTypeOther = array_key_exists('user_type_other', $data) ? $data['user_type_other'] : $user->user_type_other;
+
+        $user->gender = $gender;
+        $user->gender_other = $gender === 'other' ? $genderOther : null;
+        $user->user_type = $userType;
+        $user->user_type_other = $userType === 'other' ? $userTypeOther : null;
+        if (array_key_exists('preferred_user_types', $data)) {
+            $user->preferred_user_types = $data['preferred_user_types'];
+        }
+        if (array_key_exists('preferred_genders', $data)) {
+            $user->preferred_genders = $data['preferred_genders'];
+        }
         if ($emailChanged) {
             $user->email_verified_at = null;
         }

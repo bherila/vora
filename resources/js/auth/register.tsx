@@ -2,19 +2,12 @@ import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { DatePicker } from '@/components/date-picker';
-import { ProfileOptionCheckboxGroup } from '@/components/profile-option-checkbox-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
-import {
-  allOptionValues,
-  GENDER_OPTIONS,
-  hasProfileOptionValue,
-  USER_TYPE_OPTIONS,
-} from '@/profile-options';
 
 function getAdultBirthDateLimit(): string {
   const date = new Date();
@@ -32,18 +25,10 @@ function RegisterPage() {
   const [displayName, setDisplayName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [email, setEmail] = useState('');
-  const [gender, setGender] = useState('');
-  const [genderOther, setGenderOther] = useState('');
-  const [userType, setUserType] = useState('');
-  const [userTypeOther, setUserTypeOther] = useState('');
-  const [preferredUserTypes, setPreferredUserTypes] = useState<string[]>(allOptionValues(USER_TYPE_OPTIONS));
-  const [preferredGenders, setPreferredGenders] = useState<string[]>(allOptionValues(GENDER_OPTIONS));
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const isOtherGender = gender === 'other';
-  const isOtherUserType = userType === 'other';
   const adultBirthDateLimit = getAdultBirthDateLimit();
 
   const handleSubmit = async (e: FormEvent) => {
@@ -81,54 +66,12 @@ function RegisterPage() {
       return;
     }
 
-    if (!hasProfileOptionValue(USER_TYPE_OPTIONS, userType)) {
-      setError('Please choose a user type.');
-      setLoading(false);
-      return;
-    }
-
-    if (isOtherUserType && userTypeOther.trim().length === 0) {
-      setError('Please specify your user type when choosing Other.');
-      setLoading(false);
-      return;
-    }
-
-    if (!hasProfileOptionValue(GENDER_OPTIONS, gender)) {
-      setError('Please choose a gender option.');
-      setLoading(false);
-      return;
-    }
-
-    if (isOtherGender && genderOther.trim().length === 0) {
-      setError('Please specify your gender when choosing Other.');
-      setLoading(false);
-      return;
-    }
-
-    if (preferredUserTypes.length === 0) {
-      setError('Please choose at least one user type you want to see.');
-      setLoading(false);
-      return;
-    }
-
-    if (preferredGenders.length === 0) {
-      setError('Please choose at least one gender you want to see.');
-      setLoading(false);
-      return;
-    }
-
     try {
       const response = await fetchWrapper.post('/api/auth/register', {
         name: name.trim(),
         display_name: displayName.trim(),
         birth_date: birthDate,
         email,
-        gender,
-        gender_other: isOtherGender ? genderOther.trim() : '',
-        user_type: userType,
-        user_type_other: isOtherUserType ? userTypeOther.trim() : '',
-        preferred_user_types: preferredUserTypes,
-        preferred_genders: preferredGenders,
         password,
         password_confirmation: passwordConfirmation,
       });
@@ -219,79 +162,6 @@ function RegisterPage() {
                 Use an email address you can access. We will send verification and two-factor authentication messages there.
               </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="user_type">User type</Label>
-              <select
-                id="user_type"
-                value={userType}
-                onChange={(e) => setUserType(e.target.value)}
-                required
-                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select user type</option>
-                {USER_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            {isOtherUserType && (
-              <div className="space-y-2">
-                <Label htmlFor="user_type_other">Other user type</Label>
-                <Input
-                  id="user_type_other"
-                  type="text"
-                  placeholder="Prefer to self-describe"
-                  value={userTypeOther}
-                  onChange={(e) => setUserTypeOther(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="gender">Gender</Label>
-              <select
-                id="gender"
-                value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                required
-                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select gender</option>
-                {GENDER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            {isOtherGender && (
-              <div className="space-y-2">
-                <Label htmlFor="gender_other">Other</Label>
-                <Input
-                  id="gender_other"
-                  type="text"
-                  placeholder="Prefer to self-describe"
-                  value={genderOther}
-                  onChange={(e) => setGenderOther(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-            <ProfileOptionCheckboxGroup
-              legend="User types you want to see"
-              description="Choose who should appear in discovery and matching. You can change this later."
-              name="preferred_user_types"
-              options={USER_TYPE_OPTIONS}
-              values={preferredUserTypes}
-              onChange={setPreferredUserTypes}
-            />
-            <ProfileOptionCheckboxGroup
-              legend="Genders you want to see"
-              description="Choose the genders you want represented in discovery and matching. You can change this later."
-              name="preferred_genders"
-              options={GENDER_OPTIONS}
-              values={preferredGenders}
-              onChange={setPreferredGenders}
-            />
-
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
