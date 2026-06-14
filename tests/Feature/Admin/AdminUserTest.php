@@ -82,6 +82,22 @@ class AdminUserTest extends TestCase
     }
 
     #[Test]
+    public function admin_can_toggle_identity_and_field_lock_flags(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create();
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['id_verified' => true])->assertOk();
+        $this->assertNotNull($target->fresh()->id_verified_at);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['name_locked' => true])->assertOk();
+        $this->assertTrue($target->fresh()->name_locked);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['email_locked' => true])->assertOk();
+        $this->assertTrue($target->fresh()->email_locked);
+    }
+
+    #[Test]
     public function test_admin_cannot_disable_self_or_primary_admin(): void
     {
         $admin = $this->admin(); // id 2

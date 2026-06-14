@@ -14,6 +14,9 @@ import { getAuthComponents } from './shared-components';
 interface UserSettingsInitialData {
   name: string;
   email: string;
+  id_verified_at: string | null;
+  name_locked: boolean;
+  email_locked: boolean;
 }
 
 interface UserSettingsResponse {
@@ -28,7 +31,13 @@ interface UserSettingsResponse {
 function getInitialData(): UserSettingsInitialData {
   const element = document.getElementById('user-settings-initial-data');
   if (!element || !element.textContent) {
-    return { name: '', email: '' };
+    return {
+      name: '',
+      email: '',
+      id_verified_at: null,
+      name_locked: false,
+      email_locked: false,
+    };
   }
 
   try {
@@ -36,9 +45,18 @@ function getInitialData(): UserSettingsInitialData {
     return {
       name: parsed.name ?? '',
       email: parsed.email ?? '',
+      id_verified_at: parsed.id_verified_at ?? null,
+      name_locked: parsed.name_locked ?? false,
+      email_locked: parsed.email_locked ?? false,
     };
   } catch {
-    return { name: '', email: '' };
+    return {
+      name: '',
+      email: '',
+      id_verified_at: null,
+      name_locked: false,
+      email_locked: false,
+    };
   }
 }
 
@@ -47,6 +65,9 @@ function UserSettingsPage() {
 
   const [accountName, setAccountName] = useState(initialData.name);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
+  const [accountVerificationDate] = useState(initialData.id_verified_at);
+  const [nameLocked] = useState(initialData.name_locked);
+  const [emailLocked] = useState(initialData.email_locked);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
   const [accountMessage, setAccountMessage] = useState('');
@@ -111,6 +132,7 @@ function UserSettingsPage() {
               <Input
                 id="account-name"
                 value={accountName}
+                disabled={nameLocked}
                 onChange={(event) => setAccountName(event.target.value)}
                 autoComplete="name"
                 required
@@ -122,12 +144,22 @@ function UserSettingsPage() {
                 id="account-email"
                 type="email"
                 value={accountEmail}
+                disabled={emailLocked}
                 onChange={(event) => setAccountEmail(event.target.value)}
                 autoComplete="email"
                 required
               />
             </div>
-            <Button type="submit" disabled={accountSaving}>
+            <p className="text-sm text-muted-foreground">
+              {nameLocked ? 'Name is locked by an administrator.' : 'You can edit your name.'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
+            </p>
+            <Button type="submit" disabled={accountSaving || (nameLocked && emailLocked)}>
               {accountSaving ? 'Saving…' : 'Save account details'}
             </Button>
           </form>

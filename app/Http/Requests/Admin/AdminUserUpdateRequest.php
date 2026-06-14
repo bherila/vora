@@ -19,6 +19,9 @@ class AdminUserUpdateRequest extends FormRequest
         return [
             'is_admin' => ['sometimes', 'boolean'],
             'is_disabled' => ['sometimes', 'boolean'],
+            'id_verified' => ['sometimes', 'boolean'],
+            'name_locked' => ['sometimes', 'boolean'],
+            'email_locked' => ['sometimes', 'boolean'],
         ];
     }
 }
