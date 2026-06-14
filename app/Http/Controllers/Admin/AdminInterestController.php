@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminInterestStoreRequest;
 use App\Http\Requests\Admin\AdminInterestUpdateRequest;
 use App\Http\Requests\Admin\AdminInterestRequestDecisionRequest;
+use App\Http\Requests\Admin\AdminInterestRequestCrudRequest;
 use App\Models\Interest;
 use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
@@ -72,7 +73,60 @@ class AdminInterestController extends Controller
                 'requested_by_id' => $interestRequest->user?->id,
                 'requested_by_name' => $interestRequest->user?->name,
                 'requested_at' => $interestRequest->created_at?->toIso8601String(),
+                'status' => $interestRequest->status,
+                'reviewer_notes' => $interestRequest->reviewer_notes,
+                'reviewed_at' => $interestRequest->reviewed_at?->toIso8601String(),
             ])->toArray(),
+        ]);
+    }
+
+    public function updateRequest(AdminInterestRequestCrudRequest $request, InterestRequest $interestRequest): JsonResponse
+    {
+        if ($interestRequest->status !== InterestRequest::STATUS_PENDING) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending requests can be edited.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        $interestRequest->fill($request->validated())->save();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $interestRequest->id,
+                'name' => $interestRequest->name,
+                'description' => $interestRequest->description,
+                'parent_interest_id' => $interestRequest->parent_interest_id,
+                'status' => $interestRequest->status,
+                'requested_by_name' => $interestRequest->user?->name,
+                'requested_by' => $interestRequest->user?->email,
+                'requested_at' => $interestRequest->created_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    public function destroyRequest(Request $request, InterestRequest $interestRequest): JsonResponse
+    {
+        if ($interestRequest->status !== InterestRequest::STATUS_PENDING) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending requests can be removed.',
+            ], Response::HTTP_CONFLICT);
+        }
+
+        if ($request->user() === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated.',
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $interestRequest->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Interest request deleted.',
         ]);
     }
 

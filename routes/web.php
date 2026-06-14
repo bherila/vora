@@ -86,6 +86,8 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::put('/interests/{interest}', [AdminInterestController::class, 'update']);
     Route::delete('/interests/{interest}', [AdminInterestController::class, 'destroy']);
     Route::get('/interest-requests', [AdminInterestController::class, 'apiRequestIndex']);
+    Route::put('/interest-requests/{interestRequest}', [AdminInterestController::class, 'updateRequest']);
+    Route::delete('/interest-requests/{interestRequest}', [AdminInterestController::class, 'destroyRequest']);
     Route::post('/interest-requests/{interestRequest}/approve', [AdminInterestController::class, 'approveRequest']);
     Route::post('/interest-requests/{interestRequest}/reject', [AdminInterestController::class, 'rejectRequest']);
 });

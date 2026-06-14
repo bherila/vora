@@ -42,6 +42,7 @@ interface AdminInterestRequest {
   requested_by_id: number | null;
   requested_by_name: string | null;
   requested_at: string;
+  status: string;
 }
 
 type InterestFormState = {
@@ -74,7 +75,10 @@ function AdminInterestsPage() {
   const [requestLoading, setRequestLoading] = useState(true);
   const [requestActionId, setRequestActionId] = useState<number | null>(null);
   const [pendingRequests, setPendingRequests] = useState<AdminInterestRequest[]>([]);
+  const [requestEditingId, setRequestEditingId] = useState<number | null>(null);
+  const [requestEditForm, setRequestEditForm] = useState<InterestFormState>(createEmptyForm());
   const [deleteTarget, setDeleteTarget] = useState<AdminInterest | null>(null);
+  const [deleteRequestTarget, setDeleteRequestTarget] = useState<AdminInterestRequest | null>(null);
   const [createForm, setCreateForm] = useState<InterestFormState>(createEmptyForm());
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<InterestFormState>(createEmptyForm());
@@ -179,6 +183,15 @@ function AdminInterestsPage() {
     });
   };
 
+  const beginRequestEdit = (request: AdminInterestRequest): void => {
+    setRequestEditingId(request.id);
+    setRequestEditForm({
+      name: request.name,
+      description: request.description ?? '',
+      parent_interest_id: request.parent_interest_id ? String(request.parent_interest_id) : '',
+    });
+  };
+
   const approveRequest = async (requestId: number): Promise<void> => {
     setError('');
     setRequestActionId(requestId);
@@ -197,6 +210,38 @@ function AdminInterestsPage() {
     setRequestActionId(requestId);
     try {
       await fetchWrapper.post(`/api/admin/interest-requests/${requestId}/reject`, {});
+      await loadRequests();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const saveRequestEdit = async (requestId: number): Promise<void> => {
+    setError('');
+    setRequestActionId(requestId);
+    try {
+      await fetchWrapper.put(`/api/admin/interest-requests/${requestId}`, {
+        name: requestEditForm.name.trim(),
+        description: requestEditForm.description.trim() || null,
+        parent_interest_id: requestEditForm.parent_interest_id ? Number(requestEditForm.parent_interest_id) : null,
+      });
+      setRequestEditingId(null);
+      await loadRequests();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const deleteRequest = async (requestId: number): Promise<void> => {
+    setError('');
+    setRequestActionId(requestId);
+    try {
+      await fetchWrapper.delete(`/api/admin/interest-requests/${requestId}`);
+      setDeleteRequestTarget(null);
       await loadRequests();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -236,28 +281,91 @@ function AdminInterestsPage() {
             <TableBody>
               {pendingRequests.map((request) => (
                 <TableRow key={request.id}>
-                  <TableCell className="font-medium">{request.name}</TableCell>
-                  <TableCell>{request.parent_name ?? '—'}</TableCell>
-                  <TableCell>{request.requested_by_name ?? request.requested_by ?? 'Unknown'}</TableCell>
-                  <TableCell>{request.description ?? '—'}</TableCell>
-                  <TableCell>{request.requested_at}</TableCell>
-                  <TableCell className="space-x-2">
-                    <Button
-                      size="sm"
-                      onClick={() => void approveRequest(request.id)}
-                      disabled={requestActionId === request.id}
-                    >
-                      {requestActionId === request.id ? 'Approving…' : 'Approve'}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => void rejectRequest(request.id)}
-                      disabled={requestActionId === request.id}
-                    >
-                      {requestActionId === request.id ? 'Rejecting…' : 'Reject'}
-                    </Button>
-                  </TableCell>
+                  {requestEditingId === request.id ? (
+                    <>
+                      <TableCell>
+                        <Input
+                          value={requestEditForm.name}
+                          onChange={(event) => setRequestEditForm((current) => ({ ...current, name: event.target.value }))}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          value={requestEditForm.parent_interest_id}
+                          onChange={(event) => setRequestEditForm((current) => ({ ...current, parent_interest_id: event.target.value }))}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2"
+                        >
+                          <option value="">No parent</option>
+                          {parentOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                      <TableCell>{request.requested_by_name ?? request.requested_by ?? 'Unknown'}</TableCell>
+                      <TableCell>
+                        <Textarea
+                          value={requestEditForm.description}
+                          onChange={(event) => setRequestEditForm((current) => ({ ...current, description: event.target.value }))}
+                          rows={2}
+                        />
+                      </TableCell>
+                      <TableCell>{request.requested_at}</TableCell>
+                      <TableCell className="space-x-2">
+                        <Button
+                          size="sm"
+                          disabled={requestActionId === request.id}
+                          onClick={() => void saveRequestEdit(request.id)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRequestEditingId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell className="font-medium">{request.name}</TableCell>
+                      <TableCell>{request.parent_name ?? '—'}</TableCell>
+                      <TableCell>{request.requested_by_name ?? request.requested_by ?? 'Unknown'}</TableCell>
+                      <TableCell>{request.description ?? '—'}</TableCell>
+                      <TableCell>{request.requested_at}</TableCell>
+                      <TableCell className="space-x-2">
+                        <Button size="sm" variant="outline" onClick={() => beginRequestEdit(request)} disabled={requestActionId === request.id}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => void approveRequest(request.id)}
+                          disabled={requestActionId === request.id}
+                        >
+                          {requestActionId === request.id ? 'Approving…' : 'Approve'}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void rejectRequest(request.id)}
+                          disabled={requestActionId === request.id}
+                        >
+                          {requestActionId === request.id ? 'Rejecting…' : 'Reject'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeleteRequestTarget(request)}
+                          disabled={requestActionId === request.id}
+                        >
+                          Delete
+                        </Button>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -357,7 +465,11 @@ function AdminInterestsPage() {
                       >
                         Save
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingId(null)}
+                      >
                         Cancel
                       </Button>
                     </TableCell>
@@ -389,7 +501,12 @@ function AdminInterestsPage() {
         </Table>
       )}
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteTarget(null);
+        }
+      }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Interest</DialogTitle>
@@ -404,6 +521,40 @@ function AdminInterestsPage() {
             <Button
               variant="destructive"
               onClick={() => { if (deleteTarget) void deleteInterest(deleteTarget.id); }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteRequestTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteRequestTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Interest Request</DialogTitle>
+            <DialogDescription>
+              Delete request <strong>{deleteRequestTarget?.name}</strong>? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteRequestTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteRequestTarget) {
+                  void deleteRequest(deleteRequestTarget.id);
+                }
+              }}
+              disabled={requestActionId === deleteRequestTarget?.id}
             >
               Delete
             </Button>

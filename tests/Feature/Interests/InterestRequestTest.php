@@ -105,4 +105,47 @@ class InterestRequestTest extends TestCase
         $this->assertSame(InterestRequest::STATUS_REJECTED, $interestRequest->status);
         $this->assertSame($admin->id, $interestRequest->reviewed_by_user_id);
     }
+
+    #[Test]
+    public function admin_can_edit_pending_interest_request(): void
+    {
+        $admin = $this->admin();
+        $requestingUser = User::factory()->approved()->create();
+
+        $interestRequest = InterestRequest::query()->create([
+            'user_id' => $requestingUser->id,
+            'name' => 'Review me',
+            'description' => 'Needs attention',
+        ]);
+
+        $this->actingAs($admin)->putJson("/api/admin/interest-requests/{$interestRequest->id}", [
+            'name' => 'Updated request',
+            'description' => 'Needs a better description',
+        ])->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('interest_requests', [
+            'id' => $interestRequest->id,
+            'name' => 'Updated request',
+            'description' => 'Needs a better description',
+        ]);
+    }
+
+    #[Test]
+    public function admin_can_delete_pending_interest_request(): void
+    {
+        $admin = $this->admin();
+        $requestingUser = User::factory()->approved()->create();
+
+        $interestRequest = InterestRequest::query()->create([
+            'user_id' => $requestingUser->id,
+            'name' => 'Review me',
+        ]);
+
+        $this->actingAs($admin)->deleteJson("/api/admin/interest-requests/{$interestRequest->id}")
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('interest_requests', ['id' => $interestRequest->id]);
+    }
 }
