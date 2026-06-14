@@ -20,10 +20,18 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'display_name' => ['required', 'string', 'max:255'],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
-            'gender' => ['required', 'string', Rule::in(['m', 'f', 'other'])],
+            'gender' => ['required', 'string', Rule::in(['male', 'female', 'other'])],
             'gender_other' => ['required_if:gender,other', 'nullable', 'string', 'max:100'],
+            'user_type' => ['required', 'string', Rule::in(['human', 'furry', 'other'])],
+            'user_type_other' => ['required_if:user_type,other', 'nullable', 'string', 'max:100'],
+            'preferred_user_types' => ['required', 'array', 'min:1'],
+            'preferred_user_types.*' => ['required', 'string', 'distinct', Rule::in(['human', 'furry', 'other'])],
+            'preferred_genders' => ['required', 'array', 'min:1'],
+            'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
         ];
     }
 }

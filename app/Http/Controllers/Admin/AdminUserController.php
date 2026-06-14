@@ -29,6 +29,8 @@ class AdminUserController extends Controller
             ->get([
                 'id',
                 'name',
+                'display_name',
+                'birth_date',
                 'email',
                 'is_admin',
                 'is_disabled',
@@ -100,6 +102,10 @@ class AdminUserController extends Controller
             $user->id_verified_at = (bool) $data['id_verified'] ? now() : null;
         }
 
+        if (array_key_exists('birth_date', $data)) {
+            $user->birth_date = $data['birth_date'];
+        }
+
         $user->save();
 
         return response()->json(['success' => true, 'data' => $this->present($user)]);
@@ -127,12 +133,15 @@ class AdminUserController extends Controller
         return [
             'id' => $user->id,
             'name' => $user->name,
+            'display_name' => $user->display_name,
+            'birth_date' => $user->birth_date?->toDateString(),
             'email' => $user->email,
             'is_admin' => $user->isAdmin(),
             'is_disabled' => (bool) $user->is_disabled,
             'is_approved' => $user->isApproved(),
             'email_verified' => $user->hasVerifiedEmail(),
             'id_verified' => $user->id_verified_at !== null,
+            'birth_date_verified' => $user->id_verified_at !== null,
             'name_locked' => (bool) $user->name_locked,
             'email_locked' => (bool) $user->email_locked,
             'id_verified_at' => $user->id_verified_at?->toIso8601String(),

@@ -47,11 +47,20 @@ class AdminUserTest extends TestCase
     public function test_admin_can_list_users(): void
     {
         $admin = $this->admin();
-        User::factory()->count(2)->create();
+        User::factory()->create([
+            'display_name' => 'Listed Display',
+            'birth_date' => '1990-01-15',
+        ]);
+        User::factory()->create();
 
         $this->actingAs($admin)->getJson('/api/admin/users')
             ->assertOk()
             ->assertJsonPath('success', true)
+            ->assertJsonFragment([
+                'display_name' => 'Listed Display',
+                'birth_date' => '1990-01-15',
+                'birth_date_verified' => false,
+            ])
             ->assertJsonCount(4, 'data'); // id1 admin + actor + 2
     }
 
@@ -102,7 +111,10 @@ class AdminUserTest extends TestCase
         $admin = $this->admin();
         $target = User::factory()->approved()->create();
 
-        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['id_verified' => true])->assertOk();
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['id_verified' => true])
+            ->assertOk()
+            ->assertJsonPath('data.id_verified', true)
+            ->assertJsonPath('data.birth_date_verified', true);
         $this->assertNotNull($target->fresh()->id_verified_at);
 
         $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['name_locked' => true])->assertOk();
@@ -110,6 +122,48 @@ class AdminUserTest extends TestCase
 
         $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", ['email_locked' => true])->assertOk();
         $this->assertTrue($target->fresh()->email_locked);
+    }
+
+    #[Test]
+    public function admin_can_update_user_birth_date(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create(['birth_date' => '1990-01-15']);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", [
+            'birth_date' => '1989-06-20',
+        ])->assertOk()
+            ->assertJsonPath('data.birth_date', '1989-06-20');
+
+        $this->assertSame('1989-06-20', $target->fresh()->birth_date?->toDateString());
+    }
+
+    #[Test]
+    public function admin_cannot_set_underage_birth_date(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create(['birth_date' => '1990-01-15']);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", [
+            'birth_date' => today()->subYears(18)->addDay()->toDateString(),
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('birth_date');
+
+        $this->assertSame('1990-01-15', $target->fresh()->birth_date?->toDateString());
+    }
+
+    #[Test]
+    public function admin_cannot_set_timestamp_birth_date(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create(['birth_date' => '1990-01-15']);
+
+        $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", [
+            'birth_date' => '1989-06-20T00:00:00Z',
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('birth_date');
+
+        $this->assertSame('1990-01-15', $target->fresh()->birth_date?->toDateString());
     }
 
     #[Test]
