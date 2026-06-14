@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
+use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
@@ -87,6 +88,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
+    Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
@@ -107,6 +109,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::delete('/interest-requests/{interestRequest}', [AdminInterestController::class, 'destroyRequest']);
     Route::post('/interest-requests/{interestRequest}/approve', [AdminInterestController::class, 'approveRequest']);
     Route::post('/interest-requests/{interestRequest}/reject', [AdminInterestController::class, 'rejectRequest']);
+
+    Route::get('/media', [AdminMediaController::class, 'apiIndex']);
+    Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
