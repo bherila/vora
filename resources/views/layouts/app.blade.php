@@ -7,7 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name') }}</title>
     <meta name="color-scheme" content="dark light">
-    <script>
+    <script @cspNonce>
       (function() {
         try {
           var theme = localStorage.getItem('theme') || 'system';
@@ -19,7 +19,7 @@
     </script>
     @vite(['resources/css/app.css', 'resources/js/navbar.tsx'])
     @stack('head')
-    <script>(_=>{let a})()</script>
+    <script @cspNonce>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen flex flex-col">
     @php
@@ -27,11 +27,11 @@
       $__isAuthenticated = ! is_null($__currentUser);
       $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
     @endphp
-    <script id="navbar-initial-data" type="application/json">
-      {!! json_encode([
+    <script id="navbar-initial-data" type="application/json" @cspNonce>
+      @json([
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
-      ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+      ])
     </script>
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
       <div id="navbar"></div>
