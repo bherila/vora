@@ -8,7 +8,7 @@ use App\Models\Interest;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
-use App\Services\Media\HlsMappingService;
+use App\Services\Media\HlsService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -70,23 +70,43 @@ class MediaServicesTest extends TestCase
         $this->assertSame('pending', $media->fresh()->upload_status);
     }
 
-    public function test_hls_resolve_processing_then_ready(): void
+    public function test_hls_status_processing_then_ready_with_proxy_url(): void
     {
         Storage::fake('hls');
-        config(['media.hls_base_url' => 'https://cdn.example/hls']);
         $media = Media::factory()->video()->create(['disk' => 's3']);
-        $service = app(HlsMappingService::class);
+        $service = app(HlsService::class);
 
-        $this->assertSame('processing', $service->resolve($media)['status']);
+        $this->assertSame('processing', $service->status($media)['status']);
 
         Storage::disk('hls')->put(
             'mappings/'.$media->object_key.'.json',
-            json_encode(['hlsRoot' => 'by-id/sha256:abc/master.m3u8']),
+            json_encode(['contentId' => 'sha256:abc']),
         );
 
-        $resolved = $service->resolve($media);
+        // The recheck guard caches the last lookup, so move past its window.
+        $this->travel(3)->minutes();
+        $resolved = $service->status($media->fresh());
         $this->assertSame('ready', $resolved['status']);
-        $this->assertSame('https://cdn.example/hls/by-id/sha256:abc/master.m3u8', $resolved['playback_url']);
+        $this->assertStringContainsString("/api/media/{$media->id}/hls/master.m3u8", $resolved['master_url']);
+        $this->assertSame('sha256:abc', $media->fresh()->hls_content_id);
+    }
+
+    public function test_hls_manifest_rewrites_child_uris_and_segments_presign(): void
+    {
+        Storage::fake('hls');
+        $media = Media::factory()->video()->create(['disk' => 's3']);
+        Storage::disk('hls')->put('mappings/'.$media->object_key.'.json', json_encode(['contentId' => 'sha256:abc']));
+        Storage::disk('hls')->put('by-id/sha256:abc/master.m3u8', "#EXTM3U\n720p/index.m3u8\n");
+
+        $service = app(HlsService::class);
+        $this->assertTrue($service->ensureResolved($media->fresh()));
+
+        $manifest = $service->manifest($media->fresh(), 'master.m3u8', fn (string $p): string => 'https://app.test/proxy/'.$p);
+        $this->assertNotNull($manifest);
+        $this->assertStringContainsString('https://app.test/proxy/720p/index.m3u8', $manifest['body']);
+
+        $this->assertFalse($service->isSafeRelativePath('../secret'));
+        $this->assertTrue($service->isManifestPath('720p/index.m3u8'));
     }
 
     public function test_delete_removes_source_object_and_row(): void

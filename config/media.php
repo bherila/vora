@@ -76,17 +76,4 @@ return [
     'upload_url_ttl' => (int) env('MEDIA_UPLOAD_URL_TTL', 30),
     'view_url_ttl' => (int) env('MEDIA_VIEW_URL_TTL', 60),
 
-    /*
-    |--------------------------------------------------------------------------
-    | HLS playback base URL
-    |--------------------------------------------------------------------------
-    |
-    | Public/CDN base URL that serves the HLS output bucket to browsers. The
-    | app resolves a source key to its "hlsRoot" via the mapping object, then
-    | joins it onto this base. Leave null until the encoded bucket is exposed.
-    |
-    */
-
-    'hls_base_url' => env('MEDIA_HLS_BASE_URL'),
-
 ];

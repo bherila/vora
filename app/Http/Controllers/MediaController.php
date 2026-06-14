@@ -7,12 +7,14 @@ use App\Enums\Visibility;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
 use App\Services\FileStorageService;
-use App\Services\Media\HlsMappingService;
+use App\Services\Media\HlsService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use App\Support\MediaPresenter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -21,7 +23,7 @@ class MediaController extends Controller
     public function __construct(
         private readonly MediaUploadService $uploads,
         private readonly MediaService $media,
-        private readonly HlsMappingService $hls,
+        private readonly HlsService $hls,
         private readonly FileStorageService $storage,
     ) {}
 
@@ -161,9 +163,53 @@ class MediaController extends Controller
         );
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->resolve($media);
+            $extras['video'] = $this->hls->status($media);
         }
 
         return $extras;
+    }
+
+    /**
+     * Authenticated HLS playback proxy. Manifests (`.m3u8`) are returned inline
+     * with child URIs rewritten back through this endpoint; segment/init objects
+     * are 302-redirected to short-lived presigned R2 URLs so the app does not
+     * carry segment bandwidth.
+     */
+    public function streamHls(Request $request, Media $media, string $path = 'master.m3u8'): Response|RedirectResponse|JsonResponse
+    {
+        Gate::authorize('view', $media);
+
+        if (! $media->type->isVideo()) {
+            return response()->json(['success' => false, 'message' => 'Not a video.'], 404);
+        }
+
+        if (! $this->hls->isSafeRelativePath($path)) {
+            return response()->json(['success' => false, 'message' => 'Invalid path.'], 422);
+        }
+
+        if (! $this->hls->ensureResolved($media)) {
+            return response()->json(['success' => false, 'message' => 'HLS not available for this video.'], 404);
+        }
+
+        if ($this->hls->isManifestPath($path)) {
+            $base = route('media.hls', ['media' => $media->id]);
+            $manifest = $this->hls->manifest($media, $path, fn (string $child): string => $base.'/'.$child);
+
+            if ($manifest === null) {
+                return response()->json(['success' => false, 'message' => 'Manifest not found.'], 404);
+            }
+
+            return response($manifest['body'], 200, [
+                'Content-Type' => $manifest['contentType'],
+                'Cache-Control' => 'private, max-age=10',
+            ]);
+        }
+
+        $url = $this->hls->segmentUrl($media, $path);
+        if ($url === null) {
+            return response()->json(['success' => false, 'message' => 'Segment not found.'], 404);
+        }
+
+        return redirect()->away($url, 302);
     }
 }

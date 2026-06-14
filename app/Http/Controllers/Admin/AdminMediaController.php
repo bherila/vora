@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ModerateMediaRequest;
 use App\Models\Media;
 use App\Services\FileStorageService;
-use App\Services\Media\HlsMappingService;
+use App\Services\Media\HlsService;
 use App\Support\MediaPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -17,7 +17,7 @@ use Illuminate\View\View;
 class AdminMediaController extends Controller
 {
     public function __construct(
-        private readonly HlsMappingService $hls,
+        private readonly HlsService $hls,
         private readonly FileStorageService $storage,
     ) {}
 
@@ -90,7 +90,7 @@ class AdminMediaController extends Controller
         );
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->resolve($media);
+            $extras['video'] = $this->hls->status($media);
         }
 
         return $extras;

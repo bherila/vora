@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
+import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
 import type { MediaItem } from '@/media/types';
 
 interface MediaPlayerProps {
@@ -7,32 +8,19 @@ interface MediaPlayerProps {
   className?: string;
 }
 
-function canPlayNativeHls(): boolean {
-  if (typeof document === 'undefined') {
-    return false;
-  }
-  const el = document.createElement('video');
-  return el.canPlayType('application/vnd.apple.mpegurl') !== '';
-}
-
 /**
- * Renders a photo or video. For video it prefers the transcoded HLS stream
- * where the browser plays HLS natively (Safari); otherwise it falls back to a
- * signed URL for the original source file, which every browser can play via a
- * plain <video> element. (A future enhancement could load hls.js for adaptive
- * playback in other browsers.)
+ * Renders a photo or video. Videos play the transcoded adaptive HLS stream via
+ * the authenticated proxy (hls.js / native HLS); on playback error — or while
+ * the transcode is still processing — it falls back to a signed URL for the
+ * original source file, which any browser can play in a plain <video>.
  */
 export function MediaPlayer({ item, className }: MediaPlayerProps) {
-  const videoSrc = useMemo(() => {
-    if (item.type !== 'video') {
-      return null;
-    }
-    const hls = item.video?.playback_url ?? null;
-    if (hls && canPlayNativeHls()) {
-      return hls;
-    }
-    return item.url;
-  }, [item]);
+  const [hlsFailed, setHlsFailed] = useState(false);
+
+  // Reset the fallback flag when the item (or its readiness) changes.
+  useEffect(() => {
+    setHlsFailed(false);
+  }, [item.id, item.video?.master_url]);
 
   if (item.upload_status !== 'ready') {
     return <p className="text-sm text-muted-foreground">Upload in progress…</p>;
@@ -45,13 +33,20 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
     return <img src={item.url} alt={item.title ?? item.original_filename} className={className} />;
   }
 
-  if (item.video?.status === 'processing' && !videoSrc) {
+  // Video.
+  const masterUrl = item.video?.master_url ?? null;
+
+  if (masterUrl && !hlsFailed) {
+    return <HlsVideoPlayer src={masterUrl} className={className} onError={() => setHlsFailed(true)} />;
+  }
+
+  if (item.url) {
+    return <video src={item.url} controls playsInline className={className} />;
+  }
+
+  if (item.video?.status === 'processing') {
     return <p className="text-sm text-muted-foreground">Video is processing…</p>;
   }
 
-  if (!videoSrc) {
-    return <p className="text-sm text-muted-foreground">Unavailable.</p>;
-  }
-
-  return <video src={videoSrc} controls playsInline className={className} />;
+  return <p className="text-sm text-muted-foreground">Unavailable.</p>;
 }

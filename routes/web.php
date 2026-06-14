@@ -73,6 +73,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/', [MediaController::class, 'index']);
         Route::post('/', [MediaController::class, 'store']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
+        // HLS playback proxy: manifests served inline (rewritten), segments 302-redirected to R2.
+        Route::get('/{media}/hls/{path?}', [MediaController::class, 'streamHls'])
+            ->where('path', '.*')
+            ->name('media.hls');
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);

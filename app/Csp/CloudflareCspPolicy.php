@@ -55,7 +55,6 @@ class CloudflareCspPolicy extends Policy
             config('filesystems.disks.s3.endpoint'),
             config('filesystems.disks.photos.endpoint'),
             config('filesystems.disks.hls.endpoint'),
-            config('media.hls_base_url'),
         ];
 
         $origins = [];
