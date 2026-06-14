@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Interest\RequestInterestRequest;
 use App\Http\Requests\Interest\RateInterestRequest;
 use App\Models\Interest;
+use App\Models\InterestRequest;
 use App\Models\InterestRating;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -94,6 +96,31 @@ class InterestController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Interest rating removed.',
+        ]);
+    }
+
+    public function requestNew(RequestInterestRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $data = $request->validated();
+        $data['user_id'] = $user->id;
+
+        $interestRequest = InterestRequest::query()->create($data);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $interestRequest->id,
+                'name' => $interestRequest->name,
+                'description' => $interestRequest->description,
+                'parent_interest_id' => $interestRequest->parent_interest_id,
+                'status' => $interestRequest->status,
+                'created_at' => $interestRequest->created_at?->toIso8601String(),
+            ],
         ]);
     }
 }

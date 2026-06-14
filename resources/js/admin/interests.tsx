@@ -32,6 +32,18 @@ interface AdminInterest {
   updated_at: string;
 }
 
+interface AdminInterestRequest {
+  id: number;
+  name: string;
+  description: string | null;
+  parent_interest_id: number | null;
+  parent_name: string | null;
+  requested_by: string | null;
+  requested_by_id: number | null;
+  requested_by_name: string | null;
+  requested_at: string;
+}
+
 type InterestFormState = {
   name: string;
   description: string;
@@ -59,6 +71,9 @@ function AdminInterestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [requestLoading, setRequestLoading] = useState(true);
+  const [requestActionId, setRequestActionId] = useState<number | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<AdminInterestRequest[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<AdminInterest | null>(null);
   const [createForm, setCreateForm] = useState<InterestFormState>(createEmptyForm());
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -85,8 +100,23 @@ function AdminInterestsPage() {
     }
   };
 
+  const loadRequests = async (): Promise<void> => {
+    setRequestLoading(true);
+    try {
+      const response = await fetchWrapper.get('/api/admin/interest-requests') as {
+        success: boolean;
+        data: AdminInterestRequest[];
+      };
+      setPendingRequests(response.data ?? []);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void loadInterests();
+    void Promise.all([loadInterests(), loadRequests()]);
   }, []);
 
   const saveCreate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -149,6 +179,32 @@ function AdminInterestsPage() {
     });
   };
 
+  const approveRequest = async (requestId: number): Promise<void> => {
+    setError('');
+    setRequestActionId(requestId);
+    try {
+      await fetchWrapper.post(`/api/admin/interest-requests/${requestId}/approve`, {});
+      await Promise.all([loadInterests(), loadRequests()]);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const rejectRequest = async (requestId: number): Promise<void> => {
+    setError('');
+    setRequestActionId(requestId);
+    try {
+      await fetchWrapper.post(`/api/admin/interest-requests/${requestId}/reject`, {});
+      await loadRequests();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Admin — Interests</h1>
@@ -158,6 +214,56 @@ function AdminInterestsPage() {
           {error}
         </div>
       )}
+
+      <section className="mb-8 rounded border border-border p-4">
+        <h2 className="mb-4 text-lg font-semibold">Pending Interest Requests</h2>
+        {requestLoading ? (
+          <p className="text-muted-foreground">Loading pending requests...</p>
+        ) : pendingRequests.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pending requests.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Parent</TableHead>
+                <TableHead>Requested By</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Requested</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell className="font-medium">{request.name}</TableCell>
+                  <TableCell>{request.parent_name ?? '—'}</TableCell>
+                  <TableCell>{request.requested_by_name ?? request.requested_by ?? 'Unknown'}</TableCell>
+                  <TableCell>{request.description ?? '—'}</TableCell>
+                  <TableCell>{request.requested_at}</TableCell>
+                  <TableCell className="space-x-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void approveRequest(request.id)}
+                      disabled={requestActionId === request.id}
+                    >
+                      {requestActionId === request.id ? 'Approving…' : 'Approve'}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => void rejectRequest(request.id)}
+                      disabled={requestActionId === request.id}
+                    >
+                      {requestActionId === request.id ? 'Rejecting…' : 'Reject'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
 
       <form onSubmit={(event) => void saveCreate(event)} className="mb-8 grid gap-4 rounded border border-border p-4">
         <h2 className="text-lg font-semibold">Add Interest</h2>

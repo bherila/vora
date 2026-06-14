@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 
 interface UserInterest {
@@ -30,6 +31,12 @@ interface TreeInterest extends UserInterest {
 interface TableInterestRow {
   interest: UserInterest;
   depth: number;
+}
+
+interface InterestRequestFormState {
+  name: string;
+  description: string;
+  parent_interest_id: string;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -84,6 +91,12 @@ function UserInterestsPage() {
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [error, setError] = useState('');
   const [ratings, setRatings] = useState<Record<number, number>>({});
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestForm, setRequestForm] = useState<InterestRequestFormState>({
+    name: '',
+    description: '',
+    parent_interest_id: '',
+  });
 
   const loadInterests = async (): Promise<void> => {
     setLoading(true);
@@ -108,6 +121,15 @@ function UserInterestsPage() {
   }, []);
 
   const rows = useMemo<TableInterestRow[]>(() => flattenInterestTree(buildInterestTree(interests)), [interests]);
+  const parentOptions = useMemo(() => {
+    return interests
+      .map((interest) => ({
+        id: String(interest.id),
+        label: interest.name,
+        value: interest.id,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [interests]);
 
   const saveRating = async (event: FormEvent<HTMLFormElement>, id: number): Promise<void> => {
     event.preventDefault();
@@ -164,6 +186,38 @@ function UserInterestsPage() {
     }
   };
 
+  const requestNewInterest = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+
+    const name = requestForm.name.trim();
+    if (!name) {
+      setError('Item name is required.');
+      return;
+    }
+
+    setRequestSubmitting(true);
+    setError('');
+    try {
+      await fetchWrapper.post('/api/interests/request', {
+        name,
+        description: requestForm.description.trim() || null,
+        parent_interest_id: requestForm.parent_interest_id ? Number(requestForm.parent_interest_id) : null,
+      });
+
+      setRequestForm({
+        name: '',
+        description: '',
+        parent_interest_id: '',
+      });
+
+      toast.success('Interest request submitted for admin review.');
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setRequestSubmitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-4 text-2xl font-bold">Interests</h1>
@@ -176,6 +230,46 @@ function UserInterestsPage() {
           {error}
         </div>
       )}
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Request a new interest</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={(event) => void requestNewInterest(event)} className="grid gap-4">
+            <Input
+              value={requestForm.name}
+              onChange={(event) => setRequestForm((current) => ({ ...current, name: event.target.value }))}
+              placeholder="Interest name"
+              required
+            />
+            <Textarea
+              value={requestForm.description}
+              onChange={(event) => setRequestForm((current) => ({ ...current, description: event.target.value }))}
+              placeholder="Description (optional)"
+              rows={3}
+            />
+            <label className="grid gap-1">
+              <span className="text-sm">Parent interest (optional)</span>
+              <select
+                value={requestForm.parent_interest_id}
+                onChange={(event) => setRequestForm((current) => ({ ...current, parent_interest_id: event.target.value }))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2"
+              >
+                <option value="">No parent</option>
+                {parentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button type="submit" size="sm" className="w-fit" disabled={requestSubmitting}>
+              {requestSubmitting ? 'Submitting…' : 'Request item'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <p className="text-muted-foreground">Loading interests...</p>

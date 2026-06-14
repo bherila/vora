@@ -85,10 +85,14 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/interests', [AdminInterestController::class, 'store']);
     Route::put('/interests/{interest}', [AdminInterestController::class, 'update']);
     Route::delete('/interests/{interest}', [AdminInterestController::class, 'destroy']);
+    Route::get('/interest-requests', [AdminInterestController::class, 'apiRequestIndex']);
+    Route::post('/interest-requests/{interestRequest}/approve', [AdminInterestController::class, 'approveRequest']);
+    Route::post('/interest-requests/{interestRequest}/reject', [AdminInterestController::class, 'rejectRequest']);
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
     Route::get('/', [InterestController::class, 'apiIndex']);
     Route::post('/{interest}/rate', [InterestController::class, 'rate']);
     Route::delete('/{interest}/rate', [InterestController::class, 'destroyRate']);
+    Route::post('/request', [InterestController::class, 'requestNew']);
 });
