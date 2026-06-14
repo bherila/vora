@@ -1,0 +1,4 @@
+overrides:
+  glob: ">=10.5.0"
+allowBuilds:
+  unrs-resolver: true
