@@ -78,6 +78,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
             ->where('path', '.*')
             ->name('media.hls');
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
+        // Multipart (resumable) upload for large files.
+        Route::post('/{media}/multipart/part', [MediaController::class, 'presignPart']);
+        Route::post('/{media}/multipart/complete', [MediaController::class, 'completeMultipart']);
+        Route::post('/{media}/multipart/abort', [MediaController::class, 'abortMultipart']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);
     });

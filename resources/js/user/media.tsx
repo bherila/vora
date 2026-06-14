@@ -17,7 +17,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { fetchWrapper } from '@/fetchWrapper';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem, mediaTypeForFile, type PagedResponse, type VisibilityValue } from '@/media/types';
-import { putToSignedUrl } from '@/media/upload';
+import { type MultipartInfo, putToSignedUrl, uploadMultipart } from '@/media/upload';
 
 interface InitialData {
   last_interest_ids: number[];
@@ -25,8 +25,9 @@ interface InitialData {
 
 interface StoreResponse {
   data: MediaItem;
-  upload_url: string;
-  upload_headers: Record<string, string>;
+  upload_url?: string;
+  upload_headers?: Record<string, string>;
+  multipart?: MultipartInfo;
 }
 
 function getInitialData(): InitialData {
@@ -120,11 +121,35 @@ function UserMediaPage() {
         interest_ids: interestIds,
       })) as StoreResponse;
 
-      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
-        setProgress(Math.round(fraction * 100));
-      });
+      const reportProgress = (fraction: number): void => setProgress(Math.round(fraction * 100));
 
-      await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+      if (created.multipart) {
+        const { upload_id } = created.multipart;
+        try {
+          const parts = await uploadMultipart(
+            file,
+            created.multipart,
+            async (partNumber) => {
+              const res = (await fetchWrapper.post(`/api/media/${created.data.id}/multipart/part`, {
+                upload_id,
+                part_number: partNumber,
+              })) as { url: string };
+              return res.url;
+            },
+            reportProgress,
+          );
+          await fetchWrapper.post(`/api/media/${created.data.id}/multipart/complete`, { upload_id, parts });
+        } catch (err) {
+          // Best-effort abort so the partial upload and pending row don't linger.
+          await fetchWrapper.post(`/api/media/${created.data.id}/multipart/abort`, { upload_id }).catch(() => undefined);
+          throw err;
+        }
+      } else if (created.upload_url) {
+        await putToSignedUrl(created.upload_url, file, created.upload_headers ?? {}, reportProgress);
+        await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+      } else {
+        throw new Error('The server did not return upload instructions.');
+      }
 
       toast.success('Upload complete. It will be reviewed before others can see it.');
       setDialogOpen(false);
