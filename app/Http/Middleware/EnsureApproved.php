@@ -37,7 +37,7 @@ class EnsureApproved
             }
 
             if ($user->isPendingApproval()) {
-                return redirect()->route('approval.pending');
+                return redirect()->route('approval.pending', ['source' => 'login']);
             }
         }
 
