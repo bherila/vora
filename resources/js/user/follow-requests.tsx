@@ -6,30 +6,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { fetchWrapper } from '@/fetchWrapper';
 
 interface FollowRequest { id: number; requester: { id: number; display_name: string; user_type: string | null; gender: string | null; }; created_at: string | null; }
-interface InboxResponse { success: boolean; data: FollowRequest[]; }
+interface FollowInboxResponse { success: boolean; data: FollowRequest[]; }
 
-function FollowRequestsPage() {
-  const [requests, setRequests] = useState<FollowRequest[]>([]);
+interface AuthorshipInvite { id: number; story: { id: number; ulid: string; title: string; type: string }; invited_by: string | null; created_at: string | null; }
+interface AuthorshipInboxResponse { success: boolean; data: AuthorshipInvite[]; }
+
+function RequestsPage() {
+  const [followRequests, setFollowRequests] = useState<FollowRequest[]>([]);
+  const [invites, setInvites] = useState<AuthorshipInvite[]>([]);
   const [message, setMessage] = useState('');
 
-  const load = () => {
-    fetchWrapper.get('/api/users/follow-requests').then((response) => setRequests((response as InboxResponse).data));
+  const load = (): void => {
+    fetchWrapper.get('/api/users/follow-requests').then((r) => setFollowRequests((r as FollowInboxResponse).data));
+    fetchWrapper.get('/api/authorship-invites').then((r) => setInvites((r as AuthorshipInboxResponse).data));
   };
   useEffect(load, []);
 
-  const decide = async (id: number, action: 'accept' | 'decline') => {
+  const decideFollow = async (id: number, action: 'accept' | 'decline'): Promise<void> => {
     await fetchWrapper.post(`/api/users/follow-requests/${id}/${action}`, {});
     setMessage(action === 'accept' ? 'Follow request accepted. You can now follow back from their profile.' : 'Follow request declined.');
     load();
   };
 
+  const decideInvite = async (id: number, action: 'accept' | 'decline'): Promise<void> => {
+    await fetchWrapper.post(`/api/authorship-invites/${id}/${action}`, {});
+    setMessage(action === 'accept' ? 'Co-author invitation accepted. The story is now in your stories list.' : 'Co-author invitation declined.');
+    load();
+  };
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      <h1 className="text-2xl font-bold">Follow request inbox</h1>
+    <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+      <h1 className="text-2xl font-bold">Requests</h1>
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
-      {requests.length === 0 && <p className="text-sm text-muted-foreground">No pending follow requests.</p>}
-      <div className="space-y-4">
-        {requests.map((request) => (
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Follow requests</h2>
+        {followRequests.length === 0 && <p className="text-sm text-muted-foreground">No pending follow requests.</p>}
+        {followRequests.map((request) => (
           <Card key={request.id}>
             <CardHeader>
               <CardTitle>{request.requester.display_name}</CardTitle>
@@ -37,15 +50,35 @@ function FollowRequestsPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
               <a className="text-sm font-medium underline underline-offset-4" href={`/users/${request.requester.id}`}>View profile</a>
-              <Button size="sm" onClick={() => void decide(request.id, 'accept')}>Accept</Button>
-              <Button size="sm" variant="outline" onClick={() => void decide(request.id, 'decline')}>Decline</Button>
+              <Button size="sm" onClick={() => void decideFollow(request.id, 'accept')}>Accept</Button>
+              <Button size="sm" variant="outline" onClick={() => void decideFollow(request.id, 'decline')}>Decline</Button>
             </CardContent>
           </Card>
         ))}
-      </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Co-author invitations</h2>
+        {invites.length === 0 && <p className="text-sm text-muted-foreground">No pending co-author invitations.</p>}
+        {invites.map((invite) => (
+          <Card key={invite.id}>
+            <CardHeader>
+              <CardTitle>{invite.story.title}</CardTitle>
+              <CardDescription>
+                {invite.invited_by ? `Invited by ${invite.invited_by}` : 'Invitation'} ·{' '}
+                {invite.story.type === 'cyoa' ? 'Choose your own adventure' : 'Long form'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              <Button size="sm" onClick={() => void decideInvite(invite.id, 'accept')}>Accept</Button>
+              <Button size="sm" variant="outline" onClick={() => void decideInvite(invite.id, 'decline')}>Decline</Button>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
     </div>
   );
 }
 
 const mountEl = document.getElementById('follow-requests');
-if (mountEl) createRoot(mountEl).render(<FollowRequestsPage />);
+if (mountEl) createRoot(mountEl).render(<RequestsPage />);

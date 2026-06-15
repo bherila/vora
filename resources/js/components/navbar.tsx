@@ -6,7 +6,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 type NavbarProps = {
   authenticated: boolean;
   isAdmin: boolean;
-  followRequestCount: number;
+  requestCount: number;
 };
 
 type ThemeMode = 'system' | 'dark' | 'light';
@@ -18,7 +18,7 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated, isAdmin, followRequestCount }: NavbarProps) {
+export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +76,9 @@ export default function Navbar({ authenticated, isAdmin, followRequestCount }: N
             <li><a className='hover:underline underline-offset-4' href='/characters'>Characters</a></li>
           )}
           {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/stories'>Stories</a></li>
+          )}
+          {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/explore'>Explore</a></li>
           )}
           {authenticated && (
@@ -84,7 +87,7 @@ export default function Navbar({ authenticated, isAdmin, followRequestCount }: N
           {authenticated && (
             <li>
               <a className='hover:underline underline-offset-4' href='/users/follow-requests'>
-                Follow requests{followRequestCount > 0 ? ` (${followRequestCount})` : ''}
+                Requests{requestCount > 0 ? ` (${requestCount})` : ''}
               </a>
             </li>
           )}
@@ -120,6 +123,13 @@ export default function Navbar({ authenticated, isAdmin, followRequestCount }: N
                     onClick={() => setAdminMenuOpen(false)}
                   >
                     Media review
+                  </a>
+                  <a
+                    href='/admin/stories'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Story review
                   </a>
                   <a
                     href='/admin/audit-log'
