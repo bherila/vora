@@ -2,12 +2,82 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MediaPurpose;
+use App\Enums\MediaType;
+use App\Enums\Visibility;
+use App\Http\Requests\Profile\CompleteProfilePictureRequest;
+use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
+use App\Models\Media;
 use App\Models\User;
+use App\Services\Media\MediaResponseService;
+use App\Services\Media\MediaUploadService;
 use Illuminate\Http\JsonResponse;
 
 class ProfileController extends Controller
 {
+    public function __construct(
+        private readonly MediaUploadService $uploads,
+        private readonly MediaResponseService $responder,
+    ) {}
+
+    public function storeProfilePicture(StoreProfilePictureRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $result = $this->uploads->createPendingUpload(
+            $user,
+            MediaType::Photo,
+            $request->validated('filename'),
+            $request->validated('content_type'),
+            'Profile picture',
+            Visibility::Users,
+            [],
+            false,
+            null,
+            MediaPurpose::ProfilePicture,
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->responder->item($result['media']),
+            'upload_url' => $result['upload_url'],
+            'upload_headers' => $result['upload_headers'],
+        ], 201);
+    }
+
+    public function completeProfilePicture(CompleteProfilePictureRequest $request, Media $media): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        if ($media->user_id !== $user->id || ! $media->isProfilePicture()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        if (! $this->uploads->completeUpload($media)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload could not be verified — the file is missing or exceeds the size limit.',
+            ], 422);
+        }
+
+        $user->profile_picture_media_id = $media->id;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->responder->item($media->refresh()),
+        ]);
+    }
+
     public function update(UpdateProfileRequest $request): JsonResponse
     {
         $user = $request->user();

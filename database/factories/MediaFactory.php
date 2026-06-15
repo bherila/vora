@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Enums\Visibility;
@@ -26,6 +27,7 @@ class MediaFactory extends Factory
             'user_id' => User::factory(),
             'ulid' => $ulid,
             'type' => $type,
+            'purpose' => MediaPurpose::Gallery,
             'disk' => $type->disk(),
             'object_key' => 'uploads/0/'.$ulid.'.jpg',
             'original_filename' => fake()->word().'.jpg',
@@ -38,6 +40,14 @@ class MediaFactory extends Factory
         ];
     }
 
+    public function profilePicture(): static
+    {
+        return $this->state(fn (): array => [
+            'purpose' => MediaPurpose::ProfilePicture,
+            'title' => 'Profile picture',
+        ]);
+    }
+
     public function video(): static
     {
         return $this->state(function (): array {
@@ -45,6 +55,7 @@ class MediaFactory extends Factory
 
             return [
                 'type' => $type,
+                'purpose' => MediaPurpose::Gallery,
                 'disk' => $type->disk(),
                 'mime_type' => 'video/mp4',
                 'object_key' => 'uploads/0/'.(string) Str::ulid().'.mp4',

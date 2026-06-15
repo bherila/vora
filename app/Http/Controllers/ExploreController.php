@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Models\Media;
@@ -42,6 +43,7 @@ class ExploreController extends Controller
     public function apiIndex(ListMediaRequest $request): JsonResponse
     {
         $query = Media::query()
+            ->where('purpose', MediaPurpose::Gallery->value)
             ->discoverable()
             ->moderationStatus(ModerationStatus::Approved)
             ->where('upload_status', 'ready')

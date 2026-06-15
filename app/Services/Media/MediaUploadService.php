@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Enums\Visibility;
@@ -63,6 +64,7 @@ class MediaUploadService
         array $interestIds,
         bool $wantsThumbnail = false,
         ?string $perceptualHash = null,
+        MediaPurpose $purpose = MediaPurpose::Gallery,
     ): array {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -72,6 +74,7 @@ class MediaUploadService
             'user_id' => $user->id,
             'ulid' => $ulid,
             'type' => $type,
+            'purpose' => $purpose,
             'disk' => $type->disk(),
             'object_key' => $key,
             'thumbnail_key' => $thumbnailKey,
@@ -84,13 +87,15 @@ class MediaUploadService
         ]);
         $media->save();
 
-        if ($interestIds !== []) {
+        if ($purpose === MediaPurpose::Gallery && $interestIds !== []) {
             $media->interests()->sync($interestIds);
         }
 
-        // Remember the selection so the next upload can pre-fill it.
-        $user->last_media_interest_ids = array_values($interestIds);
-        $user->save();
+        if ($purpose === MediaPurpose::Gallery) {
+            // Remember the selection so the next upload can pre-fill it.
+            $user->last_media_interest_ids = array_values($interestIds);
+            $user->save();
+        }
 
         $ttl = (int) config('media.upload_url_ttl', 30);
 
