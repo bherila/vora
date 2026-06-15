@@ -4,6 +4,7 @@ namespace Tests\Feature\Account;
 
 use App\Enums\Visibility;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
@@ -188,5 +189,58 @@ class AccountLifecycleTest extends TestCase
         $this->assertDatabaseMissing('characters', ['id' => $character->id]);
         Storage::disk('photos')->assertMissing($gallery->object_key);
         Storage::disk('photos')->assertMissing($avatar->object_key);
+    }
+
+    // ----------------------------------------------------- review follow-ups
+
+    public function test_direct_media_view_is_blocked_for_deactivated_owner(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+        });
+
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create([
+            'upload_status' => 'ready',
+            'visibility' => Visibility::Users,
+        ]);
+
+        // Viewable via its share link before deactivation.
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$media->ulid}")->assertOk();
+
+        $owner->forceFill(['deactivated_at' => now()])->save();
+
+        // Hidden once the owner is deactivated, even with the direct link.
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$media->ulid}")->assertForbidden();
+    }
+
+    public function test_follow_inbox_hides_requests_from_deactivated_users(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $requester = User::factory()->approved()->create();
+        FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests')->assertOk()->assertJsonCount(1, 'data');
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests/count')->assertJsonPath('data.count', 1);
+
+        $requester->forceFill(['deactivated_at' => now()])->save();
+
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests/count')->assertJsonPath('data.count', 0);
+    }
+
+    public function test_deactivated_user_is_redirected_from_home_to_the_gate(): void
+    {
+        $user = User::factory()->approved()->create();
+        $user->forceFill(['deactivated_at' => now()])->save();
+
+        // The home page is public, but the global gate still redirects a
+        // deactivated (logged-in) user to reactivate.
+        $this->actingAs($user)->get('/')->assertRedirect(route('account.deactivated'));
     }
 }

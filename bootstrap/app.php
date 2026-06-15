@@ -16,7 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'approved' => EnsureApproved::class,
-            'active' => EnsureNotDeactivated::class,
+        ]);
+
+        // Gate self-deactivated accounts to the reactivate page across the whole
+        // web surface — including the package auth endpoints (password/passkeys)
+        // and the public home page a fresh login would otherwise land them on.
+        $middleware->web(append: [
+            EnsureNotDeactivated::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
