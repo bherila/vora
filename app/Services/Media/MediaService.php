@@ -2,7 +2,9 @@
 
 namespace App\Services\Media;
 
+use App\Models\Character;
 use App\Models\Media;
+use App\Models\User;
 use App\Services\FileStorageService;
 
 /**
@@ -11,6 +13,22 @@ use App\Services\FileStorageService;
 class MediaService
 {
     public function __construct(private readonly FileStorageService $storage) {}
+
+    /**
+     * Delete a media item only if no user or character still points at it as a
+     * profile picture. Used when an avatar is replaced or its owner deleted, so
+     * the previous object/row does not leak (profile pictures are never shared,
+     * but the reference check keeps this safe if that ever changes).
+     */
+    public function deleteIfUnreferenced(Media $media): void
+    {
+        $referenced = User::query()->where('profile_picture_media_id', $media->id)->exists()
+            || Character::query()->where('profile_picture_media_id', $media->id)->exists();
+
+        if (! $referenced) {
+            $this->delete($media);
+        }
+    }
 
     /**
      * Delete a media item: remove the source object from its bucket and the

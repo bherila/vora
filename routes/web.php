@@ -44,7 +44,7 @@ Route::middleware('guest')->group(function () {
 | Authenticated (no approval gate — these are the gate pages themselves)
 |--------------------------------------------------------------------------
 */
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
     Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
         ->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
@@ -54,9 +54,17 @@ Route::middleware('auth')->group(function () {
     Route::patch('/api/account', [ProfileController::class, 'update']);
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
+    Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
+    Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
+    Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
+
+    // Reachable while deactivated (exempt from the 'active' gate) so the user
+    // can reactivate or sign out.
+    Route::get('/account/deactivated', fn () => view('auth.deactivated'))->name('account.deactivated');
+    Route::post('/account/reactivate', [ProfileController::class, 'reactivate'])->name('account.reactivate');
 
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 });
@@ -66,7 +74,7 @@ Route::middleware('auth')->group(function () {
 | Authenticated + verified + approved app area
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'approved'])->group(function () {
+Route::middleware(['auth', 'approved', 'active'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
@@ -89,6 +97,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
+        Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);
     });
 
     Route::prefix('api/users')->group(function () {
@@ -120,7 +129,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 | Admin (approved admins only)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'approved', 'active', 'can:admin-only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
@@ -130,11 +139,13 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
 // admin-only ability already enforces the full access model (admin + approved +
 // not disabled) and returns a clean 403 for JSON callers.
-Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->group(function () {
+Route::middleware(['auth', 'approved', 'active', 'can:admin-only'])->prefix('api/admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
-    Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
+    // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
+    Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
+    Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);
@@ -150,7 +161,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
 });
 
-Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
+Route::middleware(['auth', 'approved', 'active'])->prefix('api/interests')->group(function () {
     // Ratings target (user, character|null); character_id is passed in the query
     // (GET) or body (POST) so the same endpoints serve user and character profiles.
     Route::get('/', [InterestController::class, 'apiIndex']);

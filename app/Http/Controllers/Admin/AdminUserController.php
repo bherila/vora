@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminUserUpdateRequest;
 use App\Models\User;
+use App\Services\UserAccountService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class AdminUserController extends Controller
 {
+    public function __construct(private readonly UserAccountService $accounts) {}
+
     /**
      * Admin users page (mounts the React admin UI).
      */
@@ -20,11 +23,13 @@ class AdminUserController extends Controller
     }
 
     /**
-     * JSON list of users for the admin UI.
+     * JSON list of users for the admin UI. Includes soft-deleted accounts so an
+     * admin can restore or permanently purge them.
      */
     public function apiIndex(): JsonResponse
     {
         $users = User::query()
+            ->withTrashed()
             ->orderByDesc('id')
             ->get([
                 'id',
@@ -35,6 +40,8 @@ class AdminUserController extends Controller
                 'is_admin',
                 'is_disabled',
                 'approved_at',
+                'deactivated_at',
+                'deleted_at',
                 'email_verified_at',
                 'id_verified_at',
                 'name_locked',
@@ -112,7 +119,8 @@ class AdminUserController extends Controller
     }
 
     /**
-     * Delete a user (never the actor or the primary admin).
+     * Permanently delete (purge) a user and all their media, characters, and
+     * storage objects. Never the actor or the primary admin.
      */
     public function destroy(Request $request, User $user): JsonResponse
     {
@@ -120,9 +128,21 @@ class AdminUserController extends Controller
             return $this->forbidden('You cannot delete this account.');
         }
 
-        $user->delete();
+        $this->accounts->purge($user);
 
-        return response()->json(['success' => true, 'message' => 'User deleted.']);
+        return response()->json(['success' => true, 'message' => 'User permanently deleted.']);
+    }
+
+    /**
+     * Restore a soft-deleted account.
+     */
+    public function restore(User $user): JsonResponse
+    {
+        if ($user->trashed()) {
+            $user->restore();
+        }
+
+        return response()->json(['success' => true, 'data' => $this->present($user)]);
     }
 
     /**
@@ -138,6 +158,10 @@ class AdminUserController extends Controller
             'email' => $user->email,
             'is_admin' => $user->isAdmin(),
             'is_disabled' => (bool) $user->is_disabled,
+            'is_deactivated' => $user->isDeactivated(),
+            'is_deleted' => $user->trashed(),
+            'deactivated_at' => $user->deactivated_at?->toIso8601String(),
+            'deleted_at' => $user->deleted_at?->toIso8601String(),
             'is_approved' => $user->isApproved(),
             'email_verified' => $user->hasVerifiedEmail(),
             'id_verified' => $user->id_verified_at !== null,

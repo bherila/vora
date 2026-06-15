@@ -34,7 +34,7 @@ class FollowController extends Controller
     public function users(Request $request): JsonResponse
     {
         $current = $request->user();
-        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->where('is_disabled', false)->orderBy('display_name')->get();
+        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->where('is_disabled', false)->whereNull('deactivated_at')->orderBy('display_name')->get();
 
         return response()->json(['success' => true, 'data' => $users->map(fn (User $user): array => [
             'id' => $user->id,
@@ -155,7 +155,7 @@ class FollowController extends Controller
 
     private function isDiscoverable(User $user): bool
     {
-        return $user->approved_at !== null && ! $user->is_disabled;
+        return $user->approved_at !== null && ! $user->is_disabled && ! $user->isDeactivated();
     }
 
     private function declinedRequestCanBeRetried(FollowRequest $followRequest): bool
