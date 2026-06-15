@@ -89,6 +89,76 @@ class MediaApiTest extends TestCase
         $this->assertSame('ready', $media->fresh()->upload_status);
     }
 
+    public function test_store_with_thumbnail_returns_second_upload_url_and_persists_hash(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'beach.jpg',
+            'content_type' => 'image/jpeg',
+            'visibility' => 'users',
+            'has_thumbnail' => true,
+            'perceptual_hash' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('thumbnail_upload_url', 'https://r2.example/put')
+            ->assertJsonPath('thumbnail_upload_headers.Content-Type', 'image/jpeg');
+
+        $media = Media::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertNotNull($media->thumbnail_key);
+        $this->assertSame('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', $media->perceptual_hash);
+    }
+
+    public function test_store_without_thumbnail_returns_null_thumbnail_url(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'beach.jpg',
+            'content_type' => 'image/jpeg',
+            'visibility' => 'users',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('thumbnail_upload_url', null);
+    }
+
+    public function test_complete_drops_thumbnail_key_when_object_missing(): void
+    {
+        // Original lands, thumbnail never does: completion should null the key
+        // rather than fail the whole upload.
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fileExists')
+                ->with('photos', 'uploads/0/orig.jpg')->andReturn(true);
+            $mock->shouldReceive('getFileSize')
+                ->with('photos', 'uploads/0/orig.jpg')->andReturn(2048);
+            // The thumbnail object never landed: getFileSize returns null, as the
+            // real adapter does for a missing key, so its key is dropped.
+            $mock->shouldReceive('getFileSize')
+                ->with('photos', 'uploads/thumbnails/0/missing.jpg')->andReturn(null);
+            $mock->shouldReceive('deleteFile')
+                ->with('photos', 'uploads/thumbnails/0/missing.jpg')->andReturn(true);
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+        });
+
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->pendingUpload()->create([
+            'disk' => 'photos',
+            'object_key' => 'uploads/0/orig.jpg',
+            'thumbnail_key' => 'uploads/thumbnails/0/missing.jpg',
+        ]);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('data.upload_status', 'ready')
+            ->assertJsonPath('data.thumbnail_url', null);
+
+        $this->assertNull($media->fresh()->thumbnail_key);
+    }
+
     public function test_index_lists_own_media_without_moderation_fields(): void
     {
         $this->fakeStorage();

@@ -38,6 +38,21 @@ class AdminMediaApiTest extends TestCase
         $this->assertArrayHasKey('user', $response->json('data.0'));
     }
 
+    public function test_admin_review_signs_thumbnail_for_review(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        // A row carrying a client-uploaded thumbnail/poster.
+        Media::factory()->for($owner)->create(['thumbnail_key' => 'uploads/thumbnails/0/thumb.jpg']);
+
+        // The reviewer must receive the thumbnail URL so the client-supplied
+        // image is reviewed, not just the source object.
+        $this->actingAs($admin)->getJson('/api/admin/media')
+            ->assertOk()
+            ->assertJsonPath('data.0.thumbnail_url', 'https://r2.example/view');
+    }
+
     public function test_non_admin_cannot_access_admin_media(): void
     {
         // User id 1 is always an admin, so occupy it with a filler first.

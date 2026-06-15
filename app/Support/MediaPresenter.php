@@ -13,7 +13,7 @@ use App\Models\Media;
  * $extras (keys: "url" for a signed view URL, "video" for HLS status), so this
  * class performs no I/O and is trivial to test.
  *
- * @phpstan-type Extras array{url?: ?string, video?: ?array<string, mixed>}
+ * @phpstan-type Extras array{url?: ?string, thumbnail_url?: ?string, video?: ?array<string, mixed>}
  */
 class MediaPresenter
 {
@@ -66,6 +66,7 @@ class MediaPresenter
             'visibility' => $media->visibility->value,
             'upload_status' => $media->upload_status,
             'url' => $extras['url'] ?? null,
+            'thumbnail_url' => $extras['thumbnail_url'] ?? null,
             'video' => $extras['video'] ?? null,
             'interests' => $media->relationLoaded('interests')
                 ? $media->interests->map(fn (Interest $i): array => ['id' => $i->id, 'name' => $i->name])->all()

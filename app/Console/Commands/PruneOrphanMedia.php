@@ -41,14 +41,29 @@ class PruneOrphanMedia extends Command
 
         $objectsDeleted = 0;
         foreach ($stale as $media) {
+            $thumbnailDisk = (string) config('media.thumbnail_disk');
+
             if ($dryRun) {
                 $this->line("would prune media #{$media->id} ({$media->disk}/{$media->object_key})");
+
+                if ($media->thumbnail_key !== null) {
+                    $this->line("  and thumbnail ({$thumbnailDisk}/{$media->thumbnail_key})");
+                }
 
                 continue;
             }
 
             if ($storage->fileExists($media->disk, $media->object_key)) {
                 $storage->deleteFile($media->disk, $media->object_key);
+                $objectsDeleted++;
+            }
+
+            // A stale pending row may also have a client-uploaded thumbnail
+            // object (its own presigned PUT); remove it so abandoned uploads
+            // don't leak thumbnail objects into storage indefinitely.
+            if ($media->thumbnail_key !== null
+                && $storage->fileExists($thumbnailDisk, $media->thumbnail_key)) {
+                $storage->deleteFile($thumbnailDisk, $media->thumbnail_key);
                 $objectsDeleted++;
             }
 

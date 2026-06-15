@@ -8,6 +8,7 @@ use App\Enums\Visibility;
 use App\Traits\HasVisibility;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,6 +39,7 @@ class Media extends Model
     protected $hidden = [
         'hls_content_id',
         'hls_checked_at',
+        'thumbnail_key',
     ];
 
     /**
@@ -52,8 +54,10 @@ class Media extends Model
         'type',
         'disk',
         'object_key',
+        'thumbnail_key',
         'original_filename',
         'mime_type',
+        'perceptual_hash',
         'size_bytes',
         'title',
         'upload_status',
@@ -103,5 +107,41 @@ class Media extends Model
     public function isReady(): bool
     {
         return $this->upload_status === 'ready';
+    }
+
+    /**
+     * Restrict a listing to a single media type. A null type is a no-op so
+     * callers can pass an optional filter straight through.
+     *
+     * @param  Builder<Media>  $query
+     * @return Builder<Media>
+     */
+    public function scopeOfType(Builder $query, ?MediaType $type): Builder
+    {
+        if ($type === null) {
+            return $query;
+        }
+
+        return $query->where('type', $type->value);
+    }
+
+    /**
+     * Restrict a listing to rows tagged with at least one of the given interest
+     * ids. An empty list is a no-op. Uses whereHas so it composes with the other
+     * listing scopes without duplicating rows.
+     *
+     * @param  Builder<Media>  $query
+     * @param  list<int>  $interestIds
+     * @return Builder<Media>
+     */
+    public function scopeWithAnyInterest(Builder $query, array $interestIds): Builder
+    {
+        if ($interestIds === []) {
+            return $query;
+        }
+
+        return $query->whereHas('interests', function (Builder $q) use ($interestIds): void {
+            $q->whereIn('interests.id', $interestIds);
+        });
     }
 }

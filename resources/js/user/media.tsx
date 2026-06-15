@@ -1,10 +1,9 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
 import { InterestPicker } from '@/components/interest-picker';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -15,9 +14,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { fetchWrapper } from '@/fetchWrapper';
-import { MediaPlayer } from '@/media/MediaPlayer';
-import { formatBytes, type MediaItem, mediaTypeForFile, type PagedResponse, type VisibilityValue } from '@/media/types';
+import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
+import { MediaFilters } from '@/media/MediaFilters';
+import { MediaGrid } from '@/media/MediaGrid';
+import { type MediaItem, type MediaTypeFilter, mediaTypeForFile, type VisibilityValue } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
+import { useMediaListing } from '@/media/useMediaListing';
 
 interface InitialData {
   last_interest_ids: number[];
@@ -27,6 +29,8 @@ interface StoreResponse {
   data: MediaItem;
   upload_url: string;
   upload_headers: Record<string, string>;
+  thumbnail_upload_url: string | null;
+  thumbnail_upload_headers: Record<string, string> | null;
 }
 
 function getInitialData(): InitialData {
@@ -46,52 +50,50 @@ function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : err instanceof Error ? err.message : 'Request failed.';
 }
 
+interface Derivatives {
+  thumbnail: Blob | null;
+  perceptualHash: string | null;
+}
+
+/**
+ * Best-effort client-side thumbnail/poster (and, for photos, a perceptual hash).
+ * Never throws: a failure just means the item uploads without a thumbnail.
+ */
+async function buildDerivatives(file: File, type: 'photo' | 'video'): Promise<Derivatives> {
+  if (!supportsClientDerivatives()) {
+    return { thumbnail: null, perceptualHash: null };
+  }
+  try {
+    if (type === 'photo') {
+      const { thumbnail, perceptualHash } = await generatePhotoDerivatives(file);
+      return { thumbnail, perceptualHash };
+    }
+    return { thumbnail: await generateVideoPoster(file), perceptualHash: null };
+  } catch {
+    return { thumbnail: null, perceptualHash: null };
+  }
+}
+
 function UserMediaPage() {
   const initial = useMemo(() => getInitialData(), []);
-  const [items, setItems] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
+  const [filterInterestIds, setFilterInterestIds] = useState<number[]>([]);
+  const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [visibility, setVisibility] = useState<VisibilityValue>('users');
-  const [interestIds, setInterestIds] = useState<number[]>(initial.last_interest_ids);
+  const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-
-  // Load a page. page 1 replaces the list (initial load / after upload); higher
-  // pages append for the "Load more" control.
-  const loadPage = async (page: number): Promise<void> => {
-    if (page > 1) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const response = (await fetchWrapper.get(`/api/media?page=${page}`)) as PagedResponse<MediaItem>;
-      const next = response.data ?? [];
-      setItems((current) => (page > 1 ? [...current, ...next] : next));
-      setHasMore(response.meta?.has_more ?? false);
-      setPage(page);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadPage(1);
-  }, []);
 
   const resetForm = (): void => {
     setFile(null);
     setTitle('');
     setVisibility('users');
+    setUploadInterestIds(initial.last_interest_ids);
     setProgress(0);
   };
 
@@ -110,6 +112,8 @@ function UserMediaPage() {
     setUploading(true);
     setProgress(0);
     try {
+      const { thumbnail, perceptualHash } = await buildDerivatives(file, type);
+
       const created = (await fetchWrapper.post('/api/media', {
         type,
         filename: file.name,
@@ -117,19 +121,31 @@ function UserMediaPage() {
         size: file.size,
         title: title.trim() || null,
         visibility,
-        interest_ids: interestIds,
+        interest_ids: uploadInterestIds,
+        has_thumbnail: thumbnail !== null,
+        perceptual_hash: perceptualHash,
       })) as StoreResponse;
 
       await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
         setProgress(Math.round(fraction * 100));
       });
 
+      // Best-effort: if the thumbnail PUT fails, completion drops the key and the
+      // item still works, just without a generated preview.
+      if (thumbnail && created.thumbnail_upload_url && created.thumbnail_upload_headers) {
+        try {
+          await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {});
+        } catch {
+          /* ignore — thumbnail is optional */
+        }
+      }
+
       await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
 
       toast.success('Upload complete. It will be reviewed before others can see it.');
       setDialogOpen(false);
       resetForm();
-      await loadPage(1);
+      listing.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -143,7 +159,7 @@ function UserMediaPage() {
     }
     try {
       await fetchWrapper.delete(`/api/media/${item.id}`);
-      setItems((current) => current.filter((m) => m.id !== item.id));
+      listing.removeLocal(item.id);
       toast.success('Media deleted.');
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -193,7 +209,7 @@ function UserMediaPage() {
               </label>
               <div className="grid gap-1">
                 <span className="text-sm">Interests</span>
-                <InterestPicker value={interestIds} onChange={setInterestIds} disabled={uploading} />
+                <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />
               </div>
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={uploading}>
@@ -210,55 +226,34 @@ function UserMediaPage() {
         </Dialog>
       </div>
 
-      {loading ? (
+      <MediaFilters
+        type={typeFilter}
+        onTypeChange={setTypeFilter}
+        interestIds={filterInterestIds}
+        onInterestIdsChange={setFilterInterestIds}
+        disabled={listing.loading}
+      />
+
+      {listing.loading ? (
         <p className="text-muted-foreground">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="text-muted-foreground">You haven&apos;t uploaded anything yet.</p>
+      ) : listing.error ? (
+        <p className="text-destructive">{listing.error}</p>
+      ) : listing.items.length === 0 ? (
+        <p className="text-muted-foreground">Nothing here yet.</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
-            <Card key={item.id}>
-              <CardHeader>
-                <CardTitle className="truncate text-base">{item.title || item.original_filename}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-2">
-                <div className="overflow-hidden rounded-md bg-muted">
-                  <MediaPlayer item={item} className="max-h-48 w-full object-contain" />
-                </div>
-                <dl className="text-xs text-muted-foreground">
-                  <div className="flex justify-between">
-                    <dt>Type</dt>
-                    <dd>{item.type}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Size</dt>
-                    <dd>{formatBytes(item.size_bytes)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt>Visibility</dt>
-                    <dd>{item.visibility === 'users' ? 'Any user' : 'Link only'}</dd>
-                  </div>
-                </dl>
-                {item.interests.length > 0 && (
-                  <p className="text-xs text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
-                )}
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => { window.location.href = `/m/${item.ulid}`; }}>
-                    Open
-                  </Button>
-                  <Button type="button" size="sm" variant="destructive" onClick={() => void remove(item)}>
-                    Delete
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <MediaGrid
+          items={listing.items}
+          renderActions={(item) => (
+            <Button type="button" size="sm" variant="destructive" onClick={() => void remove(item)}>
+              Delete
+            </Button>
+          )}
+        />
       )}
-      {hasMore && (
+      {listing.hasMore && (
         <div className="mt-6 flex justify-center">
-          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void loadPage(page + 1)}>
-            {loadingMore ? 'Loading…' : 'Load more'}
+          <Button type="button" variant="outline" disabled={listing.loadingMore} onClick={listing.loadMore}>
+            {listing.loadingMore ? 'Loading…' : 'Load more'}
           </Button>
         </div>
       )}

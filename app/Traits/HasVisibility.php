@@ -36,6 +36,18 @@ trait HasVisibility
     }
 
     /**
+     * Restrict a query to rows that may appear on a public discovery surface
+     * (e.g. Explore): strictly content marked visible to any user. Unlike
+     * {@see scopeVisibleTo} there is NO owner or admin exception — unlisted
+     * content must never be listed in discovery, even to its own uploader or to
+     * an admin browsing that surface.
+     */
+    public function scopeDiscoverable(Builder $query): Builder
+    {
+        return $query->where('visibility', Visibility::Users->value);
+    }
+
+    /**
      * Whether the viewer may see this specific record, including via a direct
      * link. Possession of the link (the record's ULID) authorises access to
      * unlisted content, which is why direct lookups allow it while listings
