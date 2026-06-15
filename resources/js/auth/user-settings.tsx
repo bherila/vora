@@ -1,6 +1,7 @@
 import { ChangePasswordForm, PasskeySection } from 'bwh-auth';
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast, Toaster } from 'sonner';
 
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
@@ -11,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
+import { RequestInterestForm } from '@/interests/request-interest-form';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import {
@@ -198,6 +201,47 @@ function UserSettingsPage() {
   const profilePictureAbortRef = useRef<AbortController | null>(null);
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
+  const [interests, setInterests] = useState<RatableInterest[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const loadInterests = async (): Promise<void> => {
+      try {
+        const response = await fetchWrapper.get('/api/interests') as { success: boolean; data: RatableInterest[] };
+        if (active) {
+          setInterests(response.data ?? []);
+        }
+      } catch (err) {
+        toast.error(typeof err === 'string' ? err : 'Failed to load interests.');
+      }
+    };
+
+    void loadInterests();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
+    try {
+      await fetchWrapper.post(`/api/interests/${interestId}/rate`, { level });
+      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
+      toast.success('Interest rating saved.');
+    } catch (err) {
+      toast.error(typeof err === 'string' ? err : 'Failed to save interest rating.');
+    }
+  };
+
+  const handleClearInterestRating = async (interestId: number): Promise<void> => {
+    try {
+      await fetchWrapper.delete(`/api/interests/${interestId}/rate`, {});
+      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
+      toast.success('Interest rating cleared.');
+    } catch (err) {
+      toast.error(typeof err === 'string' ? err : 'Failed to clear interest rating.');
+    }
+  };
 
   const applyResponseData = (data: UserSettingsResponse['data']) => {
     if (!data) {
@@ -470,6 +514,32 @@ function UserSettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Your interests</CardTitle>
+            <CardDescription>
+              Rate interests from -10 (fully uninterested) to +10 (fully interested). Characters inherit these unless you set custom interests for them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <InterestRatingList
+              interests={interests}
+              onSave={handleSaveInterestRating}
+              onClear={handleClearInterestRating}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Request a new interest</CardTitle>
+            <CardDescription>Suggest an interest for an admin to review and add to the catalog.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RequestInterestForm interests={interests} />
+          </CardContent>
+        </Card>
       </section>
 
       <section className="space-y-3">
@@ -601,6 +671,7 @@ function UserSettingsPage() {
           </CardContent>
         </Card>
       </section>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

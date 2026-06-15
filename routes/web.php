@@ -68,7 +68,6 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
-    Route::get('/interests', [InterestController::class, 'index'])->name('interests');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Media library + shareable single-media view.
@@ -90,6 +89,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
+        Route::get('/{character}/interests', [CharacterController::class, 'interests']);
+        Route::post('/{character}/interests/inherit', [CharacterController::class, 'setInterestInheritance']);
+        Route::post('/{character}/interests/{interest}/rate', [CharacterController::class, 'rateInterest']);
+        Route::delete('/{character}/interests/{interest}/rate', [CharacterController::class, 'destroyInterestRating']);
     });
 
     Route::prefix('api/users')->group(function () {

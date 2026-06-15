@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { CharacterInterestsEditor } from '@/interests/character-interests-editor';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
@@ -19,8 +21,11 @@ interface CharacterRecord {
   description: string | null;
   gender: string | null;
   gender_other: string | null;
+  user_type: string | null;
+  user_type_other: string | null;
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
+  inherit_interests: boolean;
   profile_picture: MediaItem | null;
 }
 
@@ -29,6 +34,8 @@ interface CharacterFormState {
   description: string;
   gender: string;
   gender_other: string;
+  user_type: string;
+  user_type_other: string;
   preferred_user_types: string[];
   preferred_genders: string[];
 }
@@ -51,7 +58,7 @@ interface ProfilePictureUploadResponse {
 }
 
 function blankForm(): CharacterFormState {
-  return { display_name: '', description: '', gender: '', gender_other: '', preferred_user_types: [], preferred_genders: [] };
+  return { display_name: '', description: '', gender: '', gender_other: '', user_type: '', user_type_other: '', preferred_user_types: [], preferred_genders: [] };
 }
 
 function formFromCharacter(character: CharacterRecord): CharacterFormState {
@@ -60,6 +67,8 @@ function formFromCharacter(character: CharacterRecord): CharacterFormState {
     description: character.description ?? '',
     gender: normalizeProfileOptionValue(GENDER_OPTIONS, character.gender),
     gender_other: character.gender_other ?? '',
+    user_type: normalizeProfileOptionValue(USER_TYPE_OPTIONS, character.user_type),
+    user_type_other: character.user_type_other ?? '',
     preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, character.preferred_user_types),
     preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, character.preferred_genders),
   };
@@ -124,6 +133,11 @@ function CharactersPage() {
       return;
     }
 
+    if (form.user_type === 'other' && !form.user_type_other.trim()) {
+      setError('Please specify the character type when choosing Other.');
+      return;
+    }
+
     setSaving(true);
     setError('');
     setMessage('');
@@ -133,6 +147,8 @@ function CharactersPage() {
       description: blankToNull(form.description),
       gender: blankToNull(form.gender),
       gender_other: form.gender === 'other' ? blankToNull(form.gender_other) : null,
+      user_type: blankToNull(form.user_type),
+      user_type_other: form.user_type === 'other' ? blankToNull(form.user_type_other) : null,
       preferred_user_types: selectionsToPayload(form.preferred_user_types),
       preferred_genders: selectionsToPayload(form.preferred_genders),
     };
@@ -209,7 +225,8 @@ function CharactersPage() {
           <CardDescription>Use characters only if they fit how you organize your art.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>Each character can have a separate display name, gender, interests profile, and profile picture. This keeps persona details separate from your real account settings.</p>
+          <p>Each character can have a separate display name, gender, type, discovery preferences, and profile picture. This keeps persona details separate from your real account settings.</p>
+          <p>By default a character inherits your profile interests. Choose “Set custom interests” on a character to override them; switching back to inherit clears the character's overrides.</p>
           <p>Follow requests are still between users only. Following a user follows that account and all of its characters for now; character-specific follows may be added later.</p>
           <p>To change your own default user profile, use Account → Settings. To change a fictional persona, edit it here.</p>
         </CardContent>
@@ -235,8 +252,14 @@ function CharactersPage() {
                 {character.profile_picture?.url && <img src={character.profile_picture.url} alt="" className="h-24 w-24 rounded-full object-cover" />}
                 <div className="text-sm text-muted-foreground">
                   <p>Gender: {character.gender === 'other' ? character.gender_other : character.gender || 'Not set'}</p>
-                  <p>Interests profile: {[...(character.preferred_user_types ?? []), ...(character.preferred_genders ?? [])].join(', ') || 'Not set'}</p>
+                  <p>Type: {character.user_type === 'other' ? character.user_type_other : character.user_type || 'Not set'}</p>
+                  <p>Discovery preferences: {[...(character.preferred_user_types ?? []), ...(character.preferred_genders ?? [])].join(', ') || 'Not set'}</p>
                 </div>
+                <CharacterInterestsEditor
+                  characterId={character.id}
+                  initialInherit={character.inherit_interests}
+                  onInheritChange={(inherit) => setCharacters((current) => current.map((item) => item.id === character.id ? { ...item, inherit_interests: inherit } : item))}
+                />
                 <div className="space-y-2">
                   <Label htmlFor={`character-picture-${character.id}`}>Character profile picture</Label>
                   <Input id={`character-picture-${character.id}`} type="file" accept="image/*" disabled={uploadingId === character.id} onChange={(event) => void handleProfilePicture(character, event.target.files?.[0] ?? null)} />
@@ -274,6 +297,13 @@ function CharactersPage() {
                     <Input id="character-gender-other" value={form.gender_other} onChange={(event) => setForm({ ...form, gender_other: event.target.value })} required />
                   </div>
                 )}
+                <ProfileOptionButtonGroup legend="Character type" name="character-user-type" options={USER_TYPE_OPTIONS} value={form.user_type} onChange={(value) => setForm({ ...form, user_type: value })} />
+                {form.user_type === 'other' && (
+                  <div className="space-y-1">
+                    <Label htmlFor="character-user-type-other">Other character type</Label>
+                    <Input id="character-user-type-other" value={form.user_type_other} onChange={(event) => setForm({ ...form, user_type_other: event.target.value })} required />
+                  </div>
+                )}
                 <ProfileOptionCheckboxGroup legend="Character user types to see" description="Optional discovery preferences for this character." name="character-user-types" options={USER_TYPE_OPTIONS} values={form.preferred_user_types} onChange={(values) => setForm({ ...form, preferred_user_types: values })} />
                 <ProfileOptionCheckboxGroup legend="Character genders to see" description="Optional discovery preferences for this character." name="character-genders" options={GENDER_OPTIONS} values={form.preferred_genders} onChange={(values) => setForm({ ...form, preferred_genders: values })} />
                 <div className="flex gap-2">
@@ -285,6 +315,7 @@ function CharactersPage() {
           </Card>
         </section>
       </div>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

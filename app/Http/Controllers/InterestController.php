@@ -9,18 +9,9 @@ use App\Models\InterestRating;
 use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 
 class InterestController extends Controller
 {
-    /**
-     * User-facing interest rating page.
-     */
-    public function index(): View
-    {
-        return view('user.interests');
-    }
-
     /**
      * JSON list of interests for approved users to browse + rate.
      */

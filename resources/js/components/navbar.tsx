@@ -70,9 +70,6 @@ export default function Navbar({ authenticated, isAdmin, followRequestCount }: N
             <li><a className='hover:underline underline-offset-4' href='/dashboard'>Dashboard</a></li>
           )}
           {authenticated && (
-            <li><a className='hover:underline underline-offset-4' href='/interests'>Interests</a></li>
-          )}
-          {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/media'>Media</a></li>
           )}
           {authenticated && (
