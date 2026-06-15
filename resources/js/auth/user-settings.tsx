@@ -1,7 +1,9 @@
 import { ChangePasswordForm, PasskeySection } from 'bwh-auth';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { FileDropzone } from '@/components/media/FileDropzone';
+import { UploadProgress } from '@/components/media/UploadProgress';
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -192,6 +194,8 @@ function UserSettingsPage() {
   const [passwordError, setPasswordError] = useState('');
   const [profilePictureUploading, setProfilePictureUploading] = useState(false);
   const [profilePictureProgress, setProfilePictureProgress] = useState(0);
+  const [profilePictureFiles, setProfilePictureFiles] = useState<File[]>([]);
+  const profilePictureAbortRef = useRef<AbortController | null>(null);
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
 
@@ -227,7 +231,9 @@ function UserSettingsPage() {
     email_follow_request_accepted: emailFollowRequestAccepted,
   });
 
-  const handleProfilePictureChange = async (file: File | null): Promise<void> => {
+  const handleProfilePictureChange = async (selectedFiles: File[]): Promise<void> => {
+    const file = selectedFiles[0] ?? null;
+    setProfilePictureFiles(file ? [file] : []);
     if (!file) {
       return;
     }
@@ -238,6 +244,8 @@ function UserSettingsPage() {
       return;
     }
 
+    const abortController = new AbortController();
+    profilePictureAbortRef.current = abortController;
     setProfilePictureUploading(true);
     setProfilePictureProgress(0);
     setProfilePictureError('');
@@ -250,16 +258,23 @@ function UserSettingsPage() {
         size: file.size,
       }) as ProfilePictureUploadResponse;
 
-      await putToSignedUrl(created.upload_url, file, created.upload_headers, setProfilePictureProgress);
+      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
+        setProfilePictureProgress(fraction * 100);
+      }, { signal: abortController.signal });
 
       const completed = await fetchWrapper.post(`/api/account/profile-picture/${created.data.id}/complete`, {}) as ProfilePictureCompleteResponse;
       setProfilePictureMessage(completed.data.upload_status === 'ready'
         ? 'Profile picture uploaded and waiting for admin review.'
         : 'Profile picture upload started.');
     } catch (err) {
-      setProfilePictureError(typeof err === 'string' ? err : 'Failed to upload profile picture.');
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setProfilePictureError('Profile picture upload canceled.');
+      } else {
+        setProfilePictureError(typeof err === 'string' ? err : 'Failed to upload profile picture.');
+      }
     } finally {
       setProfilePictureUploading(false);
+      profilePictureAbortRef.current = null;
     }
   };
 
@@ -369,16 +384,20 @@ function UserSettingsPage() {
                 </Alert>
               )}
               <div className="space-y-2">
-                <Label htmlFor="profile-picture">Choose image</Label>
-                <Input
-                  id="profile-picture"
-                  type="file"
+                <FileDropzone
                   accept="image/*"
+                  files={profilePictureFiles}
+                  label="Drop a profile image here"
+                  onFilesChange={(nextFiles) => void handleProfilePictureChange(nextFiles)}
                   disabled={profilePictureUploading}
-                  onChange={(event) => void handleProfilePictureChange(event.target.files?.[0] ?? null)}
+                  helperText="Select one image. Drag and drop here, or click to browse."
                 />
                 {profilePictureUploading && (
-                  <p className="text-sm text-muted-foreground">Uploading… {Math.round(profilePictureProgress * 100)}%</p>
+                  <UploadProgress
+                    label="Uploading profile picture…"
+                    progress={profilePictureProgress}
+                    onCancel={() => profilePictureAbortRef.current?.abort()}
+                  />
                 )}
               </div>
             </div>

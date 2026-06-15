@@ -1,8 +1,10 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
 import { InterestPicker } from '@/components/interest-picker';
+import { FileDropzone } from '@/components/media/FileDropzone';
+import { UploadProgress } from '@/components/media/UploadProgress';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,7 +14,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
 import { fetchWrapper } from '@/fetchWrapper';
 import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { MediaFilters } from '@/media/MediaFilters';
@@ -82,15 +83,17 @@ function UserMediaPage() {
   const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds });
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState('');
   const [visibility, setVisibility] = useState<VisibilityValue>('users');
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [uploadLabel, setUploadLabel] = useState('Uploading…');
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   const resetForm = (): void => {
-    setFile(null);
+    setFiles([]);
     setTitle('');
     setVisibility('users');
     setUploadInterestIds(initial.last_interest_ids);
@@ -99,57 +102,76 @@ function UserMediaPage() {
 
   const upload = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (!file) {
-      toast.error('Choose a file to upload.');
-      return;
-    }
-    const type = mediaTypeForFile(file);
-    if (type === null) {
-      toast.error('Only image and video files are supported.');
+    if (files.length === 0) {
+      toast.error('Choose at least one file to upload.');
       return;
     }
 
+    const unsupported = files.find((selectedFile) => mediaTypeForFile(selectedFile) === null);
+    if (unsupported) {
+      toast.error(`${unsupported.name} is not supported. Only image and video files can be uploaded.`);
+      return;
+    }
+
+    const abortController = new AbortController();
+    uploadAbortRef.current = abortController;
     setUploading(true);
     setProgress(0);
     try {
-      const { thumbnail, perceptualHash } = await buildDerivatives(file, type);
-
-      const created = (await fetchWrapper.post('/api/media', {
-        type,
-        filename: file.name,
-        content_type: file.type,
-        size: file.size,
-        title: title.trim() || null,
-        visibility,
-        interest_ids: uploadInterestIds,
-        has_thumbnail: thumbnail !== null,
-        perceptual_hash: perceptualHash,
-      })) as StoreResponse;
-
-      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
-        setProgress(Math.round(fraction * 100));
-      });
-
-      // Best-effort: if the thumbnail PUT fails, completion drops the key and the
-      // item still works, just without a generated preview.
-      if (thumbnail && created.thumbnail_upload_url && created.thumbnail_upload_headers) {
-        try {
-          await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {});
-        } catch {
-          /* ignore — thumbnail is optional */
+      for (const [index, selectedFile] of files.entries()) {
+        const type = mediaTypeForFile(selectedFile);
+        if (type === null) {
+          continue;
         }
+        setUploadLabel(`Uploading ${index + 1} of ${files.length}: ${selectedFile.name}`);
+        setProgress(0);
+        const { thumbnail, perceptualHash } = await buildDerivatives(selectedFile, type);
+
+        const created = (await fetchWrapper.post('/api/media', {
+          type,
+          filename: selectedFile.name,
+          content_type: selectedFile.type,
+          size: selectedFile.size,
+          title: files.length === 1 ? title.trim() || null : selectedFile.name,
+          visibility,
+          interest_ids: uploadInterestIds,
+          has_thumbnail: thumbnail !== null,
+          perceptual_hash: perceptualHash,
+        })) as StoreResponse;
+
+        await putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
+          setProgress(fraction * 100);
+        }, { signal: abortController.signal });
+
+        // Best-effort: if the thumbnail PUT fails, completion drops the key and the
+        // item still works, just without a generated preview.
+        if (thumbnail && created.thumbnail_upload_url && created.thumbnail_upload_headers) {
+          try {
+            await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {}, { signal: abortController.signal });
+          } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+              throw err;
+            }
+            /* ignore — thumbnail is optional */
+          }
+        }
+
+        await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
       }
 
-      await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
-
-      toast.success('Upload complete. It will be reviewed before others can see it.');
+      toast.success(files.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
       setDialogOpen(false);
       resetForm();
       listing.reload();
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        toast.info('Upload canceled.');
+      } else {
+        toast.error(getErrorMessage(err));
+      }
     } finally {
       setUploading(false);
+      uploadAbortRef.current = null;
     }
   };
 
@@ -173,7 +195,11 @@ function UserMediaPage() {
           <h1 className="text-2xl font-bold">My media</h1>
           <p className="text-muted-foreground">Upload photos and videos. Only you can see an upload until it is approved.</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          if (!uploading) {
+            setDialogOpen(open);
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>Upload</Button>
           </DialogTrigger>
@@ -182,12 +208,14 @@ function UserMediaPage() {
               <DialogTitle>Upload media</DialogTitle>
             </DialogHeader>
             <form onSubmit={(event) => void upload(event)} className="grid gap-4">
-              <Input
-                type="file"
+              <FileDropzone
                 accept="image/*,video/*"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                files={files}
+                label="Drop photos or videos here"
+                multiple
+                onFilesChange={setFiles}
                 disabled={uploading}
-                required
+                helperText="Select one or more files. Each file uploads in its own request."
               />
               <Input
                 value={title}
@@ -215,12 +243,14 @@ function UserMediaPage() {
                 <Button type="submit" disabled={uploading}>
                   {uploading ? 'Uploading…' : 'Upload'}
                 </Button>
-                {uploading && (
-                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Spinner /> {progress}%
-                  </span>
-                )}
               </div>
+              {uploading && (
+                <UploadProgress
+                  label={uploadLabel}
+                  progress={progress}
+                  onCancel={() => uploadAbortRef.current?.abort()}
+                />
+              )}
             </form>
           </DialogContent>
         </Dialog>
