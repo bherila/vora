@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Enums\MediaType;
 use App\Enums\MediaPurpose;
+use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Enums\Visibility;
 use App\Traits\HasVisibility;

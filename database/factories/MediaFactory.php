@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Enums\MediaType;
 use App\Enums\MediaPurpose;
+use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Enums\Visibility;
 use App\Models\Media;
@@ -55,7 +55,7 @@ class MediaFactory extends Factory
 
             return [
                 'type' => $type,
-            'purpose' => MediaPurpose::Gallery,
+                'purpose' => MediaPurpose::Gallery,
                 'disk' => $type->disk(),
                 'mime_type' => 'video/mp4',
                 'object_key' => 'uploads/0/'.(string) Str::ulid().'.mp4',

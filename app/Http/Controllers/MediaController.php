@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\MediaType;
 use App\Enums\MediaPurpose;
+use App\Enums\MediaType;
 use App\Enums\Visibility;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
