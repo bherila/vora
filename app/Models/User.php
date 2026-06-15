@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -14,6 +15,7 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory;
     use Notifiable;
+    use SoftDeletes;
 
     /**
      * Mass-assignable attributes. Privilege/approval columns are intentionally
@@ -56,6 +58,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'approved_at' => 'datetime',
+            'deactivated_at' => 'datetime',
             'id_verified_at' => 'datetime',
             'birth_date' => 'date',
             'preferred_user_types' => 'array',
@@ -103,6 +106,15 @@ class User extends Authenticatable implements MustVerifyEmail
     public function canLogin(): bool
     {
         return ! $this->is_disabled;
+    }
+
+    /**
+     * Self-deactivated accounts can still log in, but are gated to the
+     * reactivate page and hidden from other users until they reactivate.
+     */
+    public function isDeactivated(): bool
+    {
+        return $this->deactivated_at !== null;
     }
 
     /**

@@ -339,6 +339,42 @@ function UserSettingsPage() {
     }
   };
 
+  const handleRemoveProfilePicture = async (): Promise<void> => {
+    setProfilePictureError('');
+    setProfilePictureMessage('');
+    try {
+      await fetchWrapper.delete('/api/account/profile-picture', {});
+      setProfilePictureFiles([]);
+      setProfilePictureMessage('Profile picture removed.');
+    } catch (err) {
+      setProfilePictureError(typeof err === 'string' ? err : 'Failed to remove profile picture.');
+    }
+  };
+
+  const handleDeactivateAccount = async (): Promise<void> => {
+    if (!window.confirm('Deactivate your account? Other users will no longer be able to see you. You can reactivate any time by logging back in.')) {
+      return;
+    }
+    try {
+      await fetchWrapper.post('/api/account/deactivate', {});
+      window.location.href = '/account/deactivated';
+    } catch (err) {
+      setAccountError(typeof err === 'string' ? err : 'Failed to deactivate account.');
+    }
+  };
+
+  const handleDeleteAccount = async (): Promise<void> => {
+    if (!window.confirm('Delete your account? This cannot be undone by you — only an administrator can restore or permanently remove it. You will be logged out.')) {
+      return;
+    }
+    try {
+      await fetchWrapper.post('/api/account/delete', {});
+      window.location.href = '/login';
+    } catch (err) {
+      setAccountError(typeof err === 'string' ? err : 'Failed to delete account.');
+    }
+  };
+
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -466,6 +502,15 @@ function UserSettingsPage() {
                     onCancel={() => profilePictureAbortRef.current?.abort()}
                   />
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={profilePictureUploading}
+                  onClick={() => void handleRemoveProfilePicture()}
+                >
+                  Remove current picture
+                </Button>
               </div>
             </div>
             <form className="space-y-4" onSubmit={(event) => void handleProfileSubmit(event)}>
@@ -695,6 +740,23 @@ function UserSettingsPage() {
                 setPasswordMessage('');
               }}
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Deactivate or delete</CardTitle>
+            <CardDescription>
+              Deactivating hides your account from other users and can be reversed by logging back in. Deleting is permanent for you — only an admin can restore it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button type="button" variant="outline" onClick={() => void handleDeactivateAccount()}>
+              Deactivate account
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleDeleteAccount()}>
+              Delete account
+            </Button>
           </CardContent>
         </Card>
       </section>

@@ -30,6 +30,8 @@ interface AdminUser {
   email: string;
   is_admin: boolean;
   is_disabled: boolean;
+  is_deactivated: boolean;
+  is_deleted: boolean;
   is_approved: boolean;
   id_verified: boolean;
   birth_date_verified: boolean;
@@ -211,6 +213,18 @@ function AdminUsersPage() {
     }
   };
 
+  const restoreUser = async (user: AdminUser) => {
+    setActionLoading(user.id);
+    try {
+      await fetchWrapper.post(`/api/admin/users/${user.id}/restore`, {});
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to restore user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Admin — Users</h1>
@@ -259,6 +273,8 @@ function AdminUsersPage() {
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {user.is_admin && <Badge>Admin</Badge>}
+                    {user.is_deleted && <Badge variant="destructive">Deleted</Badge>}
+                    {user.is_deactivated && <Badge variant="secondary">Deactivated</Badge>}
                     {user.is_disabled && <Badge variant="destructive">Disabled</Badge>}
                     {!user.is_approved && <Badge variant="secondary">Pending</Badge>}
                     {user.email_verified && <Badge variant="outline">Verified</Badge>}
@@ -273,71 +289,87 @@ function AdminUsersPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
-                    {!user.is_approved && (
+                    {/* Normal controls 404 for soft-deleted users (routes aren't trashed-aware); only Restore/Purge apply. */}
+                    {!user.is_deleted && (
+                      <>
+                        {!user.is_approved && (
+                          <Button
+                            size="sm"
+                            disabled={actionLoading === user.id || !user.email_verified}
+                            title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
+                            onClick={() => void approveUser(user)}
+                            data-test="admin-users-approve"
+                          >
+                            Approve
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => void toggleAdmin(user)}
+                          data-test="admin-users-toggle-admin"
+                        >
+                          {user.is_admin ? 'Remove Admin' : 'Make Admin'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => void toggleDisabled(user)}
+                          data-test="admin-users-toggle-disabled"
+                        >
+                          {user.is_disabled ? 'Enable' : 'Disable'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => void toggleNameLock(user)}
+                          data-test="admin-users-toggle-name-lock"
+                        >
+                          {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => void toggleEmailLock(user)}
+                          data-test="admin-users-toggle-email-lock"
+                        >
+                          {user.email_locked ? 'Unlock Email' : 'Lock Email'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => void toggleIdVerification(user)}
+                          data-test="admin-users-toggle-id-verified"
+                        >
+                          {user.id_verified ? 'Clear ID/Age Verification' : 'Verify ID/Age'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => beginBirthDateEdit(user)}
+                          data-test="admin-users-edit-birth-date"
+                        >
+                          Edit Birth Date
+                        </Button>
+                      </>
+                    )}
+                    {user.is_deleted && (
                       <Button
                         size="sm"
-                        disabled={actionLoading === user.id || !user.email_verified}
-                        title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
-                        onClick={() => void approveUser(user)}
-                        data-test="admin-users-approve"
+                        variant="outline"
+                        disabled={actionLoading === user.id}
+                        onClick={() => void restoreUser(user)}
+                        data-test="admin-users-restore"
                       >
-                        Approve
+                        Restore
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => void toggleAdmin(user)}
-                      data-test="admin-users-toggle-admin"
-                    >
-                      {user.is_admin ? 'Remove Admin' : 'Make Admin'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => void toggleDisabled(user)}
-                      data-test="admin-users-toggle-disabled"
-                    >
-                      {user.is_disabled ? 'Enable' : 'Disable'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => void toggleNameLock(user)}
-                      data-test="admin-users-toggle-name-lock"
-                    >
-                      {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => void toggleEmailLock(user)}
-                      data-test="admin-users-toggle-email-lock"
-                    >
-                      {user.email_locked ? 'Unlock Email' : 'Lock Email'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => void toggleIdVerification(user)}
-                      data-test="admin-users-toggle-id-verified"
-                    >
-                      {user.id_verified ? 'Clear ID/Age Verification' : 'Verify ID/Age'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={actionLoading === user.id}
-                      onClick={() => beginBirthDateEdit(user)}
-                      data-test="admin-users-edit-birth-date"
-                    >
-                      Edit Birth Date
-                    </Button>
                     <Button
                       size="sm"
                       variant="destructive"
@@ -345,7 +377,7 @@ function AdminUsersPage() {
                       onClick={() => setDeleteTarget(user)}
                       data-test="admin-users-delete"
                     >
-                      Delete
+                      {user.is_deleted ? 'Purge' : 'Delete'}
                     </Button>
                   </div>
                 </TableCell>
@@ -358,10 +390,11 @@ function AdminUsersPage() {
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
+            <DialogTitle>Permanently delete user</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email})? This action
-              cannot be undone.
+              Permanently delete <strong>{deleteTarget?.name}</strong> ({deleteTarget?.email}), including all of their
+              media, characters, and uploaded files? This cannot be undone. To temporarily remove an account instead,
+              ask the user to deactivate it, or use Disable.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

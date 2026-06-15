@@ -12,6 +12,7 @@ use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
+use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -21,6 +22,7 @@ class CharacterController extends Controller
     public function __construct(
         private readonly MediaUploadService $uploads,
         private readonly MediaResponseService $responder,
+        private readonly MediaService $media,
     ) {}
 
     public function page(): View
@@ -78,7 +80,14 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
+        $avatar = $character->profilePicture;
         $character->delete();
+
+        // The character's avatar media is owned by the user; remove it now that
+        // the character no longer references it (unless something else does).
+        if ($avatar instanceof Media) {
+            $this->media->deleteIfUnreferenced($avatar);
+        }
 
         return response()->json(['success' => true]);
     }
@@ -124,8 +133,39 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Upload could not be verified.'], 422);
         }
 
+        $previousMediaId = $character->profile_picture_media_id;
         $character->profile_picture_media_id = $media->id;
         $character->save();
+
+        // Clean up the replaced avatar so it does not orphan its object/row.
+        if ($previousMediaId !== null && $previousMediaId !== $media->id) {
+            $previous = Media::query()->find($previousMediaId);
+            if ($previous instanceof Media) {
+                $this->media->deleteIfUnreferenced($previous);
+            }
+        }
+
+        return response()->json(['success' => true, 'data' => $this->present($character->refresh())]);
+    }
+
+    public function removeProfilePicture(Character $character): JsonResponse
+    {
+        $user = request()->user();
+
+        if (! $user instanceof User || $character->user_id !== $user->id) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        $mediaId = $character->profile_picture_media_id;
+        $character->profile_picture_media_id = null;
+        $character->save();
+
+        if ($mediaId !== null) {
+            $media = Media::query()->find($mediaId);
+            if ($media instanceof Media) {
+                $this->media->deleteIfUnreferenced($media);
+            }
+        }
 
         return response()->json(['success' => true, 'data' => $this->present($character->refresh())]);
     }
