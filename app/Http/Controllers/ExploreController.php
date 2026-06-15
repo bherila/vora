@@ -17,10 +17,10 @@ use Illuminate\View\View;
  *
  * The discovery filters (type, interests) and the response shape are shared with
  * {@see MediaController} via {@see MediaFilter} and {@see MediaResponseService};
- * the only thing that differs here is the base scoping — `visibleTo` (owner +
- * admin + any-user visibility, unlisted excluded) intersected with approved
- * moderation. Keeping that intersection in one query is what makes the privacy
- * rule auditable as search/exploration grows.
+ * the only thing that differs here is the base scoping — `discoverable`
+ * (strictly any-user visibility, with no owner or admin exception) intersected
+ * with approved moderation. Keeping that intersection in one query is what makes
+ * the privacy rule auditable as search/exploration grows.
  */
 class ExploreController extends Controller
 {
@@ -42,7 +42,7 @@ class ExploreController extends Controller
     public function apiIndex(ListMediaRequest $request): JsonResponse
     {
         $query = Media::query()
-            ->visibleTo($request->user())
+            ->discoverable()
             ->moderationStatus(ModerationStatus::Approved)
             ->where('upload_status', 'ready')
             ->with('interests')

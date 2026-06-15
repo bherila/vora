@@ -27,6 +27,13 @@ return [
     // objects. Video posters live here too, never on the video (source) disk.
     'thumbnail_disk' => env('MEDIA_THUMBNAIL_DISK', 'photos'),
 
+    // Client-generated thumbnails/posters are a separate presigned PUT, so their
+    // size is enforced on completion (not bounded by the source's type limit).
+    // A thumbnail that exceeds this is discarded rather than retained/served.
+    'thumbnail' => [
+        'max_bytes' => (int) env('MEDIA_THUMBNAIL_MAX_BYTES', 5 * 1024 * 1024),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Object key prefix

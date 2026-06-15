@@ -46,6 +46,40 @@ class ExploreApiTest extends TestCase
             ->assertJsonMissingPath('data.0.moderation_status');
     }
 
+    public function test_explore_excludes_viewers_own_unlisted_media(): void
+    {
+        $this->fakeStorage();
+        $other = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        // The viewer's own approved-but-unlisted upload must NOT surface on the
+        // discovery surface, even though it belongs to them.
+        Media::factory()->for($viewer)->approved()->unlisted()->create(['title' => 'My secret']);
+        $listed = Media::factory()->for($other)->approved()->create(['title' => 'Visible']);
+
+        $this->actingAs($viewer)->getJson('/api/explore')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $listed->id);
+    }
+
+    public function test_explore_excludes_unlisted_media_for_admin_viewer(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        $other = User::factory()->approved()->create();
+
+        // Admins bypass visibility everywhere else, but discovery is a public
+        // surface: unlisted content must stay out of it for them too.
+        Media::factory()->for($other)->approved()->unlisted()->create(['title' => 'Unlisted']);
+        $listed = Media::factory()->for($other)->approved()->create(['title' => 'Visible']);
+
+        $this->actingAs($admin)->getJson('/api/explore')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $listed->id);
+    }
+
     public function test_explore_never_exposes_pending_uploads(): void
     {
         $this->fakeStorage();

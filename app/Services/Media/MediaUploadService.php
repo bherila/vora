@@ -143,11 +143,20 @@ class MediaUploadService
             return false;
         }
 
-        // The thumbnail is an optional best-effort derivative: if the client
-        // never managed to PUT it, drop the key rather than fail the upload.
-        if ($media->thumbnail_key !== null
-            && ! $this->storage->fileExists((string) config('media.thumbnail_disk'), $media->thumbnail_key)) {
-            $media->thumbnail_key = null;
+        // The thumbnail is an optional best-effort derivative on its own
+        // presigned PUT, so its size is unconstrained at upload time. Keep it
+        // only when the client actually landed an object within the thumbnail
+        // size limit; a missing or oversized thumbnail is deleted and forgotten
+        // (drop the key rather than fail the whole upload).
+        if ($media->thumbnail_key !== null) {
+            $thumbnailDisk = (string) config('media.thumbnail_disk');
+            $thumbnailSize = $this->storage->getFileSize($thumbnailDisk, $media->thumbnail_key);
+            $maxThumbnailBytes = (int) config('media.thumbnail.max_bytes');
+
+            if ($thumbnailSize === null || ($maxThumbnailBytes > 0 && $thumbnailSize > $maxThumbnailBytes)) {
+                $this->storage->deleteFile($thumbnailDisk, $media->thumbnail_key);
+                $media->thumbnail_key = null;
+            }
         }
 
         $media->size_bytes = $size;

@@ -133,9 +133,14 @@ class MediaApiTest extends TestCase
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('fileExists')
                 ->with('photos', 'uploads/0/orig.jpg')->andReturn(true);
-            $mock->shouldReceive('fileExists')
-                ->with('photos', 'uploads/thumbnails/0/missing.jpg')->andReturn(false);
-            $mock->shouldReceive('getFileSize')->andReturn(2048);
+            $mock->shouldReceive('getFileSize')
+                ->with('photos', 'uploads/0/orig.jpg')->andReturn(2048);
+            // The thumbnail object never landed: getFileSize returns null, as the
+            // real adapter does for a missing key, so its key is dropped.
+            $mock->shouldReceive('getFileSize')
+                ->with('photos', 'uploads/thumbnails/0/missing.jpg')->andReturn(null);
+            $mock->shouldReceive('deleteFile')
+                ->with('photos', 'uploads/thumbnails/0/missing.jpg')->andReturn(true);
             $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
         });
 
