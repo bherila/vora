@@ -217,6 +217,9 @@ class CharacterTest extends TestCase
                 'ratings' => [['interest_id' => $interest->id, 'level' => 1]],
             ])
             ->assertNotFound();
+
+        // The GET listing path guards the query value the same way.
+        $this->getJson('/api/interests?character_id[]=1')->assertNotFound();
     }
 
     public function test_duplicate_profile_rating_is_prevented(): void

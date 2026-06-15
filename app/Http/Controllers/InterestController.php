@@ -30,7 +30,14 @@ class InterestController extends Controller
         $character = null;
 
         if ($characterId !== null) {
-            $character = Character::query()->find($characterId);
+            // Guard against non-scalar query input (e.g. character_id[]=1), which
+            // Eloquent find() would treat as a multi-key lookup and 500 on the
+            // ->user_id access.
+            if (! is_numeric($characterId)) {
+                return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+            }
+
+            $character = Character::query()->find((int) $characterId);
             if ($character === null || $character->user_id !== $user->id) {
                 return response()->json(['success' => false, 'message' => 'Not found.'], 404);
             }

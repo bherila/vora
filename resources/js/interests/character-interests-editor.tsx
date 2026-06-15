@@ -33,6 +33,10 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
   const [inherit, setInherit] = useState(initialInherit);
   const [interests, setInterests] = useState<RatableInterest[]>([]);
   const [busy, setBusy] = useState(false);
+  // Number of slider saves currently in flight. The inherit toggle is blocked
+  // while > 0 so a save that resolves after the inherit delete can't recreate
+  // the override and flip the character back to custom.
+  const [pendingSaves, setPendingSaves] = useState(0);
   const [undoSnapshot, setUndoSnapshot] = useState<RatingSnapshot[] | null>(null);
 
   const applyInherit = (value: boolean): void => {
@@ -72,6 +76,7 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
   }, [open, loaded, characterId]);
 
   const handleSave = async (interestId: number, level: number): Promise<void> => {
+    setPendingSaves((count) => count + 1);
     try {
       await persistRatings(characterId, [{ interest_id: interestId, level }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
@@ -79,15 +84,20 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
     } catch (err) {
       toast.error(getErrorMessage(err));
       throw err; // let the list keep the row pending for retry
+    } finally {
+      setPendingSaves((count) => count - 1);
     }
   };
 
   const handleClear = async (interestId: number): Promise<void> => {
+    setPendingSaves((count) => count + 1);
     try {
       await persistRatings(characterId, [{ interest_id: interestId, level: null }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
     } catch (err) {
       toast.error(getErrorMessage(err));
+    } finally {
+      setPendingSaves((count) => count - 1);
     }
   };
 
@@ -160,8 +170,9 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
               size="sm"
               variant={inherit ? 'default' : 'outline'}
               // Wait for the GET so switchToInherit snapshots real ratings (not an
-              // empty list) before deleting the server overrides.
-              disabled={busy || inherit || !loaded}
+              // empty list), and block while a slider save is in flight so it
+              // can't resolve after the delete and recreate the override.
+              disabled={busy || inherit || !loaded || pendingSaves > 0}
               // Keep focus on any active slider so its blur-save cannot race the
               // delete and recreate the override we are clearing.
               onMouseDown={(event) => event.preventDefault()}

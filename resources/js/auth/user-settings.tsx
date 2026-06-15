@@ -207,7 +207,10 @@ function UserSettingsPage() {
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
   const [interests, setInterests] = useState<RatableInterest[]>([]);
-  const interestsEnabled = initialData.can_manage_interests;
+  // Mirrors the /api/interests access gate. Changing the email clears email
+  // verification server-side, which makes the API 403, so we drop access here
+  // too rather than leave the panels interactive until a reload.
+  const [interestsEnabled, setInterestsEnabled] = useState(initialData.can_manage_interests);
 
   useEffect(() => {
     // The interests API is gated behind the approval middleware (approved +
@@ -392,6 +395,12 @@ function UserSettingsPage() {
         name,
         email,
       })) as UserSettingsResponse;
+
+      // Changing the email resets verification, so the interests API will 403
+      // until the new address is verified — hide the panels immediately.
+      if (email !== initialData.email) {
+        setInterestsEnabled(false);
+      }
 
       setAccountMessage(response.message ?? 'Account updated.');
       applyResponseData(response.data);
