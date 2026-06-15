@@ -174,6 +174,7 @@ class ProfileController extends Controller
         if ($user->isAdmin()) {
             $otherActiveAdmins = User::query()
                 ->whereKeyNot($user->id)
+                ->whereNotNull('approved_at')
                 ->whereNull('deactivated_at')
                 ->where('is_disabled', false)
                 ->where(fn ($q) => $q->where('is_admin', true)->orWhere('id', 1))

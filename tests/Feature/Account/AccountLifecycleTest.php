@@ -267,6 +267,17 @@ class AccountLifecycleTest extends TestCase
         $this->assertFalse($admin->refresh()->trashed());
     }
 
+    public function test_pending_admin_does_not_count_as_active_for_self_delete(): void
+    {
+        // id 1 is an admin but unapproved (cannot reach admin routes), so it
+        // must not count as the remaining usable admin.
+        User::factory()->create(['is_admin' => true]);
+        $admin = User::factory()->approved()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->postJson('/api/account/delete')->assertForbidden();
+        $this->assertFalse($admin->refresh()->trashed());
+    }
+
     public function test_cannot_accept_a_follow_request_from_a_deactivated_requester(): void
     {
         $recipient = User::factory()->approved()->create();
