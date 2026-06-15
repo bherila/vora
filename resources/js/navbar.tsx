@@ -9,7 +9,7 @@ if (mount) {
 
   let authenticated = false;
   let isAdmin = false;
-  let followRequestCount = 0;
+  let requestCount = 0;
 
   if (payload) {
     try {
@@ -17,7 +17,7 @@ if (mount) {
       if (typeof appData === 'object' && appData !== null) {
         authenticated = appData.authenticated === true;
         isAdmin = appData.isAdmin === true;
-        followRequestCount = typeof appData.followRequestCount === 'number' ? appData.followRequestCount : 0;
+        requestCount = typeof appData.requestCount === 'number' ? appData.requestCount : 0;
       }
     } catch {
       authenticated = false;
@@ -25,5 +25,5 @@ if (mount) {
     }
   }
 
-  createRoot(mount).render(<Navbar authenticated={authenticated} isAdmin={isAdmin} followRequestCount={followRequestCount} />);
+  createRoot(mount).render(<Navbar authenticated={authenticated} isAdmin={isAdmin} requestCount={requestCount} />);
 }

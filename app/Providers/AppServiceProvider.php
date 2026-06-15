@@ -3,13 +3,17 @@
 namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
+use App\Models\Character;
 use App\Models\Media;
+use App\Models\Story;
 use App\Models\User;
 use App\Policies\MediaPolicy;
+use App\Policies\StoryPolicy;
 use App\Services\Auth\VoraAuthUserPolicy;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +46,14 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('admin-only', fn (User $user): bool => $user->isAdmin() && $user->isApproved() && $user->canLogin());
 
         Gate::policy(Media::class, MediaPolicy::class);
+        Gate::policy(Story::class, StoryPolicy::class);
+
+        // Stable aliases for polymorphic story "involves" tags, so the database
+        // stores short type keys instead of fully-qualified class names.
+        Relation::morphMap([
+            'user' => User::class,
+            'character' => Character::class,
+        ]);
 
         // Register the Spatie CSP middleware globally if the HTTP kernel is available.
         if ($this->app->bound(Kernel::class)) {
