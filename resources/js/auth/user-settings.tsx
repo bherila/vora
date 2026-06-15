@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import type { MediaItem } from '@/media/types';
+import { putToSignedUrl } from '@/media/upload';
 import {
   GENDER_OPTIONS,
   normalizeProfileOptionValue,
@@ -52,6 +54,18 @@ interface UserSettingsInitialData {
   email_locked: boolean;
   email_follow_request_received: boolean;
   email_follow_request_accepted: boolean;
+}
+
+interface ProfilePictureUploadResponse {
+  success: boolean;
+  data: MediaItem;
+  upload_url: string;
+  upload_headers: Record<string, string>;
+}
+
+interface ProfilePictureCompleteResponse {
+  success: boolean;
+  data: MediaItem;
 }
 
 interface UserSettingsResponse {
@@ -176,6 +190,10 @@ function UserSettingsPage() {
   const [accountError, setAccountError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [profilePictureUploading, setProfilePictureUploading] = useState(false);
+  const [profilePictureProgress, setProfilePictureProgress] = useState(0);
+  const [profilePictureMessage, setProfilePictureMessage] = useState('');
+  const [profilePictureError, setProfilePictureError] = useState('');
 
   const applyResponseData = (data: UserSettingsResponse['data']) => {
     if (!data) {
@@ -208,6 +226,42 @@ function UserSettingsPage() {
     email_follow_request_received: emailFollowRequestReceived,
     email_follow_request_accepted: emailFollowRequestAccepted,
   });
+
+  const handleProfilePictureChange = async (file: File | null): Promise<void> => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setProfilePictureError('Profile pictures must be images, not videos.');
+      setProfilePictureMessage('');
+      return;
+    }
+
+    setProfilePictureUploading(true);
+    setProfilePictureProgress(0);
+    setProfilePictureError('');
+    setProfilePictureMessage('');
+
+    try {
+      const created = await fetchWrapper.post('/api/account/profile-picture', {
+        filename: file.name,
+        content_type: file.type,
+        size: file.size,
+      }) as ProfilePictureUploadResponse;
+
+      await putToSignedUrl(created.upload_url, file, created.upload_headers, setProfilePictureProgress);
+
+      const completed = await fetchWrapper.post(`/api/account/profile-picture/${created.data.id}/complete`, {}) as ProfilePictureCompleteResponse;
+      setProfilePictureMessage(completed.data.upload_status === 'ready'
+        ? 'Profile picture uploaded and waiting for admin review.'
+        : 'Profile picture upload started.');
+    } catch (err) {
+      setProfilePictureError(typeof err === 'string' ? err : 'Failed to upload profile picture.');
+    } finally {
+      setProfilePictureUploading(false);
+    }
+  };
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -297,6 +351,37 @@ function UserSettingsPage() {
                 <AlertDescription>{profileMessage}</AlertDescription>
               </Alert>
             )}
+            <div className="mb-6 space-y-3 rounded-lg border border-border p-4">
+              <div>
+                <h3 className="font-medium">Profile picture</h3>
+                <p className="text-sm text-muted-foreground">
+                  Upload an image for your profile. It will be reviewed by an admin before other users can see it.
+                </p>
+              </div>
+              {profilePictureError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{profilePictureError}</AlertDescription>
+                </Alert>
+              )}
+              {profilePictureMessage && (
+                <Alert>
+                  <AlertDescription>{profilePictureMessage}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="profile-picture">Choose image</Label>
+                <Input
+                  id="profile-picture"
+                  type="file"
+                  accept="image/*"
+                  disabled={profilePictureUploading}
+                  onChange={(event) => void handleProfilePictureChange(event.target.files?.[0] ?? null)}
+                />
+                {profilePictureUploading && (
+                  <p className="text-sm text-muted-foreground">Uploading… {Math.round(profilePictureProgress * 100)}%</p>
+                )}
+              </div>
+            </div>
             <form className="space-y-4" onSubmit={(event) => void handleProfileSubmit(event)}>
               <div className="space-y-1">
                 <Label htmlFor="account-display-name">Display name</Label>

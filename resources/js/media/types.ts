@@ -1,5 +1,6 @@
 export type MediaTypeValue = 'photo' | 'video';
 export type VisibilityValue = 'users' | 'unlisted';
+export type MediaPurposeValue = 'gallery' | 'profile_picture';
 export type ModerationStatusValue = 'pending' | 'approved' | 'rejected';
 
 export interface VideoStatus {
@@ -30,6 +31,7 @@ export interface MediaItem {
   id: number;
   ulid: string;
   type: MediaTypeValue;
+  purpose: MediaPurposeValue;
   title: string | null;
   original_filename: string;
   mime_type: string;

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Enums\Visibility;
@@ -52,6 +53,7 @@ class Media extends Model
         'user_id',
         'ulid',
         'type',
+        'purpose',
         'disk',
         'object_key',
         'thumbnail_key',
@@ -71,6 +73,7 @@ class Media extends Model
     {
         return [
             'type' => MediaType::class,
+            'purpose' => MediaPurpose::class,
             'visibility' => Visibility::class,
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
@@ -102,6 +105,16 @@ class Media extends Model
     public function interests(): BelongsToMany
     {
         return $this->belongsToMany(Interest::class, 'media_interests')->withTimestamps();
+    }
+
+    public function isGalleryMedia(): bool
+    {
+        return $this->purpose === MediaPurpose::Gallery;
+    }
+
+    public function isProfilePicture(): bool
+    {
+        return $this->purpose === MediaPurpose::ProfilePicture;
     }
 
     public function isReady(): bool

@@ -51,6 +51,8 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:6,1')->name('verification.send');
 
     Route::patch('/api/account', [ProfileController::class, 'update']);
+    Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
+    Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
