@@ -6,10 +6,21 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Character extends Model
 {
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        // Characters hard-delete; drop any story "involves" tags pointing at this
+        // character so they cannot dangle (story_involvements has no FK on the
+        // polymorphic columns).
+        static::deleting(function (Character $character): void {
+            $character->storyInvolvements()->delete();
+        });
+    }
 
     /**
      * @var list<string>
@@ -67,5 +78,15 @@ class Character extends Model
     public function profilePicture(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'profile_picture_media_id');
+    }
+
+    /**
+     * Story "involves" tags pointing at this character.
+     *
+     * @return MorphMany<StoryInvolvement, $this>
+     */
+    public function storyInvolvements(): MorphMany
+    {
+        return $this->morphMany(StoryInvolvement::class, 'involvable');
     }
 }

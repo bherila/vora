@@ -187,6 +187,28 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Stories this user owns (created). Co-authored stories are reached through
+     * {@see static::storyAuthorships()}.
+     *
+     * @return HasMany<Story, $this>
+     */
+    public function stories(): HasMany
+    {
+        return $this->hasMany(Story::class);
+    }
+
+    /**
+     * Every authorship row for this user (owner and co-author, pending and
+     * accepted).
+     *
+     * @return HasMany<StoryAuthor, $this>
+     */
+    public function storyAuthorships(): HasMany
+    {
+        return $this->hasMany(StoryAuthor::class);
+    }
+
+    /**
      * @return HasMany<FollowRequest, $this>
      */
     public function sentFollowRequests(): HasMany

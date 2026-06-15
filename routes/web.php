@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminMediaController;
+use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
@@ -13,6 +14,9 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Story\AuthorshipInviteController;
+use App\Http\Controllers\Story\StoryAuthorController;
+use App\Http\Controllers\StoryController;
 use Illuminate\Support\Facades\Route;
 
 // Home page (public).
@@ -86,6 +90,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
     Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
 
+    // Stories workspace + shareable single-story reader.
+    Route::get('/stories', [StoryController::class, 'page'])->name('stories');
+    Route::get('/s/{ulid}', [StoryController::class, 'readerPage'])->name('stories.view');
+
     Route::get('/users', [FollowController::class, 'directory'])->name('users.directory');
     Route::get('/users/follow-requests', [FollowController::class, 'inboxPage'])->name('users.follow-requests');
     Route::get('/users/{user}', [FollowController::class, 'profilePage'])->name('users.profile');
@@ -108,6 +116,29 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/follow-requests/{followRequest}/decline', [FollowController::class, 'decline']);
         Route::get('/{user}', [FollowController::class, 'profile']);
         Route::post('/{user}/follow-requests', [FollowController::class, 'requestFollow']);
+    });
+
+    Route::prefix('api/stories')->group(function () {
+        Route::get('/', [StoryController::class, 'index']);
+        Route::post('/', [StoryController::class, 'store']);
+        Route::get('/by-ulid/{ulid}', [StoryController::class, 'showByUlid']);
+        Route::get('/{story}', [StoryController::class, 'show']);
+        Route::patch('/{story}', [StoryController::class, 'update']);
+        Route::delete('/{story}', [StoryController::class, 'destroy']);
+        Route::put('/{story}/graph', [StoryController::class, 'saveGraph']);
+        Route::get('/{story}/authors', [StoryAuthorController::class, 'index']);
+        Route::post('/{story}/authors', [StoryAuthorController::class, 'invite']);
+        // withTrashed: a co-author who soft-deleted their account still has a
+        // story_authors row the owner must be able to remove.
+        Route::delete('/{story}/authors/{user}', [StoryAuthorController::class, 'destroy'])->withTrashed();
+    });
+
+    // Co-author invitations — the story side of the shared acceptance inbox.
+    Route::prefix('api/authorship-invites')->group(function () {
+        Route::get('/', [AuthorshipInviteController::class, 'inbox']);
+        Route::get('/count', [AuthorshipInviteController::class, 'count']);
+        Route::post('/{storyAuthor}/accept', [AuthorshipInviteController::class, 'accept']);
+        Route::post('/{storyAuthor}/decline', [AuthorshipInviteController::class, 'decline']);
     });
 
     Route::prefix('api/media')->group(function () {
@@ -134,6 +165,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
+    Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
@@ -159,6 +191,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
+
+    Route::get('/stories', [AdminStoryController::class, 'apiIndex']);
+    Route::post('/stories/{story}/moderate', [AdminStoryController::class, 'moderate']);
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
