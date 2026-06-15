@@ -32,6 +32,8 @@ interface UserSettingsInitialPayload {
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
+  email_follow_request_received?: boolean | null;
+  email_follow_request_accepted?: boolean | null;
 }
 
 interface UserSettingsInitialData {
@@ -48,6 +50,8 @@ interface UserSettingsInitialData {
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
+  email_follow_request_received: boolean;
+  email_follow_request_accepted: boolean;
 }
 
 interface UserSettingsResponse {
@@ -63,6 +67,8 @@ interface UserSettingsResponse {
     user_type_other: string | null;
     preferred_user_types: string[] | null;
     preferred_genders: string[] | null;
+    email_follow_request_received: boolean;
+    email_follow_request_accepted: boolean;
   };
 }
 
@@ -76,6 +82,8 @@ interface AccountPayload {
   user_type_other: string | null;
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
+  email_follow_request_received: boolean;
+  email_follow_request_accepted: boolean;
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -93,6 +101,8 @@ function emptyInitialData(): UserSettingsInitialData {
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
+    email_follow_request_received: false,
+    email_follow_request_accepted: false,
   };
 }
 
@@ -111,6 +121,8 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
+    email_follow_request_received: payload.email_follow_request_received ?? false,
+    email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
   };
 }
 
@@ -153,6 +165,8 @@ function UserSettingsPage() {
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
+  const [emailFollowRequestReceived, setEmailFollowRequestReceived] = useState(initialData.email_follow_request_received);
+  const [emailFollowRequestAccepted, setEmailFollowRequestAccepted] = useState(initialData.email_follow_request_accepted);
   const [profileSaving, setProfileSaving] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
@@ -177,6 +191,8 @@ function UserSettingsPage() {
     setProfileUserTypeOther(data.user_type_other ?? '');
     setPreferredUserTypes(normalizeProfileSelections(USER_TYPE_OPTIONS, data.preferred_user_types));
     setPreferredGenders(normalizeProfileSelections(GENDER_OPTIONS, data.preferred_genders));
+    setEmailFollowRequestReceived(data.email_follow_request_received);
+    setEmailFollowRequestAccepted(data.email_follow_request_accepted);
   };
 
   const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'display_name' | 'email'>> = {}): AccountPayload => ({
@@ -189,6 +205,8 @@ function UserSettingsPage() {
     user_type_other: profileUserType === 'other' ? blankToNull(profileUserTypeOther) : null,
     preferred_user_types: selectionsToPayload(preferredUserTypes),
     preferred_genders: selectionsToPayload(preferredGenders),
+    email_follow_request_received: emailFollowRequestReceived,
+    email_follow_request_accepted: emailFollowRequestAccepted,
   });
 
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -409,6 +427,26 @@ function UserSettingsPage() {
               <p className="text-sm text-muted-foreground">
                 {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
               </p>
+              <div className="space-y-3 rounded-md border border-input p-3">
+                <p className="text-sm font-medium">Follow email notifications</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={emailFollowRequestReceived}
+                    onChange={(event) => setEmailFollowRequestReceived(event.target.checked)}
+                  />
+                  Email me when I receive a follow request
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={emailFollowRequestAccepted}
+                    onChange={(event) => setEmailFollowRequestAccepted(event.target.checked)}
+                  />
+                  Email me when one of my follow requests is accepted
+                </label>
+                <p className="text-xs text-muted-foreground">Declined follow requests do not send email.</p>
+              </div>
               <p className="text-sm text-muted-foreground">
                 ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
               </p>

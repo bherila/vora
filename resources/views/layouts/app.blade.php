@@ -31,6 +31,7 @@
       @json([
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
+        'followRequestCount' => $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->count() : 0,
       ])
     </script>
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">

@@ -58,6 +58,12 @@ class ProfileController extends Controller
         if (array_key_exists('preferred_genders', $data)) {
             $user->preferred_genders = $data['preferred_genders'];
         }
+        if (array_key_exists('email_follow_request_received', $data)) {
+            $user->email_follow_request_received = (bool) $data['email_follow_request_received'];
+        }
+        if (array_key_exists('email_follow_request_accepted', $data)) {
+            $user->email_follow_request_accepted = (bool) $data['email_follow_request_accepted'];
+        }
         if ($emailChanged) {
             $user->email_verified_at = null;
         }
@@ -80,6 +86,8 @@ class ProfileController extends Controller
                 'user_type_other' => $user->user_type_other,
                 'preferred_user_types' => $user->preferred_user_types,
                 'preferred_genders' => $user->preferred_genders,
+                'email_follow_request_received' => (bool) $user->email_follow_request_received,
+                'email_follow_request_accepted' => (bool) $user->email_follow_request_accepted,
             ],
         ]);
     }
