@@ -15,5 +15,8 @@ class FollowRequestAuditLog extends Model
     }
 
     /** @return BelongsTo<FollowRequest, $this> */
-    public function followRequest(): BelongsTo { return $this->belongsTo(FollowRequest::class); }
+    public function followRequest(): BelongsTo
+    {
+        return $this->belongsTo(FollowRequest::class);
+    }
 }

@@ -26,13 +26,15 @@
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
       $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
-    @endphp
-    <script id="navbar-initial-data" type="application/json" @cspNonce>
-      @json([
+      $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->count() : 0;
+      $__navbarInitialData = json_encode([
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
-        'followRequestCount' => $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->count() : 0,
-      ])
+        'followRequestCount' => $__followRequestCount,
+      ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+    @endphp
+    <script id="navbar-initial-data" type="application/json" @cspNonce>
+      {!! $__navbarInitialData !!}
     </script>
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
       <div id="navbar"></div>

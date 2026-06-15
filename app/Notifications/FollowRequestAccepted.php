@@ -14,7 +14,10 @@ class FollowRequestAccepted extends Notification
     public function __construct(private readonly FollowRequest $followRequest) {}
 
     /** @return array<int, string> */
-    public function via(object $notifiable): array { return ['mail']; }
+    public function via(object $notifiable): array
+    {
+        return ['mail'];
+    }
 
     public function toMail(object $notifiable): MailMessage
     {

@@ -34,6 +34,21 @@ class FollowRequestTest extends TestCase
             ->assertJsonMissing(['name' => 'Hidden']);
     }
 
+    public function test_profile_rejects_non_discoverable_users(): void
+    {
+        $current = User::factory()->approved()->create();
+        $pending = User::factory()->pendingApproval()->create();
+        $disabled = User::factory()->approved()->disabled()->create();
+
+        $this->actingAs($current)->getJson("/api/users/{$pending->id}")
+            ->assertNotFound()
+            ->assertJsonPath('success', false);
+
+        $this->actingAs($current)->getJson("/api/users/{$disabled->id}")
+            ->assertNotFound()
+            ->assertJsonPath('success', false);
+    }
+
     public function test_users_can_request_accept_and_follow_back_with_audit_logs(): void
     {
         Notification::fake();
@@ -64,7 +79,14 @@ class FollowRequestTest extends TestCase
         Notification::fake();
         $requester = User::factory()->approved()->create();
         $recipient = User::factory()->approved()->create();
-        $followRequest = FollowRequest::query()->create(['requester_id' => $requester->id, 'recipient_id' => $recipient->id, 'status' => 'pending']);
+
+        $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")
+            ->assertOk();
+
+        $followRequest = FollowRequest::query()
+            ->where('requester_id', $requester->id)
+            ->where('recipient_id', $recipient->id)
+            ->firstOrFail();
 
         $this->actingAs($recipient)->postJson("/api/users/follow-requests/{$followRequest->id}/decline")->assertOk();
         Notification::assertNothingSent();
@@ -77,5 +99,29 @@ class FollowRequestTest extends TestCase
             ->assertOk();
 
         $this->assertSame(3, FollowRequestAuditLog::query()->count());
+    }
+
+    public function test_profile_marks_declined_requests_retryable_after_24_hours(): void
+    {
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
+        $followRequest = FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'declined',
+            'responded_at' => now()->subHours(23),
+        ]);
+
+        $this->actingAs($requester)->getJson("/api/users/{$recipient->id}")
+            ->assertOk()
+            ->assertJsonPath('data.follow_request.status', 'declined')
+            ->assertJsonPath('data.follow_request.can_retry', false);
+
+        $followRequest->forceFill(['responded_at' => now()->subDay()->subMinute()])->save();
+
+        $this->actingAs($requester)->getJson("/api/users/{$recipient->id}")
+            ->assertOk()
+            ->assertJsonPath('data.follow_request.status', 'declined')
+            ->assertJsonPath('data.follow_request.can_retry', true);
     }
 }

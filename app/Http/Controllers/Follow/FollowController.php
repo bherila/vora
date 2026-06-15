@@ -16,9 +16,20 @@ use Illuminate\View\View;
 
 class FollowController extends Controller
 {
-    public function directory(): View { return view('user.follow-directory'); }
-    public function profilePage(User $user): View { return view('user.follow-profile', ['profileUser' => $user]); }
-    public function inboxPage(): View { return view('user.follow-requests'); }
+    public function directory(): View
+    {
+        return view('user.follow-directory');
+    }
+
+    public function profilePage(User $user): View
+    {
+        return view('user.follow-profile', ['profileUser' => $user]);
+    }
+
+    public function inboxPage(): View
+    {
+        return view('user.follow-requests');
+    }
 
     public function users(Request $request): JsonResponse
     {
@@ -36,7 +47,7 @@ class FollowController extends Controller
     public function profile(Request $request, User $user): JsonResponse
     {
         $current = $request->user();
-        if (! $current instanceof User || $current->is($user)) {
+        if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
         }
 
@@ -58,7 +69,7 @@ class FollowController extends Controller
             'user_type' => $user->user_type,
             'gender' => $user->gender,
             'mutual_interests' => $mutualInterests,
-            'follow_request' => $followRequest ? ['status' => $followRequest->status, 'updated_at' => $followRequest->updated_at?->toIso8601String()] : null,
+            'follow_request' => $this->followRequestPayload($followRequest),
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
         ]]);
     }
@@ -66,12 +77,12 @@ class FollowController extends Controller
     public function requestFollow(Request $request, User $user): JsonResponse
     {
         $current = $request->user();
-        if (! $current instanceof User || $current->is($user)) {
+        if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             return response()->json(['success' => false, 'message' => 'You cannot follow this user.'], 422);
         }
 
         $followRequest = FollowRequest::query()->firstOrNew(['requester_id' => $current->id, 'recipient_id' => $user->id]);
-        if ($followRequest->exists && $followRequest->status === 'declined' && $followRequest->responded_at?->gt(now()->subDay())) {
+        if ($followRequest->exists && $followRequest->status === 'declined' && ! $this->declinedRequestCanBeRetried($followRequest)) {
             return response()->json(['success' => false, 'message' => 'You can request again 24 hours after the request was declined.'], 429);
         }
         if ($followRequest->exists && in_array($followRequest->status, ['pending', 'accepted'], true)) {
@@ -112,8 +123,15 @@ class FollowController extends Controller
         return response()->json(['success' => true, 'data' => ['count' => FollowRequest::query()->where('recipient_id', $request->user()?->id)->where('status', 'pending')->count()]]);
     }
 
-    public function accept(Request $request, FollowRequest $followRequest): JsonResponse { return $this->decide($request, $followRequest, 'accepted'); }
-    public function decline(Request $request, FollowRequest $followRequest): JsonResponse { return $this->decide($request, $followRequest, 'declined'); }
+    public function accept(Request $request, FollowRequest $followRequest): JsonResponse
+    {
+        return $this->decide($request, $followRequest, 'accepted');
+    }
+
+    public function decline(Request $request, FollowRequest $followRequest): JsonResponse
+    {
+        return $this->decide($request, $followRequest, 'declined');
+    }
 
     private function decide(Request $request, FollowRequest $followRequest, string $status): JsonResponse
     {
@@ -132,6 +150,30 @@ class FollowController extends Controller
         }
 
         return response()->json(['success' => true, 'data' => ['status' => $status]]);
+    }
+
+    private function isDiscoverable(User $user): bool
+    {
+        return $user->approved_at !== null && ! $user->is_disabled;
+    }
+
+    private function declinedRequestCanBeRetried(FollowRequest $followRequest): bool
+    {
+        return $followRequest->status === 'declined'
+            && ($followRequest->responded_at === null || $followRequest->responded_at->lte(now()->subDay()));
+    }
+
+    private function followRequestPayload(?FollowRequest $followRequest): ?array
+    {
+        if ($followRequest === null) {
+            return null;
+        }
+
+        return [
+            'status' => $followRequest->status,
+            'updated_at' => $followRequest->updated_at?->toIso8601String(),
+            'can_retry' => $this->declinedRequestCanBeRetried($followRequest),
+        ];
     }
 
     private function audit(FollowRequest $followRequest, User $actor, string $action): void

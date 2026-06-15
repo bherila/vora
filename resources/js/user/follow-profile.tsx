@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { fetchWrapper } from '@/fetchWrapper';
 
 interface Interest { id: number; name: string; }
-interface ProfileData { id: number; display_name: string; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: { status: string } | null; can_follow_back: boolean; }
+interface FollowRequestState { status: string; can_retry: boolean; }
+interface ProfileData { id: number; display_name: string; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
 function getUserId(): number | null {
@@ -49,7 +50,7 @@ function FollowProfilePage() {
   };
 
   if (!profile) return <div className="mx-auto max-w-3xl px-4 py-8">Loading profile...</div>;
-  const hasRequest = profile.follow_request !== null;
+  const hasActiveRequest = profile.follow_request !== null && !profile.follow_request.can_retry;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -72,7 +73,7 @@ function FollowProfilePage() {
               {profile.mutual_interests.length === 0 ? <span className="text-sm text-muted-foreground">No mutual interests yet.</span> : profile.mutual_interests.map((interest) => <Badge key={interest.id}>{interest.name}</Badge>)}
             </div>
           </section>
-          {hasRequest ? (
+          {hasActiveRequest ? (
             <p className="text-sm">Follow request status: <strong>{profile.follow_request?.status}</strong></p>
           ) : (
             <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>

@@ -19,9 +19,20 @@ class FollowRequest extends Model
     }
 
     /** @return BelongsTo<User, $this> */
-    public function requester(): BelongsTo { return $this->belongsTo(User::class, 'requester_id'); }
+    public function requester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requester_id');
+    }
+
     /** @return BelongsTo<User, $this> */
-    public function recipient(): BelongsTo { return $this->belongsTo(User::class, 'recipient_id'); }
+    public function recipient(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recipient_id');
+    }
+
     /** @return HasMany<FollowRequestAuditLog, $this> */
-    public function auditLogs(): HasMany { return $this->hasMany(FollowRequestAuditLog::class); }
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(FollowRequestAuditLog::class);
+    }
 }
