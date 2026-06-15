@@ -6,6 +6,7 @@ use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -141,6 +142,32 @@ class StoryTest extends TestCase
         ])->assertOk();
 
         $this->assertSame('pending', $story->refresh()->moderation_status->value);
+    }
+
+    public function test_editing_a_rejected_story_returns_it_to_review(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->rejected()->create(['body' => 'Original']);
+
+        $this->actingAs($owner)->patchJson("/api/stories/{$story->id}", ['body' => 'Revised after rejection'])->assertOk();
+
+        $this->assertSame('pending', $story->refresh()->moderation_status->value);
+    }
+
+    public function test_purging_a_co_author_removes_their_character_involvement_tags(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $coAuthor->id, 'display_name' => 'Sidekick']);
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $character->id]);
+
+        app(UserAccountService::class)->purge($coAuthor);
+
+        $this->assertDatabaseMissing('story_involvements', ['involvable_type' => 'character', 'involvable_id' => $character->id]);
+        // The owner's story itself survives the co-author's purge.
+        $this->assertDatabaseHas('stories', ['id' => $story->id]);
     }
 
     public function test_story_from_disabled_owner_is_hidden_from_readers(): void

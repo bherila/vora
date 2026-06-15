@@ -136,7 +136,7 @@ class StoryController extends Controller
         $contentChanged = $story->isDirty(['title', 'body']);
         $story->save();
         if ($contentChanged) {
-            $this->requeueModerationIfApproved($story);
+            $this->requeueModeration($story);
         }
 
         if (array_key_exists('interest_ids', $data)) {
@@ -174,9 +174,11 @@ class StoryController extends Controller
         /** @var list<array{from: string, to?: ?string, label: string, position?: int}> $choices */
         $choices = $request->validated('choices', []);
 
-        $this->stories->saveGraph($story, $nodes, $choices);
-        // A graph save rewrites reader-visible passages, so re-queue review.
-        $this->requeueModerationIfApproved($story);
+        // Only re-queue review when the graph's reader-visible content actually
+        // changed; a no-op "Save graph" must not knock an approved story offline.
+        if ($this->stories->saveGraph($story, $nodes, $choices)) {
+            $this->requeueModeration($story);
+        }
 
         return response()->json(['success' => true, 'data' => $this->editorPayload($story, request()->user())]);
     }
@@ -211,13 +213,15 @@ class StoryController extends Controller
     }
 
     /**
-     * Return an already-approved story to the review queue after its
-     * reader-visible content changed. Pending/rejected stories are left as-is
-     * (they are not reader-visible anyway).
+     * Return an already-reviewed story (approved or rejected) to the pending
+     * queue after its reader-visible content changed: approved content must be
+     * re-reviewed before readers see the new version, and a rejected story gets
+     * a path back into review once the author revises it. Already-pending
+     * stories are left untouched.
      */
-    private function requeueModerationIfApproved(Story $story): void
+    private function requeueModeration(Story $story): void
     {
-        if (! $story->isApprovedContent()) {
+        if ($story->isPendingReview()) {
             return;
         }
 

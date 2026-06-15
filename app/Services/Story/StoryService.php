@@ -5,6 +5,7 @@ namespace App\Services\Story;
 use App\Models\Character;
 use App\Models\Story;
 use App\Models\StoryAuthor;
+use App\Models\StoryChoice;
 use App\Models\StoryNode;
 use App\Models\User;
 use App\Support\StoryPresenter;
@@ -128,11 +129,17 @@ class StoryService
      * matched by their client `key`; missing nodes are deleted (cascading their
      * choices), and all choices are rebuilt from the payload.
      *
+     * Returns whether the reader-visible graph (passages + their wiring) actually
+     * changed, so callers can decide whether to re-queue moderation. Cosmetic
+     * canvas position changes do not count.
+     *
      * @param  list<array{key: string, title?: ?string, body?: ?string, is_start?: bool, position_x?: float, position_y?: float}>  $nodes
      * @param  list<array{from: string, to?: ?string, label: string, position?: int}>  $choices
      */
-    public function saveGraph(Story $story, array $nodes, array $choices): void
+    public function saveGraph(Story $story, array $nodes, array $choices): bool
     {
+        $before = $this->graphSignature($story);
+
         DB::transaction(function () use ($story, $nodes, $choices): void {
             $keys = [];
             $startAssigned = false;
@@ -199,6 +206,38 @@ class StoryService
                 ]);
             }
         });
+
+        return $before !== $this->graphSignature($story);
+    }
+
+    /**
+     * Canonical signature of a story's reader-visible graph (passage text + start
+     * flag + choice wiring/labels), keyed by stable node keys so it is invariant
+     * to row-id churn. Excludes canvas positions.
+     */
+    private function graphSignature(Story $story): string
+    {
+        $story->load(['nodes', 'choices']);
+        $keyById = $story->nodes->pluck('key', 'id');
+
+        $nodes = $story->nodes
+            ->sortBy('key')
+            ->map(fn (StoryNode $n): array => [$n->key, $n->title, $n->body, (bool) $n->is_start])
+            ->values()
+            ->all();
+
+        $choices = $story->choices
+            ->map(fn (StoryChoice $c): array => [
+                $keyById[$c->from_node_id] ?? null,
+                $c->to_node_id !== null ? ($keyById[$c->to_node_id] ?? null) : null,
+                $c->label,
+                (int) $c->position,
+            ])
+            ->sortBy(fn (array $c): string => (string) json_encode($c))
+            ->values()
+            ->all();
+
+        return (string) json_encode(['nodes' => $nodes, 'choices' => $choices]);
     }
 
     /**

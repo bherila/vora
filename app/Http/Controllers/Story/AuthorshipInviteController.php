@@ -7,6 +7,7 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Notifications\CoAuthorInviteAccepted;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,13 +24,8 @@ class AuthorshipInviteController extends Controller
      */
     public function inbox(Request $request): JsonResponse
     {
-        $current = $request->user();
-
-        $invites = StoryAuthor::query()
+        $invites = $this->pendingInvitesFor($request->user()?->id)
             ->with(['story', 'invitedBy'])
-            ->whereHas('story')
-            ->where('user_id', $current?->id)
-            ->where('status', StoryAuthor::STATUS_PENDING)
             ->latest()
             ->get();
 
@@ -48,11 +44,28 @@ class AuthorshipInviteController extends Controller
 
     public function count(Request $request): JsonResponse
     {
-        return response()->json(['success' => true, 'data' => ['count' => StoryAuthor::query()
-            ->whereHas('story')
-            ->where('user_id', $request->user()?->id)
+        return response()->json(['success' => true, 'data' => [
+            'count' => $this->pendingInvitesFor($request->user()?->id)->count(),
+        ]]);
+    }
+
+    /**
+     * Pending invites for a user, excluding any whose story owner has since
+     * deactivated, been disabled, or deleted their account (those can never be
+     * accepted, so they must not show as actionable cards/badges).
+     *
+     * @return Builder<StoryAuthor>
+     */
+    private function pendingInvitesFor(?int $userId): Builder
+    {
+        return StoryAuthor::query()
+            ->where('user_id', $userId)
             ->where('status', StoryAuthor::STATUS_PENDING)
-            ->count()]]);
+            ->whereHas('story', function ($query): void {
+                $query->whereHas('user', function ($owner): void {
+                    $owner->whereNull('deactivated_at')->where('is_disabled', false);
+                });
+            });
     }
 
     public function accept(Request $request, StoryAuthor $storyAuthor): JsonResponse

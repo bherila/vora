@@ -127,6 +127,22 @@ class CoAuthorTest extends TestCase
         $this->assertSame('pending', $invite->refresh()->status);
     }
 
+    public function test_invites_from_inactive_owners_are_hidden_from_the_inbox(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $invitee = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
+
+        $this->actingAs($invitee)->getJson('/api/authorship-invites')->assertOk()->assertJsonCount(1, 'data');
+        $this->actingAs($invitee)->getJson('/api/authorship-invites/count')->assertOk()->assertJsonPath('data.count', 1);
+
+        $owner->forceFill(['deactivated_at' => now()])->save();
+
+        $this->actingAs($invitee)->getJson('/api/authorship-invites')->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($invitee)->getJson('/api/authorship-invites/count')->assertOk()->assertJsonPath('data.count', 0);
+    }
+
     public function test_non_author_cannot_probe_authorship_via_remove_endpoint(): void
     {
         $owner = User::factory()->approved()->create();

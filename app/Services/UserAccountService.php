@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\FollowRequest;
 use App\Models\Media;
+use App\Models\StoryInvolvement;
 use App\Models\User;
 use App\Services\Media\MediaService;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,20 @@ class UserAccountService
 
         DB::transaction(function () use ($user): void {
             $user->interestRatings()->delete();
+
+            // Bulk character deletion bypasses the Character `deleting` hook, so
+            // explicitly remove the polymorphic story "involves" tags pointing at
+            // this user and their characters (these have no FK to cascade).
+            $characterIds = $user->characters()->pluck('id');
+            StoryInvolvement::query()
+                ->where('involvable_type', 'character')
+                ->whereIn('involvable_id', $characterIds)
+                ->delete();
+            StoryInvolvement::query()
+                ->where('involvable_type', 'user')
+                ->where('involvable_id', $user->id)
+                ->delete();
+
             $user->characters()->delete();
             FollowRequest::query()
                 ->where('requester_id', $user->id)

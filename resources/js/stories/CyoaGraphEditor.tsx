@@ -1,5 +1,5 @@
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,24 +37,25 @@ function randomKey(): string {
  * a live diagram shows the resulting branch graph.
  */
 export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
-  const idToKey = useMemo(() => {
-    const map = new Map<number, string>();
-    story.nodes.forEach((n) => {
-      if (typeof n.id === 'number') map.set(n.id, n.key);
+  const fromStory = (s: StoryEditor): { nodes: EditorNode[]; choices: EditorChoice[] } => {
+    const idToKey = new Map<number, string>();
+    s.nodes.forEach((n) => {
+      if (typeof n.id === 'number') idToKey.set(n.id, n.key);
     });
-    return map;
-  }, [story.nodes]);
+    return {
+      nodes: s.nodes.map((n) => ({ key: n.key, title: n.title ?? '', body: n.body ?? '', is_start: n.is_start })),
+      choices: s.choices
+        .map((c) => ({
+          fromKey: idToKey.get(c.from_node_id ?? -1) ?? '',
+          toKey: c.to_node_id != null ? (idToKey.get(c.to_node_id) ?? null) : null,
+          label: c.label,
+        }))
+        .filter((c) => c.fromKey !== ''),
+    };
+  };
 
-  const [nodes, setNodes] = useState<EditorNode[]>(() =>
-    story.nodes.map((n) => ({ key: n.key, title: n.title ?? '', body: n.body ?? '', is_start: n.is_start })),
-  );
-  const [choices, setChoices] = useState<EditorChoice[]>(() =>
-    story.choices.map((c) => ({
-      fromKey: idToKey.get(c.from_node_id ?? -1) ?? '',
-      toKey: c.to_node_id != null ? (idToKey.get(c.to_node_id) ?? null) : null,
-      label: c.label,
-    })).filter((c) => c.fromKey !== ''),
-  );
+  const [nodes, setNodes] = useState<EditorNode[]>(() => fromStory(story).nodes);
+  const [choices, setChoices] = useState<EditorChoice[]>(() => fromStory(story).choices);
   const [selectedKey, setSelectedKey] = useState<string | null>(() => nodes.find((n) => n.is_start)?.key ?? nodes[0]?.key ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -112,6 +113,12 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
         .filter((c) => nodes.some((n) => n.key === c.fromKey))
         .map((c, i) => ({ from: c.fromKey, to: c.toKey, label: c.label || 'Continue', position: i }));
       const updated = await storiesApi.saveGraph(story.id, nodePayload, choicePayload);
+      // Adopt the server-normalized graph (e.g. a promoted start passage, dropped
+      // dangling edges) so the editor reflects exactly what was persisted.
+      const next = fromStory(updated);
+      setNodes(next.nodes);
+      setChoices(next.choices);
+      setSelectedKey((cur) => (cur && next.nodes.some((n) => n.key === cur) ? cur : next.nodes.find((n) => n.is_start)?.key ?? next.nodes[0]?.key ?? null));
       onSaved(updated);
       setSaved(true);
     } catch (e) {

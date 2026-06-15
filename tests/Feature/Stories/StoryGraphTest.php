@@ -78,6 +78,32 @@ class StoryGraphTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('nodes.1.key');
     }
 
+    public function test_unchanged_graph_save_does_not_requeue_an_approved_story(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->cyoa()->create();
+        $payload = [
+            'nodes' => [
+                ['key' => 'start', 'title' => 'Start', 'body' => 'Begin', 'is_start' => true],
+                ['key' => 'next', 'title' => 'Next', 'body' => 'Onward', 'is_start' => false],
+            ],
+            'choices' => [['from' => 'start', 'to' => 'next', 'label' => 'Go', 'position' => 0]],
+        ];
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", $payload)->assertOk();
+
+        // Pretend an admin approved this graph.
+        $story->forceFill(['moderation_status' => 'approved'])->save();
+
+        // Re-saving the identical graph must NOT knock it back to pending.
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", $payload)->assertOk();
+        $this->assertSame('approved', $story->refresh()->moderation_status->value);
+
+        // A real content change does re-queue it.
+        $payload['nodes'][0]['body'] = 'A different beginning';
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", $payload)->assertOk();
+        $this->assertSame('pending', $story->refresh()->moderation_status->value);
+    }
+
     public function test_graph_save_rejected_on_long_form_story(): void
     {
         $owner = User::factory()->approved()->create();
