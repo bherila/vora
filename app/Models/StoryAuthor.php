@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,6 +45,26 @@ class StoryAuthor extends Model
         return [
             'responded_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Pending invites whose story owner is still active (not deactivated,
+     * disabled, or deleted). Used by both the invite inbox/count API and the
+     * navbar badge so they can never disagree. A soft-deleted owner drops out
+     * via the relation's default scope.
+     *
+     * @param  Builder<StoryAuthor>  $query
+     * @return Builder<StoryAuthor>
+     */
+    public function scopePendingForActiveOwner(Builder $query): Builder
+    {
+        return $query
+            ->where('status', self::STATUS_PENDING)
+            ->whereHas('story', function (Builder $story): void {
+                $story->whereHas('user', function (Builder $owner): void {
+                    $owner->whereNull('deactivated_at')->where('is_disabled', false);
+                });
+            });
     }
 
     public function isOwner(): bool

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Stories;
 
+use App\Models\Character;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
@@ -86,6 +87,40 @@ class CoAuthorTest extends TestCase
         $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
         $this->actingAs($owner)->deleteJson("/api/stories/{$story->id}/authors/{$coAuthor->id}")->assertOk();
         $this->assertDatabaseMissing('story_authors', ['story_id' => $story->id, 'user_id' => $coAuthor->id]);
+    }
+
+    public function test_removing_a_co_author_clears_their_involvement_tags(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $coCharacter = Character::query()->create(['user_id' => $coAuthor->id, 'display_name' => 'Sidekick']);
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $coAuthor->id]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $coCharacter->id]);
+        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $owner->id]);
+
+        $this->actingAs($owner)->deleteJson("/api/stories/{$story->id}/authors/{$coAuthor->id}")->assertOk();
+
+        // The removed co-author's tags are gone; the owner's own tag remains.
+        $this->assertDatabaseMissing('story_involvements', ['story_id' => $story->id, 'involvable_type' => 'user', 'involvable_id' => $coAuthor->id]);
+        $this->assertDatabaseMissing('story_involvements', ['story_id' => $story->id, 'involvable_type' => 'character', 'involvable_id' => $coCharacter->id]);
+        $this->assertDatabaseHas('story_involvements', ['story_id' => $story->id, 'involvable_type' => 'user', 'involvable_id' => $owner->id]);
+    }
+
+    public function test_navbar_request_count_excludes_invites_from_inactive_owners(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $invitee = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
+
+        // The navbar bootstrap JSON escapes quotes (JSON_HEX_QUOT), so match the
+        // escaped key form (" for ").
+        $this->actingAs($invitee)->get('/dashboard')->assertSee('requestCount":1', false);
+
+        $owner->forceFill(['deactivated_at' => now()])->save();
+        $this->actingAs($invitee)->get('/dashboard')->assertSee('requestCount":0', false);
     }
 
     public function test_owner_cannot_be_removed_and_non_owner_cannot_invite(): void

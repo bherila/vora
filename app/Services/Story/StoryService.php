@@ -72,6 +72,23 @@ class StoryService
     }
 
     /**
+     * Drop any "involves" tag that is no longer permitted — e.g. after a
+     * co-author is removed, their user tag and their characters' tags should
+     * disappear immediately rather than lingering until the next details save.
+     */
+    public function pruneDisallowedInvolvements(Story $story): void
+    {
+        $allowed = $this->allowedInvolvables($story);
+
+        $story->load('involvements');
+        foreach ($story->involvements as $involvement) {
+            if (! in_array($involvement->involvable_type.':'.$involvement->involvable_id, $allowed, true)) {
+                $involvement->delete();
+            }
+        }
+    }
+
+    /**
      * Identifiers ("type:id") this story is allowed to involve: every author
      * user and every character those authors own.
      *

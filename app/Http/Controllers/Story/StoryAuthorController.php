@@ -8,11 +8,14 @@ use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Notifications\CoAuthorInviteReceived;
+use App\Services\Story\StoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
 
 class StoryAuthorController extends Controller
 {
+    public function __construct(private readonly StoryService $stories) {}
+
     /**
      * List a story's authors and pending invites (any author may view).
      */
@@ -89,6 +92,10 @@ class StoryAuthorController extends Controller
         }
 
         $author->delete();
+
+        // The removed author's user/character "involves" tags are no longer
+        // permitted; drop them now instead of leaving them until a details save.
+        $this->stories->pruneDisallowedInvolvements($story);
 
         return response()->json(['success' => true, 'data' => $this->authorsPayload($story->refresh())]);
     }

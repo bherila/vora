@@ -27,7 +27,9 @@
       $__isAuthenticated = ! is_null($__currentUser);
       $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
       $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->count() : 0;
-      $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->where('status', 'pending')->count() : 0;
+      // Mirror the invite-inbox filter (pendingForActiveOwner) so the badge count
+      // never includes invites the inbox hides (owner since gone inactive).
+      $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;
       $__navbarInitialData = json_encode([
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,

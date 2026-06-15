@@ -60,12 +60,7 @@ class AuthorshipInviteController extends Controller
     {
         return StoryAuthor::query()
             ->where('user_id', $userId)
-            ->where('status', StoryAuthor::STATUS_PENDING)
-            ->whereHas('story', function ($query): void {
-                $query->whereHas('user', function ($owner): void {
-                    $owner->whereNull('deactivated_at')->where('is_disabled', false);
-                });
-            });
+            ->pendingForActiveOwner();
     }
 
     public function accept(Request $request, StoryAuthor $storyAuthor): JsonResponse
