@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { buildInterestTree, collectDescendantIds, flattenInterestTree, getDepthPaddingClass } from '@/interests/tree';
 
 interface AdminInterest {
   id: number;
@@ -30,11 +31,6 @@ interface AdminInterest {
   parent_name: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface InterestTreeNode extends AdminInterest {
-  children: InterestTreeNode[];
-  depth: number;
 }
 
 interface AdminInterestRequest {
@@ -70,64 +66,6 @@ function formatDate(value: string): string {
 
 function createEmptyForm(): InterestFormState {
   return { name: '', description: '', parent_interest_id: '' };
-}
-
-function sortByName<T extends { name: string }>(items: T[]): T[] {
-  return [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-}
-
-function buildInterestTree(interests: AdminInterest[]): InterestTreeNode[] {
-  const nodes = new Map<number, InterestTreeNode>();
-  const roots: InterestTreeNode[] = [];
-
-  for (const interest of interests) {
-    nodes.set(interest.id, { ...interest, children: [], depth: 0 });
-  }
-
-  for (const node of nodes.values()) {
-    if (node.parent_interest_id !== null) {
-      const parent = nodes.get(node.parent_interest_id);
-      if (parent) {
-        parent.children.push(node);
-        continue;
-      }
-    }
-
-    roots.push(node);
-  }
-
-  const sortBranch = (branch: InterestTreeNode[], depth: number): InterestTreeNode[] => {
-    return sortByName(branch).map((node) => ({
-      ...node,
-      depth,
-      children: sortBranch(node.children, depth + 1),
-    }));
-  };
-
-  return sortBranch(roots, 0);
-}
-
-function flattenInterestTree(nodes: InterestTreeNode[]): InterestTreeNode[] {
-  return nodes.flatMap((node) => [node, ...flattenInterestTree(node.children)]);
-}
-
-function getDepthPaddingClass(depth: number): string {
-  const classes = ['pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20', 'pl-24'];
-
-  return classes[Math.min(depth, classes.length - 1)] ?? 'pl-0';
-}
-
-function collectDescendantIds(node: InterestTreeNode): Set<number> {
-  const ids = new Set<number>();
-
-  for (const child of node.children) {
-    ids.add(child.id);
-    for (const descendantId of collectDescendantIds(child)) {
-      ids.add(descendantId);
-    }
-  }
-
-  return ids;
 }
 
 function AdminInterestsPage() {
