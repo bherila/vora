@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { RequestInterestForm } from '@/interests/request-interest-form';
 import type { MediaItem } from '@/media/types';
@@ -41,6 +42,7 @@ interface UserSettingsInitialPayload {
   email_locked?: boolean | null;
   email_follow_request_received?: boolean | null;
   email_follow_request_accepted?: boolean | null;
+  approved?: boolean | null;
 }
 
 interface UserSettingsInitialData {
@@ -59,6 +61,7 @@ interface UserSettingsInitialData {
   email_locked: boolean;
   email_follow_request_received: boolean;
   email_follow_request_accepted: boolean;
+  approved: boolean;
 }
 
 interface ProfilePictureUploadResponse {
@@ -122,6 +125,7 @@ function emptyInitialData(): UserSettingsInitialData {
     email_locked: false,
     email_follow_request_received: false,
     email_follow_request_accepted: false,
+    approved: false,
   };
 }
 
@@ -142,6 +146,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     email_locked: payload.email_locked ?? false,
     email_follow_request_received: payload.email_follow_request_received ?? false,
     email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
+    approved: payload.approved ?? false,
   };
 }
 
@@ -202,40 +207,49 @@ function UserSettingsPage() {
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
   const [interests, setInterests] = useState<RatableInterest[]>([]);
+  const interestsEnabled = initialData.approved;
 
   useEffect(() => {
+    // The interests API is gated behind the approval middleware, so only
+    // approved users can load/rate them. Unapproved users still see the rest of
+    // Settings without a failing request or a dead panel.
+    if (!interestsEnabled) {
+      return;
+    }
+
     let active = true;
-    const loadInterests = async (): Promise<void> => {
+    const load = async (): Promise<void> => {
       try {
-        const response = await fetchWrapper.get('/api/interests') as { success: boolean; data: RatableInterest[] };
+        const { interests: loaded } = await loadInterests(null);
         if (active) {
-          setInterests(response.data ?? []);
+          setInterests(loaded);
         }
       } catch (err) {
         toast.error(typeof err === 'string' ? err : 'Failed to load interests.');
       }
     };
 
-    void loadInterests();
+    void load();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [interestsEnabled]);
 
   const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
     try {
-      await fetchWrapper.post(`/api/interests/${interestId}/rate`, { level });
+      await persistRatings(null, [{ interest_id: interestId, level }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
       toast.success('Interest rating saved.');
     } catch (err) {
       toast.error(typeof err === 'string' ? err : 'Failed to save interest rating.');
+      throw err; // let the list keep the row pending for retry
     }
   };
 
   const handleClearInterestRating = async (interestId: number): Promise<void> => {
     try {
-      await fetchWrapper.delete(`/api/interests/${interestId}/rate`, {});
+      await persistRatings(null, [{ interest_id: interestId, level: null }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
       toast.success('Interest rating cleared.');
     } catch (err) {
@@ -515,31 +529,35 @@ function UserSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your interests</CardTitle>
-            <CardDescription>
-              Rate interests from -10 (fully uninterested) to +10 (fully interested). Characters inherit these unless you set custom interests for them.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <InterestRatingList
-              interests={interests}
-              onSave={handleSaveInterestRating}
-              onClear={handleClearInterestRating}
-            />
-          </CardContent>
-        </Card>
+        {interestsEnabled && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Your interests</CardTitle>
+                <CardDescription>
+                  Rate interests from -10 (fully uninterested) to +10 (fully interested). Characters inherit these unless you set custom interests for them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <InterestRatingList
+                  interests={interests}
+                  onSave={handleSaveInterestRating}
+                  onClear={handleClearInterestRating}
+                />
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Request a new interest</CardTitle>
-            <CardDescription>Suggest an interest for an admin to review and add to the catalog.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RequestInterestForm interests={interests} />
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Request a new interest</CardTitle>
+                <CardDescription>Suggest an interest for an admin to review and add to the catalog.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RequestInterestForm interests={interests} />
+              </CardContent>
+            </Card>
+          </>
+        )}
       </section>
 
       <section className="space-y-3">

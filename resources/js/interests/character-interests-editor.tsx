@@ -2,19 +2,13 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { fetchWrapper } from '@/fetchWrapper';
+import { loadInterests, persistRatings, setInterestInheritance } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 
 interface CharacterInterestsEditorProps {
   characterId: number;
   initialInherit: boolean;
   onInheritChange?: (inherit: boolean) => void;
-}
-
-interface InterestsResponse {
-  success: boolean;
-  inherit_interests: boolean;
-  data: RatableInterest[];
 }
 
 interface RatingSnapshot {
@@ -55,10 +49,10 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
     const load = async (): Promise<void> => {
       setLoading(true);
       try {
-        const response = await fetchWrapper.get(`/api/characters/${characterId}/interests`) as InterestsResponse;
+        const { interests: loaded, inherit: loadedInherit } = await loadInterests(characterId);
         if (active) {
-          setInterests(response.data);
-          setInherit(response.inherit_interests);
+          setInterests(loaded);
+          setInherit(loadedInherit);
           setLoaded(true);
         }
       } catch (err) {
@@ -79,17 +73,18 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
 
   const handleSave = async (interestId: number, level: number): Promise<void> => {
     try {
-      await fetchWrapper.post(`/api/characters/${characterId}/interests/${interestId}/rate`, { level });
+      await persistRatings(characterId, [{ interest_id: interestId, level }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
       applyInherit(false);
     } catch (err) {
       toast.error(getErrorMessage(err));
+      throw err; // let the list keep the row pending for retry
     }
   };
 
   const handleClear = async (interestId: number): Promise<void> => {
     try {
-      await fetchWrapper.delete(`/api/characters/${characterId}/interests/${interestId}/rate`, {});
+      await persistRatings(characterId, [{ interest_id: interestId, level: null }]);
       setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -103,7 +98,7 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
 
     setBusy(true);
     try {
-      await fetchWrapper.post(`/api/characters/${characterId}/interests/inherit`, { inherit: true });
+      await setInterestInheritance(characterId, true);
       setInterests((current) => current.map((item) => ({ ...item, rating: null })));
       setUndoSnapshot(snapshot.length > 0 ? snapshot : null);
       applyInherit(true);
@@ -117,7 +112,7 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
   const switchToOverride = async (): Promise<void> => {
     setBusy(true);
     try {
-      await fetchWrapper.post(`/api/characters/${characterId}/interests/inherit`, { inherit: false });
+      await setInterestInheritance(characterId, false);
       setUndoSnapshot(null);
       applyInherit(false);
     } catch (err) {
@@ -134,10 +129,9 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
 
     setBusy(true);
     try {
-      await fetchWrapper.post(`/api/characters/${characterId}/interests/inherit`, { inherit: false });
-      for (const { id, level } of undoSnapshot) {
-        await fetchWrapper.post(`/api/characters/${characterId}/interests/${id}/rate`, { level });
-      }
+      // Restoring the snapshot in one batch request also flips the character
+      // back to override mode server-side.
+      await persistRatings(characterId, undoSnapshot.map(({ id, level }) => ({ interest_id: id, level })));
       setInterests((current) => current.map((item) => {
         const restored = undoSnapshot.find((entry) => entry.id === item.id);
         return restored ? { ...item, rating: restored.level } : item;
@@ -165,7 +159,12 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
               type="button"
               size="sm"
               variant={inherit ? 'default' : 'outline'}
-              disabled={busy || inherit}
+              // Wait for the GET so switchToInherit snapshots real ratings (not an
+              // empty list) before deleting the server overrides.
+              disabled={busy || inherit || !loaded}
+              // Keep focus on any active slider so its blur-save cannot race the
+              // delete and recreate the override we are clearing.
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => void switchToInherit()}
             >
               Inherit from my profile
@@ -174,7 +173,7 @@ export function CharacterInterestsEditor({ characterId, initialInherit, onInheri
               type="button"
               size="sm"
               variant={inherit ? 'outline' : 'default'}
-              disabled={busy || !inherit}
+              disabled={busy || !inherit || !loaded}
               onClick={() => void switchToOverride()}
             >
               Set custom interests

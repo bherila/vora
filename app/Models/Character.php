@@ -46,11 +46,11 @@ class Character extends Model
      * {@see static::$inherit_interests} is false; otherwise the character falls
      * back to the owning user's profile interest ratings.
      *
-     * @return HasMany<CharacterInterestRating, $this>
+     * @return HasMany<InterestRating, $this>
      */
     public function interestRatings(): HasMany
     {
-        return $this->hasMany(CharacterInterestRating::class);
+        return $this->hasMany(InterestRating::class);
     }
 
     /**

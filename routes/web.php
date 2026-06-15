@@ -89,10 +89,6 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
-        Route::get('/{character}/interests', [CharacterController::class, 'interests']);
-        Route::post('/{character}/interests/inherit', [CharacterController::class, 'setInterestInheritance']);
-        Route::post('/{character}/interests/{interest}/rate', [CharacterController::class, 'rateInterest']);
-        Route::delete('/{character}/interests/{interest}/rate', [CharacterController::class, 'destroyInterestRating']);
     });
 
     Route::prefix('api/users')->group(function () {
@@ -155,8 +151,10 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
+    // Ratings target (user, character|null); character_id is passed in the query
+    // (GET) or body (POST) so the same endpoints serve user and character profiles.
     Route::get('/', [InterestController::class, 'apiIndex']);
-    Route::post('/{interest}/rate', [InterestController::class, 'rate']);
-    Route::delete('/{interest}/rate', [InterestController::class, 'destroyRate']);
+    Route::post('/ratings', [InterestController::class, 'batchRate']);
+    Route::post('/inherit', [InterestController::class, 'setInheritance']);
     Route::post('/request', [InterestController::class, 'requestNew']);
 });

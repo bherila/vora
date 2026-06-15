@@ -48,16 +48,21 @@ export function InterestRatingList({ interests, onSave, onClear }: InterestRatin
   }, [interests]);
 
   const saveRating = async (id: number): Promise<void> => {
-    dirty.current.delete(id);
     const nextRating = ratings[id] ?? 0;
     const serverRating = interests.find((interest) => interest.id === id)?.rating ?? null;
     if (serverRating === nextRating) {
+      dirty.current.delete(id);
       return;
     }
 
     setSaving((current) => ({ ...current, [id]: true }));
     try {
       await onSave(id, nextRating);
+      // Clear dirty only after a successful save, so a failed save stays pending
+      // and the next blur retries it instead of silently dropping the value.
+      dirty.current.delete(id);
+    } catch {
+      // Leave the row dirty so the unsaved value is preserved for retry.
     } finally {
       setSaving((current) => ({ ...current, [id]: false }));
     }

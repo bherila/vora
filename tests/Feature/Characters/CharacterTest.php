@@ -3,8 +3,8 @@
 namespace Tests\Feature\Characters;
 
 use App\Models\Character;
-use App\Models\CharacterInterestRating;
 use App\Models\Interest;
+use App\Models\InterestRating;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -80,6 +80,39 @@ class CharacterTest extends TestCase
             ->assertJsonValidationErrors('user_type_other');
     }
 
+    public function test_user_can_batch_rate_their_own_interests(): void
+    {
+        $user = User::factory()->approved()->create();
+        $animals = Interest::query()->create(['name' => 'Animals']);
+        $art = Interest::query()->create(['name' => 'Art']);
+
+        $this->actingAs($user)
+            ->postJson('/api/interests/ratings', [
+                'character_id' => null,
+                'ratings' => [
+                    ['interest_id' => $animals->id, 'level' => 5],
+                    ['interest_id' => $art->id, 'level' => -3],
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $user->id, 'character_id' => null, 'interest_id' => $animals->id, 'level' => 5,
+        ]);
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $user->id, 'character_id' => null, 'interest_id' => $art->id, 'level' => -3,
+        ]);
+
+        // A null level clears a rating.
+        $this->postJson('/api/interests/ratings', [
+            'ratings' => [['interest_id' => $animals->id, 'level' => null]],
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('interest_ratings', [
+            'user_id' => $user->id, 'character_id' => null, 'interest_id' => $animals->id,
+        ]);
+    }
+
     public function test_rating_a_character_interest_overrides_inheritance(): void
     {
         $user = User::factory()->approved()->create();
@@ -92,21 +125,29 @@ class CharacterTest extends TestCase
         $this->assertTrue($character->refresh()->inherit_interests);
 
         $this->actingAs($user)
-            ->postJson("/api/characters/{$character->id}/interests/{$interest->id}/rate", ['level' => 7])
-            ->assertOk()
-            ->assertJsonPath('data.level', 7);
+            ->postJson('/api/interests/ratings', [
+                'character_id' => $character->id,
+                'ratings' => [['interest_id' => $interest->id, 'level' => 7]],
+            ])
+            ->assertOk();
 
         $this->assertFalse($character->refresh()->inherit_interests);
-        $this->assertDatabaseHas('character_interest_ratings', [
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $user->id,
             'character_id' => $character->id,
             'interest_id' => $interest->id,
             'level' => 7,
         ]);
 
-        $this->getJson("/api/characters/{$character->id}/interests")
+        $this->getJson("/api/interests?character_id={$character->id}")
             ->assertOk()
             ->assertJsonPath('inherit_interests', false)
             ->assertJsonPath('data.0.rating', 7);
+
+        // The override must not leak into the user's own profile ratings.
+        $this->getJson('/api/interests')
+            ->assertOk()
+            ->assertJsonPath('data.0.rating', null);
     }
 
     public function test_switching_back_to_inherit_clears_character_overrides(): void
@@ -118,23 +159,24 @@ class CharacterTest extends TestCase
             'display_name' => 'Nova',
             'inherit_interests' => false,
         ]);
-        CharacterInterestRating::query()->create([
+        InterestRating::query()->create([
+            'user_id' => $user->id,
             'character_id' => $character->id,
             'interest_id' => $interest->id,
             'level' => -4,
         ]);
 
         $this->actingAs($user)
-            ->postJson("/api/characters/{$character->id}/interests/inherit", ['inherit' => true])
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => true])
             ->assertOk()
             ->assertJsonPath('data.inherit_interests', true);
 
-        $this->assertDatabaseMissing('character_interest_ratings', [
+        $this->assertDatabaseMissing('interest_ratings', [
             'character_id' => $character->id,
         ]);
     }
 
-    public function test_user_cannot_rate_another_users_character(): void
+    public function test_cross_user_character_rating_is_hidden_as_not_found(): void
     {
         $owner = User::factory()->approved()->create();
         $otherUser = User::factory()->approved()->create();
@@ -144,11 +186,20 @@ class CharacterTest extends TestCase
             'display_name' => 'Hidden Persona',
         ]);
 
+        // Even with an otherwise-invalid payload, ownership is enforced first so
+        // the response is 404 (not a 422 that would leak the character's existence).
         $this->actingAs($owner)
-            ->postJson("/api/characters/{$character->id}/interests/{$interest->id}/rate", ['level' => 3])
+            ->postJson('/api/interests/ratings', [
+                'character_id' => $character->id,
+                'ratings' => [['interest_id' => $interest->id, 'level' => 999]],
+            ])
             ->assertNotFound();
 
-        $this->assertDatabaseMissing('character_interest_ratings', [
+        $this->actingAs($owner)
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => 'maybe'])
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('interest_ratings', [
             'character_id' => $character->id,
         ]);
     }

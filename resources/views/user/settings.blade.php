@@ -19,6 +19,7 @@
       'email_locked' => (bool) $__currentUser->email_locked,
       'email_follow_request_received' => (bool) $__currentUser->email_follow_request_received,
       'email_follow_request_accepted' => (bool) $__currentUser->email_follow_request_accepted,
+      'approved' => (bool) $__currentUser->isApproved(),
     ];
   @endphp
   <script id="user-settings-initial-data" type="application/json" @cspNonce>
