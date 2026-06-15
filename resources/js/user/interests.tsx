@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -97,6 +97,9 @@ function UserInterestsPage() {
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [error, setError] = useState('');
   const [ratings, setRatings] = useState<Record<number, number>>({});
+  // Tracks which sliders the user actually moved, so a plain focus/blur (no
+  // change) never persists a rating and an explicit value — including 0 — does.
+  const dirtyRatings = useRef<Set<number>>(new Set());
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestForm, setRequestForm] = useState<InterestRequestFormState>({
     name: '',
@@ -137,9 +140,16 @@ function UserInterestsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [interests]);
 
-  const saveRating = async (event: FormEvent<HTMLFormElement>, id: number): Promise<void> => {
-    event.preventDefault();
+  const saveRating = async (id: number): Promise<void> => {
+    dirtyRatings.current.delete(id);
     const nextRating = ratings[id] ?? 0;
+    // Skip the POST only when the slider already matches the saved value. An
+    // unrated interest has no server value, so an explicit rating (including 0)
+    // still saves.
+    const serverRating = interests.find((interest) => interest.id === id)?.rating ?? null;
+    if (serverRating === nextRating) {
+      return;
+    }
 
     setSaving((current) => ({ ...current, [id]: true }));
     setError('');
@@ -166,6 +176,7 @@ function UserInterestsPage() {
   };
 
   const clearRating = async (id: number): Promise<void> => {
+    dirtyRatings.current.delete(id);
     setSaving((current) => ({ ...current, [id]: true }));
     setError('');
     try {
@@ -291,7 +302,7 @@ function UserInterestsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Interest</TableHead>
-                  <TableHead className="w-[460px] text-right">Your rating</TableHead>
+                  <TableHead className="w-[320px] text-right">Your rating (-10 to 10)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -306,43 +317,40 @@ function UserInterestsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <form
-                          onSubmit={(event) => void saveRating(event, interest.id)}
-                          className="flex items-center justify-end gap-3"
-                        >
-                          <label className="grid gap-1 text-left">
-                            <span className="text-xs text-muted-foreground">Level (-10 to 10)</span>
-                            <Input
-                              type="range"
-                              min={-10}
-                              max={10}
-                              value={rowRating}
-                              onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
-                              className="w-48"
-                            />
-                          </label>
+                        <div className="flex items-center justify-end gap-3">
                           <Input
-                            type="number"
+                            type="range"
                             min={-10}
                             max={10}
                             value={rowRating}
-                            onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
-                            className="w-20"
+                            aria-label={`Rating for ${interest.name}`}
+                            onChange={(event) => {
+                              dirtyRatings.current.add(interest.id);
+                              setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }));
+                            }}
+                            onBlur={() => {
+                              if (dirtyRatings.current.has(interest.id)) {
+                                void saveRating(interest.id);
+                              }
+                            }}
+                            disabled={saving[interest.id]}
+                            className="w-48"
                           />
-                          <Button type="submit" size="sm" disabled={saving[interest.id]}>
-                            {saving[interest.id] ? 'Saving…' : 'Save'}
-                          </Button>
+                          <span className="w-8 text-sm tabular-nums text-muted-foreground">{rowRating}</span>
                           {interest.rating !== null && (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
+                              // Keep focus on the slider so its blur-save does not race this click.
+                              onMouseDown={(event) => event.preventDefault()}
                               onClick={() => void clearRating(interest.id)}
+                              disabled={saving[interest.id]}
                             >
                               Clear
                             </Button>
                           )}
-                        </form>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
