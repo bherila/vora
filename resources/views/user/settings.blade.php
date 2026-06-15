@@ -19,7 +19,9 @@
       'email_locked' => (bool) $__currentUser->email_locked,
       'email_follow_request_received' => (bool) $__currentUser->email_follow_request_received,
       'email_follow_request_accepted' => (bool) $__currentUser->email_follow_request_accepted,
-      'approved' => (bool) $__currentUser->isApproved(),
+      // Mirrors the EnsureApproved gate on /api/interests so the interest panels
+      // only render when the API will actually accept the request.
+      'can_manage_interests' => (bool) (! $__currentUser->is_disabled && $__currentUser->hasVerifiedEmail() && $__currentUser->isApproved()),
     ];
   @endphp
   <script id="user-settings-initial-data" type="application/json" @cspNonce>

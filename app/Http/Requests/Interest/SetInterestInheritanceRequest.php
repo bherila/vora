@@ -20,7 +20,15 @@ class SetInterestInheritanceRequest extends FormRequest
             return false;
         }
 
-        $character = Character::query()->find($this->input('character_id'));
+        $characterId = $this->input('character_id');
+
+        // Guard against non-scalar input (e.g. an array), which Eloquent find()
+        // would treat as a multi-key lookup and 500 on the ->user_id access.
+        if (! is_numeric($characterId)) {
+            return false;
+        }
+
+        $character = Character::query()->find((int) $characterId);
 
         return $character !== null && $character->user_id === $user->id;
     }

@@ -42,7 +42,7 @@ interface UserSettingsInitialPayload {
   email_locked?: boolean | null;
   email_follow_request_received?: boolean | null;
   email_follow_request_accepted?: boolean | null;
-  approved?: boolean | null;
+  can_manage_interests?: boolean | null;
 }
 
 interface UserSettingsInitialData {
@@ -61,7 +61,7 @@ interface UserSettingsInitialData {
   email_locked: boolean;
   email_follow_request_received: boolean;
   email_follow_request_accepted: boolean;
-  approved: boolean;
+  can_manage_interests: boolean;
 }
 
 interface ProfilePictureUploadResponse {
@@ -125,7 +125,7 @@ function emptyInitialData(): UserSettingsInitialData {
     email_locked: false,
     email_follow_request_received: false,
     email_follow_request_accepted: false,
-    approved: false,
+    can_manage_interests: false,
   };
 }
 
@@ -146,7 +146,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     email_locked: payload.email_locked ?? false,
     email_follow_request_received: payload.email_follow_request_received ?? false,
     email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
-    approved: payload.approved ?? false,
+    can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
 
@@ -207,12 +207,12 @@ function UserSettingsPage() {
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
   const [interests, setInterests] = useState<RatableInterest[]>([]);
-  const interestsEnabled = initialData.approved;
+  const interestsEnabled = initialData.can_manage_interests;
 
   useEffect(() => {
-    // The interests API is gated behind the approval middleware, so only
-    // approved users can load/rate them. Unapproved users still see the rest of
-    // Settings without a failing request or a dead panel.
+    // The interests API is gated behind the approval middleware (approved +
+    // verified + not disabled), so only eligible users can load/rate them.
+    // Other users still see the rest of Settings without a failing request.
     if (!interestsEnabled) {
       return;
     }

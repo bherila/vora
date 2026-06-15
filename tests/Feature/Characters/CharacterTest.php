@@ -6,6 +6,7 @@ use App\Models\Character;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -201,6 +202,35 @@ class CharacterTest extends TestCase
 
         $this->assertDatabaseMissing('interest_ratings', [
             'character_id' => $character->id,
+        ]);
+    }
+
+    public function test_malformed_character_id_does_not_error(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Cooking']);
+
+        // A non-scalar character_id must be rejected as 404, not 500.
+        $this->actingAs($user)
+            ->postJson('/api/interests/ratings', [
+                'character_id' => ['nope'],
+                'ratings' => [['interest_id' => $interest->id, 'level' => 1]],
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_duplicate_profile_rating_is_prevented(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Gaming']);
+
+        InterestRating::query()->create([
+            'user_id' => $user->id, 'character_id' => null, 'interest_id' => $interest->id, 'level' => 2,
+        ]);
+
+        $this->expectException(QueryException::class);
+        InterestRating::query()->create([
+            'user_id' => $user->id, 'character_id' => null, 'interest_id' => $interest->id, 'level' => 5,
         ]);
     }
 
