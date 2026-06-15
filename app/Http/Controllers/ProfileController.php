@@ -165,6 +165,25 @@ class ProfileController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
+        // Protect the app from being left with no administrator who can restore
+        // or manage accounts (mirrors the admin delete guards).
+        if ($user->id === 1) {
+            return response()->json(['success' => false, 'message' => 'The primary admin account cannot be deleted.'], 403);
+        }
+
+        if ($user->isAdmin()) {
+            $otherActiveAdmins = User::query()
+                ->whereKeyNot($user->id)
+                ->whereNull('deactivated_at')
+                ->where('is_disabled', false)
+                ->where(fn ($q) => $q->where('is_admin', true)->orWhere('id', 1))
+                ->count();
+
+            if ($otherActiveAdmins === 0) {
+                return response()->json(['success' => false, 'message' => 'You are the last administrator and cannot delete your account.'], 403);
+            }
+        }
+
         $user->delete();
 
         Auth::logout();

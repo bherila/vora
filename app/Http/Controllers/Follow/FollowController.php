@@ -147,6 +147,14 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 
+        // A requester who deactivated or deleted after sending must stay hidden:
+        // requester is null once soft-deleted (User scope) and gets the same
+        // treatment as a deactivated one.
+        $requester = $followRequest->requester;
+        if ($requester === null || $requester->isDeactivated()) {
+            return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
+        }
+
         $followRequest->status = $status;
         $followRequest->responded_at = Carbon::now();
         $followRequest->save();

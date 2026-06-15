@@ -22,7 +22,9 @@ class RegisterController extends Controller
     {
         $data = $request->validated();
 
-        $isFirstUser = User::count() === 0;
+        // Count soft-deleted accounts too, so the first-user (auto-admin)
+        // bootstrap can't re-trigger after every account has been soft-deleted.
+        $isFirstUser = User::withTrashed()->count() === 0;
         $signupRedirect = route('verification.notice', ! $isFirstUser ? ['signup_status' => 'pending-approval'] : []);
 
         $user = new User;

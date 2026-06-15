@@ -144,6 +144,9 @@ class AccountLifecycleTest extends TestCase
 
     public function test_self_delete_soft_deletes_and_blocks_login(): void
     {
+        // Another admin must exist (and user id 1 is always an admin) so the
+        // deleter is not blocked by the last-admin guard.
+        User::factory()->approved()->create(['is_admin' => true]);
         $user = User::factory()->approved()->create(['email' => 'gone@example.com']);
 
         $this->actingAs($user)->postJson('/api/account/delete')->assertOk();
@@ -242,5 +245,44 @@ class AccountLifecycleTest extends TestCase
         // The home page is public, but the global gate still redirects a
         // deactivated (logged-in) user to reactivate.
         $this->actingAs($user)->get('/')->assertRedirect(route('account.deactivated'));
+    }
+
+    public function test_primary_admin_cannot_self_delete(): void
+    {
+        // The first user is id 1, which is always treated as the primary admin.
+        $primary = User::factory()->approved()->create(['is_admin' => true]);
+        $this->assertSame(1, $primary->id);
+
+        $this->actingAs($primary)->postJson('/api/account/delete')->assertForbidden();
+        $this->assertFalse($primary->refresh()->trashed());
+    }
+
+    public function test_last_active_admin_cannot_self_delete(): void
+    {
+        // id 1 exists but is disabled, so it is not an active admin.
+        User::factory()->approved()->create(['is_disabled' => true]);
+        $admin = User::factory()->approved()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->postJson('/api/account/delete')->assertForbidden();
+        $this->assertFalse($admin->refresh()->trashed());
+    }
+
+    public function test_cannot_accept_a_follow_request_from_a_deactivated_requester(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $requester = User::factory()->approved()->create();
+        $followRequest = FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+
+        $requester->forceFill(['deactivated_at' => now()])->save();
+
+        $this->actingAs($recipient)
+            ->postJson("/api/users/follow-requests/{$followRequest->id}/accept")
+            ->assertNotFound();
+
+        $this->assertSame('pending', $followRequest->refresh()->status);
     }
 }
