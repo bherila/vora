@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
@@ -68,6 +69,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Media library + shareable single-media view.
     Route::get('/media', [MediaController::class, 'library'])->name('media');
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
+
+    // Cross-user exploration of approved, discoverable media.
+    Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
+    Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
 
     Route::prefix('api/media')->group(function () {
         Route::get('/', [MediaController::class, 'index']);

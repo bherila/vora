@@ -4,14 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\MediaType;
 use App\Enums\Visibility;
+use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
-use App\Services\FileStorageService;
 use App\Services\Media\HlsService;
+use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
-use App\Support\MediaPresenter;
-use App\Support\PaginationMeta;
+use App\Support\MediaFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +25,7 @@ class MediaController extends Controller
         private readonly MediaUploadService $uploads,
         private readonly MediaService $media,
         private readonly HlsService $hls,
-        private readonly FileStorageService $storage,
+        private readonly MediaResponseService $responder,
     ) {}
 
     /**
@@ -46,24 +46,22 @@ class MediaController extends Controller
 
     /**
      * List the current user's own media (every status), newest first, paginated.
+     * Accepts the shared type/interest discovery filters.
      */
-    public function index(Request $request): JsonResponse
+    public function index(ListMediaRequest $request): JsonResponse
     {
-        $paginator = Media::query()
+        $query = Media::query()
             ->where('user_id', $request->user()->id)
             ->with('interests')
-            ->latest()
-            ->paginate((int) config('media.page_size', 24));
+            ->latest();
 
-        $data = collect($paginator->items())
-            // resolveHls: false — listings must not do a per-item R2 read.
-            ->map(fn (Media $m): array => MediaPresenter::ownerView($m, $this->extrasFor($m, resolveHls: false)))
-            ->all();
+        $paginator = MediaFilter::fromRequest($request)
+            ->applyTo($query)
+            ->paginate((int) config('media.page_size', 24));
 
         return response()->json([
             'success' => true,
-            'data' => $data,
-            'meta' => PaginationMeta::from($paginator),
+            ...$this->responder->page($paginator),
         ]);
     }
 
@@ -80,15 +78,19 @@ class MediaController extends Controller
             $request->validated('title'),
             Visibility::from($request->validated('visibility')),
             $request->interestIds(),
+            (bool) $request->validated('has_thumbnail', false),
+            $request->validated('perceptual_hash'),
         );
 
         $media = $result['media']->load('interests');
 
         return response()->json([
             'success' => true,
-            'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+            'data' => $this->responder->item($media),
             'upload_url' => $result['upload_url'],
             'upload_headers' => $result['upload_headers'],
+            'thumbnail_upload_url' => $result['thumbnail_upload_url'],
+            'thumbnail_upload_headers' => $result['thumbnail_upload_headers'],
         ], 201);
     }
 
@@ -110,7 +112,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+            'data' => $this->responder->item($media),
         ]);
     }
 
@@ -124,7 +126,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+            'data' => $this->responder->item($media),
         ]);
     }
 
@@ -139,7 +141,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => MediaPresenter::ownerView($media, $this->extrasFor($media)),
+            'data' => $this->responder->item($media),
         ]);
     }
 
@@ -150,33 +152,6 @@ class MediaController extends Controller
         $this->media->delete($media);
 
         return response()->json(['success' => true, 'message' => 'Media deleted.']);
-    }
-
-    /**
-     * Compute the signed view URL and (for videos) HLS playback status.
-     *
-     * @return array{url: ?string, video: ?array<string, mixed>}
-     */
-    private function extrasFor(Media $media, bool $resolveHls = true): array
-    {
-        $extras = ['url' => null, 'video' => null];
-
-        if (! $media->isReady()) {
-            return $extras;
-        }
-
-        $extras['url'] = $this->storage->getSignedViewUrl(
-            $media->disk,
-            $media->object_key,
-            (int) config('media.view_url_ttl', 60),
-            $media->mime_type,
-        );
-
-        if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media, $resolveHls);
-        }
-
-        return $extras;
     }
 
     /**

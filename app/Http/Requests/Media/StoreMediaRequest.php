@@ -31,6 +31,11 @@ class StoreMediaRequest extends FormRequest
             'visibility' => ['required', Rule::in(Visibility::values())],
             'interest_ids' => ['nullable', 'array'],
             'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
+            // The client generates the thumbnail/poster itself; ask for a second
+            // presigned URL when it has one to upload.
+            'has_thumbnail' => ['nullable', 'boolean'],
+            // Base64 of a 32-byte blockhash (44 chars incl. padding). Photos only.
+            'perceptual_hash' => ['nullable', 'string', 'max:64'],
         ];
     }
 

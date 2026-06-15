@@ -22,6 +22,11 @@ return [
     // Disk that holds the s3-hls transcoder output (read-only for the app).
     'hls_disk' => 'hls',
 
+    // Disk for client-generated thumbnails/posters. Defaults to the photo disk
+    // because the video transcoder never scans it and it already accepts image
+    // objects. Video posters live here too, never on the video (source) disk.
+    'thumbnail_disk' => env('MEDIA_THUMBNAIL_DISK', 'photos'),
+
     /*
     |--------------------------------------------------------------------------
     | Object key prefix
