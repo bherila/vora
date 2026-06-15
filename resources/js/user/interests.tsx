@@ -137,9 +137,14 @@ function UserInterestsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [interests]);
 
-  const saveRating = async (event: FormEvent<HTMLFormElement>, id: number): Promise<void> => {
-    event.preventDefault();
+  const saveRating = async (id: number): Promise<void> => {
     const nextRating = ratings[id] ?? 0;
+    // Treat an unrated interest as 0 so merely focusing/blurring a slider that
+    // was not moved does not persist a spurious neutral rating.
+    const serverRating = interests.find((interest) => interest.id === id)?.rating ?? 0;
+    if (serverRating === nextRating) {
+      return;
+    }
 
     setSaving((current) => ({ ...current, [id]: true }));
     setError('');
@@ -291,7 +296,7 @@ function UserInterestsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Interest</TableHead>
-                  <TableHead className="w-[460px] text-right">Your rating</TableHead>
+                  <TableHead className="w-[320px] text-right">Your rating (-10 to 10)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -306,43 +311,31 @@ function UserInterestsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <form
-                          onSubmit={(event) => void saveRating(event, interest.id)}
-                          className="flex items-center justify-end gap-3"
-                        >
-                          <label className="grid gap-1 text-left">
-                            <span className="text-xs text-muted-foreground">Level (-10 to 10)</span>
-                            <Input
-                              type="range"
-                              min={-10}
-                              max={10}
-                              value={rowRating}
-                              onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
-                              className="w-48"
-                            />
-                          </label>
+                        <div className="flex items-center justify-end gap-3">
                           <Input
-                            type="number"
+                            type="range"
                             min={-10}
                             max={10}
                             value={rowRating}
+                            aria-label={`Rating for ${interest.name}`}
                             onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
-                            className="w-20"
+                            onBlur={() => void saveRating(interest.id)}
+                            disabled={saving[interest.id]}
+                            className="w-48"
                           />
-                          <Button type="submit" size="sm" disabled={saving[interest.id]}>
-                            {saving[interest.id] ? 'Saving…' : 'Save'}
-                          </Button>
+                          <span className="w-8 text-sm tabular-nums text-muted-foreground">{rowRating}</span>
                           {interest.rating !== null && (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
                               onClick={() => void clearRating(interest.id)}
+                              disabled={saving[interest.id]}
                             >
                               Clear
                             </Button>
                           )}
-                        </form>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
