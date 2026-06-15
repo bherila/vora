@@ -32,6 +32,11 @@ interface AdminInterest {
   updated_at: string;
 }
 
+interface InterestTreeNode extends AdminInterest {
+  children: InterestTreeNode[];
+  depth: number;
+}
+
 interface AdminInterestRequest {
   id: number;
   name: string;
@@ -67,6 +72,64 @@ function createEmptyForm(): InterestFormState {
   return { name: '', description: '', parent_interest_id: '' };
 }
 
+function sortByName<T extends { name: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function buildInterestTree(interests: AdminInterest[]): InterestTreeNode[] {
+  const nodes = new Map<number, InterestTreeNode>();
+  const roots: InterestTreeNode[] = [];
+
+  for (const interest of interests) {
+    nodes.set(interest.id, { ...interest, children: [], depth: 0 });
+  }
+
+  for (const node of nodes.values()) {
+    if (node.parent_interest_id !== null) {
+      const parent = nodes.get(node.parent_interest_id);
+      if (parent) {
+        parent.children.push(node);
+        continue;
+      }
+    }
+
+    roots.push(node);
+  }
+
+  const sortBranch = (branch: InterestTreeNode[], depth: number): InterestTreeNode[] => {
+    return sortByName(branch).map((node) => ({
+      ...node,
+      depth,
+      children: sortBranch(node.children, depth + 1),
+    }));
+  };
+
+  return sortBranch(roots, 0);
+}
+
+function flattenInterestTree(nodes: InterestTreeNode[]): InterestTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenInterestTree(node.children)]);
+}
+
+function getDepthPaddingClass(depth: number): string {
+  const classes = ['pl-0', 'pl-4', 'pl-8', 'pl-12', 'pl-16', 'pl-20', 'pl-24'];
+
+  return classes[Math.min(depth, classes.length - 1)] ?? 'pl-0';
+}
+
+function collectDescendantIds(node: InterestTreeNode): Set<number> {
+  const ids = new Set<number>();
+
+  for (const child of node.children) {
+    ids.add(child.id);
+    for (const descendantId of collectDescendantIds(child)) {
+      ids.add(descendantId);
+    }
+  }
+
+  return ids;
+}
+
 function AdminInterestsPage() {
   const [interests, setInterests] = useState<AdminInterest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,13 +146,33 @@ function AdminInterestsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<InterestFormState>(createEmptyForm());
 
+  const treeInterests = useMemo(() => buildInterestTree(interests), [interests]);
+  const flatTreeInterests = useMemo(() => flattenInterestTree(treeInterests), [treeInterests]);
+
   const parentOptions = useMemo(() => {
-    return interests.map((interest) => ({
+    return flatTreeInterests.map((interest) => ({
       id: String(interest.id),
-      label: interest.name,
+      label: `${'— '.repeat(interest.depth)}${interest.name}`,
       value: interest.id,
     }));
-  }, [interests]);
+  }, [flatTreeInterests]);
+
+  const editParentOptions = useMemo(() => {
+    if (editingId === null) {
+      return parentOptions;
+    }
+
+    const editingNode = flatTreeInterests.find((interest) => interest.id === editingId);
+    const excludedIds = new Set<number>([editingId]);
+
+    if (editingNode) {
+      for (const descendantId of collectDescendantIds(editingNode)) {
+        excludedIds.add(descendantId);
+      }
+    }
+
+    return parentOptions.filter((option) => !excludedIds.has(option.value));
+  }, [editingId, flatTreeInterests, parentOptions]);
 
   const loadInterests = async (): Promise<void> => {
     setLoading(true);
@@ -411,94 +494,79 @@ function AdminInterestsPage() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading interests...</p>
+      ) : flatTreeInterests.length === 0 ? (
+        <p className="rounded border border-border p-4 text-sm text-muted-foreground">No interests have been created yet.</p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Parent</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Updated</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {interests.map((interest) => (
-              <TableRow key={interest.id}>
+        <section className="rounded border border-border p-4" aria-label="Interest hierarchy">
+          <div className="mb-3 grid grid-cols-[minmax(0,1fr)_8rem_12rem] gap-3 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span>Name</span>
+            <span>Updated</span>
+            <span>Actions</span>
+          </div>
+          <div className="space-y-2">
+            {flatTreeInterests.map((interest) => (
+              <div key={interest.id} className="rounded-md border border-border bg-background p-3">
                 {editingId === interest.id ? (
-                  <>
-                    <TableCell>
-                      <Input
-                        value={editForm.name}
-                        onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <select
-                        value={editForm.parent_interest_id}
-                        onChange={(event) => setEditForm((current) => ({ ...current, parent_interest_id: event.target.value }))}
-                        className="w-full rounded-md border border-input bg-background px-3 py-2"
-                      >
-                        <option value="">No parent</option>
-                        {parentOptions
-                          .filter((option) => option.value !== interest.id)
-                          .map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                      </select>
-                    </TableCell>
-                    <TableCell>
-                      <Textarea
-                        value={editForm.description}
-                        onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
-                        rows={2}
-                      />
-                    </TableCell>
-                    <TableCell>{formatDate(interest.updated_at)}</TableCell>
-                    <TableCell className="space-x-2">
-                      <Button
-                        size="sm"
-                        disabled={savingId === interest.id}
-                        onClick={() => void saveEdit(interest.id)}
-                      >
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_minmax(0,1fr)_auto]">
+                    <Input
+                      value={editForm.name}
+                      onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                      aria-label="Interest name"
+                    />
+                    <select
+                      value={editForm.parent_interest_id}
+                      onChange={(event) => setEditForm((current) => ({ ...current, parent_interest_id: event.target.value }))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2"
+                      aria-label="Parent interest"
+                    >
+                      <option value="">No parent</option>
+                      {editParentOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Textarea
+                      value={editForm.description}
+                      onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))}
+                      rows={2}
+                      aria-label="Interest description"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={savingId === interest.id} onClick={() => void saveEdit(interest.id)}>
                         Save
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditingId(null)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>
                         Cancel
                       </Button>
-                    </TableCell>
-                  </>
+                    </div>
+                  </div>
                 ) : (
-                  <>
-                    <TableCell>{interest.name}</TableCell>
-                    <TableCell>{interest.parent_name ?? '—'}</TableCell>
-                    <TableCell>{interest.description ?? '—'}</TableCell>
-                    <TableCell>{formatDate(interest.updated_at)}</TableCell>
-                    <TableCell className="space-x-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_8rem_12rem] items-start gap-3">
+                    <div className={getDepthPaddingClass(interest.depth)}>
+                      <div className="flex items-center gap-2">
+                        {interest.depth > 0 && <span className="text-muted-foreground">↳</span>}
+                        <span className="font-medium">{interest.name}</span>
+                      </div>
+                      {interest.description && (
+                        <p className="mt-1 text-sm text-muted-foreground">{interest.description}</p>
+                      )}
+                    </div>
+                    <span className="text-sm text-muted-foreground">{formatDate(interest.updated_at)}</span>
+                    <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => beginEdit(interest)}>
                         Edit
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setDeleteTarget(interest)}
-                        disabled={savingId === interest.id}
-                      >
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(interest)} disabled={savingId === interest.id}>
                         Delete
                       </Button>
-                    </TableCell>
-                  </>
+                    </div>
+                  </div>
                 )}
-              </TableRow>
+              </div>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+        </section>
       )}
 
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => {
