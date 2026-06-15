@@ -6,6 +6,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 type NavbarProps = {
   authenticated: boolean;
   isAdmin: boolean;
+  followRequestCount: number;
 };
 
 type ThemeMode = 'system' | 'dark' | 'light';
@@ -17,7 +18,7 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
+export default function Navbar({ authenticated, isAdmin, followRequestCount }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +77,16 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
           )}
           {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/explore'>Explore</a></li>
+          )}
+          {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/users'>Users</a></li>
+          )}
+          {authenticated && (
+            <li>
+              <a className='hover:underline underline-offset-4' href='/users/follow-requests'>
+                Follow requests{followRequestCount > 0 ? ` (${followRequestCount})` : ''}
+              </a>
+            </li>
           )}
           {authenticated && isAdmin && (
             <li className='relative' ref={adminMenuRef}>

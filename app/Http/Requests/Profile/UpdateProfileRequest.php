@@ -30,6 +30,8 @@ class UpdateProfileRequest extends FormRequest
             'preferred_user_types.*' => ['required', 'string', 'distinct', Rule::in(['human', 'furry', 'other'])],
             'preferred_genders' => ['nullable', 'array'],
             'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
+            'email_follow_request_received' => ['sometimes', 'boolean'],
+            'email_follow_request_accepted' => ['sometimes', 'boolean'],
             'email' => [
                 'required',
                 'string',

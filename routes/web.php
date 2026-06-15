@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ExploreController;
+use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
@@ -73,6 +74,20 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Cross-user exploration of approved, discoverable media.
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
     Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
+
+    Route::get('/users', [FollowController::class, 'directory'])->name('users.directory');
+    Route::get('/users/follow-requests', [FollowController::class, 'inboxPage'])->name('users.follow-requests');
+    Route::get('/users/{user}', [FollowController::class, 'profilePage'])->name('users.profile');
+
+    Route::prefix('api/users')->group(function () {
+        Route::get('/', [FollowController::class, 'users']);
+        Route::get('/follow-requests/count', [FollowController::class, 'count']);
+        Route::get('/follow-requests', [FollowController::class, 'inbox']);
+        Route::post('/follow-requests/{followRequest}/accept', [FollowController::class, 'accept']);
+        Route::post('/follow-requests/{followRequest}/decline', [FollowController::class, 'decline']);
+        Route::get('/{user}', [FollowController::class, 'profile']);
+        Route::post('/{user}/follow-requests', [FollowController::class, 'requestFollow']);
+    });
 
     Route::prefix('api/media')->group(function () {
         Route::get('/', [MediaController::class, 'index']);

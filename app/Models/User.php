@@ -33,6 +33,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'preferred_user_types',
         'preferred_genders',
         'last_login_at',
+        'email_follow_request_received',
+        'email_follow_request_accepted',
     ];
 
     /**
@@ -63,6 +65,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'name_locked' => 'boolean',
             'email_locked' => 'boolean',
             'force_change_pw' => 'boolean',
+            'email_follow_request_received' => 'boolean',
+            'email_follow_request_accepted' => 'boolean',
         ];
     }
 
@@ -138,5 +142,21 @@ class User extends Authenticatable implements MustVerifyEmail
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /**
+     * @return HasMany<FollowRequest, $this>
+     */
+    public function sentFollowRequests(): HasMany
+    {
+        return $this->hasMany(FollowRequest::class, 'requester_id');
+    }
+
+    /**
+     * @return HasMany<FollowRequest, $this>
+     */
+    public function receivedFollowRequests(): HasMany
+    {
+        return $this->hasMany(FollowRequest::class, 'recipient_id');
     }
 }

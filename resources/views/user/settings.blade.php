@@ -17,6 +17,8 @@
       'id_verified_at' => $__currentUser->id_verified_at?->toIso8601String(),
       'name_locked' => (bool) $__currentUser->name_locked,
       'email_locked' => (bool) $__currentUser->email_locked,
+      'email_follow_request_received' => (bool) $__currentUser->email_follow_request_received,
+      'email_follow_request_accepted' => (bool) $__currentUser->email_follow_request_accepted,
     ];
   @endphp
   <script id="user-settings-initial-data" type="application/json" @cspNonce>
