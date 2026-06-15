@@ -12,6 +12,7 @@ class InterestRating extends Model
      */
     protected $fillable = [
         'user_id',
+        'character_id',
         'interest_id',
         'level',
     ];
@@ -21,6 +22,7 @@ class InterestRating extends Model
      */
     protected $casts = [
         'level' => 'integer',
+        'character_id' => 'integer',
     ];
 
     /**
@@ -29,6 +31,16 @@ class InterestRating extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The character this rating overrides, or null for the user's own profile.
+     *
+     * @return BelongsTo<Character, $this>
+     */
+    public function character(): BelongsTo
+    {
+        return $this->belongsTo(Character::class);
     }
 
     /**

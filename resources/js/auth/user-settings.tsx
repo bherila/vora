@@ -1,6 +1,7 @@
 import { ChangePasswordForm, PasskeySection } from 'bwh-auth';
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast, Toaster } from 'sonner';
 
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
@@ -11,6 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { loadInterests, persistRatings } from '@/interests/api';
+import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
+import { RequestInterestForm } from '@/interests/request-interest-form';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import {
@@ -38,6 +42,7 @@ interface UserSettingsInitialPayload {
   email_locked?: boolean | null;
   email_follow_request_received?: boolean | null;
   email_follow_request_accepted?: boolean | null;
+  can_manage_interests?: boolean | null;
 }
 
 interface UserSettingsInitialData {
@@ -56,6 +61,7 @@ interface UserSettingsInitialData {
   email_locked: boolean;
   email_follow_request_received: boolean;
   email_follow_request_accepted: boolean;
+  can_manage_interests: boolean;
 }
 
 interface ProfilePictureUploadResponse {
@@ -119,6 +125,7 @@ function emptyInitialData(): UserSettingsInitialData {
     email_locked: false,
     email_follow_request_received: false,
     email_follow_request_accepted: false,
+    can_manage_interests: false,
   };
 }
 
@@ -139,6 +146,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     email_locked: payload.email_locked ?? false,
     email_follow_request_received: payload.email_follow_request_received ?? false,
     email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
+    can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
 
@@ -198,6 +206,59 @@ function UserSettingsPage() {
   const profilePictureAbortRef = useRef<AbortController | null>(null);
   const [profilePictureMessage, setProfilePictureMessage] = useState('');
   const [profilePictureError, setProfilePictureError] = useState('');
+  const [interests, setInterests] = useState<RatableInterest[]>([]);
+  // Mirrors the /api/interests access gate. Changing the email clears email
+  // verification server-side, which makes the API 403, so we drop access here
+  // too rather than leave the panels interactive until a reload.
+  const [interestsEnabled, setInterestsEnabled] = useState(initialData.can_manage_interests);
+
+  useEffect(() => {
+    // The interests API is gated behind the approval middleware (approved +
+    // verified + not disabled), so only eligible users can load/rate them.
+    // Other users still see the rest of Settings without a failing request.
+    if (!interestsEnabled) {
+      return;
+    }
+
+    let active = true;
+    const load = async (): Promise<void> => {
+      try {
+        const { interests: loaded } = await loadInterests(null);
+        if (active) {
+          setInterests(loaded);
+        }
+      } catch (err) {
+        toast.error(typeof err === 'string' ? err : 'Failed to load interests.');
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [interestsEnabled]);
+
+  const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
+    try {
+      await persistRatings(null, [{ interest_id: interestId, level }]);
+      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
+      toast.success('Interest rating saved.');
+    } catch (err) {
+      toast.error(typeof err === 'string' ? err : 'Failed to save interest rating.');
+      throw err; // let the list keep the row pending for retry
+    }
+  };
+
+  const handleClearInterestRating = async (interestId: number): Promise<void> => {
+    try {
+      await persistRatings(null, [{ interest_id: interestId, level: null }]);
+      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
+      toast.success('Interest rating cleared.');
+    } catch (err) {
+      toast.error(typeof err === 'string' ? err : 'Failed to clear interest rating.');
+    }
+  };
 
   const applyResponseData = (data: UserSettingsResponse['data']) => {
     if (!data) {
@@ -335,6 +396,12 @@ function UserSettingsPage() {
         email,
       })) as UserSettingsResponse;
 
+      // Changing the email resets verification, so the interests API will 403
+      // until the new address is verified — hide the panels immediately.
+      if (email !== initialData.email) {
+        setInterestsEnabled(false);
+      }
+
       setAccountMessage(response.message ?? 'Account updated.');
       applyResponseData(response.data);
     } catch (err) {
@@ -470,6 +537,36 @@ function UserSettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        {interestsEnabled && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Your interests</CardTitle>
+                <CardDescription>
+                  Rate interests from -10 (fully uninterested) to +10 (fully interested). Characters inherit these unless you set custom interests for them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <InterestRatingList
+                  interests={interests}
+                  onSave={handleSaveInterestRating}
+                  onClear={handleClearInterestRating}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Request a new interest</CardTitle>
+                <CardDescription>Suggest an interest for an admin to review and add to the catalog.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RequestInterestForm interests={interests} />
+              </CardContent>
+            </Card>
+          </>
+        )}
       </section>
 
       <section className="space-y-3">
@@ -601,6 +698,7 @@ function UserSettingsPage() {
           </CardContent>
         </Card>
       </section>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

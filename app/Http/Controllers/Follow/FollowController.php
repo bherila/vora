@@ -51,10 +51,11 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
         }
 
-        $currentInterestIds = InterestRating::query()->where('user_id', $current->id)->where('level', '>', 0)->pluck('interest_id');
+        $currentInterestIds = InterestRating::query()->where('user_id', $current->id)->whereNull('character_id')->where('level', '>', 0)->pluck('interest_id');
         $mutualInterests = InterestRating::query()
             ->with('interest:id,name')
             ->where('user_id', $user->id)
+            ->whereNull('character_id')
             ->where('level', '>', 0)
             ->whereIn('interest_id', $currentInterestIds)
             ->get()

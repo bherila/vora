@@ -68,7 +68,6 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
-    Route::get('/interests', [InterestController::class, 'index'])->name('interests');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Media library + shareable single-media view.
@@ -152,8 +151,10 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {
+    // Ratings target (user, character|null); character_id is passed in the query
+    // (GET) or body (POST) so the same endpoints serve user and character profiles.
     Route::get('/', [InterestController::class, 'apiIndex']);
-    Route::post('/{interest}/rate', [InterestController::class, 'rate']);
-    Route::delete('/{interest}/rate', [InterestController::class, 'destroyRate']);
+    Route::post('/ratings', [InterestController::class, 'batchRate']);
+    Route::post('/inherit', [InterestController::class, 'setInheritance']);
     Route::post('/request', [InterestController::class, 'requestNew']);
 });

@@ -2,27 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Interest\RateInterestRequest;
+use App\Http\Requests\Interest\BatchRateInterestRequest;
 use App\Http\Requests\Interest\RequestInterestRequest;
+use App\Http\Requests\Interest\SetInterestInheritanceRequest;
+use App\Models\Character;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 
 class InterestController extends Controller
 {
     /**
-     * User-facing interest rating page.
-     */
-    public function index(): View
-    {
-        return view('user.interests');
-    }
-
-    /**
-     * JSON list of interests for approved users to browse + rate.
+     * JSON list of interests with the ratings for a target profile. The target
+     * is the logged-in user, or one of their characters when `character_id` is
+     * supplied. Cross-user (or unknown) characters are hidden as 404.
      */
     public function apiIndex(Request $request): JsonResponse
     {
@@ -31,8 +26,28 @@ class InterestController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
+        $characterId = $request->query('character_id');
+        $character = null;
+
+        if ($characterId !== null) {
+            // Guard against non-scalar query input (e.g. character_id[]=1), which
+            // Eloquent find() would treat as a multi-key lookup and 500 on the
+            // ->user_id access.
+            if (! is_numeric($characterId)) {
+                return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+            }
+
+            $character = Character::query()->find((int) $characterId);
+            if ($character === null || $character->user_id !== $user->id) {
+                return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+            }
+        }
+
+        // where('character_id', null) is translated to whereNull() by the query
+        // builder, so this scopes to the user's own ratings when no character.
         $ratings = InterestRating::query()
             ->where('user_id', $user->id)
+            ->where('character_id', $character?->id)
             ->pluck('level', 'interest_id');
 
         $interests = Interest::query()
@@ -49,53 +64,72 @@ class InterestController extends Controller
 
         return response()->json([
             'success' => true,
+            'inherit_interests' => $character?->inherit_interests ?? false,
             'data' => $interests,
         ]);
     }
 
-    public function rate(RateInterestRequest $request, Interest $interest): JsonResponse
+    /**
+     * Set or clear multiple interest ratings in one request for a target
+     * profile (the user, or one of their characters). A null level clears a
+     * rating; any other value upserts it.
+     */
+    public function batchRate(BatchRateInterestRequest $request): JsonResponse
     {
         $user = $request->user();
-        if ($user === null) {
-            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        $validated = $request->validated();
+        $characterId = $validated['character_id'] ?? null;
+        $hasExplicit = false;
+
+        foreach ($validated['ratings'] as $rating) {
+            $interestId = (int) $rating['interest_id'];
+
+            if ($rating['level'] === null) {
+                InterestRating::query()
+                    ->where('user_id', $user->id)
+                    ->where('character_id', $characterId)
+                    ->where('interest_id', $interestId)
+                    ->delete();
+
+                continue;
+            }
+
+            $hasExplicit = true;
+            InterestRating::query()->updateOrCreate(
+                ['user_id' => $user->id, 'character_id' => $characterId, 'interest_id' => $interestId],
+                ['level' => (int) $rating['level']],
+            );
         }
 
-        $level = (int) $request->validated()['level'];
+        // Persisting an explicit rating means the character is overriding, not
+        // inheriting, the owner's profile interests.
+        if ($characterId !== null && $hasExplicit) {
+            Character::query()->whereKey($characterId)->update(['inherit_interests' => false]);
+        }
 
-        InterestRating::query()->updateOrCreate(
-            [
-                'user_id' => $user->id,
-                'interest_id' => $interest->id,
-            ],
-            [
-                'level' => $level,
-            ]
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'interest_id' => $interest->id,
-                'level' => $level,
-            ],
-        ]);
+        return response()->json(['success' => true]);
     }
 
-    public function destroyRate(Request $request, Interest $interest): JsonResponse
+    /**
+     * Toggle whether a character inherits the owner's profile interests.
+     * Switching inheritance on clears the character's own overrides.
+     */
+    public function setInheritance(SetInterestInheritanceRequest $request): JsonResponse
     {
-        $user = $request->user();
-        if ($user === null) {
-            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
-        }
+        $validated = $request->validated();
+        $character = Character::query()->findOrFail($validated['character_id']);
+        $inherit = (bool) $validated['inherit'];
 
-        InterestRating::query()
-            ->where('user_id', $user->id)
-            ->where('interest_id', $interest->id)
-            ->delete();
+        $character->inherit_interests = $inherit;
+        $character->save();
+
+        if ($inherit) {
+            $character->interestRatings()->delete();
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Interest rating removed.',
+            'data' => ['character_id' => $character->id, 'inherit_interests' => $inherit],
         ]);
     }
 

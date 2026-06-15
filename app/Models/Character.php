@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Character extends Model
 {
@@ -19,8 +20,11 @@ class Character extends Model
         'description',
         'gender',
         'gender_other',
+        'user_type',
+        'user_type_other',
         'preferred_user_types',
         'preferred_genders',
+        'inherit_interests',
         'profile_picture_media_id',
     ];
 
@@ -32,8 +36,21 @@ class Character extends Model
         return [
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
+            'inherit_interests' => 'boolean',
             'profile_picture_media_id' => 'integer',
         ];
+    }
+
+    /**
+     * Per-character interest overrides. Only consulted when
+     * {@see static::$inherit_interests} is false; otherwise the character falls
+     * back to the owning user's profile interest ratings.
+     *
+     * @return HasMany<InterestRating, $this>
+     */
+    public function interestRatings(): HasMany
+    {
+        return $this->hasMany(InterestRating::class);
     }
 
     /**

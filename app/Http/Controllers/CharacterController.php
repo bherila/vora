@@ -134,12 +134,15 @@ class CharacterController extends Controller
     private function payload(array $data): array
     {
         $gender = $data['gender'] ?? null;
+        $userType = $data['user_type'] ?? null;
 
         return [
             'display_name' => $data['display_name'],
             'description' => $data['description'] ?? null,
             'gender' => $gender,
             'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
+            'user_type' => $userType,
+            'user_type_other' => $userType === 'other' ? ($data['user_type_other'] ?? null) : null,
             'preferred_user_types' => $data['preferred_user_types'] ?? null,
             'preferred_genders' => $data['preferred_genders'] ?? null,
         ];
@@ -156,8 +159,11 @@ class CharacterController extends Controller
             'description' => $character->description,
             'gender' => $character->gender,
             'gender_other' => $character->gender_other,
+            'user_type' => $character->user_type,
+            'user_type_other' => $character->user_type_other,
             'preferred_user_types' => $character->preferred_user_types ?? [],
             'preferred_genders' => $character->preferred_genders ?? [],
+            'inherit_interests' => $character->inherit_interests,
             'profile_picture' => $picture instanceof Media ? $this->responder->item($picture, resolveHls: false) : null,
         ];
     }
