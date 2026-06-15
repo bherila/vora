@@ -148,6 +148,17 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Optional fictional personas owned by this account. The user account itself
+     * remains the default/null character for follows and profile changes.
+     *
+     * @return HasMany<Character, $this>
+     */
+    public function characters(): HasMany
+    {
+        return $this->hasMany(Character::class);
+    }
+
+    /**
      * @return BelongsTo<Media, $this>
      */
     public function profilePicture(): BelongsTo

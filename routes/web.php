@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
@@ -68,6 +69,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     Route::get('/interests', [InterestController::class, 'index'])->name('interests');
+    Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Media library + shareable single-media view.
     Route::get('/media', [MediaController::class, 'library'])->name('media');
@@ -80,6 +82,15 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/users', [FollowController::class, 'directory'])->name('users.directory');
     Route::get('/users/follow-requests', [FollowController::class, 'inboxPage'])->name('users.follow-requests');
     Route::get('/users/{user}', [FollowController::class, 'profilePage'])->name('users.profile');
+
+    Route::prefix('api/characters')->group(function () {
+        Route::get('/', [CharacterController::class, 'index']);
+        Route::post('/', [CharacterController::class, 'store']);
+        Route::patch('/{character}', [CharacterController::class, 'update']);
+        Route::delete('/{character}', [CharacterController::class, 'destroy']);
+        Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
+        Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
+    });
 
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);
