@@ -54,9 +54,17 @@ Route::middleware('auth')->group(function () {
     Route::patch('/api/account', [ProfileController::class, 'update']);
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
+    Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
+    Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
+    Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
+
+    // Reachable while deactivated (exempt in EnsureNotDeactivated) so the user
+    // can reactivate or sign out.
+    Route::get('/account/deactivated', fn () => view('auth.deactivated'))->name('account.deactivated');
+    Route::post('/account/reactivate', [ProfileController::class, 'reactivate'])->name('account.reactivate');
 
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 });
@@ -89,6 +97,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
+        Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);
     });
 
     Route::prefix('api/users')->group(function () {
@@ -134,7 +143,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
-    Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
+    // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
+    Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
+    Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);

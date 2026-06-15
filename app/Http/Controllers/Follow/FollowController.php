@@ -34,7 +34,7 @@ class FollowController extends Controller
     public function users(Request $request): JsonResponse
     {
         $current = $request->user();
-        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->where('is_disabled', false)->orderBy('display_name')->get();
+        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->where('is_disabled', false)->whereNull('deactivated_at')->orderBy('display_name')->get();
 
         return response()->json(['success' => true, 'data' => $users->map(fn (User $user): array => [
             'id' => $user->id,
@@ -105,7 +105,11 @@ class FollowController extends Controller
     public function inbox(Request $request): JsonResponse
     {
         $current = $request->user();
-        $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender')->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
+        // Hide requests from accounts that have since deactivated or deleted —
+        // whereHas('requester') drops soft-deleted requesters via the User scope.
+        $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender')
+            ->whereHas('requester', fn ($q) => $q->whereNull('deactivated_at'))
+            ->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
 
         return response()->json(['success' => true, 'data' => $requests->map(fn (FollowRequest $followRequest): array => [
             'id' => $followRequest->id,
@@ -121,7 +125,9 @@ class FollowController extends Controller
 
     public function count(Request $request): JsonResponse
     {
-        return response()->json(['success' => true, 'data' => ['count' => FollowRequest::query()->where('recipient_id', $request->user()?->id)->where('status', 'pending')->count()]]);
+        return response()->json(['success' => true, 'data' => ['count' => FollowRequest::query()
+            ->whereHas('requester', fn ($q) => $q->whereNull('deactivated_at'))
+            ->where('recipient_id', $request->user()?->id)->where('status', 'pending')->count()]]);
     }
 
     public function accept(Request $request, FollowRequest $followRequest): JsonResponse
@@ -141,6 +147,14 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 
+        // A requester who deactivated or deleted after sending must stay hidden:
+        // requester is null once soft-deleted (User scope) and gets the same
+        // treatment as a deactivated one.
+        $requester = $followRequest->requester;
+        if ($requester === null || $requester->isDeactivated()) {
+            return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
+        }
+
         $followRequest->status = $status;
         $followRequest->responded_at = Carbon::now();
         $followRequest->save();
@@ -155,7 +169,7 @@ class FollowController extends Controller
 
     private function isDiscoverable(User $user): bool
     {
-        return $user->approved_at !== null && ! $user->is_disabled;
+        return $user->approved_at !== null && ! $user->is_disabled && ! $user->isDeactivated();
     }
 
     private function declinedRequestCanBeRetried(FollowRequest $followRequest): bool
