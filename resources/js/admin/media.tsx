@@ -125,6 +125,20 @@ function AdminMediaPage() {
                 <div className="overflow-hidden rounded-md bg-muted">
                   <MediaPlayer item={item} className="max-h-64 w-full object-contain" />
                 </div>
+                {item.thumbnail_url && (
+                  <div className="grid gap-1">
+                    <span className="text-xs text-muted-foreground">
+                      Thumbnail/poster (shown in listings — review this too)
+                    </span>
+                    <div className="overflow-hidden rounded-md bg-muted">
+                      <img
+                        src={item.thumbnail_url}
+                        alt={`Thumbnail for ${item.title || item.original_filename}`}
+                        className="max-h-40 w-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
                 <dl className="text-xs text-muted-foreground">
                   <div className="flex justify-between">
                     <dt>Uploader</dt>

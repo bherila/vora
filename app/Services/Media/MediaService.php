@@ -25,6 +25,12 @@ class MediaService
     {
         $this->storage->deleteFile($media->disk, $media->object_key);
 
+        // The thumbnail/poster is private to this row (not content-shared like
+        // HLS output), so it is safe to remove alongside the source.
+        if ($media->thumbnail_key !== null) {
+            $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->thumbnail_key);
+        }
+
         $media->delete();
     }
 }

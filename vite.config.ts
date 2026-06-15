@@ -26,6 +26,7 @@ export default defineConfig({
                 'resources/js/admin/media.tsx',
                 'resources/js/user/interests.tsx',
                 'resources/js/user/media.tsx',
+                'resources/js/user/explore.tsx',
                 'resources/js/media/view.tsx',
             ],
       refresh: true,

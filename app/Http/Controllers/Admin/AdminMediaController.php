@@ -94,11 +94,11 @@ class AdminMediaController extends Controller
     }
 
     /**
-     * @return array{url: ?string, video: ?array<string, mixed>}
+     * @return array{url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
      */
     private function extrasFor(Media $media, bool $resolveHls = true): array
     {
-        $extras = ['url' => null, 'video' => null];
+        $extras = ['url' => null, 'thumbnail_url' => null, 'video' => null];
 
         if (! $media->isReady()) {
             return $extras;
@@ -110,6 +110,19 @@ class AdminMediaController extends Controller
             (int) config('media.view_url_ttl', 60),
             $media->mime_type,
         );
+
+        // Sign the client-supplied thumbnail/poster too. It is exactly what the
+        // owner library and Explore grids display, so the reviewer must see and
+        // approve it here — otherwise an arbitrary uploaded JPEG would reach
+        // discovery surfaces without ever being reviewed.
+        if ($media->thumbnail_key !== null) {
+            $extras['thumbnail_url'] = $this->storage->getSignedViewUrl(
+                (string) config('media.thumbnail_disk'),
+                $media->thumbnail_key,
+                (int) config('media.view_url_ttl', 60),
+                'image/jpeg',
+            );
+        }
 
         if ($media->type->isVideo()) {
             $extras['video'] = $this->hls->status($media, $resolveHls);

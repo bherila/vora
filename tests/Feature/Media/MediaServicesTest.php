@@ -85,6 +85,60 @@ class MediaServicesTest extends TestCase
         $this->assertDatabaseMissing('media', ['id' => $media->id]);
     }
 
+    public function test_complete_upload_keeps_thumbnail_within_size_limit(): void
+    {
+        Storage::fake('photos');
+        config(['media.thumbnail.max_bytes' => 1000]);
+        $media = Media::factory()->pendingUpload()->create([
+            'disk' => 'photos',
+            'thumbnail_key' => 'uploads/thumbnails/0/thumb.jpg',
+        ]);
+        Storage::disk('photos')->put($media->object_key, str_repeat('x', 100));
+        Storage::disk('photos')->put($media->thumbnail_key, str_repeat('t', 500));
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+
+        $fresh = $media->fresh();
+        $this->assertSame('uploads/thumbnails/0/thumb.jpg', $fresh->thumbnail_key);
+        Storage::disk('photos')->assertExists('uploads/thumbnails/0/thumb.jpg');
+    }
+
+    public function test_complete_upload_drops_oversized_thumbnail_but_keeps_source(): void
+    {
+        Storage::fake('photos');
+        config(['media.thumbnail.max_bytes' => 100]);
+        $media = Media::factory()->pendingUpload()->create([
+            'disk' => 'photos',
+            'thumbnail_key' => 'uploads/thumbnails/0/thumb.jpg',
+        ]);
+        Storage::disk('photos')->put($media->object_key, str_repeat('x', 50));
+        // The client PUT a multi-megabyte image to the thumbnail URL.
+        Storage::disk('photos')->put($media->thumbnail_key, str_repeat('t', 5000));
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+
+        $fresh = $media->fresh();
+        // Source upload still succeeds and is reviewable...
+        $this->assertSame('ready', $fresh->upload_status);
+        // ...but the oversized thumbnail is discarded, not served.
+        $this->assertNull($fresh->thumbnail_key);
+        Storage::disk('photos')->assertMissing('uploads/thumbnails/0/thumb.jpg');
+    }
+
+    public function test_complete_upload_drops_thumbnail_key_when_object_missing(): void
+    {
+        Storage::fake('photos');
+        $media = Media::factory()->pendingUpload()->create([
+            'disk' => 'photos',
+            'thumbnail_key' => 'uploads/thumbnails/0/thumb.jpg',
+        ]);
+        Storage::disk('photos')->put($media->object_key, 'data');
+        // Thumbnail was never PUT.
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+        $this->assertNull($media->fresh()->thumbnail_key);
+    }
+
     public function test_complete_upload_resets_premature_approval_to_pending(): void
     {
         Storage::fake('photos');

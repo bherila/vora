@@ -37,10 +37,15 @@ export interface MediaItem {
   visibility: VisibilityValue;
   upload_status: string;
   url: string | null;
+  /** Signed URL of the small JPEG thumbnail/poster, when one was generated. */
+  thumbnail_url: string | null;
   video: VideoStatus | null;
   interests: MediaInterest[];
   created_at: string | null;
 }
+
+/** Selected media-type filter for a listing. 'all' applies no type constraint. */
+export type MediaTypeFilter = 'all' | MediaTypeValue;
 
 /** Admin list responses additionally carry the internal review state. */
 export interface AdminMediaItem extends MediaItem {

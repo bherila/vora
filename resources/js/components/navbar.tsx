@@ -74,6 +74,9 @@ export default function Navbar({ authenticated, isAdmin }: NavbarProps) {
           {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/media'>Media</a></li>
           )}
+          {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/explore'>Explore</a></li>
+          )}
           {authenticated && isAdmin && (
             <li className='relative' ref={adminMenuRef}>
               <button
