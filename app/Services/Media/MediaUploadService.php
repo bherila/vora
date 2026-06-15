@@ -136,8 +136,15 @@ class MediaUploadService
         $size = $this->storage->getFileSize($media->disk, $media->object_key);
 
         // Reject an object that exceeds the type's limit: delete it and the row.
+        // Drop the thumbnail too — once the row is gone, prune can no longer
+        // discover the orphaned thumbnail key.
         if ($size !== null && $size > $media->type->maxBytes()) {
             $this->storage->deleteFile($media->disk, $media->object_key);
+
+            if ($media->thumbnail_key !== null) {
+                $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->thumbnail_key);
+            }
+
             $media->delete();
 
             return false;
