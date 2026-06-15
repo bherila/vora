@@ -101,6 +101,19 @@ class CoAuthorTest extends TestCase
         $this->actingAs($coAuthor)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $third->id])->assertForbidden();
     }
 
+    public function test_non_author_cannot_probe_authorship_via_remove_endpoint(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+
+        // A non-author gets a uniform 403 before any authorship row is disclosed.
+        $this->actingAs($stranger)->deleteJson("/api/stories/{$story->id}/authors/{$coAuthor->id}")->assertForbidden();
+        $this->assertDatabaseHas('story_authors', ['story_id' => $story->id, 'user_id' => $coAuthor->id]);
+    }
+
     public function test_cannot_invite_same_user_twice(): void
     {
         $owner = User::factory()->approved()->create();

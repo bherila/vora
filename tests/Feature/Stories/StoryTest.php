@@ -114,6 +114,47 @@ class StoryTest extends TestCase
         $this->assertDatabaseMissing('stories', ['id' => $story->id]);
     }
 
+    public function test_editing_an_approved_story_returns_it_to_review(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $reader = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->readable()->create(['body' => 'Original']);
+
+        // Readable before the edit.
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
+
+        $this->actingAs($owner)->patchJson("/api/stories/{$story->id}", ['body' => 'Rewritten after approval'])->assertOk();
+
+        $this->assertSame('pending', $story->refresh()->moderation_status->value);
+        // No longer reader-visible until re-approved.
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+    }
+
+    public function test_cyoa_graph_save_returns_an_approved_story_to_review(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->cyoa()->readable()->create();
+
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", [
+            'nodes' => [['key' => 'start', 'body' => 'Begin', 'is_start' => true]],
+            'choices' => [],
+        ])->assertOk();
+
+        $this->assertSame('pending', $story->refresh()->moderation_status->value);
+    }
+
+    public function test_story_from_disabled_owner_is_hidden_from_readers(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $reader = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->readable()->create();
+
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
+
+        $owner->forceFill(['is_disabled' => true])->save();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+    }
+
     public function test_library_lists_owned_and_co_authored_stories(): void
     {
         $owner = User::factory()->approved()->create();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Enums\StoryType;
 use App\Enums\Visibility;
@@ -128,7 +129,15 @@ class StoryController extends Controller
                 $story->published_at = now();
             }
         }
+
+        // Editing the reader-visible text of an already-approved story must send
+        // it back through review, so post-approval content can't reach readers
+        // unreviewed (see StoryPolicy::view).
+        $contentChanged = $story->isDirty(['title', 'body']);
         $story->save();
+        if ($contentChanged) {
+            $this->requeueModerationIfApproved($story);
+        }
 
         if (array_key_exists('interest_ids', $data)) {
             $this->stories->syncInterests($story, $request->interestIds());
@@ -166,6 +175,8 @@ class StoryController extends Controller
         $choices = $request->validated('choices', []);
 
         $this->stories->saveGraph($story, $nodes, $choices);
+        // A graph save rewrites reader-visible passages, so re-queue review.
+        $this->requeueModerationIfApproved($story);
 
         return response()->json(['success' => true, 'data' => $this->editorPayload($story, request()->user())]);
     }
@@ -197,6 +208,25 @@ class StoryController extends Controller
         $payload['involvable_options'] = $this->stories->involvableOptions($story);
 
         return $payload;
+    }
+
+    /**
+     * Return an already-approved story to the review queue after its
+     * reader-visible content changed. Pending/rejected stories are left as-is
+     * (they are not reader-visible anyway).
+     */
+    private function requeueModerationIfApproved(Story $story): void
+    {
+        if (! $story->isApprovedContent()) {
+            return;
+        }
+
+        $story->forceFill([
+            'moderation_status' => ModerationStatus::Pending->value,
+            'moderated_by_user_id' => null,
+            'moderated_at' => null,
+            'moderation_notes' => null,
+        ])->save();
     }
 
     /**

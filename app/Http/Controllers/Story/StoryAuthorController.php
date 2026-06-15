@@ -63,6 +63,11 @@ class StoryAuthorController extends Controller
      */
     public function destroy(Story $story, User $user): JsonResponse
     {
+        // Authorize before any row lookup so non-authors get a uniform 403 and
+        // cannot probe who authors a private/draft story. Owners and accepted
+        // co-authors both satisfy the `update` ability.
+        Gate::authorize('update', $story);
+
         $current = request()->user();
         if (! $current instanceof User) {
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);

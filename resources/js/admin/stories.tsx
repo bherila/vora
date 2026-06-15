@@ -27,20 +27,39 @@ function badgeClass(status: string): string {
   return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200';
 }
 
+interface PaginationMeta {
+  current_page: number;
+  last_page: number;
+  has_more: boolean;
+}
+
 function AdminStoriesPage() {
   const [stories, setStories] = useState<AdminStory[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('pending');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = (): void => {
-    const query = filter === 'all' ? '' : `?status=${filter}`;
+  // Page 1 replaces the list (filter change / after a moderation action);
+  // higher pages append via the "Load more" control.
+  const load = (status: StatusFilter, nextPage: number): void => {
+    const params = new URLSearchParams({ page: String(nextPage) });
+    if (status !== 'all') params.set('status', status);
+    if (nextPage > 1) setLoadingMore(true);
     fetchWrapper
-      .get(`/api/admin/stories${query}`)
-      .then((r) => setStories((r as { data: AdminStory[] }).data ?? []))
-      .catch((e) => setError(typeof e === 'string' ? e : 'Could not load stories.'));
+      .get(`/api/admin/stories?${params.toString()}`)
+      .then((r) => {
+        const response = r as { data: AdminStory[]; meta?: PaginationMeta };
+        setStories((prev) => (nextPage === 1 ? response.data ?? [] : [...prev, ...(response.data ?? [])]));
+        setHasMore(response.meta?.has_more ?? false);
+        setPage(nextPage);
+      })
+      .catch((e) => setError(typeof e === 'string' ? e : 'Could not load stories.'))
+      .finally(() => setLoadingMore(false));
   };
-  useEffect(load, [filter]);
+  useEffect(() => load(filter, 1), [filter]);
 
   const moderate = async (story: AdminStory, action: 'approve' | 'reject'): Promise<void> => {
     const notes = action === 'reject' ? window.prompt('Optional note to record with this rejection:') ?? undefined : undefined;
@@ -48,7 +67,7 @@ function AdminStoriesPage() {
     setError('');
     try {
       await fetchWrapper.post(`/api/admin/stories/${story.id}/moderate`, { action, notes });
-      load();
+      load(filter, 1);
     } catch (e) {
       setError(typeof e === 'string' ? e : 'Could not moderate story.');
     } finally {
@@ -111,6 +130,14 @@ function AdminStoriesPage() {
           ))}
         </TableBody>
       </Table>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => load(filter, page + 1)}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
