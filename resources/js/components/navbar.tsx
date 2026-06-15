@@ -76,6 +76,9 @@ export default function Navbar({ authenticated, isAdmin, followRequestCount }: N
             <li><a className='hover:underline underline-offset-4' href='/media'>Media</a></li>
           )}
           {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/characters'>Characters</a></li>
+          )}
+          {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/explore'>Explore</a></li>
           )}
           {authenticated && (
