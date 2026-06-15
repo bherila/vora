@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\MediaType;
+use App\Enums\MediaPurpose;
 use App\Enums\Visibility;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
@@ -51,6 +52,7 @@ class MediaController extends Controller
     public function index(ListMediaRequest $request): JsonResponse
     {
         $query = Media::query()
+            ->where('purpose', MediaPurpose::Gallery->value)
             ->where('user_id', $request->user()->id)
             ->with('interests')
             ->latest();
@@ -101,6 +103,10 @@ class MediaController extends Controller
     {
         Gate::authorize('complete', $media);
 
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
         if (! $this->uploads->completeUpload($media)) {
             return response()->json([
                 'success' => false,
@@ -122,6 +128,11 @@ class MediaController extends Controller
     public function show(Request $request, Media $media): JsonResponse
     {
         Gate::authorize('view', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
         $media->load('interests');
 
         return response()->json([
@@ -135,7 +146,10 @@ class MediaController extends Controller
      */
     public function showByUlid(Request $request, string $ulid): JsonResponse
     {
-        $media = Media::query()->where('ulid', $ulid)->firstOrFail();
+        $media = Media::query()
+            ->where('purpose', MediaPurpose::Gallery->value)
+            ->where('ulid', $ulid)
+            ->firstOrFail();
         Gate::authorize('view', $media);
         $media->load('interests');
 
@@ -148,6 +162,10 @@ class MediaController extends Controller
     public function destroy(Request $request, Media $media): JsonResponse
     {
         Gate::authorize('delete', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
 
         $this->media->delete($media);
 
@@ -163,6 +181,10 @@ class MediaController extends Controller
     public function streamHls(Request $request, Media $media, string $path = 'master.m3u8'): Response|RedirectResponse|JsonResponse
     {
         Gate::authorize('view', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
 
         if (! $media->type->isVideo()) {
             return response()->json(['success' => false, 'message' => 'Not a video.'], 404);

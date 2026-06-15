@@ -6,6 +6,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -35,6 +36,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_login_at',
         'email_follow_request_received',
         'email_follow_request_accepted',
+        'profile_picture_media_id',
     ];
 
     /**
@@ -59,6 +61,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
             'last_media_interest_ids' => 'array',
+            'profile_picture_media_id' => 'integer',
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
@@ -142,6 +145,22 @@ class User extends Authenticatable implements MustVerifyEmail
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /**
+     * @return BelongsTo<Media, $this>
+     */
+    public function profilePicture(): BelongsTo
+    {
+        return $this->belongsTo(Media::class, 'profile_picture_media_id');
+    }
+
+    /**
+     * @return HasOne<Media, $this>
+     */
+    public function latestProfilePictureUpload(): HasOne
+    {
+        return $this->hasOne(Media::class)->where('purpose', 'profile_picture')->latestOfMany();
     }
 
     /**

@@ -59,6 +59,7 @@ class MediaPresenter
             'id' => $media->id,
             'ulid' => $media->ulid,
             'type' => $media->type->value,
+            'purpose' => $media->purpose->value,
             'title' => $media->title,
             'original_filename' => $media->original_filename,
             'mime_type' => $media->mime_type,

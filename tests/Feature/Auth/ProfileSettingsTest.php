@@ -2,10 +2,14 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\MediaPurpose;
+use App\Models\Media;
 use App\Models\User;
+use App\Services\FileStorageService;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -30,6 +34,77 @@ class ProfileSettingsTest extends TestCase
             'preferred_user_types' => $user->preferred_user_types,
             'preferred_genders' => $user->preferred_genders,
         ], $overrides);
+    }
+
+    private function fakeStorage(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('getSignedUploadUrl')->andReturn([
+                'url' => 'https://r2.example/put',
+                'headers' => ['Content-Type' => 'image/jpeg'],
+            ]);
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+            $mock->shouldReceive('fileExists')->andReturn(true);
+            $mock->shouldReceive('getFileSize')->andReturn(2048);
+            $mock->shouldReceive('deleteFile')->andReturn(true);
+        });
+    }
+
+    #[Test]
+    public function users_can_create_and_complete_profile_picture_uploads(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+
+        $response = $this->actingAs($user)->postJson('/api/account/profile-picture', [
+            'filename' => 'avatar.jpg',
+            'content_type' => 'image/jpeg',
+            'size' => 2048,
+        ])->assertCreated()
+            ->assertJsonPath('upload_url', 'https://r2.example/put')
+            ->assertJsonPath('data.type', 'photo')
+            ->assertJsonPath('data.purpose', 'profile_picture')
+            ->assertJsonMissingPath('data.moderation_status');
+
+        $media = Media::query()->findOrFail($response->json('data.id'));
+        $this->assertTrue($media->isProfilePicture());
+        $this->assertSame(MediaPurpose::ProfilePicture, $media->purpose);
+
+        $this->actingAs($user)->postJson("/api/account/profile-picture/{$media->id}/complete")
+            ->assertOk()
+            ->assertJsonPath('data.upload_status', 'ready');
+
+        $user->refresh();
+        $this->assertSame($media->id, $user->profile_picture_media_id);
+        $this->assertTrue($media->fresh()->isPendingReview());
+    }
+
+    #[Test]
+    public function profile_picture_uploads_must_be_images(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/account/profile-picture', [
+            'filename' => 'avatar.mp4',
+            'content_type' => 'video/mp4',
+            'size' => 2048,
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('content_type');
+    }
+
+    #[Test]
+    public function profile_picture_uploads_do_not_appear_in_gallery_listing(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        Media::factory()->for($user)->create();
+        Media::factory()->for($user)->profilePicture()->create();
+
+        $this->actingAs($user)->getJson('/api/media')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.purpose', 'gallery');
     }
 
     #[Test]
