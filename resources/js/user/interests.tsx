@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -97,6 +97,9 @@ function UserInterestsPage() {
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   const [error, setError] = useState('');
   const [ratings, setRatings] = useState<Record<number, number>>({});
+  // Tracks which sliders the user actually moved, so a plain focus/blur (no
+  // change) never persists a rating and an explicit value — including 0 — does.
+  const dirtyRatings = useRef<Set<number>>(new Set());
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestForm, setRequestForm] = useState<InterestRequestFormState>({
     name: '',
@@ -138,10 +141,12 @@ function UserInterestsPage() {
   }, [interests]);
 
   const saveRating = async (id: number): Promise<void> => {
+    dirtyRatings.current.delete(id);
     const nextRating = ratings[id] ?? 0;
-    // Treat an unrated interest as 0 so merely focusing/blurring a slider that
-    // was not moved does not persist a spurious neutral rating.
-    const serverRating = interests.find((interest) => interest.id === id)?.rating ?? 0;
+    // Skip the POST only when the slider already matches the saved value. An
+    // unrated interest has no server value, so an explicit rating (including 0)
+    // still saves.
+    const serverRating = interests.find((interest) => interest.id === id)?.rating ?? null;
     if (serverRating === nextRating) {
       return;
     }
@@ -171,6 +176,7 @@ function UserInterestsPage() {
   };
 
   const clearRating = async (id: number): Promise<void> => {
+    dirtyRatings.current.delete(id);
     setSaving((current) => ({ ...current, [id]: true }));
     setError('');
     try {
@@ -318,8 +324,15 @@ function UserInterestsPage() {
                             max={10}
                             value={rowRating}
                             aria-label={`Rating for ${interest.name}`}
-                            onChange={(event) => setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }))}
-                            onBlur={() => void saveRating(interest.id)}
+                            onChange={(event) => {
+                              dirtyRatings.current.add(interest.id);
+                              setRatings((current) => ({ ...current, [interest.id]: Number(event.target.value) }));
+                            }}
+                            onBlur={() => {
+                              if (dirtyRatings.current.has(interest.id)) {
+                                void saveRating(interest.id);
+                              }
+                            }}
                             disabled={saving[interest.id]}
                             className="w-48"
                           />
@@ -329,6 +342,8 @@ function UserInterestsPage() {
                               type="button"
                               size="sm"
                               variant="outline"
+                              // Keep focus on the slider so its blur-save does not race this click.
+                              onMouseDown={(event) => event.preventDefault()}
                               onClick={() => void clearRating(interest.id)}
                               disabled={saving[interest.id]}
                             >
