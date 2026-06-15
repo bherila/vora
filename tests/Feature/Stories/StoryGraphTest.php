@@ -64,6 +64,20 @@ class StoryGraphTest extends TestCase
         $this->assertSame(1, $story->nodes()->where('is_start', true)->count());
     }
 
+    public function test_duplicate_node_keys_are_rejected(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->cyoa()->create();
+
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", [
+            'nodes' => [
+                ['key' => 'start', 'body' => 'A', 'is_start' => true],
+                ['key' => 'start', 'body' => 'B', 'is_start' => false],
+            ],
+            'choices' => [],
+        ])->assertStatus(422)->assertJsonValidationErrors('nodes.1.key');
+    }
+
     public function test_graph_save_rejected_on_long_form_story(): void
     {
         $owner = User::factory()->approved()->create();

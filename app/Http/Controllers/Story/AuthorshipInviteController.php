@@ -62,6 +62,14 @@ class AuthorshipInviteController extends Controller
             return response()->json(['success' => false, 'message' => 'Invitation unavailable.'], 404);
         }
 
+        // If the owner deactivated, was disabled, or deleted their account after
+        // sending the invite, accepting would grant edit access to content owned
+        // by an inactive account — mirror the follow-request inactive guard.
+        $owner = $storyAuthor->story?->user;
+        if (! $owner instanceof User || $owner->isDeactivated() || ! $owner->canLogin()) {
+            return response()->json(['success' => false, 'message' => 'Invitation unavailable.'], 404);
+        }
+
         $storyAuthor->status = StoryAuthor::STATUS_ACCEPTED;
         $storyAuthor->responded_at = Carbon::now();
         $storyAuthor->save();

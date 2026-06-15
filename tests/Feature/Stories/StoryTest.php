@@ -155,6 +155,33 @@ class StoryTest extends TestCase
         $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
     }
 
+    public function test_reader_payload_hides_deactivated_co_authors_and_their_tags(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create(['display_name' => 'Collab']);
+        $reader = User::factory()->approved()->create();
+        $coCharacter = Character::query()->create(['user_id' => $coAuthor->id, 'display_name' => 'Sidekick']);
+
+        $story = Story::factory()->for($owner)->readable()->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $coCharacter->id]);
+        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $coAuthor->id]);
+
+        // While active, the co-author and their character appear.
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertOk()
+            ->assertJsonFragment(['name' => 'Sidekick']);
+
+        $coAuthor->forceFill(['deactivated_at' => now()])->save();
+
+        $response = $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
+        $authorIds = collect($response->json('data.authors'))->pluck('user_id');
+        $this->assertNotContains($coAuthor->id, $authorIds->all());
+        $involveNames = collect($response->json('data.involves'))->pluck('name');
+        $this->assertNotContains('Sidekick', $involveNames->all());
+        $this->assertNotContains('Collab', $involveNames->all());
+    }
+
     public function test_library_lists_owned_and_co_authored_stories(): void
     {
         $owner = User::factory()->approved()->create();

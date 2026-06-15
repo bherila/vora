@@ -68,6 +68,13 @@ class StoryPresenter
      */
     public static function readerView(Story $story): array
     {
+        // Inactive (deactivated/disabled/deleted) co-authors and their tags must
+        // not leak to other readers, matching the account-lifecycle guarantee.
+        // The owner's own active status is enforced by StoryPolicy::view.
+        $activeAuthors = $story->authors
+            ->filter(fn (StoryAuthor $a): bool => $a->isAccepted() && self::isActiveUser($a->user));
+        $activeUserIds = $activeAuthors->pluck('user_id')->map(fn ($id): int => (int) $id)->all();
+
         return [
             'id' => $story->id,
             'ulid' => $story->ulid,
@@ -76,9 +83,12 @@ class StoryPresenter
             'status' => $story->status->value,
             'body' => $story->body,
             'owner' => self::userRef($story->user),
-            'authors' => self::authors($story, acceptedOnly: true),
+            'authors' => $activeAuthors
+                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
+                ->values()
+                ->all(),
             'interests' => self::interests($story),
-            'involves' => self::involvements($story),
+            'involves' => self::involvements($story, $activeUserIds),
             'nodes' => $story->isCyoa() ? self::nodes($story) : [],
             'choices' => $story->isCyoa() ? self::choices($story) : [],
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
@@ -112,46 +122,69 @@ class StoryPresenter
     }
 
     /**
+     * @param  list<int>|null  $allowedUserIds  when set, only involvements tied to
+     *                                          these author user ids (directly or
+     *                                          via a character they own) are kept
      * @return list<array<string, mixed>>
      */
-    private static function involvements(Story $story): array
+    private static function involvements(Story $story, ?array $allowedUserIds = null): array
     {
         return $story->involvements
-            ->map(function (StoryInvolvement $involvement): ?array {
+            ->map(function (StoryInvolvement $involvement) use ($allowedUserIds): ?array {
                 $involvable = $involvement->involvable;
                 if ($involvable === null) {
                     return null;
                 }
 
-                $type = $involvable instanceof Character ? 'character' : 'user';
-                $name = $involvable instanceof Character
-                    ? $involvable->display_name
-                    : ($involvable->display_name ?: $involvable->name);
+                if ($involvable instanceof Character) {
+                    if ($allowedUserIds !== null && ! in_array((int) $involvable->user_id, $allowedUserIds, true)) {
+                        return null;
+                    }
 
-                return ['type' => $type, 'id' => $involvable->id, 'name' => $name];
+                    return ['type' => 'character', 'id' => $involvable->id, 'name' => $involvable->display_name];
+                }
+
+                if ($allowedUserIds !== null && ! in_array((int) $involvable->id, $allowedUserIds, true)) {
+                    return null;
+                }
+
+                return ['type' => 'user', 'id' => $involvable->id, 'name' => $involvable->display_name ?: $involvable->name];
             })
             ->filter()
             ->values()
             ->all();
     }
 
+    private static function isActiveUser(?User $user): bool
+    {
+        // A soft-deleted user resolves to null via the default relation scope.
+        return $user !== null && ! $user->isDeactivated() && $user->canLogin();
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
-    private static function authors(Story $story, bool $acceptedOnly = false): array
+    private static function authors(Story $story): array
     {
         return $story->authors
-            ->filter(fn (StoryAuthor $author): bool => ! $acceptedOnly || $author->isAccepted())
-            ->map(fn (StoryAuthor $author): array => [
-                'id' => $author->id,
-                'user_id' => $author->user_id,
-                'display_name' => $author->user?->display_name ?: $author->user?->name,
-                'role' => $author->role,
-                'status' => $author->status,
-                'is_owner' => $author->isOwner(),
-            ])
+            ->map(fn (StoryAuthor $author): array => self::authorRef($author))
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function authorRef(StoryAuthor $author): array
+    {
+        return [
+            'id' => $author->id,
+            'user_id' => $author->user_id,
+            'display_name' => $author->user?->display_name ?: $author->user?->name,
+            'role' => $author->role,
+            'status' => $author->status,
+            'is_owner' => $author->isOwner(),
+        ];
     }
 
     /**

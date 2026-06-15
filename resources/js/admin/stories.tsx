@@ -62,7 +62,13 @@ function AdminStoriesPage() {
   useEffect(() => load(filter, 1), [filter]);
 
   const moderate = async (story: AdminStory, action: 'approve' | 'reject'): Promise<void> => {
-    const notes = action === 'reject' ? window.prompt('Optional note to record with this rejection:') ?? undefined : undefined;
+    let notes: string | undefined;
+    if (action === 'reject') {
+      const input = window.prompt('Optional note to record with this rejection:');
+      // Cancelling the prompt aborts the rejection entirely.
+      if (input === null) return;
+      notes = input;
+    }
     setBusyId(story.id);
     setError('');
     try {

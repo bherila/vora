@@ -20,7 +20,9 @@ class SaveStoryGraphRequest extends FormRequest
     {
         return [
             'nodes' => ['present', 'array'],
-            'nodes.*.key' => ['nullable', 'string', 'max:64'],
+            // Distinct keys so two passages can't reconcile into one row (which
+            // could, e.g., clobber the start passage).
+            'nodes.*.key' => ['nullable', 'string', 'max:64', 'distinct'],
             'nodes.*.title' => ['nullable', 'string', 'max:255'],
             'nodes.*.body' => ['nullable', 'string'],
             'nodes.*.is_start' => ['nullable', 'boolean'],

@@ -101,6 +101,32 @@ class CoAuthorTest extends TestCase
         $this->actingAs($coAuthor)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $third->id])->assertForbidden();
     }
 
+    public function test_owner_can_remove_a_co_author_who_deleted_their_account(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+
+        $coAuthor->delete(); // soft delete
+
+        $this->actingAs($owner)->deleteJson("/api/stories/{$story->id}/authors/{$coAuthor->id}")->assertOk();
+        $this->assertDatabaseMissing('story_authors', ['story_id' => $story->id, 'user_id' => $coAuthor->id]);
+    }
+
+    public function test_invite_cannot_be_accepted_after_owner_deactivates(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $invitee = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $invite = $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
+
+        $owner->forceFill(['deactivated_at' => now()])->save();
+
+        $this->actingAs($invitee)->postJson("/api/authorship-invites/{$invite->id}/accept")->assertNotFound();
+        $this->assertSame('pending', $invite->refresh()->status);
+    }
+
     public function test_non_author_cannot_probe_authorship_via_remove_endpoint(): void
     {
         $owner = User::factory()->approved()->create();
