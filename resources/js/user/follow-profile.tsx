@@ -9,7 +9,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 
 interface Interest { id: number; name: string; }
 interface FollowRequestState { status: string; can_retry: boolean; }
-interface ProfileData { id: number; display_name: string; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
+interface ProfileData { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
 function getInitialProfile(): ProfileData | null {
@@ -66,13 +66,20 @@ function FollowProfilePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <section>
-            <h2 className="font-semibold">Mutual interests</h2>
-            <p className="text-sm text-muted-foreground">Only interests you both have are shown by default.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {profile.mutual_interests.length === 0 ? <span className="text-sm text-muted-foreground">No mutual interests yet.</span> : profile.mutual_interests.map((interest) => <Badge key={interest.id}>{interest.name}</Badge>)}
-            </div>
-          </section>
+          {profile.restricted ? (
+            <section>
+              <h2 className="font-semibold">This profile is private</h2>
+              <p className="text-sm text-muted-foreground">Send a follow request to see more.</p>
+            </section>
+          ) : (
+            <section>
+              <h2 className="font-semibold">Mutual interests</h2>
+              <p className="text-sm text-muted-foreground">Only interests you both have are shown by default.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {profile.mutual_interests.length === 0 ? <span className="text-sm text-muted-foreground">No mutual interests yet.</span> : profile.mutual_interests.map((interest) => <Badge key={interest.id}>{interest.name}</Badge>)}
+              </div>
+            </section>
+          )}
           {hasActiveRequest ? (
             <p className="text-sm">Follow request status: <strong>{profile.follow_request?.status}</strong></p>
           ) : (

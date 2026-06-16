@@ -87,6 +87,11 @@ class UserAccountService
                 $query->where('privacyable_type', (new Post)->getMorphClass())
                     ->whereIn('privacyable_id', $user->posts()->select('id'));
             })
+            // The user's own profile allowlist (they are the privacyable).
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', $user->getMorphClass())
+                    ->where('privacyable_id', $user->id);
+            })
             ->delete();
     }
 }
