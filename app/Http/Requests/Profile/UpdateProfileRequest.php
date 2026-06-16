@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Profile;
 
+use App\Enums\Audience;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,6 +31,7 @@ class UpdateProfileRequest extends FormRequest
             'preferred_user_types.*' => ['required', 'string', 'distinct', Rule::in(['human', 'furry', 'other'])],
             'preferred_genders' => ['nullable', 'array'],
             'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
+            'profile_audience' => ['sometimes', Rule::in(Audience::values())],
             'email_follow_request_received' => ['sometimes', 'boolean'],
             'email_follow_request_accepted' => ['sometimes', 'boolean'],
             'email' => [

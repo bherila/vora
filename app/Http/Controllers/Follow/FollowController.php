@@ -9,6 +9,7 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
+use App\Services\Privacy\ProfileGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -16,6 +17,8 @@ use Illuminate\View\View;
 
 class FollowController extends Controller
 {
+    public function __construct(private readonly ProfileGate $gate) {}
+
     public function directory(): View
     {
         return view('user.follow-directory');
@@ -49,12 +52,22 @@ class FollowController extends Controller
         $current = $request->user();
         $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active()->orderBy('display_name')->get();
 
-        return response()->json(['success' => true, 'data' => $users->map(fn (User $user): array => [
-            'id' => $user->id,
-            'display_name' => $user->display_name ?: $user->name,
-            'user_type' => $user->user_type,
-            'gender' => $user->gender,
-        ])]);
+        // Restricted profiles still appear in the directory so they remain
+        // findable for a follow request, but their details are withheld from
+        // viewers their audience tier doesn't admit.
+        $canView = $current instanceof User ? $this->gate->canViewMany($current, $users) : [];
+
+        return response()->json(['success' => true, 'data' => $users->map(function (User $user) use ($canView): array {
+            $visible = $canView[$user->id] ?? false;
+
+            return [
+                'id' => $user->id,
+                'display_name' => $user->display_name ?: $user->name,
+                'restricted' => ! $visible,
+                'user_type' => $visible ? $user->user_type : null,
+                'gender' => $visible ? $user->gender : null,
+            ];
+        })]);
     }
 
     public function profile(Request $request, User $user): JsonResponse
@@ -75,6 +88,26 @@ class FollowController extends Controller
      */
     private function profilePayload(User $current, User $user): array
     {
+        $followRequest = FollowRequest::query()->where('requester_id', $current->id)->where('recipient_id', $user->id)->first();
+
+        // Always present, even on a restricted profile, so the viewer can still
+        // send / track a follow request.
+        $base = [
+            'id' => $user->id,
+            'display_name' => $user->display_name ?: $user->name,
+            'follow_request' => $this->followRequestPayload($followRequest),
+        ];
+
+        if (! $this->gate->canView($current, $user)) {
+            return $base + [
+                'restricted' => true,
+                'user_type' => null,
+                'gender' => null,
+                'mutual_interests' => [],
+                'can_follow_back' => false,
+            ];
+        }
+
         $currentInterestIds = InterestRating::query()->where('user_id', $current->id)->whereNull('character_id')->where('level', '>', 0)->pluck('interest_id');
         $mutualInterests = InterestRating::query()
             ->with('interest:id,name')
@@ -86,16 +119,13 @@ class FollowController extends Controller
             ->map(fn (InterestRating $rating): array => ['id' => $rating->interest_id, 'name' => $rating->interest?->name])
             ->all();
 
-        $followRequest = FollowRequest::query()->where('requester_id', $current->id)->where('recipient_id', $user->id)->first();
         $incoming = FollowRequest::query()->where('requester_id', $user->id)->where('recipient_id', $current->id)->where('status', 'accepted')->exists();
 
-        return [
-            'id' => $user->id,
-            'display_name' => $user->display_name ?: $user->name,
+        return $base + [
+            'restricted' => false,
             'user_type' => $user->user_type,
             'gender' => $user->gender,
             'mutual_interests' => $mutualInterests,
-            'follow_request' => $this->followRequestPayload($followRequest),
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
         ];
     }
