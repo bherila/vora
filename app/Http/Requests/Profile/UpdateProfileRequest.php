@@ -34,6 +34,10 @@ class UpdateProfileRequest extends FormRequest
             'profile_audience' => ['sometimes', Rule::in(Audience::values())],
             'email_follow_request_received' => ['sometimes', 'boolean'],
             'email_follow_request_accepted' => ['sometimes', 'boolean'],
+            'notify_new_post' => ['sometimes', 'boolean'],
+            'notify_post_reaction' => ['sometimes', 'boolean'],
+            'notify_post_comment' => ['sometimes', 'boolean'],
+            'notify_follow_accepted' => ['sometimes', 'boolean'],
             'email' => [
                 'required',
                 'string',

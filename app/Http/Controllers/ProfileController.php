@@ -258,6 +258,11 @@ class ProfileController extends Controller
         if (array_key_exists('email_follow_request_accepted', $data)) {
             $user->email_follow_request_accepted = (bool) $data['email_follow_request_accepted'];
         }
+        foreach (['notify_new_post', 'notify_post_reaction', 'notify_post_comment', 'notify_follow_accepted'] as $pref) {
+            if (array_key_exists($pref, $data)) {
+                $user->{$pref} = (bool) $data[$pref];
+            }
+        }
         if ($emailChanged) {
             $user->email_verified_at = null;
         }
@@ -283,6 +288,10 @@ class ProfileController extends Controller
                 'preferred_genders' => $user->preferred_genders,
                 'email_follow_request_received' => (bool) $user->email_follow_request_received,
                 'email_follow_request_accepted' => (bool) $user->email_follow_request_accepted,
+                'notify_new_post' => (bool) $user->notify_new_post,
+                'notify_post_reaction' => (bool) $user->notify_post_reaction,
+                'notify_post_comment' => (bool) $user->notify_post_comment,
+                'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
             ],
         ]);
     }
