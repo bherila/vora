@@ -14,6 +14,7 @@ use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\PostReactionController;
 use App\Http\Controllers\ProfileController;
@@ -164,6 +165,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{post}', [PostController::class, 'destroy']);
         Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
         Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
+        Route::get('/{post}/comments', [PostCommentController::class, 'index']);
+        Route::post('/{post}/comments', [PostCommentController::class, 'store']);
+        Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });
 
     Route::get('/api/feed', [FeedController::class, 'index']);
