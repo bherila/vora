@@ -31,6 +31,7 @@ class Post extends Model
      */
     protected $fillable = [
         'user_id',
+        'character_id',
         'ulid',
         'body',
         'audience',
@@ -56,6 +57,17 @@ class Post extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The persona this post is published as, if any. Ownership stays with the
+     * user; the character is only the surfaced identity.
+     *
+     * @return BelongsTo<Character, $this>
+     */
+    public function character(): BelongsTo
+    {
+        return $this->belongsTo(Character::class);
     }
 
     /**
