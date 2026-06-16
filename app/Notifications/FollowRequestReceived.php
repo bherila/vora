@@ -3,11 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\FollowRequest;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
-class FollowRequestReceived extends Notification
+class FollowRequestReceived extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(private readonly FollowRequest $followRequest) {}
@@ -15,7 +19,7 @@ class FollowRequestReceived extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->deliveryChannels($notifiable, 'notify_follow_request');
     }
 
     /**
@@ -32,5 +36,13 @@ class FollowRequestReceived extends Notification
             'follow_request_id' => $this->followRequest->id,
             'url' => '/users/follow-requests',
         ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('New follow request', $actor.' wants to follow you.', $data);
     }
 }

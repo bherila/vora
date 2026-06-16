@@ -3,11 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\StoryAuthor;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
-class CoAuthorInviteReceived extends Notification
+class CoAuthorInviteReceived extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(private readonly StoryAuthor $storyAuthor) {}
@@ -15,7 +19,7 @@ class CoAuthorInviteReceived extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->deliveryChannels($notifiable);
     }
 
     /**
@@ -35,5 +39,13 @@ class CoAuthorInviteReceived extends Notification
             'story_title' => $story?->title,
             'url' => '/users/follow-requests',
         ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('Co-author invitation', $actor.' invited you to co-author a story.', $data);
     }
 }

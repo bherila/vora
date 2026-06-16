@@ -37,6 +37,7 @@ class UserAccountService
 
         DB::transaction(function () use ($user): void {
             $user->interestRatings()->delete();
+            $user->pushSubscriptions()->delete();
 
             // audience_members has no FK to its polymorphic target, and
             // force-deleting the user cascades stories/media at the DB level
