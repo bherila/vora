@@ -149,8 +149,8 @@ function AdminMediaPage() {
                     <dd>{item.type} · {formatBytes(item.size_bytes)}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt>Visibility</dt>
-                    <dd>{item.visibility}</dd>
+                    <dt>Audience</dt>
+                    <dd>{item.audience}{item.discoverable ? '' : ' · link-only'}</dd>
                   </div>
                 </dl>
                 {item.interests.length > 0 && (

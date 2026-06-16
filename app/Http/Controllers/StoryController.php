@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Enums\StoryType;
-use App\Enums\Visibility;
 use App\Http\Requests\Story\SaveStoryGraphRequest;
 use App\Http\Requests\Story\StoreStoryRequest;
 use App\Http\Requests\Story\UpdateStoryRequest;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
+use App\Services\Privacy\PrivacyAuditor;
 use App\Services\Story\StoryService;
 use App\Support\StoryPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,7 +23,10 @@ use Illuminate\View\View;
 
 class StoryController extends Controller
 {
-    public function __construct(private readonly StoryService $stories) {}
+    public function __construct(
+        private readonly StoryService $stories,
+        private readonly PrivacyAuditor $auditor,
+    ) {}
 
     /**
      * The signed-in user's stories workspace (library + editor).
@@ -84,13 +88,19 @@ class StoryController extends Controller
             'type' => $data['type'],
             'status' => $status->value,
             'body' => $data['body'] ?? null,
-            'visibility' => $data['visibility'] ?? Visibility::Users->value,
+            'audience' => $request->audience()->value,
+            'discoverable' => $request->discoverable(),
             'published_at' => $status === StoryStatus::Published ? now() : null,
         ]);
 
         $this->stories->ensureOwnerAuthor($story, $user);
         $this->stories->syncInterests($story, $request->interestIds());
         $this->stories->syncInvolvements($story, $this->involvementsInput($request->validated()));
+
+        $story->syncAudienceMembers(
+            $request->audience() === Audience::SpecificPeople ? $request->audienceUserIds() : []
+        );
+        $this->auditor->recordCreation($story, $user, $story->privacySnapshot(), $request);
 
         return response()->json(['success' => true, 'data' => $this->editorPayload($story, $user)], 201);
     }
@@ -112,6 +122,7 @@ class StoryController extends Controller
         Gate::authorize('update', $story);
 
         $data = $request->validated();
+        $privacyBefore = $story->privacySnapshot();
 
         if (array_key_exists('title', $data)) {
             $story->title = $data['title'];
@@ -119,8 +130,11 @@ class StoryController extends Controller
         if (array_key_exists('body', $data)) {
             $story->body = $data['body'];
         }
-        if (array_key_exists('visibility', $data)) {
-            $story->visibility = Visibility::from($data['visibility']);
+        if (array_key_exists('audience', $data)) {
+            $story->audience = $request->audience();
+        }
+        if (array_key_exists('discoverable', $data)) {
+            $story->discoverable = $request->discoverable();
         }
         if (array_key_exists('status', $data)) {
             $status = StoryStatus::from($data['status']);
@@ -144,6 +158,23 @@ class StoryController extends Controller
         }
         if (array_key_exists('involvements', $data)) {
             $this->stories->syncInvolvements($story, $this->involvementsInput($data));
+        }
+
+        if (array_key_exists('audience', $data)
+            || array_key_exists('discoverable', $data)
+            || array_key_exists('audience_user_ids', $data)) {
+            if ($story->audience === Audience::SpecificPeople) {
+                // Only rewrite the allowlist when the request actually carries it.
+                // A title/body save (or a discoverable toggle) that omits
+                // audience_user_ids must not silently revoke every grant.
+                if (array_key_exists('audience_user_ids', $data)) {
+                    $story->syncAudienceMembers($request->audienceUserIds());
+                }
+            } else {
+                // Leaving the SpecificPeople tier clears any stale grants.
+                $story->syncAudienceMembers([]);
+            }
+            $this->auditor->record($story, $request->user(), $privacyBefore, $story->privacySnapshot(), $request);
         }
 
         return response()->json(['success' => true, 'data' => $this->editorPayload($story, request()->user())]);

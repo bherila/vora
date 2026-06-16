@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
-use App\Enums\Visibility;
 use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
@@ -40,7 +40,7 @@ class ProfileController extends Controller
             $request->validated('filename'),
             $request->validated('content_type'),
             'Profile picture',
-            Visibility::Users,
+            Audience::Everyone,
             [],
             false,
             null,

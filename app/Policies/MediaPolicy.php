@@ -35,7 +35,7 @@ class MediaPolicy
             return false;
         }
 
-        return $media->isApprovedContent() && $media->isVisibleTo($user);
+        return $media->isApprovedContent() && $media->isViewableBy($user);
     }
 
     public function complete(User $user, Media $media): bool

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Account;
 
-use App\Enums\Visibility;
+use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
@@ -130,7 +130,7 @@ class AccountLifecycleTest extends TestCase
         $viewer = User::factory()->approved()->create();
         Media::factory()->for($owner)->approved()->create([
             'upload_status' => 'ready',
-            'visibility' => Visibility::Users,
+            'audience' => Audience::Everyone,
         ]);
 
         $this->actingAs($viewer)->getJson('/api/explore')->assertOk()->assertJsonCount(1, 'data');
@@ -206,7 +206,7 @@ class AccountLifecycleTest extends TestCase
         $viewer = User::factory()->approved()->create();
         $media = Media::factory()->for($owner)->approved()->create([
             'upload_status' => 'ready',
-            'visibility' => Visibility::Users,
+            'audience' => Audience::Everyone,
         ]);
 
         // Viewable via its share link before deactivation.

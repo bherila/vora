@@ -37,7 +37,7 @@ class StoryPolicy
 
         return $story->status === StoryStatus::Published
             && $story->isApprovedContent()
-            && $story->isVisibleTo($user);
+            && $story->isViewableBy($user);
     }
 
     /**
