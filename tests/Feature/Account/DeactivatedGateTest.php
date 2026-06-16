@@ -23,6 +23,11 @@ class DeactivatedGateTest extends TestCase
 
     public function test_deactivated_user_is_blocked_from_all_write_endpoints(): void
     {
+        // Consume id 1 so neither test account is the primary admin (id 1 is
+        // always treated as admin, which could mask a gate regression that only
+        // affects ordinary users).
+        User::factory()->create();
+
         $user = User::factory()->approved()->create();
         $other = User::factory()->approved()->create();
 
@@ -55,12 +60,15 @@ class DeactivatedGateTest extends TestCase
             ['POST', '/api/account/profile-picture'],
             ['POST', "/api/account/profile-picture/{$media->id}/complete"],
             ['DELETE', '/api/account/profile-picture'],
+            ['POST', '/api/account/deactivate'],
+            ['POST', '/api/account/delete'],
 
             // Characters
             ['POST', '/api/characters'],
             ['PATCH', "/api/characters/{$character->id}"],
             ['DELETE', "/api/characters/{$character->id}"],
             ['POST', "/api/characters/{$character->id}/profile-picture"],
+            ['POST', "/api/characters/{$character->id}/profile-picture/{$media->id}/complete"],
             ['DELETE', "/api/characters/{$character->id}/profile-picture"],
 
             // Media
