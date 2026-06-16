@@ -5,11 +5,13 @@ namespace App\Services\Post;
 use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
+use App\Notifications\FollowedUserPosted;
 use App\Services\Privacy\PrivacyAuditor;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -80,7 +82,34 @@ class PostService
         $post->syncAudienceMembers($audience === Audience::SpecificPeople ? $audienceUserIds : []);
         $this->auditor->recordCreation($post, $author, $post->privacySnapshot(), $request);
 
+        $this->notifyFollowers($author, $post);
+
         return $post;
+    }
+
+    /**
+     * Notify the author's active followers who are allowed to see the new post.
+     * Chunked so a popular account's fan-out stays bounded in memory rather than
+     * loading the whole follower set on the request path. (At larger scale this
+     * fan-out should move to a queued job — tracked as a follow-up.)
+     */
+    private function notifyFollowers(User $author, Post $post): void
+    {
+        $followerIds = FollowRequest::query()
+            ->where('recipient_id', $author->id)
+            ->where('status', FollowRequest::STATUS_ACCEPTED)
+            ->select('requester_id');
+
+        User::query()
+            ->whereIn('id', $followerIds)
+            ->active()
+            ->chunkById(200, function ($followers) use ($post): void {
+                foreach ($followers as $follower) {
+                    if ($post->isViewableBy($follower)) {
+                        $follower->notify(new FollowedUserPosted($post));
+                    }
+                }
+            });
     }
 
     /**

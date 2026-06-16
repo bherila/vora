@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Post\ReactionRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Notifications\PostReactedTo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
 
@@ -22,10 +23,16 @@ class PostReactionController extends Controller
         $user = $request->user();
 
         // Idempotent: reacting again is a no-op rather than a duplicate row.
-        $post->reactions()->firstOrCreate([
+        $reaction = $post->reactions()->firstOrCreate([
             'user_id' => $user->id,
             'type' => $request->reactionType(),
         ]);
+
+        // Notify the author once, only on a genuinely new reaction and never for
+        // their own.
+        if ($reaction->wasRecentlyCreated && $post->user_id !== $user->id) {
+            $post->user?->notify(new PostReactedTo($post, $user));
+        }
 
         return $this->summary($post, $user);
     }

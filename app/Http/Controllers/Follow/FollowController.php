@@ -8,6 +8,7 @@ use App\Models\FollowRequestAuditLog;
 use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
+use App\Notifications\FollowRequestAcceptedInApp;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Privacy\ProfileGate;
 use Illuminate\Http\JsonResponse;
@@ -228,8 +229,13 @@ class FollowController extends Controller
         $followRequest->save();
         $this->audit($followRequest, $current, $status);
 
-        if ($status === 'accepted' && $followRequest->requester?->email_follow_request_accepted) {
-            $followRequest->requester->notify(new FollowRequestAccepted($followRequest->load('recipient')));
+        if ($status === 'accepted') {
+            // Always notify in-app; e-mail stays gated by the requester's pref.
+            $followRequest->requester?->notify(new FollowRequestAcceptedInApp($followRequest));
+
+            if ($followRequest->requester?->email_follow_request_accepted) {
+                $followRequest->requester->notify(new FollowRequestAccepted($followRequest->load('recipient')));
+            }
         }
 
         return response()->json(['success' => true, 'data' => ['status' => $status]]);
