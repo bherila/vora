@@ -27,6 +27,12 @@ class StoryPresenter
      */
     public static function summary(Story $story): array
     {
+        // Author/admin-facing payload: it must keep *all* authorship rows
+        // (including pending invites, which the editor's CoAuthorPanel renders as
+        // "invited" and excludes from the invite dropdown) and all involvement
+        // tags. The public reader surface — the only cross-user one — does its own
+        // active-account filtering in readerView(); a future discovery feed (#27)
+        // must do the same rather than relying on this shape.
         return [
             'id' => $story->id,
             'ulid' => $story->ulid,
@@ -157,8 +163,9 @@ class StoryPresenter
 
     private static function isActiveUser(?User $user): bool
     {
-        // A soft-deleted user resolves to null via the default relation scope.
-        return $user !== null && ! $user->isDeactivated() && $user->canLogin();
+        // A soft-deleted user resolves to null via the default relation scope;
+        // User::isActive() covers the deactivated + disabled states.
+        return $user !== null && $user->isActive();
     }
 
     /**

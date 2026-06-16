@@ -62,7 +62,7 @@ class StoryAuthor extends Model
             ->where('status', self::STATUS_PENDING)
             ->whereHas('story', function (Builder $story): void {
                 $story->whereHas('user', function (Builder $owner): void {
-                    $owner->whereNull('deactivated_at')->where('is_disabled', false);
+                    $owner->active();
                 });
             });
     }

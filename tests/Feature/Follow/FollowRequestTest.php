@@ -124,4 +124,91 @@ class FollowRequestTest extends TestCase
             ->assertJsonPath('data.follow_request.status', 'declined')
             ->assertJsonPath('data.follow_request.can_retry', true);
     }
+
+    public function test_inbox_and_count_exclude_requests_from_inactive_requesters(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $active = User::factory()->approved()->create();
+        $disabled = User::factory()->approved()->create();
+        $deactivated = User::factory()->approved()->create();
+
+        foreach ([$active, $disabled, $deactivated] as $requester) {
+            FollowRequest::query()->create([
+                'requester_id' => $requester->id,
+                'recipient_id' => $recipient->id,
+                'status' => 'pending',
+            ]);
+        }
+        $disabled->forceFill(['is_disabled' => true])->save();
+        $deactivated->forceFill(['deactivated_at' => now()])->save();
+
+        // Only the active requester's pending request survives in both the list
+        // and the badge count — the two must agree.
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.requester.id', $active->id);
+
+        $this->actingAs($recipient)->getJson('/api/users/follow-requests/count')
+            ->assertOk()
+            ->assertJsonPath('data.count', 1);
+    }
+
+    public function test_profile_page_404s_for_non_discoverable_or_self(): void
+    {
+        $current = User::factory()->approved()->create();
+        $disabled = User::factory()->approved()->disabled()->create();
+
+        $this->actingAs($current)->get("/users/{$disabled->id}")->assertNotFound();
+        // Viewing your own profile page is not a route the UI offers.
+        $this->actingAs($current)->get("/users/{$current->id}")->assertNotFound();
+    }
+
+    public function test_profile_page_hydrates_payload_without_an_ajax_round_trip(): void
+    {
+        $current = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create(['display_name' => 'Aria']);
+
+        // The page ships the full payload inline (no follow-up GET on render).
+        $this->actingAs($current)->get("/users/{$other->id}")
+            ->assertOk()
+            ->assertSee('follow-profile-data')
+            ->assertSee('"display_name":"Aria"', false)
+            ->assertSee("\"id\":{$other->id}", false);
+    }
+
+    public function test_navbar_follow_request_count_excludes_inactive_requesters(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $requester = User::factory()->approved()->create();
+        FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($recipient)->get('/dashboard')->assertSee('requestCount":1', false);
+
+        $requester->forceFill(['is_disabled' => true])->save();
+        $this->actingAs($recipient)->get('/dashboard')->assertSee('requestCount":0', false);
+    }
+
+    public function test_request_from_a_disabled_requester_cannot_be_accepted(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $requester = User::factory()->approved()->create();
+        $followRequest = FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+
+        $requester->forceFill(['is_disabled' => true])->save();
+
+        $this->actingAs($recipient)->postJson("/api/users/follow-requests/{$followRequest->id}/accept")
+            ->assertNotFound()
+            ->assertJsonPath('success', false);
+
+        $this->assertDatabaseHas('follow_requests', ['id' => $followRequest->id, 'status' => 'pending']);
+    }
 }

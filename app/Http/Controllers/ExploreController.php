@@ -47,9 +47,10 @@ class ExploreController extends Controller
             ->discoverable()
             ->moderationStatus(ModerationStatus::Approved)
             ->where('upload_status', 'ready')
-            // Hide media owned by deactivated or deleted accounts. whereHas
-            // respects the User soft-delete scope, so trashed owners drop out too.
-            ->whereHas('user', fn ($q) => $q->whereNull('deactivated_at'))
+            // Hide media owned by deactivated, disabled, or deleted accounts.
+            // whereHas respects the User soft-delete scope, so trashed owners
+            // drop out too; active() covers deactivated + disabled.
+            ->whereHas('user', fn ($q) => $q->active())
             ->with('interests')
             ->latest();
 
