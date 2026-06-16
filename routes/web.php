@@ -13,6 +13,7 @@ use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
@@ -152,6 +153,13 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);
+    });
+
+    Route::prefix('api/posts')->group(function () {
+        Route::get('/', [PostController::class, 'index']);
+        Route::post('/', [PostController::class, 'store']);
+        Route::get('/by-ulid/{ulid}', [PostController::class, 'showByUlid']);
+        Route::delete('/{post}', [PostController::class, 'destroy']);
     });
 });
 

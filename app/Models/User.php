@@ -185,6 +185,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * @return HasMany<Post, $this>
+     */
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
      * Optional fictional personas owned by this account. The user account itself
      * remains the default/null character for follows and profile changes.
      *
