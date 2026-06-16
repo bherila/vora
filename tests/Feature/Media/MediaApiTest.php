@@ -227,4 +227,28 @@ class MediaApiTest extends TestCase
 
         $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$pending->ulid}")->assertForbidden();
     }
+
+    public function test_other_user_video_by_ulid_does_not_expose_original_signed_url(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $video = Media::factory()->for($owner)->video()->unlisted()->approved()->create();
+
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$video->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.url', null)
+            ->assertJsonPath('data.video.status', 'processing');
+    }
+
+    public function test_owner_video_endpoint_still_includes_original_signed_url(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $video = Media::factory()->for($owner)->video()->create();
+
+        $this->actingAs($owner)->getJson("/api/media/{$video->id}")
+            ->assertOk()
+            ->assertJsonPath('data.url', 'https://r2.example/view');
+    }
 }
