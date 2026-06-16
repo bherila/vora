@@ -110,6 +110,21 @@ class ExploreApiTest extends TestCase
             ->assertJsonPath('data.0.type', 'video');
     }
 
+    public function test_explore_video_listing_does_not_expose_original_signed_url(): void
+    {
+        $this->fakeStorage();
+        $viewer = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+
+        $video = Media::factory()->for($other)->approved()->video()->create();
+
+        $this->actingAs($viewer)->getJson('/api/explore?type=video')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $video->id)
+            ->assertJsonPath('data.0.url', null);
+    }
+
     public function test_explore_filters_by_interest(): void
     {
         $this->fakeStorage();

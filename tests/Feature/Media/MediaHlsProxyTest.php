@@ -33,11 +33,20 @@ class MediaHlsProxyTest extends TestCase
         $media = Media::factory()->for($owner)->video()->create(['disk' => 's3']);
         $this->seedHls($media);
 
-        $response = $this->actingAs($owner)->get("/api/media/{$media->id}/hls/master.m3u8");
+        $response = $this->actingAs($owner)
+            ->withHeader('User-Agent', 'Vora test player')
+            ->get("/api/media/{$media->id}/hls/master.m3u8");
 
         $response->assertOk();
         $this->assertSame('application/vnd.apple.mpegurl', $response->headers->get('Content-Type'));
         $response->assertSee("/api/media/{$media->id}/hls/720p/index.m3u8", false);
+        $this->assertDatabaseHas('media_playback_audit_logs', [
+            'media_id' => $media->id,
+            'user_id' => $owner->id,
+            'action' => 'hls_manifest',
+            'path' => 'master.m3u8',
+            'user_agent' => 'Vora test player',
+        ]);
     }
 
     public function test_segment_is_redirected_to_presigned_url(): void
@@ -47,8 +56,17 @@ class MediaHlsProxyTest extends TestCase
         $this->seedHls($media);
 
         $this->actingAs($owner)
+            ->withHeader('User-Agent', 'Vora test player')
             ->get("/api/media/{$media->id}/hls/720p/seg_0.m4s")
             ->assertRedirect('https://r2.example/seg_0.m4s');
+
+        $this->assertDatabaseHas('media_playback_audit_logs', [
+            'media_id' => $media->id,
+            'user_id' => $owner->id,
+            'action' => 'hls_segment_redirect',
+            'path' => '720p/seg_0.m4s',
+            'user_agent' => 'Vora test player',
+        ]);
     }
 
     public function test_unsafe_path_is_rejected(): void
