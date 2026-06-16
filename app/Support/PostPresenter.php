@@ -38,6 +38,7 @@ class PostPresenter
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
             'viewer_reacted' => self::viewerReacted($post, $viewer),
+            'comment_count' => (int) ($post->comments_count ?? $post->comments()->count()),
             'created_at' => $post->created_at?->toIso8601String(),
         ];
     }
