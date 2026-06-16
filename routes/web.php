@@ -10,6 +10,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\ExploreController;
+use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
@@ -161,6 +162,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/by-ulid/{ulid}', [PostController::class, 'showByUlid']);
         Route::delete('/{post}', [PostController::class, 'destroy']);
     });
+
+    Route::get('/api/feed', [FeedController::class, 'index']);
 });
 
 /*
