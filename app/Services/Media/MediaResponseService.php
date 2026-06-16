@@ -28,7 +28,7 @@ class MediaResponseService
      *
      * @return array{url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
      */
-    public function extras(Media $media, bool $resolveHls = true): array
+    public function extras(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = true): array
     {
         $extras = ['url' => null, 'thumbnail_url' => null, 'video' => null];
 
@@ -38,12 +38,15 @@ class MediaResponseService
 
         $ttl = (int) config('media.view_url_ttl', 60);
 
-        $extras['url'] = $this->storage->getSignedViewUrl(
-            $media->disk,
-            $media->object_key,
-            $ttl,
-            $media->mime_type,
-        );
+        $shouldSignOriginal = ! $media->type->isVideo() || $includeOriginalVideoUrl;
+        if ($shouldSignOriginal) {
+            $extras['url'] = $this->storage->getSignedViewUrl(
+                $media->disk,
+                $media->object_key,
+                $ttl,
+                $media->mime_type,
+            );
+        }
 
         if ($media->thumbnail_key !== null) {
             $extras['thumbnail_url'] = $this->storage->getSignedViewUrl(
@@ -66,9 +69,9 @@ class MediaResponseService
      *
      * @return array<string, mixed>
      */
-    public function item(Media $media, bool $resolveHls = true): array
+    public function item(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = true): array
     {
-        return MediaPresenter::ownerView($media, $this->extras($media, $resolveHls));
+        return MediaPresenter::ownerView($media, $this->extras($media, $resolveHls, $includeOriginalVideoUrl));
     }
 
     /**
@@ -78,10 +81,10 @@ class MediaResponseService
      * @param  LengthAwarePaginator<int, Media>  $paginator
      * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
      */
-    public function page(LengthAwarePaginator $paginator): array
+    public function page(LengthAwarePaginator $paginator, bool $includeOriginalVideoUrls = true): array
     {
         $data = collect($paginator->items())
-            ->map(fn (Media $m): array => $this->item($m, resolveHls: false))
+            ->map(fn (Media $m): array => $this->item($m, resolveHls: false, includeOriginalVideoUrl: $includeOriginalVideoUrls))
             ->values()
             ->all();
 
