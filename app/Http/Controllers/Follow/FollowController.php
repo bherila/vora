@@ -230,8 +230,10 @@ class FollowController extends Controller
         $this->audit($followRequest, $current, $status);
 
         if ($status === 'accepted') {
-            // Always notify in-app; e-mail stays gated by the requester's pref.
-            $followRequest->requester?->notify(new FollowRequestAcceptedInApp($followRequest));
+            // In-app and e-mail are gated by their own per-type preferences.
+            if ($followRequest->requester?->notify_follow_accepted) {
+                $followRequest->requester->notify(new FollowRequestAcceptedInApp($followRequest));
+            }
 
             if ($followRequest->requester?->email_follow_request_accepted) {
                 $followRequest->requester->notify(new FollowRequestAccepted($followRequest->load('recipient')));

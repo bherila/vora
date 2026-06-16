@@ -30,8 +30,8 @@ class PostReactionController extends Controller
 
         // Notify the author once, only on a genuinely new reaction and never for
         // their own.
-        if ($reaction->wasRecentlyCreated && $post->user_id !== $user->id) {
-            $post->user?->notify(new PostReactedTo($post, $user));
+        if ($reaction->wasRecentlyCreated && $post->user_id !== $user->id && $post->user?->notify_post_reaction) {
+            $post->user->notify(new PostReactedTo($post, $user));
         }
 
         return $this->summary($post, $user);
