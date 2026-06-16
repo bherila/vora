@@ -223,31 +223,20 @@ class CoAuthorTest extends TestCase
         $this->assertNotContains('character:'.$disabledCharacter->id, $keys);
     }
 
-    public function test_summary_hides_inactive_co_author_involvements_and_authorship(): void
+    public function test_editor_payload_keeps_pending_co_author_invites(): void
     {
+        // The editor's CoAuthorPanel relies on pending rows being present (to show
+        // them as "invited" and keep them out of the invite dropdown), so the
+        // author-facing payload must not filter authorship rows by status.
         $owner = User::factory()->approved()->create();
-        $coAuthor = User::factory()->approved()->create();
-        $coCharacter = Character::query()->create(['user_id' => $coAuthor->id, 'display_name' => 'Sidekick']);
+        $invitee = User::factory()->approved()->create();
         $story = Story::factory()->for($owner)->create();
-        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
-        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $coAuthor->id]);
-        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $coCharacter->id]);
-        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $owner->id]);
+        $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
 
-        $coAuthor->forceFill(['is_disabled' => true])->save();
+        $response = $this->actingAs($owner)->getJson("/api/stories/{$story->id}")->assertOk();
+        $pending = collect($response->json('data.authors'))->firstWhere('user_id', $invitee->id);
 
-        $response = $this->actingAs($owner)->getJson('/api/stories')->assertOk();
-        $involves = collect($response->json('data.0.involves'))
-            ->map(fn (array $o): string => $o['type'].':'.$o['id'])
-            ->all();
-        $authorUserIds = collect($response->json('data.0.authors'))->pluck('user_id')->all();
-
-        // The owner's own tag and authorship survive; the disabled co-author's
-        // involvement tags and authorship entry are filtered out of the listing.
-        $this->assertContains('user:'.$owner->id, $involves);
-        $this->assertNotContains('user:'.$coAuthor->id, $involves);
-        $this->assertNotContains('character:'.$coCharacter->id, $involves);
-        $this->assertContains($owner->id, $authorUserIds);
-        $this->assertNotContains($coAuthor->id, $authorUserIds);
+        $this->assertNotNull($pending);
+        $this->assertSame('pending', $pending['status']);
     }
 }

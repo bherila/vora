@@ -27,13 +27,12 @@ class StoryPresenter
      */
     public static function summary(Story $story): array
     {
-        // Inactive (deactivated/disabled/deleted) co-authors and their tags must
-        // not surface even on author-facing listings, and this is the shape the
-        // future discovery feed reuses. Mirrors readerView()'s filtering.
-        $activeAuthors = $story->authors
-            ->filter(fn (StoryAuthor $a): bool => $a->isAccepted() && self::isActiveUser($a->user));
-        $activeUserIds = $activeAuthors->pluck('user_id')->map(fn ($id): int => (int) $id)->all();
-
+        // Author/admin-facing payload: it must keep *all* authorship rows
+        // (including pending invites, which the editor's CoAuthorPanel renders as
+        // "invited" and excludes from the invite dropdown) and all involvement
+        // tags. The public reader surface — the only cross-user one — does its own
+        // active-account filtering in readerView(); a future discovery feed (#27)
+        // must do the same rather than relying on this shape.
         return [
             'id' => $story->id,
             'ulid' => $story->ulid,
@@ -43,11 +42,8 @@ class StoryPresenter
             'visibility' => $story->visibility->value,
             'owner' => self::userRef($story->user),
             'interests' => self::interests($story),
-            'involves' => self::involvements($story, $activeUserIds),
-            'authors' => $activeAuthors
-                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
-                ->values()
-                ->all(),
+            'involves' => self::involvements($story),
+            'authors' => self::authors($story),
             'node_count' => $story->isCyoa() ? ($story->nodes_count ?? $story->nodes()->count()) : null,
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
             'created_at' => $story->created_at?->format('Y-m-d H:i:s'),
