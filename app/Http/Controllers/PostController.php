@@ -25,6 +25,7 @@ class PostController extends Controller
         $posts = Post::query()
             ->where('user_id', $user?->id)
             ->with(['user', 'attachments.attachable'])
+            ->withReactionState($user)
             ->latest()
             ->get();
 
@@ -62,7 +63,7 @@ class PostController extends Controller
      */
     public function showByUlid(Request $request, string $ulid): JsonResponse
     {
-        $post = Post::query()->where('ulid', $ulid)->firstOrFail();
+        $post = Post::query()->where('ulid', $ulid)->withReactionState($request->user())->firstOrFail();
         Gate::authorize('view', $post);
 
         $post->load(['user', 'attachments.attachable']);
