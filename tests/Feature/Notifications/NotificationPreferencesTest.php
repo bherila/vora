@@ -137,6 +137,16 @@ class NotificationPreferencesTest extends TestCase
         $this->assertSame(0, $requester->notifications()->count());
     }
 
+    public function test_follow_request_notification_respects_the_recipients_preference(): void
+    {
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create(['notify_follow_request' => false]);
+
+        $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")->assertOk();
+
+        $this->assertSame(0, $recipient->notifications()->count());
+    }
+
     public function test_preferences_can_be_updated_via_the_account_endpoint(): void
     {
         $user = User::factory()->approved()->create();
@@ -147,11 +157,14 @@ class NotificationPreferencesTest extends TestCase
             'email' => $user->email,
             'notify_new_post' => false,
             'notify_post_reaction' => false,
+            'notify_follow_request' => false,
         ])->assertOk()
             ->assertJsonPath('data.notify_new_post', false)
-            ->assertJsonPath('data.notify_post_comment', true);
+            ->assertJsonPath('data.notify_post_comment', true)
+            ->assertJsonPath('data.notify_follow_request', false);
 
         $this->assertFalse($user->fresh()->notify_new_post);
         $this->assertFalse($user->fresh()->notify_post_reaction);
+        $this->assertFalse($user->fresh()->notify_follow_request);
     }
 }
