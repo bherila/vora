@@ -5,10 +5,11 @@ namespace App\Notifications;
 use App\Models\FollowRequest;
 use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
-class FollowRequestReceived extends Notification
+class FollowRequestReceived extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;

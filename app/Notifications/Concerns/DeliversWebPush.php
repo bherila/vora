@@ -16,6 +16,12 @@ trait DeliversWebPush
             return [];
         }
 
+        // The database write is synchronous and fast; web push requires an
+        // outbound HTTP call to the browser push service. Separating the channels
+        // lets 'database' run inline while web push is dispatched asynchronously
+        // to the queue so a slow or unreachable push service cannot delay or fail
+        // the caller's request. Classes using this trait should implement
+        // ShouldQueue so Laravel routes web push via the queue worker.
         return ['database', WebPushChannel::class];
     }
 

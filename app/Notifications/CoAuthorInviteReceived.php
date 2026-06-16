@@ -5,10 +5,11 @@ namespace App\Notifications;
 use App\Models\StoryAuthor;
 use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
-class CoAuthorInviteReceived extends Notification
+class CoAuthorInviteReceived extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;

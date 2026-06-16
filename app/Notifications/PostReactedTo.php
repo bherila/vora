@@ -6,13 +6,14 @@ use App\Models\Post;
 use App\Models\User;
 use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Sent to a post's author when someone reacts to it.
  */
-class PostReactedTo extends Notification
+class PostReactedTo extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;

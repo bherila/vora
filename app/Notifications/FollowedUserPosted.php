@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\Post;
 use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
@@ -12,7 +13,7 @@ use NotificationChannels\WebPush\WebPushMessage;
  * Sent to a follower when an account they follow publishes a post they are
  * allowed to see.
  */
-class FollowedUserPosted extends Notification
+class FollowedUserPosted extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;
