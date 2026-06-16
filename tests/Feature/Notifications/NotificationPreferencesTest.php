@@ -46,6 +46,60 @@ class NotificationPreferencesTest extends TestCase
         $this->assertSame(0, $follower->notifications()->count());
     }
 
+    public function test_new_post_fan_out_job_is_deleted_when_the_post_model_is_missing(): void
+    {
+        $author = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        $job = new NotifyFollowersOfPost($post);
+
+        $this->assertTrue($job->deleteWhenMissingModels);
+    }
+
+    public function test_new_post_fan_out_skips_inactive_authors(): void
+    {
+        $author = User::factory()->approved()->create();
+        $follower = User::factory()->approved()->create();
+        $this->follow($follower, $author);
+        $post = Post::factory()->for($author)->approved()->create();
+
+        $author->forceFill(['deactivated_at' => now()])->save();
+
+        (new NotifyFollowersOfPost($post->refresh()))->handle();
+
+        $this->assertSame(0, $follower->notifications()->count());
+    }
+
+    public function test_new_post_fan_out_only_notifies_followers_accepted_before_the_post(): void
+    {
+        $author = User::factory()->approved()->create();
+        $existingFollower = User::factory()->approved()->create();
+        $futureFollower = User::factory()->approved()->create();
+        $postCreatedAt = now()->subMinutes(10);
+        $post = Post::factory()->for($author)->approved()->create([
+            'created_at' => $postCreatedAt,
+            'updated_at' => $postCreatedAt,
+        ]);
+
+        FollowRequest::query()->create([
+            'requester_id' => $existingFollower->id,
+            'recipient_id' => $author->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => $postCreatedAt->copy()->subMinute(),
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $futureFollower->id,
+            'recipient_id' => $author->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => $postCreatedAt->copy()->addMinute(),
+        ]);
+
+        (new NotifyFollowersOfPost($post))->handle();
+
+        $this->assertSame(1, $existingFollower->notifications()->count());
+        $this->assertSame(0, $futureFollower->notifications()->count());
+    }
+
     public function test_reaction_notification_respects_the_authors_preference(): void
     {
         $author = User::factory()->approved()->create(['notify_post_reaction' => false]);

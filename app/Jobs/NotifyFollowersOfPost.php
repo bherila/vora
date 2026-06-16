@@ -24,18 +24,25 @@ class NotifyFollowersOfPost implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(private readonly Post $post) {}
 
     public function handle(): void
     {
         $author = $this->post->user;
-        if ($author === null) {
+        if ($author === null || ! $author->isActive()) {
             return;
         }
 
         $followerIds = FollowRequest::query()
             ->where('recipient_id', $author->id)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('responded_at')
+                    ->orWhere('responded_at', '<=', $this->post->created_at);
+            })
             ->select('requester_id');
 
         User::query()
