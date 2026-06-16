@@ -121,6 +121,10 @@ class StoryService
      */
     public function involvableOptions(Story $story): array
     {
+        // Offer every accepted author and their characters — including any whose
+        // account later went inactive, so an owner can still *remove* a stale
+        // involvement tag for them. The public reader hides inactive co-authors'
+        // tags in StoryPresenter::readerView(); the editor is author-facing.
         $authorUsers = $story->authors()
             ->where('status', StoryAuthor::STATUS_ACCEPTED)
             ->with('user')

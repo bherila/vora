@@ -251,4 +251,23 @@ class MediaApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.url', 'https://r2.example/view');
     }
+
+    public function test_media_from_a_disabled_owner_is_hidden_from_other_viewers(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $approved = Media::factory()->for($owner)->approved()->create();
+
+        // Visible before the owner is disabled...
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertOk();
+
+        // ...and hidden on every path once the owner is admin-disabled, matching
+        // the deactivated/deleted treatment (and StoryPolicy).
+        $owner->forceFill(['is_disabled' => true])->save();
+
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/media/{$approved->id}")->assertForbidden();
+    }
 }
