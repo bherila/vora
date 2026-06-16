@@ -10,10 +10,20 @@ use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
 
 class PostController extends Controller
 {
     public function __construct(private readonly PostService $posts) {}
+
+    /**
+     * A shareable single-post page (resolved client-side by ulid), mirroring the
+     * media and story view pages. This is the URL notifications link to.
+     */
+    public function viewPage(string $ulid): View
+    {
+        return view('posts.show', ['ulid' => $ulid]);
+    }
 
     /**
      * The current user's own posts, newest first.
