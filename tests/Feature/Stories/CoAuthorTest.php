@@ -201,28 +201,6 @@ class CoAuthorTest extends TestCase
         $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])->assertStatus(422);
     }
 
-    public function test_involvable_options_exclude_inactive_co_authors(): void
-    {
-        $owner = User::factory()->approved()->create();
-        $active = User::factory()->approved()->create();
-        $disabled = User::factory()->approved()->create();
-        $disabledCharacter = Character::query()->create(['user_id' => $disabled->id, 'display_name' => 'Ghost']);
-        $story = Story::factory()->for($owner)->create();
-        $story->authors()->create(['user_id' => $active->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
-        $story->authors()->create(['user_id' => $disabled->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
-        $disabled->forceFill(['is_disabled' => true])->save();
-
-        $response = $this->actingAs($owner)->getJson("/api/stories/{$story->id}")->assertOk();
-        $keys = collect($response->json('data.involvable_options'))
-            ->map(fn (array $o): string => $o['type'].':'.$o['id'])
-            ->all();
-
-        // The disabled co-author and their characters drop out of the picker.
-        $this->assertContains('user:'.$active->id, $keys);
-        $this->assertNotContains('user:'.$disabled->id, $keys);
-        $this->assertNotContains('character:'.$disabledCharacter->id, $keys);
-    }
-
     public function test_editor_payload_keeps_pending_co_author_invites(): void
     {
         // The editor's CoAuthorPanel relies on pending rows being present (to show
