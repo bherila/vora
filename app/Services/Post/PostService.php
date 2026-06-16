@@ -89,18 +89,25 @@ class PostService
 
     /**
      * Notify the author's active followers who are allowed to see the new post.
+     * Chunked so a popular account's fan-out stays bounded in memory rather than
+     * loading the whole follower set on the request path. (At larger scale this
+     * fan-out should move to a queued job — tracked as a follow-up.)
      */
     private function notifyFollowers(User $author, Post $post): void
     {
         $followerIds = FollowRequest::query()
             ->where('recipient_id', $author->id)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
-            ->pluck('requester_id');
+            ->select('requester_id');
 
-        User::query()->whereIn('id', $followerIds)->active()->get()
-            ->each(function (User $follower) use ($post): void {
-                if ($post->isViewableBy($follower)) {
-                    $follower->notify(new FollowedUserPosted($post));
+        User::query()
+            ->whereIn('id', $followerIds)
+            ->active()
+            ->chunkById(200, function ($followers) use ($post): void {
+                foreach ($followers as $follower) {
+                    if ($post->isViewableBy($follower)) {
+                        $follower->notify(new FollowedUserPosted($post));
+                    }
                 }
             });
     }

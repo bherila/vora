@@ -6,6 +6,7 @@ use App\Enums\Audience;
 use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -82,6 +83,28 @@ class NotificationTest extends TestCase
 
         $this->actingAs($author)->postJson("/api/posts/{$post->id}/comments", ['body' => 'thanks'])->assertCreated();
         $this->assertSame(1, $author->notifications()->count(), 'no self-notification');
+    }
+
+    public function test_the_post_page_route_resolves_so_notification_links_do_not_404(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        $this->actingAs($viewer)->get("/p/{$post->ulid}")->assertOk();
+    }
+
+    public function test_purging_an_actor_removes_notifications_referencing_them(): void
+    {
+        $author = User::factory()->approved()->create();
+        $reactor = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+        $this->actingAs($reactor)->postJson("/api/posts/{$post->id}/reactions");
+        $this->assertSame(1, $author->notifications()->count());
+
+        app(UserAccountService::class)->purge($reactor);
+
+        $this->assertSame(0, $author->notifications()->count(), 'erasing the actor removes notifications about them');
     }
 
     public function test_unread_count_and_marking_read(): void

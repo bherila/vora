@@ -171,6 +171,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });
 
+    // Shareable single-post page (the URL notifications link to).
+    Route::get('/p/{ulid}', [PostController::class, 'viewPage'])->name('posts.view');
+
     Route::get('/api/feed', [FeedController::class, 'index']);
 
     Route::prefix('api/notifications')->group(function () {
