@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ModerationStatus;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\Media\MediaResponseService;
 use App\Support\FollowGraph;
 use App\Support\PostPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,6 +21,8 @@ use Illuminate\Http\Request;
  */
 class FeedController extends Controller
 {
+    public function __construct(private readonly MediaResponseService $mediaResponder) {}
+
     public function index(Request $request): JsonResponse
     {
         $viewer = $request->user();
@@ -55,7 +58,7 @@ class FeedController extends Controller
         return response()->json([
             'success' => true,
             'data' => collect($posts->items())
-                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer instanceof User ? $viewer : null))
+                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer instanceof User ? $viewer : null, $this->mediaResponder))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),
         ]);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Post\StorePostRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\Media\MediaResponseService;
 use App\Services\Post\PostService;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,10 @@ use Illuminate\View\View;
 
 class PostController extends Controller
 {
-    public function __construct(private readonly PostService $posts) {}
+    public function __construct(
+        private readonly PostService $posts,
+        private readonly MediaResponseService $mediaResponder,
+    ) {}
 
     /**
      * A shareable single-post page (resolved client-side by ulid), mirroring the
@@ -41,7 +45,7 @@ class PostController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $posts->map(fn (Post $post): array => PostPresenter::view($post, $user))->values(),
+            'data' => $posts->map(fn (Post $post): array => PostPresenter::view($post, $user, $this->mediaResponder))->values(),
         ]);
     }
 
@@ -65,7 +69,7 @@ class PostController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => PostPresenter::view($post, $user),
+            'data' => PostPresenter::view($post, $user, $this->mediaResponder),
         ], 201);
     }
 
@@ -81,7 +85,7 @@ class PostController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => PostPresenter::view($post, $request->user()),
+            'data' => PostPresenter::view($post, $request->user(), $this->mediaResponder),
         ]);
     }
 

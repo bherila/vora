@@ -10,6 +10,7 @@ use App\Models\Post;
 use App\Models\PostAttachment;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Media\MediaResponseService;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -26,7 +27,7 @@ class PostPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function view(Post $post, ?User $viewer): array
+    public static function view(Post $post, ?User $viewer, ?MediaResponseService $mediaResponder = null): array
     {
         return [
             'id' => $post->id,
@@ -35,7 +36,7 @@ class PostPresenter
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
             'author' => self::author($post->user),
-            'as_character' => self::asCharacter($post),
+            'as_character' => self::asCharacter($post, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
             'viewer_reacted' => self::viewerReacted($post, $viewer),
@@ -82,19 +83,29 @@ class PostPresenter
      * The persona a post is published as, surfaced alongside the user author.
      * Ownership and moderation remain user-level.
      *
+     * The avatar is serialized via {@see MediaResponseService} (a signed,
+     * loadable URL — the same shape CharacterController returns), because a
+     * profile-picture media's ULID is not resolvable through the gallery-only
+     * /api/media/by-ulid endpoint. When no responder is supplied the avatar is
+     * simply omitted.
+     *
      * @return array<string, mixed>|null
      */
-    private static function asCharacter(Post $post): ?array
+    private static function asCharacter(Post $post, ?MediaResponseService $mediaResponder): ?array
     {
         $character = $post->character;
         if ($character === null) {
             return null;
         }
 
+        $avatar = $character->profilePicture;
+
         return [
             'id' => $character->id,
             'display_name' => $character->display_name,
-            'profile_picture_ulid' => $character->profilePicture?->ulid,
+            'avatar' => ($avatar instanceof Media && $mediaResponder !== null)
+                ? $mediaResponder->item($avatar, resolveHls: false)
+                : null,
         ];
     }
 
