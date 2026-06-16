@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminMediaController;
+use App\Http\Controllers\Admin\AdminStaticPageController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Auth\EmailVerificationController;
@@ -14,15 +15,17 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use Illuminate\Support\Facades\Route;
 
-// Home page and legal pages (public).
-Route::get('/', fn () => view('welcome'))->name('home');
-Route::view('/privacy', 'privacy')->name('privacy');
-Route::view('/terms', 'terms')->name('terms');
+// Home page and static pages (public).
+Route::get('/', [StaticPageController::class, 'home'])->name('home');
+Route::get('/privacy', [StaticPageController::class, 'show'])->defaults('slug', 'privacy')->name('privacy');
+Route::get('/terms', [StaticPageController::class, 'show'])->defaults('slug', 'terms')->name('terms');
+Route::get('/page/{slug}', [StaticPageController::class, 'show'])->name('pages.show');
 
 /*
 |--------------------------------------------------------------------------
@@ -168,6 +171,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
     Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
+    Route::get('/pages', [AdminStaticPageController::class, 'index'])->name('pages');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
@@ -196,6 +200,11 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/stories', [AdminStoryController::class, 'apiIndex']);
     Route::post('/stories/{story}/moderate', [AdminStoryController::class, 'moderate']);
+
+    Route::get('/pages', [AdminStaticPageController::class, 'apiIndex']);
+    Route::post('/pages', [AdminStaticPageController::class, 'store']);
+    Route::post('/pages/seed-defaults', [AdminStaticPageController::class, 'seedDefaults']);
+    Route::put('/pages/{staticPage}', [AdminStaticPageController::class, 'update']);
 });
 
 Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function () {

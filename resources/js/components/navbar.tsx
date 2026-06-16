@@ -132,6 +132,13 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
                     Story review
                   </a>
                   <a
+                    href='/admin/pages'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Static pages
+                  </a>
+                  <a
                     href='/admin/audit-log'
                     className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
                     onClick={() => setAdminMenuOpen(false)}
