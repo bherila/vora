@@ -14,6 +14,7 @@
       'user_type_other' => $__currentUser->user_type_other,
       'preferred_user_types' => $__currentUser->preferred_user_types ?? [],
       'preferred_genders' => $__currentUser->preferred_genders ?? [],
+      'profile_audience' => $__currentUser->profile_audience?->value ?? 'everyone',
       'id_verified_at' => $__currentUser->id_verified_at?->toIso8601String(),
       'name_locked' => (bool) $__currentUser->name_locked,
       'email_locked' => (bool) $__currentUser->email_locked,

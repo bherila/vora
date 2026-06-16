@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 
-interface DirectoryUser { id: number; display_name: string; user_type: string | null; gender: string | null; }
+interface DirectoryUser { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; }
 interface DirectoryResponse { success: boolean; data: DirectoryUser[]; }
 
 function FollowDirectoryPage() {
@@ -33,6 +33,7 @@ function FollowDirectoryPage() {
               <CardDescription className="flex gap-2">
                 {user.user_type && <Badge variant="outline">{user.user_type}</Badge>}
                 {user.gender && <Badge variant="outline">{user.gender}</Badge>}
+                {user.restricted && <Badge variant="outline">Private</Badge>}
               </CardDescription>
             </CardHeader>
             <CardContent>

@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Enums\StoryType;
-use App\Enums\Visibility;
-use App\Traits\HasVisibility;
+use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,14 +20,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * choose-your-own-adventure graph of {@see StoryNode} passages connected by
  * {@see StoryChoice} edges.
  *
- * Privacy (visibility) and admin review (moderation) reuse the shared
- * HasVisibility/Moderatable traits, exactly like {@see Media}. A story is owned
- * by a single user but may have additional accepted co-authors.
+ * Privacy (audience) and admin review (moderation) reuse the shared
+ * HasPrivacyPolicy/Moderatable traits, exactly like {@see Media}. A story is
+ * owned by a single user but may have additional accepted co-authors.
  */
 class Story extends Model
 {
     use HasFactory;
-    use HasVisibility;
+    use HasPrivacyPolicy;
     use Moderatable;
     use SerializesDatesAsLocal;
 
@@ -44,7 +44,8 @@ class Story extends Model
         'type',
         'status',
         'body',
-        'visibility',
+        'audience',
+        'discoverable',
         'published_at',
     ];
 
@@ -56,7 +57,8 @@ class Story extends Model
         return [
             'type' => StoryType::class,
             'status' => StoryStatus::class,
-            'visibility' => Visibility::class,
+            'audience' => Audience::class,
+            'discoverable' => 'boolean',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
             'published_at' => 'datetime',

@@ -1,6 +1,6 @@
 import { fetchWrapper } from '@/fetchWrapper';
 
-import type { InvolvementTag, StoryEditor, StoryNode, StoryReader, StorySummary, StoryType, Visibility } from './types';
+import type { Audience, InvolvementTag, StoryEditor, StoryNode, StoryReader, StorySummary, StoryType } from './types';
 
 interface Envelope<T> {
   success: boolean;
@@ -12,13 +12,15 @@ export interface CreateStoryInput {
   title: string;
   type: StoryType;
   body?: string | null;
-  visibility?: Visibility;
+  audience?: Audience;
+  discoverable?: boolean;
 }
 
 export interface UpdateStoryInput {
   title?: string;
   status?: 'draft' | 'published';
-  visibility?: Visibility;
+  audience?: Audience;
+  discoverable?: boolean;
   body?: string | null;
   interest_ids?: number[];
   involvements?: Array<{ type: string; id: number }>;

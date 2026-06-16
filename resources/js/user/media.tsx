@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
-import { type MediaItem, type MediaTypeFilter, mediaTypeForFile, type VisibilityValue } from '@/media/types';
+import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { useMediaListing } from '@/media/useMediaListing';
 
@@ -85,7 +86,8 @@ function UserMediaPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState('');
-  const [visibility, setVisibility] = useState<VisibilityValue>('users');
+  const [audience, setAudience] = useState<Audience>('everyone');
+  const [discoverable, setDiscoverable] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -95,7 +97,8 @@ function UserMediaPage() {
   const resetForm = (): void => {
     setFiles([]);
     setTitle('');
-    setVisibility('users');
+    setAudience('everyone');
+    setDiscoverable(true);
     setUploadInterestIds(initial.last_interest_ids);
     setProgress(0);
   };
@@ -134,7 +137,8 @@ function UserMediaPage() {
           content_type: selectedFile.type,
           size: selectedFile.size,
           title: files.length === 1 ? title.trim() || null : selectedFile.name,
-          visibility,
+          audience,
+          discoverable,
           interest_ids: uploadInterestIds,
           has_thumbnail: thumbnail !== null,
           perceptual_hash: perceptualHash,
@@ -234,14 +238,25 @@ function UserMediaPage() {
               <label className="grid gap-1">
                 <span className="text-sm">Who can see this?</span>
                 <select
-                  value={visibility}
-                  onChange={(event) => setVisibility(event.target.value as VisibilityValue)}
+                  value={audience}
+                  onChange={(event) => setAudience(event.target.value as Audience)}
                   disabled={uploading}
                   className="w-full rounded-md border border-input bg-background px-3 py-2"
                 >
-                  <option value="users">Any user</option>
-                  <option value="unlisted">Only people with the link</option>
+                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={discoverable}
+                  onChange={(event) => setDiscoverable(event.target.checked)}
+                  disabled={uploading}
+                  className="mt-0.5"
+                />
+                <span>List in discovery — otherwise only people with the link can find it.</span>
               </label>
               <div className="grid gap-1">
                 <span className="text-sm">Interests</span>
