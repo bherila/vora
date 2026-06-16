@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
-use App\Enums\Visibility;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
@@ -14,6 +14,7 @@ use App\Services\Media\HlsService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Privacy\PrivacyAuditor;
 use App\Support\MediaFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +30,7 @@ class MediaController extends Controller
         private readonly MediaService $media,
         private readonly HlsService $hls,
         private readonly MediaResponseService $responder,
+        private readonly PrivacyAuditor $auditor,
     ) {}
 
     /**
@@ -80,13 +82,23 @@ class MediaController extends Controller
             $request->validated('filename'),
             $request->validated('content_type'),
             $request->validated('title'),
-            Visibility::from($request->validated('visibility')),
+            $request->audience(),
             $request->interestIds(),
             (bool) $request->validated('has_thumbnail', false),
             $request->validated('perceptual_hash'),
+            discoverable: $request->discoverable(),
         );
 
-        $media = $result['media']->load('interests');
+        $media = $result['media'];
+
+        // Apply the allowlist (empty unless the SpecificPeople audience) and
+        // record the initial privacy policy for audit.
+        $media->syncAudienceMembers(
+            $request->audience() === Audience::SpecificPeople ? $request->audienceUserIds() : []
+        );
+        $this->auditor->recordCreation($media, $request->user(), $media->privacySnapshot(), $request);
+
+        $media->load('interests');
 
         return response()->json([
             'success' => true,

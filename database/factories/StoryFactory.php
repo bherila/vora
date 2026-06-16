@@ -2,10 +2,10 @@
 
 namespace Database\Factories;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Enums\StoryType;
-use App\Enums\Visibility;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
@@ -28,9 +28,15 @@ class StoryFactory extends Factory
             'type' => StoryType::LongForm,
             'status' => StoryStatus::Draft,
             'body' => fake()->paragraphs(2, true),
-            'visibility' => Visibility::Users,
+            'audience' => Audience::Everyone,
+            'discoverable' => true,
             'moderation_status' => ModerationStatus::Pending,
         ];
+    }
+
+    public function audience(Audience $audience): static
+    {
+        return $this->state(fn (): array => ['audience' => $audience]);
     }
 
     /**
@@ -70,9 +76,12 @@ class StoryFactory extends Factory
         return $this->state(fn (): array => ['moderation_status' => ModerationStatus::Rejected]);
     }
 
+    /**
+     * Link-only: discoverable off, audience unchanged (Everyone by default).
+     */
     public function unlisted(): static
     {
-        return $this->state(fn (): array => ['visibility' => Visibility::Unlisted]);
+        return $this->state(fn (): array => ['discoverable' => false]);
     }
 
     /**

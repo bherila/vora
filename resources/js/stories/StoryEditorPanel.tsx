@@ -6,11 +6,12 @@ import { Markdown } from '@/components/Markdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 
 import { storiesApi } from './api';
 import { CoAuthorPanel } from './CoAuthorPanel';
 import { CyoaGraphEditor } from './CyoaGraphEditor';
-import type { StoryAuthorRef, StoryEditor } from './types';
+import type { Audience, StoryAuthorRef, StoryEditor } from './types';
 
 interface StoryEditorPanelProps {
   storyId: number;
@@ -29,7 +30,8 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
-  const [visibility, setVisibility] = useState<'users' | 'unlisted'>('users');
+  const [audience, setAudience] = useState<Audience>('everyone');
+  const [discoverable, setDiscoverable] = useState(true);
   const [body, setBody] = useState('');
   const [interestIds, setInterestIds] = useState<number[]>([]);
   const [involved, setInvolved] = useState<Set<string>>(new Set());
@@ -42,7 +44,8 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
     setStory(data);
     setTitle(data.title);
     setStatus(data.status);
-    setVisibility(data.visibility);
+    setAudience(data.audience);
+    setDiscoverable(data.discoverable);
     setBody(data.body ?? '');
     setInterestIds(data.interests.map((i) => i.id));
     setInvolved(new Set(data.involves.map((v) => involveKey(v.type, v.id))));
@@ -85,7 +88,8 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
       const updated = await storiesApi.update(story.id, {
         title,
         status,
-        visibility,
+        audience,
+        discoverable,
         body: story.type === 'long_form' ? body : story.body,
         interest_ids: interestIds,
         involvements,
@@ -172,11 +176,16 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
             </select>
           </div>
           <div className="grid gap-2">
-            <label className="text-sm font-medium" htmlFor="story-visibility">Visibility</label>
-            <select id="story-visibility" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={visibility} onChange={(e) => setVisibility(e.target.value as 'users' | 'unlisted')}>
-              <option value="users">Any user</option>
-              <option value="unlisted">Only people with the link</option>
+            <label className="text-sm font-medium" htmlFor="story-audience">Who can see this?</label>
+            <select id="story-audience" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={audience} onChange={(e) => setAudience(e.target.value as Audience)}>
+              {AUDIENCE_SELECT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={discoverable} onChange={(e) => setDiscoverable(e.target.checked)} />
+              List in discovery (otherwise link-only)
+            </label>
           </div>
 
           <div className="grid gap-2">

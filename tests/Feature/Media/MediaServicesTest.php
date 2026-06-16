@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Media;
 
+use App\Enums\Audience;
 use App\Enums\MediaType;
-use App\Enums\Visibility;
 use App\Models\Interest;
 use App\Models\Media;
 use App\Models\User;
@@ -37,7 +37,7 @@ class MediaServicesTest extends TestCase
             'My Vacation.JPG',
             'image/jpeg',
             'Vacation',
-            Visibility::Users,
+            Audience::Everyone,
             [$interest->id],
         );
 
