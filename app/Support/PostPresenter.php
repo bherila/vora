@@ -46,6 +46,21 @@ class PostPresenter
     }
 
     /**
+     * Admin review payload — includes the internal moderation fields.
+     *
+     * @return array<string, mixed>
+     */
+    public static function adminView(Post $post, User $viewer, ?MediaResponseService $mediaResponder = null): array
+    {
+        return self::view($post, $viewer, $mediaResponder) + [
+            'moderation_status' => $post->moderation_status->value,
+            'moderation_notes' => $post->moderation_notes,
+            'moderated_at' => $post->moderated_at?->toIso8601String(),
+            'moderated_by_user_id' => $post->moderated_by_user_id,
+        ];
+    }
+
+    /**
      * Prefer the counts loaded by {@see Post::scopeWithReactionState()} (set on
      * listings to avoid an N+1); fall back to a query for single-item contexts.
      */
