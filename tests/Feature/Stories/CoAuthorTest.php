@@ -200,4 +200,21 @@ class CoAuthorTest extends TestCase
         $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])->assertCreated();
         $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])->assertStatus(422);
     }
+
+    public function test_editor_payload_keeps_pending_co_author_invites(): void
+    {
+        // The editor's CoAuthorPanel relies on pending rows being present (to show
+        // them as "invited" and keep them out of the invite dropdown), so the
+        // author-facing payload must not filter authorship rows by status.
+        $owner = User::factory()->approved()->create();
+        $invitee = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
+
+        $response = $this->actingAs($owner)->getJson("/api/stories/{$story->id}")->assertOk();
+        $pending = collect($response->json('data.authors'))->firstWhere('user_id', $invitee->id);
+
+        $this->assertNotNull($pending);
+        $this->assertSame('pending', $pending['status']);
+    }
 }

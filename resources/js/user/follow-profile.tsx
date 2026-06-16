@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -12,20 +12,22 @@ interface FollowRequestState { status: string; can_retry: boolean; }
 interface ProfileData { id: number; display_name: string; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
-function getUserId(): number | null {
+function getInitialProfile(): ProfileData | null {
   const script = document.getElementById('follow-profile-data');
   if (!script?.textContent) return null;
   try {
-    const data = JSON.parse(script.textContent) as { userId?: unknown };
-    return typeof data.userId === 'number' ? data.userId : null;
+    return JSON.parse(script.textContent) as ProfileData;
   } catch { return null; }
 }
 
 function FollowProfilePage() {
-  const userId = getUserId();
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  // The page is server-hydrated (see FollowController::profilePage), so the
+  // initial render needs no AJAX. The endpoint is only re-hit to refresh state
+  // after the viewer acts.
+  const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const userId = profile?.id ?? null;
 
   const loadProfile = () => {
     if (!userId) return;
@@ -33,8 +35,6 @@ function FollowProfilePage() {
       .then((response) => setProfile((response as ProfileResponse).data))
       .catch(() => setError('Unable to load profile.'));
   };
-
-  useEffect(loadProfile, [userId]);
 
   const sendRequest = async () => {
     if (!userId) return;

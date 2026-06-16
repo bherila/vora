@@ -27,11 +27,11 @@ class MediaPolicy
             return true;
         }
 
-        // Media owned by a deactivated or deleted account is hidden from other
-        // users on every path (direct ULID/HLS links included). Admins bypass
-        // this via before().
+        // Media owned by a deleted, deactivated, or disabled account is hidden
+        // from other users on every path (direct ULID/HLS links included).
+        // Admins bypass this via before(). Mirrors StoryPolicy::view.
         $owner = User::withTrashed()->find($media->user_id);
-        if ($owner === null || $owner->trashed() || $owner->isDeactivated()) {
+        if ($owner === null || $owner->trashed() || ! $owner->isActive()) {
             return false;
         }
 
