@@ -35,6 +35,7 @@ class PostPresenter
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
             'author' => self::author($post->user),
+            'as_character' => self::asCharacter($post),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
             'viewer_reacted' => self::viewerReacted($post, $viewer),
@@ -75,6 +76,26 @@ class PostPresenter
         }
 
         return ['id' => $user->id, 'display_name' => $user->display_name ?? $user->name];
+    }
+
+    /**
+     * The persona a post is published as, surfaced alongside the user author.
+     * Ownership and moderation remain user-level.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function asCharacter(Post $post): ?array
+    {
+        $character = $post->character;
+        if ($character === null) {
+            return null;
+        }
+
+        return [
+            'id' => $character->id,
+            'display_name' => $character->display_name,
+            'profile_picture_ulid' => $character->profilePicture?->ulid,
+        ];
     }
 
     /**

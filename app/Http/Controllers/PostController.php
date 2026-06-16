@@ -34,7 +34,7 @@ class PostController extends Controller
 
         $posts = Post::query()
             ->where('user_id', $user?->id)
-            ->with(['user', 'attachments.attachable'])
+            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($user)
             ->latest()
             ->get();
@@ -58,9 +58,10 @@ class PostController extends Controller
             $request->attachmentsInput(),
             $request->audienceUserIds(),
             $request,
+            $request->characterId(),
         );
 
-        $post->load(['user', 'attachments.attachable']);
+        $post->load(['user', 'character.profilePicture', 'attachments.attachable']);
 
         return response()->json([
             'success' => true,
@@ -76,7 +77,7 @@ class PostController extends Controller
         $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->firstOrFail();
         Gate::authorize('view', $post);
 
-        $post->load(['user', 'attachments.attachable']);
+        $post->load(['user', 'character.profilePicture', 'attachments.attachable']);
 
         return response()->json([
             'success' => true,

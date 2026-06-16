@@ -46,7 +46,7 @@ class FeedController extends Controller
             // owner the per-record policies would now reject.
             ->whereHas('user', fn (Builder $query) => $query->active())
             ->viewableBy($viewer)
-            ->with(['user', 'attachments.attachable'])
+            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($viewer)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
