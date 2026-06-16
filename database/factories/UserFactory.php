@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\Audience;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -27,6 +28,7 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'gender' => 'male',
             'user_type' => 'human',
+            'profile_audience' => Audience::Everyone,
             'preferred_user_types' => ['human', 'furry', 'other'],
             'preferred_genders' => ['male', 'female', 'other'],
             'remember_token' => Str::random(10),

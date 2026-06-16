@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 
-interface FollowRequest { id: number; requester: { id: number; display_name: string; user_type: string | null; gender: string | null; }; created_at: string | null; }
+interface FollowRequest { id: number; requester: { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; }; created_at: string | null; }
 interface FollowInboxResponse { success: boolean; data: FollowRequest[]; }
 
 interface AuthorshipInvite { id: number; story: { id: number; ulid: string; title: string; type: string }; invited_by: string | null; created_at: string | null; }

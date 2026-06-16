@@ -15,6 +15,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { RequestInterestForm } from '@/interests/request-interest-form';
+import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import {
@@ -37,6 +38,7 @@ interface UserSettingsInitialPayload {
   user_type_other?: string | null;
   preferred_user_types?: unknown;
   preferred_genders?: unknown;
+  profile_audience?: string | null;
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
@@ -56,6 +58,7 @@ interface UserSettingsInitialData {
   user_type_other: string;
   preferred_user_types: string[];
   preferred_genders: string[];
+  profile_audience: string;
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
@@ -104,6 +107,7 @@ interface AccountPayload {
   user_type_other: string | null;
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
+  profile_audience: string;
   email_follow_request_received: boolean;
   email_follow_request_accepted: boolean;
 }
@@ -120,6 +124,7 @@ function emptyInitialData(): UserSettingsInitialData {
     user_type_other: '',
     preferred_user_types: [],
     preferred_genders: [],
+    profile_audience: 'everyone',
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
@@ -141,6 +146,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     user_type_other: payload.user_type_other ?? '',
     preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, payload.preferred_user_types),
     preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, payload.preferred_genders),
+    profile_audience: payload.profile_audience ?? 'everyone',
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
@@ -186,6 +192,7 @@ function UserSettingsPage() {
   const [profileUserTypeOther, setProfileUserTypeOther] = useState(initialData.user_type_other);
   const [preferredUserTypes, setPreferredUserTypes] = useState(initialData.preferred_user_types);
   const [preferredGenders, setPreferredGenders] = useState(initialData.preferred_genders);
+  const [profileAudience, setProfileAudience] = useState(initialData.profile_audience);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
@@ -288,6 +295,7 @@ function UserSettingsPage() {
     user_type_other: profileUserType === 'other' ? blankToNull(profileUserTypeOther) : null,
     preferred_user_types: selectionsToPayload(preferredUserTypes),
     preferred_genders: selectionsToPayload(preferredGenders),
+    profile_audience: profileAudience,
     email_follow_request_received: emailFollowRequestReceived,
     email_follow_request_accepted: emailFollowRequestAccepted,
   });
@@ -576,6 +584,22 @@ function UserSettingsPage() {
                 values={preferredGenders}
                 onChange={setPreferredGenders}
               />
+              <div className="grid gap-1.5">
+                <Label htmlFor="account-profile-audience">Who can see your profile</Label>
+                <select
+                  id="account-profile-audience"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={profileAudience}
+                  onChange={(event) => setProfileAudience(event.target.value)}
+                >
+                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <p className="text-sm text-muted-foreground">
+                  Restricted profiles stay listed so people can still request to follow you — only your details are hidden.
+                </p>
+              </div>
               <Button type="submit" disabled={profileSaving}>
                 {profileSaving ? 'Saving...' : 'Save profile'}
               </Button>
