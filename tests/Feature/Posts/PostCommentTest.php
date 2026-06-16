@@ -97,6 +97,49 @@ class PostCommentTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrorFor('parent_id');
     }
 
+    public function test_comment_count_counts_only_visible_comments(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+        PostComment::factory()->for($post)->for($commenter)->create();
+        PostComment::factory()->for($post)->for($commenter)->rejected()->create();
+
+        // A bystander's comment_count matches the visible list (1), not the raw row count.
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertJsonPath('data.comment_count', 1);
+    }
+
+    public function test_cannot_reply_to_a_hidden_parent_comment(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+        $hiddenParent = PostComment::factory()->for($post)->for($commenter)->rejected()->create();
+
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/comments", [
+            'body' => 'reply', 'parent_id' => $hiddenParent->id,
+        ])->assertStatus(422)->assertJsonValidationErrorFor('parent_id');
+    }
+
+    public function test_comments_from_inactive_accounts_are_hidden_from_others(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+        PostComment::factory()->for($post)->for($commenter)->create();
+
+        $commenter->forceFill(['deactivated_at' => now()])->save();
+
+        $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()->assertJsonCount(0, 'data');
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertJsonPath('data.comment_count', 0);
+    }
+
     public function test_comments_cascade_when_the_post_is_deleted(): void
     {
         $author = User::factory()->approved()->create();

@@ -94,7 +94,9 @@ class Post extends Model
     {
         return $query
             ->withCount('reactions')
-            ->withCount('comments')
+            // Count only the comments this viewer may see, so comment_count agrees
+            // with the comments listing and never leaks moderation state.
+            ->withCount(['comments' => fn (Builder $inner) => $inner->visibleTo($viewer)])
             ->withCount(['reactions as viewer_reaction_count' => function (Builder $inner) use ($viewer): void {
                 $inner->where('user_id', $viewer?->id);
             }]);

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ModerationStatus;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -35,6 +36,29 @@ class PostComment extends Model
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Comments a viewer may see: approved comments from active accounts, plus the
+     * viewer's own (any review state). The single source of truth for comment
+     * visibility — used by the listing, the post's comment_count, and the
+     * reply-parent check so they cannot disagree or leak moderation state.
+     *
+     * @param  Builder<PostComment>  $query
+     * @return Builder<PostComment>
+     */
+    public function scopeVisibleTo(Builder $query, ?User $viewer): Builder
+    {
+        return $query->where(function (Builder $outer) use ($viewer): void {
+            $outer->where(function (Builder $inner): void {
+                $inner->where('moderation_status', ModerationStatus::Approved->value)
+                    ->whereHas('user', fn (Builder $u) => $u->active());
+            });
+
+            if ($viewer !== null) {
+                $outer->orWhere('user_id', $viewer->id);
+            }
+        });
     }
 
     /**

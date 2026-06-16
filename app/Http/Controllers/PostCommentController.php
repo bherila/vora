@@ -8,7 +8,6 @@ use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
 use App\Support\PostCommentPresenter;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -29,11 +28,7 @@ class PostCommentController extends Controller
 
         $comments = $post->comments()
             ->with('user:id,name,display_name')
-            ->where(function (Builder $query) use ($viewer): void {
-                // Others see only approved comments; the author always sees theirs.
-                $query->where('moderation_status', ModerationStatus::Approved->value)
-                    ->orWhere('user_id', $viewer?->id);
-            })
+            ->visibleTo($viewer)
             ->orderBy('created_at')
             ->get();
 
@@ -92,7 +87,9 @@ class PostCommentController extends Controller
             return null;
         }
 
-        $parent = PostComment::query()->find($parentId);
+        // The parent must be visible to the replier — replying to a moderated-away
+        // comment would surface a reply whose parent the viewer cannot see.
+        $parent = PostComment::query()->visibleTo($request->user())->find($parentId);
         if ($parent === null || $parent->post_id !== $post->id || $parent->parent_id !== null) {
             throw ValidationException::withMessages(['parent_id' => 'You can only reply to a comment on this post.']);
         }
