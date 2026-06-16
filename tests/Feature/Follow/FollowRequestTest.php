@@ -53,33 +53,41 @@ class FollowRequestTest extends TestCase
     public function test_users_can_request_accept_and_follow_back_with_audit_logs(): void
     {
         Notification::fake();
-        $requester = User::factory()->approved()->create(['email_follow_request_accepted' => true]);
-        $recipient = User::factory()->approved()->create(['email_follow_request_received' => true]);
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
 
         $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")
             ->assertOk()
             ->assertJsonPath('data.status', 'pending');
 
         $followRequest = FollowRequest::query()->where('requester_id', $requester->id)->where('recipient_id', $recipient->id)->firstOrFail();
-        Notification::assertSentTo($recipient, FollowRequestReceived::class);
+        Notification::assertSentTo(
+            $recipient,
+            FollowRequestReceived::class,
+            fn (FollowRequestReceived $notification, array $channels): bool => $channels === ['database'],
+        );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'requested']);
 
         $this->actingAs($recipient)->postJson("/api/users/follow-requests/{$followRequest->id}/accept")
             ->assertOk()
             ->assertJsonPath('data.status', 'accepted');
 
-        Notification::assertSentTo($requester, FollowRequestAccepted::class);
+        Notification::assertSentTo(
+            $requester,
+            FollowRequestAccepted::class,
+            fn (FollowRequestAccepted $notification, array $channels): bool => $channels === ['database'],
+        );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'accepted']);
         $this->actingAs($recipient)->getJson("/api/users/{$requester->id}")
             ->assertOk()
             ->assertJsonPath('data.can_follow_back', true);
     }
 
-    public function test_declined_requests_are_rate_limited_for_24_hours_without_email(): void
+    public function test_declined_requests_are_rate_limited_for_24_hours_without_notifications(): void
     {
         Notification::fake();
         $requester = User::factory()->approved()->create();
-        $recipient = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create(['notify_follow_request' => false]);
 
         $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")
             ->assertOk();

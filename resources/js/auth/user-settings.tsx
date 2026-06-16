@@ -42,8 +42,11 @@ interface UserSettingsInitialPayload {
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
-  email_follow_request_received?: boolean | null;
-  email_follow_request_accepted?: boolean | null;
+  notify_new_post?: boolean | null;
+  notify_post_reaction?: boolean | null;
+  notify_post_comment?: boolean | null;
+  notify_follow_request?: boolean | null;
+  notify_follow_accepted?: boolean | null;
   can_manage_interests?: boolean | null;
 }
 
@@ -62,8 +65,11 @@ interface UserSettingsInitialData {
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
-  email_follow_request_received: boolean;
-  email_follow_request_accepted: boolean;
+  notify_new_post: boolean;
+  notify_post_reaction: boolean;
+  notify_post_comment: boolean;
+  notify_follow_request: boolean;
+  notify_follow_accepted: boolean;
   can_manage_interests: boolean;
 }
 
@@ -92,8 +98,11 @@ interface UserSettingsResponse {
     user_type_other: string | null;
     preferred_user_types: string[] | null;
     preferred_genders: string[] | null;
-    email_follow_request_received: boolean;
-    email_follow_request_accepted: boolean;
+    notify_new_post: boolean;
+    notify_post_reaction: boolean;
+    notify_post_comment: boolean;
+    notify_follow_request: boolean;
+    notify_follow_accepted: boolean;
   };
 }
 
@@ -108,8 +117,11 @@ interface AccountPayload {
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
   profile_audience: string;
-  email_follow_request_received: boolean;
-  email_follow_request_accepted: boolean;
+  notify_new_post: boolean;
+  notify_post_reaction: boolean;
+  notify_post_comment: boolean;
+  notify_follow_request: boolean;
+  notify_follow_accepted: boolean;
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -128,8 +140,11 @@ function emptyInitialData(): UserSettingsInitialData {
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
-    email_follow_request_received: false,
-    email_follow_request_accepted: false,
+    notify_new_post: true,
+    notify_post_reaction: true,
+    notify_post_comment: true,
+    notify_follow_request: true,
+    notify_follow_accepted: true,
     can_manage_interests: false,
   };
 }
@@ -150,8 +165,11 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
-    email_follow_request_received: payload.email_follow_request_received ?? false,
-    email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
+    notify_new_post: payload.notify_new_post ?? true,
+    notify_post_reaction: payload.notify_post_reaction ?? true,
+    notify_post_comment: payload.notify_post_comment ?? true,
+    notify_follow_request: payload.notify_follow_request ?? true,
+    notify_follow_accepted: payload.notify_follow_accepted ?? true,
     can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
@@ -196,8 +214,11 @@ function UserSettingsPage() {
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
-  const [emailFollowRequestReceived, setEmailFollowRequestReceived] = useState(initialData.email_follow_request_received);
-  const [emailFollowRequestAccepted, setEmailFollowRequestAccepted] = useState(initialData.email_follow_request_accepted);
+  const [notifyNewPost, setNotifyNewPost] = useState(initialData.notify_new_post);
+  const [notifyPostReaction, setNotifyPostReaction] = useState(initialData.notify_post_reaction);
+  const [notifyPostComment, setNotifyPostComment] = useState(initialData.notify_post_comment);
+  const [notifyFollowRequest, setNotifyFollowRequest] = useState(initialData.notify_follow_request);
+  const [notifyFollowAccepted, setNotifyFollowAccepted] = useState(initialData.notify_follow_accepted);
   const [profileSaving, setProfileSaving] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
@@ -281,8 +302,11 @@ function UserSettingsPage() {
     setProfileUserTypeOther(data.user_type_other ?? '');
     setPreferredUserTypes(normalizeProfileSelections(USER_TYPE_OPTIONS, data.preferred_user_types));
     setPreferredGenders(normalizeProfileSelections(GENDER_OPTIONS, data.preferred_genders));
-    setEmailFollowRequestReceived(data.email_follow_request_received);
-    setEmailFollowRequestAccepted(data.email_follow_request_accepted);
+    setNotifyNewPost(data.notify_new_post);
+    setNotifyPostReaction(data.notify_post_reaction);
+    setNotifyPostComment(data.notify_post_comment);
+    setNotifyFollowRequest(data.notify_follow_request);
+    setNotifyFollowAccepted(data.notify_follow_accepted);
   };
 
   const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'display_name' | 'email'>> = {}): AccountPayload => ({
@@ -296,8 +320,11 @@ function UserSettingsPage() {
     preferred_user_types: selectionsToPayload(preferredUserTypes),
     preferred_genders: selectionsToPayload(preferredGenders),
     profile_audience: profileAudience,
-    email_follow_request_received: emailFollowRequestReceived,
-    email_follow_request_accepted: emailFollowRequestAccepted,
+    notify_new_post: notifyNewPost,
+    notify_post_reaction: notifyPostReaction,
+    notify_post_comment: notifyPostComment,
+    notify_follow_request: notifyFollowRequest,
+    notify_follow_accepted: notifyFollowAccepted,
   });
 
   const handleProfilePictureChange = async (selectedFiles: File[]): Promise<void> => {
@@ -698,24 +725,48 @@ function UserSettingsPage() {
                 {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
               </p>
               <div className="space-y-3 rounded-md border border-input p-3">
-                <p className="text-sm font-medium">Follow email notifications</p>
+                <p className="text-sm font-medium">In-app notifications</p>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={emailFollowRequestReceived}
-                    onChange={(event) => setEmailFollowRequestReceived(event.target.checked)}
+                    checked={notifyNewPost}
+                    onChange={(event) => setNotifyNewPost(event.target.checked)}
                   />
-                  Email me when I receive a follow request
+                  Notify me when someone I follow posts
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={emailFollowRequestAccepted}
-                    onChange={(event) => setEmailFollowRequestAccepted(event.target.checked)}
+                    checked={notifyPostReaction}
+                    onChange={(event) => setNotifyPostReaction(event.target.checked)}
                   />
-                  Email me when one of my follow requests is accepted
+                  Notify me when someone reacts to my post
                 </label>
-                <p className="text-xs text-muted-foreground">Declined follow requests do not send email.</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyPostComment}
+                    onChange={(event) => setNotifyPostComment(event.target.checked)}
+                  />
+                  Notify me when someone comments on my post
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyFollowRequest}
+                    onChange={(event) => setNotifyFollowRequest(event.target.checked)}
+                  />
+                  Notify me when I receive a follow request
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyFollowAccepted}
+                    onChange={(event) => setNotifyFollowAccepted(event.target.checked)}
+                  />
+                  Notify me when one of my follow requests is accepted
+                </label>
+                <p className="text-xs text-muted-foreground">Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.</p>
               </div>
               <p className="text-sm text-muted-foreground">
                 ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}

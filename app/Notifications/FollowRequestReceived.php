@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use App\Models\FollowRequest;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class FollowRequestReceived extends Notification
@@ -16,17 +15,22 @@ class FollowRequestReceived extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['database'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
     {
         $requester = $this->followRequest->requester;
 
-        return (new MailMessage)
-            ->subject('New follow request')
-            ->greeting('You have a new follow request')
-            ->line(($requester?->display_name ?: $requester?->name ?: 'Someone').' wants to follow you.')
-            ->action('Review follow requests', url('/users/follow-requests'));
+        return [
+            'type' => 'follow_request',
+            'actor_id' => $this->followRequest->requester_id,
+            'actor_name' => $requester?->display_name ?: $requester?->name,
+            'follow_request_id' => $this->followRequest->id,
+            'url' => '/users/follow-requests',
+        ];
     }
 }
