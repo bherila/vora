@@ -21,9 +21,22 @@ class FollowController extends Controller
         return view('user.follow-directory');
     }
 
-    public function profilePage(User $user): View
+    public function profilePage(Request $request, User $user): View
     {
-        return view('user.follow-profile', ['profileUser' => $user]);
+        $current = $request->user();
+        if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
+            abort(404);
+        }
+
+        // Hydrate the page with the same payload the JSON endpoint returns so the
+        // React entry renders immediately, with no initial AJAX round-trip. This
+        // mirrors the navbar's navbar-initial-data bootstrap.
+        return view('user.follow-profile', [
+            'profileData' => json_encode(
+                $this->profilePayload($current, $user),
+                JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+            ),
+        ]);
     }
 
     public function inboxPage(): View
@@ -34,7 +47,7 @@ class FollowController extends Controller
     public function users(Request $request): JsonResponse
     {
         $current = $request->user();
-        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->where('is_disabled', false)->whereNull('deactivated_at')->orderBy('display_name')->get();
+        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active()->orderBy('display_name')->get();
 
         return response()->json(['success' => true, 'data' => $users->map(fn (User $user): array => [
             'id' => $user->id,
@@ -51,6 +64,17 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
         }
 
+        return response()->json(['success' => true, 'data' => $this->profilePayload($current, $user)]);
+    }
+
+    /**
+     * The viewer-specific profile payload shared by the hydrated page
+     * ({@see self::profilePage()}) and the refresh endpoint ({@see self::profile()}).
+     *
+     * @return array<string, mixed>
+     */
+    private function profilePayload(User $current, User $user): array
+    {
         $currentInterestIds = InterestRating::query()->where('user_id', $current->id)->whereNull('character_id')->where('level', '>', 0)->pluck('interest_id');
         $mutualInterests = InterestRating::query()
             ->with('interest:id,name')
@@ -59,12 +83,13 @@ class FollowController extends Controller
             ->where('level', '>', 0)
             ->whereIn('interest_id', $currentInterestIds)
             ->get()
-            ->map(fn (InterestRating $rating): array => ['id' => $rating->interest_id, 'name' => $rating->interest?->name]);
+            ->map(fn (InterestRating $rating): array => ['id' => $rating->interest_id, 'name' => $rating->interest?->name])
+            ->all();
 
         $followRequest = FollowRequest::query()->where('requester_id', $current->id)->where('recipient_id', $user->id)->first();
         $incoming = FollowRequest::query()->where('requester_id', $user->id)->where('recipient_id', $current->id)->where('status', 'accepted')->exists();
 
-        return response()->json(['success' => true, 'data' => [
+        return [
             'id' => $user->id,
             'display_name' => $user->display_name ?: $user->name,
             'user_type' => $user->user_type,
@@ -72,7 +97,7 @@ class FollowController extends Controller
             'mutual_interests' => $mutualInterests,
             'follow_request' => $this->followRequestPayload($followRequest),
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
-        ]]);
+        ];
     }
 
     public function requestFollow(Request $request, User $user): JsonResponse
@@ -105,10 +130,11 @@ class FollowController extends Controller
     public function inbox(Request $request): JsonResponse
     {
         $current = $request->user();
-        // Hide requests from accounts that have since deactivated or deleted —
-        // whereHas('requester') drops soft-deleted requesters via the User scope.
+        // Hide requests from accounts that have since deactivated, been disabled,
+        // or deleted — whereHas('requester') drops soft-deleted requesters via the
+        // User scope; active() covers deactivated + disabled.
         $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender')
-            ->whereHas('requester', fn ($q) => $q->whereNull('deactivated_at'))
+            ->whereHas('requester', fn ($q) => $q->active())
             ->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
 
         return response()->json(['success' => true, 'data' => $requests->map(fn (FollowRequest $followRequest): array => [
@@ -126,7 +152,7 @@ class FollowController extends Controller
     public function count(Request $request): JsonResponse
     {
         return response()->json(['success' => true, 'data' => ['count' => FollowRequest::query()
-            ->whereHas('requester', fn ($q) => $q->whereNull('deactivated_at'))
+            ->whereHas('requester', fn ($q) => $q->active())
             ->where('recipient_id', $request->user()?->id)->where('status', 'pending')->count()]]);
     }
 
@@ -147,11 +173,11 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 
-        // A requester who deactivated or deleted after sending must stay hidden:
-        // requester is null once soft-deleted (User scope) and gets the same
-        // treatment as a deactivated one.
+        // A requester who deactivated, was disabled, or deleted after sending must
+        // stay hidden: requester is null once soft-deleted (User scope), and
+        // isActive() covers the deactivated + disabled states.
         $requester = $followRequest->requester;
-        if ($requester === null || $requester->isDeactivated()) {
+        if ($requester === null || ! $requester->isActive()) {
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 
@@ -169,7 +195,7 @@ class FollowController extends Controller
 
     private function isDiscoverable(User $user): bool
     {
-        return $user->approved_at !== null && ! $user->is_disabled && ! $user->isDeactivated();
+        return $user->approved_at !== null && $user->isActive();
     }
 
     private function declinedRequestCanBeRetried(FollowRequest $followRequest): bool

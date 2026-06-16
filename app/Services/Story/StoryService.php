@@ -126,7 +126,7 @@ class StoryService
             ->with('user')
             ->get()
             ->pluck('user')
-            ->filter();
+            ->filter(fn (?User $u): bool => $u !== null && $u->isActive());
 
         $options = $authorUsers
             ->map(fn (User $u): array => ['type' => 'user', 'id' => $u->id, 'name' => $u->display_name ?: $u->name])
