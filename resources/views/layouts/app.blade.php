@@ -26,7 +26,9 @@
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
       $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
-      $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->count() : 0;
+      // Mirror the follow-request inbox filter (requester still active) so the
+      // badge never counts requests the inbox hides.
+      $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->whereHas('requester', fn ($q) => $q->active())->count() : 0;
       // Mirror the invite-inbox filter (pendingForActiveOwner) so the badge count
       // never includes invites the inbox hides (owner since gone inactive).
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;

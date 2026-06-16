@@ -27,6 +27,13 @@ class StoryPresenter
      */
     public static function summary(Story $story): array
     {
+        // Inactive (deactivated/disabled/deleted) co-authors and their tags must
+        // not surface even on author-facing listings, and this is the shape the
+        // future discovery feed reuses. Mirrors readerView()'s filtering.
+        $activeAuthors = $story->authors
+            ->filter(fn (StoryAuthor $a): bool => $a->isAccepted() && self::isActiveUser($a->user));
+        $activeUserIds = $activeAuthors->pluck('user_id')->map(fn ($id): int => (int) $id)->all();
+
         return [
             'id' => $story->id,
             'ulid' => $story->ulid,
@@ -36,8 +43,11 @@ class StoryPresenter
             'visibility' => $story->visibility->value,
             'owner' => self::userRef($story->user),
             'interests' => self::interests($story),
-            'involves' => self::involvements($story),
-            'authors' => self::authors($story),
+            'involves' => self::involvements($story, $activeUserIds),
+            'authors' => $activeAuthors
+                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
+                ->values()
+                ->all(),
             'node_count' => $story->isCyoa() ? ($story->nodes_count ?? $story->nodes()->count()) : null,
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
             'created_at' => $story->created_at?->format('Y-m-d H:i:s'),
@@ -157,8 +167,9 @@ class StoryPresenter
 
     private static function isActiveUser(?User $user): bool
     {
-        // A soft-deleted user resolves to null via the default relation scope.
-        return $user !== null && ! $user->isDeactivated() && $user->canLogin();
+        // A soft-deleted user resolves to null via the default relation scope;
+        // User::isActive() covers the deactivated + disabled states.
+        return $user !== null && $user->isActive();
     }
 
     /**
