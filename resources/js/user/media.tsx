@@ -117,6 +117,7 @@ function UserMediaPage() {
     uploadAbortRef.current = abortController;
     setUploading(true);
     setProgress(0);
+    let completedCount = 0;
     try {
       for (const [index, selectedFile] of files.entries()) {
         const type = mediaTypeForFile(selectedFile);
@@ -157,6 +158,7 @@ function UserMediaPage() {
         }
 
         await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+        completedCount += 1;
       }
 
       toast.success(files.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
@@ -164,10 +166,16 @@ function UserMediaPage() {
       resetForm();
       listing.reload();
     } catch (err) {
+      if (completedCount > 0) {
+        setFiles(files.slice(completedCount));
+        listing.reload();
+      }
+
       if (err instanceof DOMException && err.name === 'AbortError') {
-        toast.info('Upload canceled.');
+        toast.info(completedCount > 0 ? `${completedCount} upload${completedCount === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');
       } else {
-        toast.error(getErrorMessage(err));
+        const message = getErrorMessage(err);
+        toast.error(completedCount > 0 ? `${message} ${completedCount} upload${completedCount === 1 ? '' : 's'} completed before the failure.` : message);
       }
     } finally {
       setUploading(false);

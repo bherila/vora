@@ -241,6 +241,19 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.video.status', 'processing');
     }
 
+    public function test_other_user_video_by_id_does_not_expose_original_signed_url(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $video = Media::factory()->for($owner)->video()->approved()->create();
+
+        $this->actingAs($viewer)->getJson("/api/media/{$video->id}")
+            ->assertOk()
+            ->assertJsonPath('data.url', null)
+            ->assertJsonPath('data.video.status', 'processing');
+    }
+
     public function test_owner_video_endpoint_still_includes_original_signed_url(): void
     {
         $this->fakeStorage();
