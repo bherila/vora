@@ -3,15 +3,19 @@
 namespace App\Notifications;
 
 use App\Models\Post;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Sent to a follower when an account they follow publishes a post they are
  * allowed to see.
  */
-class FollowedUserPosted extends Notification
+class FollowedUserPosted extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(private readonly Post $post) {}
@@ -21,7 +25,7 @@ class FollowedUserPosted extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->deliveryChannels($notifiable, 'notify_new_post');
     }
 
     /**
@@ -39,5 +43,13 @@ class FollowedUserPosted extends Notification
             'post_ulid' => $this->post->ulid,
             'url' => '/p/'.$this->post->ulid,
         ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('New post', $actor.' posted something new.', $data);
     }
 }

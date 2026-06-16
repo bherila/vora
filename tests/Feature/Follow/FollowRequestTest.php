@@ -12,6 +12,7 @@ use App\Notifications\FollowRequestReceived;
 use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\TestCase;
 
 class FollowRequestTest extends TestCase
@@ -64,7 +65,7 @@ class FollowRequestTest extends TestCase
         Notification::assertSentTo(
             $recipient,
             FollowRequestReceived::class,
-            fn (FollowRequestReceived $notification, array $channels): bool => $channels === ['database'],
+            fn (FollowRequestReceived $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
         );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'requested']);
 
@@ -75,7 +76,7 @@ class FollowRequestTest extends TestCase
         Notification::assertSentTo(
             $requester,
             FollowRequestAccepted::class,
-            fn (FollowRequestAccepted $notification, array $channels): bool => $channels === ['database'],
+            fn (FollowRequestAccepted $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
         );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'accepted']);
         $this->actingAs($recipient)->getJson("/api/users/{$requester->id}")

@@ -4,14 +4,18 @@ namespace App\Notifications;
 
 use App\Models\Post;
 use App\Models\User;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Sent to a post's author when someone comments on it.
  */
-class PostCommentedOn extends Notification
+class PostCommentedOn extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(
@@ -24,7 +28,7 @@ class PostCommentedOn extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->deliveryChannels($notifiable, 'notify_post_comment');
     }
 
     /**
@@ -40,5 +44,13 @@ class PostCommentedOn extends Notification
             'post_ulid' => $this->post->ulid,
             'url' => '/p/'.$this->post->ulid,
         ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('New comment', $actor.' commented on your post.', $data);
     }
 }
