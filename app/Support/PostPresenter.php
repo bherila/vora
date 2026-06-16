@@ -36,8 +36,32 @@ class PostPresenter
             'discoverable' => $post->discoverable,
             'author' => self::author($post->user),
             'attachments' => self::attachments($post, $viewer),
+            'reaction_count' => self::reactionCount($post),
+            'viewer_reacted' => self::viewerReacted($post, $viewer),
             'created_at' => $post->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Prefer the counts loaded by {@see Post::scopeWithReactionState()} (set on
+     * listings to avoid an N+1); fall back to a query for single-item contexts.
+     */
+    private static function reactionCount(Post $post): int
+    {
+        return (int) ($post->reactions_count ?? $post->reactions()->count());
+    }
+
+    private static function viewerReacted(Post $post, ?User $viewer): bool
+    {
+        if ($viewer === null) {
+            return false;
+        }
+
+        if ($post->viewer_reaction_count !== null) {
+            return (int) $post->viewer_reaction_count > 0;
+        }
+
+        return $post->reactions()->where('user_id', $viewer->id)->exists();
     }
 
     /**
