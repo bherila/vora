@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\StoryStatus;
 use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Media;
@@ -10,7 +11,6 @@ use App\Models\PostAttachment;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * Serializes a Post for API responses. Pure (no I/O). Never exposes moderation
@@ -89,18 +89,37 @@ class PostPresenter
     }
 
     /**
-     * The intersection gate. For privacy-controlled attachments (Media/Story) we
-     * defer to that model's own view policy via the Gate, so the rule stays
-     * identical to opening the item directly — owner/admin, approval, audience,
-     * an active owner, and (for stories) published status — with no duplication.
-     * Characters/Interests are public profile/tag references.
+     * The intersection gate for privacy-controlled attachments (Media/Story):
+     * the viewer must own it / be an admin, or it must be approved, viewable to
+     * them by its own audience, and (for stories) published — i.e. the same rule
+     * as opening it directly.
+     *
+     * The owner-active check the policies also apply is intentionally omitted: an
+     * attachment is always the post author's own content, and the post is only
+     * ever presented when that author is active (the feed filters inactive
+     * owners; the single-post policy requires an active owner). Checking it here
+     * via Gate would re-fetch every attachment's owner — an N+1 across a feed
+     * page — for a condition already guaranteed by the surrounding post.
      */
     private static function canSee(Model $attachable, ?User $viewer): bool
     {
-        if ($attachable instanceof Media || $attachable instanceof Story) {
-            return $viewer !== null && Gate::forUser($viewer)->allows('view', $attachable);
+        if ($attachable instanceof Media) {
+            return self::ownerOrAdmin($attachable->user_id, $viewer)
+                || ($attachable->isApprovedContent() && $attachable->isViewableBy($viewer));
+        }
+
+        if ($attachable instanceof Story) {
+            return self::ownerOrAdmin($attachable->user_id, $viewer)
+                || ($attachable->status === StoryStatus::Published
+                    && $attachable->isApprovedContent()
+                    && $attachable->isViewableBy($viewer));
         }
 
         return true;
+    }
+
+    private static function ownerOrAdmin(int $ownerId, ?User $viewer): bool
+    {
+        return $viewer !== null && ($viewer->isAdmin() || $viewer->id === $ownerId);
     }
 }

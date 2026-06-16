@@ -81,6 +81,22 @@ class PostFeedTest extends TestCase
         $this->assertContains($ownRejected->ulid, $ulids, 'the author always sees their own post');
     }
 
+    public function test_feed_excludes_posts_from_an_inactive_followed_author(): void
+    {
+        $followed = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $this->follow($viewer, $followed);
+        $post = Post::factory()->for($followed)->approved()->create();
+
+        $this->assertContains($post->ulid, $this->feedUlids($viewer));
+
+        // The author deactivates after the viewer followed them (deactivated_at
+        // is not mass-assignable, so set it directly).
+        $followed->forceFill(['deactivated_at' => now()])->save();
+
+        $this->assertNotContains($post->ulid, $this->feedUlids($viewer), 'an inactive author drops out of the feed');
+    }
+
     public function test_feed_is_newest_first(): void
     {
         $spacer = User::factory()->approved()->create();
