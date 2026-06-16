@@ -57,8 +57,8 @@ class PostCommentController extends Controller
         $comment->save();
 
         // Notify the post's author of the new comment, never for their own.
-        if ($post->user_id !== $user->id && $post->user?->notify_post_comment) {
-            $post->user->notify(new PostCommentedOn($post, $user));
+        if ($post->user_id !== $user->id) {
+            $post->user?->notify(new PostCommentedOn($post, $user));
         }
 
         $comment->load('user:id,name,display_name');

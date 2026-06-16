@@ -42,10 +42,6 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_login_at',
         'email_follow_request_received',
         'email_follow_request_accepted',
-        'notify_new_post',
-        'notify_post_reaction',
-        'notify_post_comment',
-        'notify_follow_accepted',
         'profile_picture_media_id',
     ];
 
@@ -82,10 +78,6 @@ class User extends Authenticatable implements MustVerifyEmail
             'force_change_pw' => 'boolean',
             'email_follow_request_received' => 'boolean',
             'email_follow_request_accepted' => 'boolean',
-            'notify_new_post' => 'boolean',
-            'notify_post_reaction' => 'boolean',
-            'notify_post_comment' => 'boolean',
-            'notify_follow_accepted' => 'boolean',
         ];
     }
 
