@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AudienceMember;
 use App\Models\FollowRequest;
 use App\Models\Media;
+use App\Models\Post;
 use App\Models\Story;
 use App\Models\StoryInvolvement;
 use App\Models\User;
@@ -81,6 +82,10 @@ class UserAccountService
             ->orWhere(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Media)->getMorphClass())
                     ->whereIn('privacyable_id', $user->media()->select('id'));
+            })
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', (new Post)->getMorphClass())
+                    ->whereIn('privacyable_id', $user->posts()->select('id'));
             })
             ->delete();
     }
