@@ -1,6 +1,8 @@
+import type { Audience } from '@/lib/audience';
+
+export type { Audience };
 export type StoryType = 'long_form' | 'cyoa';
 export type StoryStatus = 'draft' | 'published';
-export type Visibility = 'users' | 'unlisted';
 export type AuthorStatus = 'pending' | 'accepted';
 
 export interface InterestTag {
@@ -56,7 +58,8 @@ export interface StorySummary {
   title: string;
   type: StoryType;
   status: StoryStatus;
-  visibility: Visibility;
+  audience: Audience;
+  discoverable: boolean;
   owner: { id: number; display_name: string } | null;
   interests: InterestTag[];
   involves: InvolvementTag[];

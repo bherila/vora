@@ -1,5 +1,7 @@
+import type { Audience } from '@/lib/audience';
+
+export type { Audience };
 export type MediaTypeValue = 'photo' | 'video';
-export type VisibilityValue = 'users' | 'unlisted';
 export type MediaPurposeValue = 'gallery' | 'profile_picture';
 export type ModerationStatusValue = 'pending' | 'approved' | 'rejected';
 
@@ -36,7 +38,8 @@ export interface MediaItem {
   original_filename: string;
   mime_type: string;
   size_bytes: number | null;
-  visibility: VisibilityValue;
+  audience: Audience;
+  discoverable: boolean;
   upload_status: string;
   url: string | null;
   /** Signed URL of the small JPEG thumbnail/poster, when one was generated. */

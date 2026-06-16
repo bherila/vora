@@ -3,12 +3,14 @@
 namespace App\Http\Requests\Story;
 
 use App\Enums\StoryStatus;
-use App\Enums\Visibility;
+use App\Http\Requests\Concerns\ValidatesAudience;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateStoryRequest extends FormRequest
 {
+    use ValidatesAudience;
+
     public function authorize(): bool
     {
         $user = $this->user();
@@ -24,7 +26,7 @@ class UpdateStoryRequest extends FormRequest
         return [
             'title' => ['sometimes', 'required', 'string', 'max:255'],
             'status' => ['sometimes', 'required', Rule::in(StoryStatus::values())],
-            'visibility' => ['sometimes', 'required', Rule::in(Visibility::values())],
+            ...$this->audienceRules(['sometimes', 'required']),
             'body' => ['nullable', 'string'],
             'interest_ids' => ['nullable', 'array'],
             'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],

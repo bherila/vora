@@ -11,7 +11,8 @@ interface AdminStory {
   title: string;
   type: string;
   status: string;
-  visibility: string;
+  audience: string;
+  discoverable: boolean;
   owner: { id: number; display_name: string } | null;
   moderation_status: 'pending' | 'approved' | 'rejected';
   moderation_notes: string | null;

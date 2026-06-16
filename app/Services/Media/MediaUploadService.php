@@ -2,10 +2,10 @@
 
 namespace App\Services\Media;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
-use App\Enums\Visibility;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
@@ -60,11 +60,12 @@ class MediaUploadService
         string $filename,
         string $mimeType,
         ?string $title,
-        Visibility $visibility,
+        Audience $audience,
         array $interestIds,
         bool $wantsThumbnail = false,
         ?string $perceptualHash = null,
         MediaPurpose $purpose = MediaPurpose::Gallery,
+        bool $discoverable = true,
     ): array {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -83,7 +84,8 @@ class MediaUploadService
             'perceptual_hash' => $perceptualHash,
             'title' => $title,
             'upload_status' => 'pending',
-            'visibility' => $visibility,
+            'audience' => $audience,
+            'discoverable' => $discoverable,
         ]);
         $media->save();
 

@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
-use App\Enums\Visibility;
-use App\Traits\HasVisibility;
+use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,14 +19,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * A photo or video uploaded by a user. Stored in R2 via a presigned upload;
  * videos additionally get transcoded to HLS by the external s3-hls service.
  *
- * Privacy (visibility) and admin review (moderation) are provided by the shared
- * HasVisibility/Moderatable traits. Moderation state is internal and must never
- * be serialized to the owner.
+ * Privacy (audience) and admin review (moderation) are provided by the shared
+ * HasPrivacyPolicy/Moderatable traits. Moderation state is internal and must
+ * never be serialized to the owner.
  */
 class Media extends Model
 {
     use HasFactory;
-    use HasVisibility;
+    use HasPrivacyPolicy;
     use Moderatable;
     use SerializesDatesAsLocal;
 
@@ -63,7 +63,8 @@ class Media extends Model
         'size_bytes',
         'title',
         'upload_status',
-        'visibility',
+        'audience',
+        'discoverable',
     ];
 
     /**
@@ -74,7 +75,8 @@ class Media extends Model
         return [
             'type' => MediaType::class,
             'purpose' => MediaPurpose::class,
-            'visibility' => Visibility::class,
+            'audience' => Audience::class,
+            'discoverable' => 'boolean',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
             'hls_checked_at' => 'datetime',

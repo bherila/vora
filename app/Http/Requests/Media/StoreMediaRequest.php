@@ -3,13 +3,15 @@
 namespace App\Http\Requests\Media;
 
 use App\Enums\MediaType;
-use App\Enums\Visibility;
+use App\Http\Requests\Concerns\ValidatesAudience;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreMediaRequest extends FormRequest
 {
+    use ValidatesAudience;
+
     public function authorize(): bool
     {
         $user = $this->user();
@@ -28,7 +30,7 @@ class StoreMediaRequest extends FormRequest
             'content_type' => ['required', 'string', 'max:255'],
             'size' => ['nullable', 'integer', 'min:1'],
             'title' => ['nullable', 'string', 'max:255'],
-            'visibility' => ['required', Rule::in(Visibility::values())],
+            ...$this->audienceRules(['required']),
             'interest_ids' => ['nullable', 'array'],
             'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
             // The client generates the thumbnail/poster itself; ask for a second

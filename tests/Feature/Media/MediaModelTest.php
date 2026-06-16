@@ -2,8 +2,8 @@
 
 namespace Tests\Feature\Media;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
-use App\Enums\Visibility;
 use App\Models\Interest;
 use App\Models\Media;
 use App\Models\User;
@@ -18,7 +18,8 @@ class MediaModelTest extends TestCase
     {
         $media = Media::factory()->create();
 
-        $this->assertInstanceOf(Visibility::class, $media->visibility);
+        $this->assertInstanceOf(Audience::class, $media->audience);
+        $this->assertTrue($media->discoverable);
         $this->assertInstanceOf(ModerationStatus::class, $media->moderation_status);
         $this->assertTrue($media->isPendingReview());
     }
@@ -32,19 +33,20 @@ class MediaModelTest extends TestCase
         $this->assertTrue($media->interests->contains($interest));
     }
 
-    public function test_visible_to_scope_excludes_unlisted_and_others(): void
+    public function test_discoverable_is_orthogonal_to_audience(): void
     {
         $owner = User::factory()->approved()->create();
         $other = User::factory()->approved()->create();
 
-        Media::factory()->for($owner)->create(['visibility' => Visibility::Users]);
+        // Both are the Everyone audience; "unlisted" only flips discoverable off.
+        Media::factory()->for($owner)->create();
         Media::factory()->for($owner)->unlisted()->create();
-        Media::factory()->for($other)->create(['visibility' => Visibility::Users]);
 
-        // Owner sees their own (both) plus the other user's public one = 3.
-        $this->assertSame(3, Media::query()->visibleTo($owner)->count());
-        // The other user sees only the two public ones (not owner's unlisted).
-        $this->assertSame(2, Media::query()->visibleTo($other)->count());
+        // viewableBy is audience-based: a link-only (unlisted) item is still the
+        // Everyone audience, so any viewer is authorized to see both.
+        $this->assertSame(2, Media::query()->viewableBy($other)->count());
+        // Discovery is the separate axis: only the listed item shows up.
+        $this->assertSame(1, Media::query()->discoverable()->count());
     }
 
     public function test_moderation_transitions(): void
