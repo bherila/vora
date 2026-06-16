@@ -142,6 +142,27 @@ class ExploreApiTest extends TestCase
             ->assertJsonPath('data.0.id', $video->id);
     }
 
+    public function test_explore_excludes_media_from_inactive_owners(): void
+    {
+        $this->fakeStorage();
+        $viewer = User::factory()->approved()->create();
+        $disabled = User::factory()->approved()->disabled()->create();
+        $deactivated = User::factory()->approved()->create();
+        $active = User::factory()->approved()->create();
+
+        // Approved, listed media — but the owners are admin-disabled or
+        // self-deactivated, so the rows must stay out of the public feed.
+        Media::factory()->for($disabled)->approved()->create(['title' => 'From disabled']);
+        Media::factory()->for($deactivated)->approved()->create(['title' => 'From deactivated']);
+        $deactivated->forceFill(['deactivated_at' => now()])->save();
+        $visible = Media::factory()->for($active)->approved()->create(['title' => 'Visible']);
+
+        $this->actingAs($viewer)->getJson('/api/explore')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $visible->id);
+    }
+
     public function test_explore_requires_approval(): void
     {
         $pending = User::factory()->create(); // not approved

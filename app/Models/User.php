@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -115,6 +116,30 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isDeactivated(): bool
     {
         return $this->deactivated_at !== null;
+    }
+
+    /**
+     * Whether this account is visible to and interactable with by other users:
+     * not self-deactivated and not admin-disabled. Soft-deleted users resolve to
+     * null before this is ever reached. The single source of truth shared with
+     * {@see self::scopeActive()}; mirror any change there.
+     */
+    public function isActive(): bool
+    {
+        return ! $this->isDeactivated() && $this->canLogin();
+    }
+
+    /**
+     * Query counterpart to {@see self::isActive()}: limit to accounts that are
+     * neither deactivated nor disabled. Soft-deleted rows are already excluded by
+     * the model's default scope.
+     *
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->whereNull('deactivated_at')->where('is_disabled', false);
     }
 
     /**

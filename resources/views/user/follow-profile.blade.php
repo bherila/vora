@@ -2,7 +2,7 @@
 
 @section('content')
   <script id="follow-profile-data" type="application/json" @cspNonce>
-    @json(['userId' => $profileUser->id])
+    {!! $profileData !!}
   </script>
   <div id="follow-profile"></div>
 @endsection
