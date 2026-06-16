@@ -8,6 +8,8 @@ use App\Enums\Visibility;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
+use App\Models\MediaPlaybackAuditLog;
+use App\Models\User;
 use App\Services\Media\HlsService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
@@ -152,10 +154,13 @@ class MediaController extends Controller
             ->firstOrFail();
         Gate::authorize('view', $media);
         $media->load('interests');
+        $viewer = $request->user();
+        $includeOriginalVideoUrl = $viewer instanceof User
+            && ($media->user_id === $viewer->id || $viewer->isAdmin());
 
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($media),
+            'data' => $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl),
         ]);
     }
 
@@ -206,6 +211,10 @@ class MediaController extends Controller
                 return response()->json(['success' => false, 'message' => 'Manifest not found.'], 404);
             }
 
+            $this->auditPlayback($request, $media, 'hls_manifest', $path, [
+                'content_type' => $manifest['contentType'],
+            ]);
+
             return response($manifest['body'], 200, [
                 'Content-Type' => $manifest['contentType'],
                 'Cache-Control' => 'private, max-age=10',
@@ -217,6 +226,27 @@ class MediaController extends Controller
             return response()->json(['success' => false, 'message' => 'Segment not found.'], 404);
         }
 
+        $this->auditPlayback($request, $media, 'hls_segment_redirect', $path);
+
         return redirect()->away($url, 302);
+    }
+
+    /**
+     * Keep a lightweight audit trail of successful HLS playback access. Do not
+     * persist the generated R2 URL; it is a credential-bearing artifact.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    private function auditPlayback(Request $request, Media $media, string $action, string $path, array $metadata = []): void
+    {
+        MediaPlaybackAuditLog::query()->create([
+            'media_id' => $media->id,
+            'user_id' => $request->user()?->id,
+            'action' => $action,
+            'path' => $path,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'metadata' => $metadata === [] ? null : $metadata,
+        ]);
     }
 }

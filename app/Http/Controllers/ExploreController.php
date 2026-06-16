@@ -59,7 +59,7 @@ class ExploreController extends Controller
 
         return response()->json([
             'success' => true,
-            ...$this->responder->page($paginator),
+            ...$this->responder->page($paginator, includeOriginalVideoUrls: false),
         ]);
     }
 }
