@@ -67,7 +67,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            ...$this->responder->page($paginator),
+            ...$this->responder->page($paginator, includeOriginalVideoUrls: true),
         ]);
     }
 
@@ -102,7 +102,7 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($media),
+            'data' => $this->responder->item($media, includeOriginalVideoUrl: true),
             'upload_url' => $result['upload_url'],
             'upload_headers' => $result['upload_headers'],
             'thumbnail_upload_url' => $result['thumbnail_upload_url'],
@@ -132,12 +132,13 @@ class MediaController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($media),
+            'data' => $this->responder->item($media, includeOriginalVideoUrl: true),
         ]);
     }
 
     /**
-     * Show a single item the current user owns (by id).
+     * Show a single item by id. Owners/admins get video originals; other
+     * authorized viewers only get the HLS playback surface.
      */
     public function show(Request $request, Media $media): JsonResponse
     {
@@ -148,10 +149,13 @@ class MediaController extends Controller
         }
 
         $media->load('interests');
+        $viewer = $request->user();
+        $includeOriginalVideoUrl = $viewer instanceof User
+            && ($media->user_id === $viewer->id || $viewer->isAdmin());
 
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($media),
+            'data' => $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl),
         ]);
     }
 
