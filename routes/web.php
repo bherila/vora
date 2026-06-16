@@ -14,6 +14,7 @@ use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\PostReactionController;
@@ -171,6 +172,13 @@ Route::middleware(['auth', 'approved'])->group(function () {
     });
 
     Route::get('/api/feed', [FeedController::class, 'index']);
+
+    Route::prefix('api/notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('/read-all', [NotificationController::class, 'markAllRead']);
+        Route::post('/{id}/read', [NotificationController::class, 'markRead']);
+    });
 });
 
 /*

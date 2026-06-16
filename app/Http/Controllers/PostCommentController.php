@@ -7,6 +7,7 @@ use App\Http\Requests\Post\CommentRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
+use App\Notifications\PostCommentedOn;
 use App\Support\PostCommentPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,6 +55,11 @@ class PostCommentController extends Controller
         // reactively. The moderation column is not mass-assignable.
         $comment->moderation_status = ModerationStatus::Approved;
         $comment->save();
+
+        // Notify the post's author of the new comment, never for their own.
+        if ($post->user_id !== $user->id) {
+            $post->user?->notify(new PostCommentedOn($post, $user));
+        }
 
         $comment->load('user:id,name,display_name');
 

@@ -5,11 +5,13 @@ namespace App\Services\Post;
 use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
+use App\Notifications\FollowedUserPosted;
 use App\Services\Privacy\PrivacyAuditor;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -80,7 +82,27 @@ class PostService
         $post->syncAudienceMembers($audience === Audience::SpecificPeople ? $audienceUserIds : []);
         $this->auditor->recordCreation($post, $author, $post->privacySnapshot(), $request);
 
+        $this->notifyFollowers($author, $post);
+
         return $post;
+    }
+
+    /**
+     * Notify the author's active followers who are allowed to see the new post.
+     */
+    private function notifyFollowers(User $author, Post $post): void
+    {
+        $followerIds = FollowRequest::query()
+            ->where('recipient_id', $author->id)
+            ->where('status', FollowRequest::STATUS_ACCEPTED)
+            ->pluck('requester_id');
+
+        User::query()->whereIn('id', $followerIds)->active()->get()
+            ->each(function (User $follower) use ($post): void {
+                if ($post->isViewableBy($follower)) {
+                    $follower->notify(new FollowedUserPosted($post));
+                }
+            });
     }
 
     /**
