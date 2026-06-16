@@ -19,8 +19,10 @@ use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use Illuminate\Support\Facades\Route;
 
-// Home page (public).
+// Home page and legal pages (public).
 Route::get('/', fn () => view('welcome'))->name('home');
+Route::view('/privacy', 'privacy')->name('privacy');
+Route::view('/terms', 'terms')->name('terms');
 
 /*
 |--------------------------------------------------------------------------
