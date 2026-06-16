@@ -72,6 +72,28 @@ class PrivacyAuditTest extends TestCase
         $this->assertSame(0, PrivacyAuditLog::query()->count());
     }
 
+    public function test_a_partial_save_preserves_the_specific_allowlist(): void
+    {
+        $author = User::factory()->approved()->create();
+        $granted = User::factory()->approved()->create();
+        $story = Story::factory()->for($author)->create(['audience' => Audience::SpecificPeople]);
+        $story->syncAudienceMembers([$granted->id]);
+
+        // A save that re-sends the audience but omits audience_user_ids (exactly
+        // what the editor does on a title/body save) must not wipe the grants.
+        $this->actingAs($author)
+            ->patchJson("/api/stories/{$story->id}", [
+                'title' => 'Renamed',
+                'audience' => Audience::SpecificPeople->value,
+            ])
+            ->assertOk();
+
+        $this->assertTrue(
+            $story->fresh()->audienceMembers()->where('user_id', $granted->id)->exists(),
+            'the allowlist survives a partial save',
+        );
+    }
+
     public function test_erasing_the_actor_nulls_the_link_but_retains_the_record(): void
     {
         $author = User::factory()->approved()->create();

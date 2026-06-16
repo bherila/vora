@@ -72,12 +72,17 @@ trait HasPrivacyPolicy
         $morph = $this->getMorphClass();
 
         return $query->where(function (Builder $q) use ($viewer, $table, $morph): void {
-            // Everyone is viewable to any (authenticated or not) viewer.
-            $q->where($table.'.audience', Audience::Everyone->value);
-
+            // No authenticated viewer sees nothing — content is never served to
+            // guests (mirrors isViewableBy(null) === false). This keeps the scope
+            // safe to reuse on any future guest-facing listing.
             if ($viewer === null) {
+                $q->whereRaw('1 = 0');
+
                 return;
             }
+
+            // Everyone is viewable to any signed-in viewer.
+            $q->where($table.'.audience', Audience::Everyone->value);
 
             $viewerId = $viewer->id;
 

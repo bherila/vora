@@ -84,7 +84,16 @@ return new class extends Migration
                 $table->string('visibility')->default('users')->after('id');
             });
 
-            DB::table($name)->where('discoverable', false)->update(['visibility' => 'unlisted']);
+            // The old binary model cannot express Followers/Mutuals/Specific.
+            // Fail safe: anything not fully public (restricted audience OR not
+            // discoverable) rolls back to link-only "unlisted" rather than
+            // becoming public/listed under the legacy policy.
+            DB::table($name)
+                ->where(function ($query): void {
+                    $query->where('discoverable', false)
+                        ->orWhere('audience', '!=', 'everyone');
+                })
+                ->update(['visibility' => 'unlisted']);
 
             Schema::table($name, function (Blueprint $table): void {
                 $table->dropIndex(['audience', 'discoverable']);

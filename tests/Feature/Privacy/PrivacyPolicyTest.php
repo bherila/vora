@@ -6,7 +6,9 @@ use App\Enums\Audience;
 use App\Models\AudienceMember;
 use App\Models\FollowRequest;
 use App\Models\Media;
+use App\Models\Story;
 use App\Models\User;
+use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -179,5 +181,30 @@ class PrivacyPolicyTest extends TestCase
         $granted->forceDelete();
 
         $this->assertSame(0, AudienceMember::query()->count(), 'an erased user leaves no allowlist grants');
+    }
+
+    public function test_an_unauthenticated_viewer_matches_nothing_in_the_scope(): void
+    {
+        $owner = User::factory()->approved()->create();
+        Media::factory()->for($owner)->create(['audience' => Audience::Everyone]);
+
+        // Parity with isViewableBy(null) === false: content is never served to
+        // guests, even the Everyone tier.
+        $this->assertSame(0, Media::query()->viewableBy(null)->count());
+    }
+
+    public function test_purging_an_owner_prunes_their_content_allowlists(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $granted = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create(['audience' => Audience::SpecificPeople]);
+        $story->syncAudienceMembers([$granted->id]);
+        $this->assertSame(1, AudienceMember::query()->count());
+
+        // Purge force-deletes the owner; stories cascade at the DB level without
+        // firing the model hook, so the allowlist must be cleaned explicitly.
+        app(UserAccountService::class)->purge($owner);
+
+        $this->assertSame(0, AudienceMember::query()->count());
     }
 }

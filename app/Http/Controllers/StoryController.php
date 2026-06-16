@@ -163,9 +163,17 @@ class StoryController extends Controller
         if (array_key_exists('audience', $data)
             || array_key_exists('discoverable', $data)
             || array_key_exists('audience_user_ids', $data)) {
-            $story->syncAudienceMembers(
-                $story->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []
-            );
+            if ($story->audience === Audience::SpecificPeople) {
+                // Only rewrite the allowlist when the request actually carries it.
+                // A title/body save (or a discoverable toggle) that omits
+                // audience_user_ids must not silently revoke every grant.
+                if (array_key_exists('audience_user_ids', $data)) {
+                    $story->syncAudienceMembers($request->audienceUserIds());
+                }
+            } else {
+                // Leaving the SpecificPeople tier clears any stale grants.
+                $story->syncAudienceMembers([]);
+            }
             $this->auditor->record($story, $request->user(), $privacyBefore, $story->privacySnapshot(), $request);
         }
 
