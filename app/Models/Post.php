@@ -75,16 +75,28 @@ class Post extends Model
     }
 
     /**
-     * Load the reaction summary the presenter needs in one place: the total
-     * count and whether $viewer has reacted, without an N+1 across a listing.
+     * @return HasMany<PostComment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(PostComment::class);
+    }
+
+    /**
+     * Load the engagement summary the presenter needs in one place — reaction
+     * count, whether $viewer reacted, and comment count — without an N+1 across a
+     * listing.
      *
      * @param  Builder<Post>  $query
      * @return Builder<Post>
      */
-    public function scopeWithReactionState(Builder $query, ?User $viewer): Builder
+    public function scopeWithEngagementCounts(Builder $query, ?User $viewer): Builder
     {
         return $query
             ->withCount('reactions')
+            // Count only the comments this viewer may see, so comment_count agrees
+            // with the comments listing and never leaks moderation state.
+            ->withCount(['comments' => fn (Builder $inner) => $inner->visibleTo($viewer)])
             ->withCount(['reactions as viewer_reaction_count' => function (Builder $inner) use ($viewer): void {
                 $inner->where('user_id', $viewer?->id);
             }]);

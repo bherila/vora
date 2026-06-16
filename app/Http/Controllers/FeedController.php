@@ -47,7 +47,7 @@ class FeedController extends Controller
             ->whereHas('user', fn (Builder $query) => $query->active())
             ->viewableBy($viewer)
             ->with(['user', 'attachments.attachable'])
-            ->withReactionState($viewer)
+            ->withEngagementCounts($viewer)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->cursorPaginate((int) config('media.page_size', 24));
