@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Post\StorePostRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\Media\MediaResponseService;
 use App\Services\Post\PostService;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,10 @@ use Illuminate\View\View;
 
 class PostController extends Controller
 {
-    public function __construct(private readonly PostService $posts) {}
+    public function __construct(
+        private readonly PostService $posts,
+        private readonly MediaResponseService $mediaResponder,
+    ) {}
 
     /**
      * A shareable single-post page (resolved client-side by ulid), mirroring the
@@ -34,14 +38,14 @@ class PostController extends Controller
 
         $posts = Post::query()
             ->where('user_id', $user?->id)
-            ->with(['user', 'attachments.attachable'])
+            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($user)
             ->latest()
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $posts->map(fn (Post $post): array => PostPresenter::view($post, $user))->values(),
+            'data' => $posts->map(fn (Post $post): array => PostPresenter::view($post, $user, $this->mediaResponder))->values(),
         ]);
     }
 
@@ -58,13 +62,14 @@ class PostController extends Controller
             $request->attachmentsInput(),
             $request->audienceUserIds(),
             $request,
+            $request->characterId(),
         );
 
-        $post->load(['user', 'attachments.attachable']);
+        $post->load(['user', 'character.profilePicture', 'attachments.attachable']);
 
         return response()->json([
             'success' => true,
-            'data' => PostPresenter::view($post, $user),
+            'data' => PostPresenter::view($post, $user, $this->mediaResponder),
         ], 201);
     }
 
@@ -76,11 +81,11 @@ class PostController extends Controller
         $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->firstOrFail();
         Gate::authorize('view', $post);
 
-        $post->load(['user', 'attachments.attachable']);
+        $post->load(['user', 'character.profilePicture', 'attachments.attachable']);
 
         return response()->json([
             'success' => true,
-            'data' => PostPresenter::view($post, $request->user()),
+            'data' => PostPresenter::view($post, $request->user(), $this->mediaResponder),
         ]);
     }
 

@@ -55,14 +55,17 @@ class PostService
         array $attachments,
         array $audienceUserIds,
         Request $request,
+        ?int $characterId = null,
     ): Post {
         $resolved = $this->resolveAttachments($author, $attachments);
+        $character = $this->resolveCharacter($author, $characterId);
 
         $post = $author->posts()->make([
             'ulid' => (string) Str::ulid(),
             'body' => $body,
             'audience' => $audience->value,
             'discoverable' => $discoverable,
+            'character_id' => $character?->id,
         ]);
         // Short posts publish immediately and are moderated reactively (an admin
         // can reject/take one down), rather than sitting in a pre-publication
@@ -110,6 +113,25 @@ class PostService
                     }
                 }
             });
+    }
+
+    /**
+     * Resolve the persona a post is published as: a character the author owns.
+     */
+    private function resolveCharacter(User $author, ?int $characterId): ?Character
+    {
+        if ($characterId === null) {
+            return null;
+        }
+
+        $character = Character::query()->find($characterId);
+        if ($character === null || $character->user_id !== $author->id) {
+            throw ValidationException::withMessages([
+                'character_id' => 'You can only post as your own character.',
+            ]);
+        }
+
+        return $character;
     }
 
     /**

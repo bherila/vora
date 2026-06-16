@@ -25,11 +25,22 @@ class StorePostRequest extends FormRequest
     {
         return [
             'body' => ['required', 'string', 'max:2000'],
+            'character_id' => ['nullable', 'integer'],
             ...$this->audienceRules(['nullable']),
             'attachments' => ['nullable', 'array', 'max:4'],
             'attachments.*.type' => ['required', Rule::in(array_keys(PostService::ATTACHMENT_TYPES))],
             'attachments.*.id' => ['required', 'integer'],
         ];
+    }
+
+    /**
+     * The character to post as, if any.
+     */
+    public function characterId(): ?int
+    {
+        $value = $this->input('character_id');
+
+        return $value === null ? null : (int) $value;
     }
 
     /**
