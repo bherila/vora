@@ -9,6 +9,7 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
+use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -99,6 +100,45 @@ class FollowRequestTest extends TestCase
             ->assertOk();
 
         $this->assertSame(3, FollowRequestAuditLog::query()->count());
+    }
+
+    public function test_audit_logs_survive_permanent_deletion_of_follow_participants(): void
+    {
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
+        $followRequest = FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+        $auditLog = FollowRequestAuditLog::query()->create([
+            'follow_request_id' => $followRequest->id,
+            'actor_id' => $requester->id,
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'action' => 'requested',
+        ]);
+
+        app(UserAccountService::class)->purge($requester);
+
+        $this->assertSame(1, FollowRequestAuditLog::query()->count());
+        $this->assertDatabaseHas('follow_request_audit_logs', [
+            'id' => $auditLog->id,
+            'follow_request_id' => null,
+            'actor_id' => null,
+            'requester_id' => null,
+            'recipient_id' => $recipient->id,
+        ]);
+
+        app(UserAccountService::class)->purge($recipient);
+
+        $this->assertSame(1, FollowRequestAuditLog::query()->count());
+        $this->assertDatabaseHas('follow_request_audit_logs', [
+            'id' => $auditLog->id,
+            'follow_request_id' => null,
+            'requester_id' => null,
+            'recipient_id' => null,
+        ]);
     }
 
     public function test_profile_marks_declined_requests_retryable_after_24_hours(): void
