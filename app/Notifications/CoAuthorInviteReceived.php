@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use App\Models\StoryAuthor;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class CoAuthorInviteReceived extends Notification
@@ -16,19 +15,25 @@ class CoAuthorInviteReceived extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['database'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
     {
         $inviter = $this->storyAuthor->invitedBy;
         $story = $this->storyAuthor->story;
 
-        return (new MailMessage)
-            ->subject('Co-author invitation')
-            ->greeting('You have been invited to co-author a story')
-            ->line(($inviter?->display_name ?: $inviter?->name ?: 'Someone')
-                .' invited you to co-author "'.($story?->title ?? 'a story').'".')
-            ->action('Review invitations', url('/users/follow-requests'));
+        return [
+            'type' => 'co_author_invite',
+            'actor_id' => $this->storyAuthor->invited_by_user_id,
+            'actor_name' => $inviter?->display_name ?: $inviter?->name,
+            'story_id' => $story?->id,
+            'story_ulid' => $story?->ulid,
+            'story_title' => $story?->title,
+            'url' => '/users/follow-requests',
+        ];
     }
 }

@@ -40,11 +40,10 @@ class User extends Authenticatable implements MustVerifyEmail
         'preferred_user_types',
         'preferred_genders',
         'last_login_at',
-        'email_follow_request_received',
-        'email_follow_request_accepted',
         'notify_new_post',
         'notify_post_reaction',
         'notify_post_comment',
+        'notify_follow_request',
         'notify_follow_accepted',
         'profile_picture_media_id',
     ];
@@ -80,11 +79,10 @@ class User extends Authenticatable implements MustVerifyEmail
             'name_locked' => 'boolean',
             'email_locked' => 'boolean',
             'force_change_pw' => 'boolean',
-            'email_follow_request_received' => 'boolean',
-            'email_follow_request_accepted' => 'boolean',
             'notify_new_post' => 'boolean',
             'notify_post_reaction' => 'boolean',
             'notify_post_comment' => 'boolean',
+            'notify_follow_request' => 'boolean',
             'notify_follow_accepted' => 'boolean',
         ];
     }

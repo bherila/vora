@@ -32,6 +32,7 @@ class UserFactory extends Factory
             'notify_new_post' => true,
             'notify_post_reaction' => true,
             'notify_post_comment' => true,
+            'notify_follow_request' => true,
             'notify_follow_accepted' => true,
             'preferred_user_types' => ['human', 'furry', 'other'],
             'preferred_genders' => ['male', 'female', 'other'],

@@ -18,8 +18,11 @@
       'id_verified_at' => $__currentUser->id_verified_at?->toIso8601String(),
       'name_locked' => (bool) $__currentUser->name_locked,
       'email_locked' => (bool) $__currentUser->email_locked,
-      'email_follow_request_received' => (bool) $__currentUser->email_follow_request_received,
-      'email_follow_request_accepted' => (bool) $__currentUser->email_follow_request_accepted,
+      'notify_new_post' => (bool) $__currentUser->notify_new_post,
+      'notify_post_reaction' => (bool) $__currentUser->notify_post_reaction,
+      'notify_post_comment' => (bool) $__currentUser->notify_post_comment,
+      'notify_follow_request' => (bool) $__currentUser->notify_follow_request,
+      'notify_follow_accepted' => (bool) $__currentUser->notify_follow_accepted,
       // Mirrors the EnsureApproved gate on /api/interests so the interest panels
       // only render when the API will actually accept the request.
       'can_manage_interests' => (bool) (! $__currentUser->is_disabled && $__currentUser->hasVerifiedEmail() && $__currentUser->isApproved()),
