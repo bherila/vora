@@ -38,7 +38,8 @@ class PostApiTest extends TestCase
             ->assertJsonPath('data.audience', 'everyone');
 
         $post = Post::query()->firstOrFail();
-        $this->assertTrue($post->isPendingReview(), 'new posts enter review');
+        // Short posts publish immediately (reactive moderation), unlike Media/Story.
+        $this->assertTrue($post->isApprovedContent(), 'new posts are visible immediately');
         $this->assertTrue(
             PrivacyAuditLog::query()->where('privacyable_id', $post->id)->where('action', 'created')->exists(),
         );
@@ -65,11 +66,12 @@ class PostApiTest extends TestCase
         $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk();
     }
 
-    public function test_pending_post_is_hidden_from_non_owner(): void
+    public function test_rejected_post_is_hidden_from_non_owner(): void
     {
+        // Reactive moderation: an admin can take a post down by rejecting it.
         $owner = User::factory()->approved()->create();
         $viewer = User::factory()->approved()->create();
-        $post = Post::factory()->for($owner)->create(['audience' => Audience::Everyone]); // pending
+        $post = Post::factory()->for($owner)->rejected()->create(['audience' => Audience::Everyone]);
 
         $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertForbidden();
         $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk();

@@ -10,6 +10,7 @@ use App\Models\PostAttachment;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Serializes a Post for API responses. Pure (no I/O). Never exposes moderation
@@ -88,18 +89,16 @@ class PostPresenter
     }
 
     /**
-     * The intersection gate: Media/Story are shown only when the viewer owns them,
-     * is an admin, or they are approved AND viewable to the viewer by their own
-     * audience policy. Characters/Interests are public.
+     * The intersection gate. For privacy-controlled attachments (Media/Story) we
+     * defer to that model's own view policy via the Gate, so the rule stays
+     * identical to opening the item directly — owner/admin, approval, audience,
+     * an active owner, and (for stories) published status — with no duplication.
+     * Characters/Interests are public profile/tag references.
      */
     private static function canSee(Model $attachable, ?User $viewer): bool
     {
         if ($attachable instanceof Media || $attachable instanceof Story) {
-            if ($viewer !== null && ($viewer->isAdmin() || $viewer->id === $attachable->user_id)) {
-                return true;
-            }
-
-            return $attachable->isApprovedContent() && $attachable->isViewableBy($viewer);
+            return $viewer !== null && Gate::forUser($viewer)->allows('view', $attachable);
         }
 
         return true;

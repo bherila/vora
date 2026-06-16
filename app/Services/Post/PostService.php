@@ -3,6 +3,7 @@
 namespace App\Services\Post;
 
 use App\Enums\Audience;
+use App\Enums\ModerationStatus;
 use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Media;
@@ -55,12 +56,19 @@ class PostService
     ): Post {
         $resolved = $this->resolveAttachments($author, $attachments);
 
-        $post = $author->posts()->create([
+        $post = $author->posts()->make([
             'ulid' => (string) Str::ulid(),
             'body' => $body,
             'audience' => $audience->value,
             'discoverable' => $discoverable,
         ]);
+        // Short posts publish immediately and are moderated reactively (an admin
+        // can reject/take one down), rather than sitting in a pre-publication
+        // queue that would make the feed dead on arrival. Heavier content
+        // (Media/Story) keeps pre-moderation. Set directly: the moderation column
+        // is intentionally not mass-assignable.
+        $post->moderation_status = ModerationStatus::Approved;
+        $post->save();
 
         foreach ($resolved as $model) {
             $post->attachments()->create([
@@ -110,6 +118,14 @@ class PostService
             if (in_array($type, self::OWNED_TYPES, true) && $model->user_id !== $author->id) {
                 throw ValidationException::withMessages([
                     "attachments.$i.id" => 'You can only attach your own content.',
+                ]);
+            }
+
+            // Only gallery media is shareable/openable through the media surface;
+            // attaching a profile picture would yield a ULID that can't be opened.
+            if ($model instanceof Media && ! $model->isGalleryMedia()) {
+                throw ValidationException::withMessages([
+                    "attachments.$i.id" => 'Only gallery media can be attached.',
                 ]);
             }
 
