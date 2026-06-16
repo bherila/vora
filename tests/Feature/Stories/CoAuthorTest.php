@@ -10,6 +10,7 @@ use App\Notifications\CoAuthorInviteAccepted;
 use App\Notifications\CoAuthorInviteReceived;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\TestCase;
 
 class CoAuthorTest extends TestCase
@@ -28,7 +29,7 @@ class CoAuthorTest extends TestCase
         Notification::assertSentTo(
             $invitee,
             CoAuthorInviteReceived::class,
-            fn (CoAuthorInviteReceived $notification, array $channels): bool => $channels === ['database'],
+            fn (CoAuthorInviteReceived $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
         );
 
         $invite = StoryAuthor::query()->where('story_id', $story->id)->where('user_id', $invitee->id)->firstOrFail();
@@ -48,7 +49,7 @@ class CoAuthorTest extends TestCase
         Notification::assertSentTo(
             $owner,
             CoAuthorInviteAccepted::class,
-            fn (CoAuthorInviteAccepted $notification, array $channels): bool => $channels === ['database'],
+            fn (CoAuthorInviteAccepted $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
         );
 
         // Now an author, the co-author can edit.

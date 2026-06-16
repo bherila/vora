@@ -24,6 +24,12 @@ import {
   normalizeProfileSelections,
   USER_TYPE_OPTIONS,
 } from '@/profile-options';
+import {
+  currentBrowserPushSubscription,
+  isWebPushSupported,
+  subscribeBrowserToWebPush,
+  unsubscribeBrowserFromWebPush,
+} from '@/push';
 
 import { getAuthComponents } from './shared-components';
 
@@ -47,6 +53,8 @@ interface UserSettingsInitialPayload {
   notify_post_comment?: boolean | null;
   notify_follow_request?: boolean | null;
   notify_follow_accepted?: boolean | null;
+  web_push_public_key?: string | null;
+  web_push_subscription_count?: number | null;
   can_manage_interests?: boolean | null;
 }
 
@@ -70,6 +78,8 @@ interface UserSettingsInitialData {
   notify_post_comment: boolean;
   notify_follow_request: boolean;
   notify_follow_accepted: boolean;
+  web_push_public_key: string;
+  web_push_subscription_count: number;
   can_manage_interests: boolean;
 }
 
@@ -145,6 +155,8 @@ function emptyInitialData(): UserSettingsInitialData {
     notify_post_comment: true,
     notify_follow_request: true,
     notify_follow_accepted: true,
+    web_push_public_key: '',
+    web_push_subscription_count: 0,
     can_manage_interests: false,
   };
 }
@@ -170,6 +182,8 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     notify_post_comment: payload.notify_post_comment ?? true,
     notify_follow_request: payload.notify_follow_request ?? true,
     notify_follow_accepted: payload.notify_follow_accepted ?? true,
+    web_push_public_key: payload.web_push_public_key ?? '',
+    web_push_subscription_count: payload.web_push_subscription_count ?? 0,
     can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
@@ -219,6 +233,13 @@ function UserSettingsPage() {
   const [notifyPostComment, setNotifyPostComment] = useState(initialData.notify_post_comment);
   const [notifyFollowRequest, setNotifyFollowRequest] = useState(initialData.notify_follow_request);
   const [notifyFollowAccepted, setNotifyFollowAccepted] = useState(initialData.notify_follow_accepted);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushSubscriptionCount, setPushSubscriptionCount] = useState(initialData.web_push_subscription_count);
+  const [pushSaving, setPushSaving] = useState(false);
+  const [pushMessage, setPushMessage] = useState('');
+  const [pushError, setPushError] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
@@ -266,6 +287,33 @@ function UserSettingsPage() {
       active = false;
     };
   }, [interestsEnabled]);
+
+  useEffect(() => {
+    const supported = isWebPushSupported();
+    setPushSupported(supported);
+    setPushPermission(supported ? Notification.permission : 'denied');
+
+    if (!supported) {
+      return;
+    }
+
+    let active = true;
+    currentBrowserPushSubscription()
+      .then((subscription) => {
+        if (active) {
+          setPushSubscribed(subscription !== null);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPushSubscribed(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
     try {
@@ -407,6 +455,42 @@ function UserSettingsPage() {
       window.location.href = '/login';
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to delete account.');
+    }
+  };
+
+  const handleEnablePush = async (): Promise<void> => {
+    setPushSaving(true);
+    setPushMessage('');
+    setPushError('');
+
+    try {
+      const count = await subscribeBrowserToWebPush(initialData.web_push_public_key);
+      setPushSubscriptionCount(count);
+      setPushPermission(Notification.permission);
+      setPushSubscribed(true);
+      setPushMessage('Browser push enabled for this device.');
+    } catch (err) {
+      setPushPermission(isWebPushSupported() ? Notification.permission : 'denied');
+      setPushError(err instanceof Error ? err.message : 'Could not enable browser push.');
+    } finally {
+      setPushSaving(false);
+    }
+  };
+
+  const handleDisablePush = async (): Promise<void> => {
+    setPushSaving(true);
+    setPushMessage('');
+    setPushError('');
+
+    try {
+      const count = await unsubscribeBrowserFromWebPush();
+      setPushSubscriptionCount(count);
+      setPushSubscribed(false);
+      setPushMessage('Browser push disabled for this device.');
+    } catch (err) {
+      setPushError(typeof err === 'string' ? err : 'Could not disable browser push.');
+    } finally {
+      setPushSaving(false);
     }
   };
 
@@ -767,6 +851,44 @@ function UserSettingsPage() {
                   Notify me when one of my follow requests is accepted
                 </label>
                 <p className="text-xs text-muted-foreground">Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.</p>
+              </div>
+              <div className="space-y-3 rounded-md border border-input p-3">
+                <div>
+                  <p className="text-sm font-medium">Browser push notifications</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pushSupported
+                      ? `This account has ${pushSubscriptionCount} subscribed ${pushSubscriptionCount === 1 ? 'device' : 'devices'}.`
+                      : 'This browser does not support push notifications.'}
+                  </p>
+                </div>
+                {pushMessage && (
+                  <Alert>
+                    <AlertDescription>{pushMessage}</AlertDescription>
+                  </Alert>
+                )}
+                {pushError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{pushError}</AlertDescription>
+                  </Alert>
+                )}
+                {pushSupported && !initialData.web_push_public_key && (
+                  <p className="text-sm text-muted-foreground">Browser push is not configured.</p>
+                )}
+                {pushSupported && initialData.web_push_public_key && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant={pushSubscribed ? 'outline' : 'default'}
+                      disabled={pushSaving || pushPermission === 'denied'}
+                      onClick={() => void (pushSubscribed ? handleDisablePush() : handleEnablePush())}
+                    >
+                      {pushSaving ? 'Saving...' : (pushSubscribed ? 'Disable on this device' : 'Enable on this device')}
+                    </Button>
+                    {pushPermission === 'denied' && (
+                      <span className="text-sm text-muted-foreground">Push permission is blocked in this browser.</span>
+                    )}
+                  </div>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}

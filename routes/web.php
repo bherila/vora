@@ -19,6 +19,7 @@ use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\PostReactionController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
@@ -66,6 +67,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
+
+    Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'status']);
+    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
