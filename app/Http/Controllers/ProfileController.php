@@ -246,6 +246,11 @@ class ProfileController extends Controller
         }
         if (array_key_exists('profile_audience', $data)) {
             $user->profile_audience = Audience::from($data['profile_audience']);
+            // Leaving the specific tier drops any stale grants, so switching back
+            // later cannot silently re-enable old access (mirrors the story path).
+            if ($user->profile_audience !== Audience::SpecificPeople) {
+                $user->profileAudienceMembers()->delete();
+            }
         }
         if (array_key_exists('email_follow_request_received', $data)) {
             $user->email_follow_request_received = (bool) $data['email_follow_request_received'];

@@ -131,6 +131,46 @@ class ProfilePrivacyTest extends TestCase
         $this->assertSame(0, AudienceMember::query()->count());
     }
 
+    public function test_leaving_the_specific_tier_clears_the_profile_allowlist(): void
+    {
+        $owner = $this->withProfileAudience(Audience::SpecificPeople);
+        $granted = User::factory()->approved()->create();
+        $owner->profileAudienceMembers()->create(['user_id' => $granted->id]);
+
+        $this->actingAs($owner)->patchJson('/api/account', [
+            'name' => $owner->name,
+            'display_name' => $owner->display_name,
+            'email' => $owner->email,
+            'profile_audience' => Audience::Everyone->value,
+        ])->assertOk();
+
+        $this->assertSame(0, AudienceMember::query()->count(), 'stale grants cannot survive a tier change');
+    }
+
+    public function test_follow_request_inbox_masks_restricted_requester_details(): void
+    {
+        // The requester's own profile is followers-only. Create it first so the
+        // recipient is not user id 1 (which is always treated as an admin).
+        $requester = $this->withProfileAudience(Audience::Followers);
+        $recipient = User::factory()->approved()->create();
+        FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+
+        // The recipient does not follow the requester → details masked.
+        $row = collect($this->actingAs($recipient)->getJson('/api/users/follow-requests')->json('data'))->first();
+        $this->assertTrue($row['requester']['restricted']);
+        $this->assertNull($row['requester']['user_type']);
+
+        // Once the recipient follows the requester, the requester's profile opens.
+        $this->follow($recipient, $requester);
+        $row = collect($this->actingAs($recipient)->getJson('/api/users/follow-requests')->json('data'))->first();
+        $this->assertFalse($row['requester']['restricted']);
+        $this->assertSame('human', $row['requester']['user_type']);
+    }
+
     public function test_follow_request_can_still_be_sent_to_a_restricted_profile(): void
     {
         $owner = $this->withProfileAudience(Audience::Followers);

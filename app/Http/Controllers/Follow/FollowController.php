@@ -163,20 +163,32 @@ class FollowController extends Controller
         // Hide requests from accounts that have since deactivated, been disabled,
         // or deleted — whereHas('requester') drops soft-deleted requesters via the
         // User scope; active() covers deactivated + disabled.
-        $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender')
+        $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender,profile_audience')
             ->whereHas('requester', fn ($q) => $q->active())
             ->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
 
-        return response()->json(['success' => true, 'data' => $requests->map(fn (FollowRequest $followRequest): array => [
-            'id' => $followRequest->id,
-            'requester' => [
-                'id' => $followRequest->requester?->id,
-                'display_name' => $followRequest->requester?->display_name ?: $followRequest->requester?->name,
-                'user_type' => $followRequest->requester?->user_type,
-                'gender' => $followRequest->requester?->gender,
-            ],
-            'created_at' => $followRequest->created_at?->toIso8601String(),
-        ])]);
+        // The inbox is another surface onto a requester's profile, so it honours
+        // the same audience gate as the directory: details are withheld unless
+        // the recipient may view that requester's profile.
+        $requesters = $requests->pluck('requester')->filter()->values();
+        $canView = $current instanceof User ? $this->gate->canViewMany($current, $requesters) : [];
+
+        return response()->json(['success' => true, 'data' => $requests->map(function (FollowRequest $followRequest) use ($canView): array {
+            $requester = $followRequest->requester;
+            $visible = $requester !== null && ($canView[$requester->id] ?? false);
+
+            return [
+                'id' => $followRequest->id,
+                'requester' => [
+                    'id' => $requester?->id,
+                    'display_name' => $requester?->display_name ?: $requester?->name,
+                    'restricted' => ! $visible,
+                    'user_type' => $visible ? $requester?->user_type : null,
+                    'gender' => $visible ? $requester?->gender : null,
+                ],
+                'created_at' => $followRequest->created_at?->toIso8601String(),
+            ];
+        })]);
     }
 
     public function count(Request $request): JsonResponse
