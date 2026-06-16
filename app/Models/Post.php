@@ -7,6 +7,7 @@ use App\Enums\ModerationStatus;
 use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -63,5 +64,29 @@ class Post extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(PostAttachment::class);
+    }
+
+    /**
+     * @return HasMany<PostReaction, $this>
+     */
+    public function reactions(): HasMany
+    {
+        return $this->hasMany(PostReaction::class);
+    }
+
+    /**
+     * Load the reaction summary the presenter needs in one place: the total
+     * count and whether $viewer has reacted, without an N+1 across a listing.
+     *
+     * @param  Builder<Post>  $query
+     * @return Builder<Post>
+     */
+    public function scopeWithReactionState(Builder $query, ?User $viewer): Builder
+    {
+        return $query
+            ->withCount('reactions')
+            ->withCount(['reactions as viewer_reaction_count' => function (Builder $inner) use ($viewer): void {
+                $inner->where('user_id', $viewer?->id);
+            }]);
     }
 }
