@@ -39,10 +39,11 @@ class PostComment extends Model
     }
 
     /**
-     * Comments a viewer may see: approved comments from active accounts, plus the
-     * viewer's own (any review state). The single source of truth for comment
-     * visibility — used by the listing, the post's comment_count, and the
-     * reply-parent check so they cannot disagree or leak moderation state.
+     * Comments a viewer may see by their own review state: approved comments from
+     * active accounts, plus the viewer's own (any review state). The source of
+     * truth for a single comment's visibility — used by the reply-parent check and
+     * composed into {@see scopeThreadVisibleTo} so they cannot leak moderation
+     * state. Kept non-recursive so it can be reused for the parent check.
      *
      * @param  Builder<PostComment>  $query
      * @return Builder<PostComment>
@@ -59,6 +60,27 @@ class PostComment extends Model
                 $outer->orWhere('user_id', $viewer->id);
             }
         });
+    }
+
+    /**
+     * Thread-aware visibility: a comment the viewer may see whose parent (if any)
+     * the viewer may also see. Moderating a top-level comment away therefore also
+     * hides its now-orphaned replies, so the listing never shows a reply whose
+     * parent is gone. Used by the comment listing and the post's comment_count so
+     * the two stay in agreement. Non-recursive — threading is one level deep, so
+     * the parent check applies {@see scopeVisibleTo} to a top-level comment.
+     *
+     * @param  Builder<PostComment>  $query
+     * @return Builder<PostComment>
+     */
+    public function scopeThreadVisibleTo(Builder $query, ?User $viewer): Builder
+    {
+        return $query
+            ->visibleTo($viewer)
+            ->where(function (Builder $outer) use ($viewer): void {
+                $outer->whereNull('parent_id')
+                    ->orWhereHas('parent', fn (Builder $parent) => $parent->visibleTo($viewer));
+            });
     }
 
     /**

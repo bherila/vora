@@ -29,7 +29,7 @@ class PostCommentController extends Controller
 
         $comments = $post->comments()
             ->with('user:id,name,display_name')
-            ->visibleTo($viewer)
+            ->threadVisibleTo($viewer)
             ->orderBy('created_at')
             ->get();
 
