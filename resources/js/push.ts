@@ -49,6 +49,17 @@ export async function subscribeBrowserToWebPush(publicKey: string): Promise<numb
   }
 
   const registration = await navigator.serviceWorker.register('/sw.js');
+
+  // Clear any pre-existing browser subscription first. The enable flow only runs
+  // when this account is not subscribed, so an existing subscription here is stale
+  // (e.g. it belongs to another account on a shared browser). Reusing it would POST
+  // an endpoint that is already globally unique to that other account and fail, so
+  // unsubscribe to force a fresh endpoint.
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) {
+    await existing.unsubscribe();
+  }
+
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey),

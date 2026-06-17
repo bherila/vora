@@ -25,6 +25,7 @@ export default defineConfig({
                 'resources/js/admin/interests.tsx',
                 'resources/js/admin/media.tsx',
                 'resources/js/admin/stories.tsx',
+                'resources/js/admin/static-pages.tsx',
                 'resources/js/user/media.tsx',
                 'resources/js/user/characters.tsx',
                 'resources/js/user/explore.tsx',
