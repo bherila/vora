@@ -69,6 +69,16 @@ class AppServiceProvider extends ServiceProvider
             ]);
 
             if (Schema::hasTable('static_pages')) {
+                // Drop a default legal link whose row exists but is unpublished:
+                // StaticPageController::show() 404s that slug, so an unconditional
+                // footer link would point at a 404. (A published-but-not-in-footer
+                // legal row still renders, so its default link is kept.)
+                StaticPage::query()
+                    ->whereIn('slug', ['privacy', 'terms'])
+                    ->where('is_published', false)
+                    ->pluck('slug')
+                    ->each(fn (string $slug) => $footerPages->forget($slug));
+
                 StaticPage::query()
                     ->where('is_published', true)
                     ->where('show_in_footer', true)

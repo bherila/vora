@@ -152,6 +152,60 @@ class LegalPagesTest extends TestCase
             ->assertSee('href="'.route('pages.show', 'about-us').'"', false);
     }
 
+    public function test_footer_omits_legal_link_when_its_page_is_unpublished(): void
+    {
+        // Admin unpublishes the privacy page → show() 404s it → the footer must not
+        // keep a now-broken default Privacy link. Terms is untouched.
+        StaticPage::query()->create([
+            'slug' => 'privacy',
+            'title' => 'Privacy',
+            'body_markdown' => 'Work in progress.',
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => false,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 10,
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertDontSee('href="'.route('privacy').'"', false)
+            ->assertSee('href="'.route('terms').'"', false);
+    }
+
+    public function test_legacy_contact_variables_are_scrubbed_by_migration(): void
+    {
+        // Simulate an install seeded before the fix: the privacy row froze the old
+        // app_name/contact into its stored variables.
+        StaticPage::query()->create([
+            'slug' => 'privacy',
+            'title' => 'Privacy Policy',
+            'body_markdown' => 'Contact {{privacy_contact_email}}.',
+            'variables' => json_encode([
+                'app_name' => 'Old App',
+                'privacy_contact_email' => 'stale@example.test',
+                'last_updated' => 'June 1, 2026',
+            ], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => true,
+            'footer_label' => 'Privacy',
+            'sort_order' => 10,
+        ]);
+
+        $migration = require database_path('migrations/2026_06_29_000000_scrub_legacy_static_page_contact_variables.php');
+        $migration->up();
+
+        $variables = json_decode((string) StaticPage::query()->where('slug', 'privacy')->value('variables'), true);
+        $this->assertArrayNotHasKey('privacy_contact_email', $variables);
+        $this->assertArrayNotHasKey('app_name', $variables);
+        // Page-specific keys are preserved.
+        $this->assertSame('June 1, 2026', $variables['last_updated']);
+
+        // The live config now flows through to the rendered page.
+        config(['app.privacy_contact_email' => 'fresh@example.test']);
+        $this->get('/privacy')->assertOk()->assertSee('fresh@example.test');
+    }
+
     public function test_deactivated_user_can_still_reach_legal_pages(): void
     {
         $user = User::factory()->approved()->create(['deactivated_at' => now()]);
