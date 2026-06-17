@@ -107,6 +107,59 @@ class AdminPostModerationTest extends TestCase
             ->assertJsonPath('data.0.moderation_status', 'rejected');
     }
 
+    public function test_rejecting_a_parent_comment_hides_its_orphaned_replies(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $parentAuthor = User::factory()->approved()->create();
+        $replyAuthor = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->create();
+        $parent = PostComment::factory()->for($post)->for($parentAuthor)->create();
+        PostComment::factory()->for($post)->for($replyAuthor)->create(['parent_id' => $parent->id]);
+
+        // Before moderation the viewer sees both the parent and its reply.
+        $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertJsonPath('data.comment_count', 2);
+
+        $this->actingAs($admin)->postJson("/api/admin/post-comments/{$parent->id}/moderate", [
+            'action' => 'reject',
+        ])->assertOk();
+
+        // Rejecting the parent hides it and its now-orphaned reply for other viewers,
+        // and the post's comment_count agrees with the listing.
+        $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertJsonPath('data.comment_count', 0);
+    }
+
+    public function test_admin_post_payload_counts_all_comments_including_rejected(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->create();
+        $comment = PostComment::factory()->for($post)->for($commenter)->create();
+
+        $this->actingAs($admin)->postJson("/api/admin/post-comments/{$comment->id}/moderate", [
+            'action' => 'reject',
+        ])->assertOk();
+
+        // The admin review payload reports the comment even though it is now hidden
+        // from non-author viewers, so moderators keep the full thread context.
+        $this->actingAs($admin)->getJson('/api/admin/posts')
+            ->assertOk()
+            ->assertJsonPath('data.0.comment_count', 1);
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertJsonPath('data.comment_count', 0);
+    }
+
     public function test_non_admin_cannot_access_post_moderation_endpoints(): void
     {
         User::factory()->admin()->create();
