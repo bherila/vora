@@ -67,27 +67,45 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         View::composer('layouts.app', function ($view): void {
+            // Privacy/Terms are required links and always present. Database footer
+            // pages are merged in by slug: a stored privacy/terms row overrides the
+            // default entry, and any other footer page is appended — so adding a
+            // custom footer link never drops the legal links.
             $footerPages = collect([
-                ['label' => 'Privacy', 'url' => route('privacy')],
-                ['label' => 'Terms', 'url' => route('terms')],
+                'privacy' => ['label' => 'Privacy', 'url' => route('privacy'), 'sort_order' => 10],
+                'terms' => ['label' => 'Terms', 'url' => route('terms'), 'sort_order' => 20],
             ]);
 
             if (Schema::hasTable('static_pages')) {
-                $databaseFooterPages = StaticPage::query()
+                // Drop a default legal link whose row exists but is unpublished:
+                // StaticPageController::show() 404s that slug, so an unconditional
+                // footer link would point at a 404. (A published-but-not-in-footer
+                // legal row still renders, so its default link is kept.)
+                StaticPage::query()
+                    ->whereIn('slug', ['privacy', 'terms'])
+                    ->where('is_published', false)
+                    ->pluck('slug')
+                    ->each(fn (string $slug) => $footerPages->forget($slug));
+
+                StaticPage::query()
                     ->where('is_published', true)
                     ->where('show_in_footer', true)
                     ->orderBy('sort_order')
                     ->orderBy('title')
                     ->get()
-                    ->map(fn (StaticPage $page): array => [
-                        'label' => $page->footer_label ?: $page->title,
-                        'url' => in_array($page->slug, ['privacy', 'terms'], true) ? route($page->slug) : route('pages.show', $page->slug),
-                    ]);
-
-                if ($databaseFooterPages->isNotEmpty()) {
-                    $footerPages = $databaseFooterPages;
-                }
+                    ->each(function (StaticPage $page) use ($footerPages): void {
+                        $footerPages[$page->slug] = [
+                            'label' => $page->footer_label ?: $page->title,
+                            'url' => in_array($page->slug, ['privacy', 'terms'], true) ? route($page->slug) : route('pages.show', $page->slug),
+                            'sort_order' => $page->sort_order,
+                        ];
+                    });
             }
+
+            $footerPages = $footerPages
+                ->sortBy('sort_order')
+                ->map(fn (array $page): array => ['label' => $page['label'], 'url' => $page['url']])
+                ->values();
 
             $view->with('footerPages', $footerPages);
         });
