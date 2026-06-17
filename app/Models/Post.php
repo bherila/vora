@@ -107,8 +107,28 @@ class Post extends Model
         return $query
             ->withCount('reactions')
             // Count only the comments this viewer may see, so comment_count agrees
-            // with the comments listing and never leaks moderation state.
-            ->withCount(['comments' => fn (Builder $inner) => $inner->visibleTo($viewer)])
+            // with the comments listing (including hiding replies orphaned by a
+            // moderated-away parent) and never leaks moderation state.
+            ->withCount(['comments' => fn (Builder $inner) => $inner->threadVisibleTo($viewer)])
+            ->withCount(['reactions as viewer_reaction_count' => function (Builder $inner) use ($viewer): void {
+                $inner->where('user_id', $viewer?->id);
+            }]);
+    }
+
+    /**
+     * Admin variant of {@see scopeWithEngagementCounts}: comment_count reflects
+     * every comment regardless of moderation state, so the review payload's count
+     * matches the comment-moderation listing instead of under-reporting once a
+     * comment is rejected. Reaction state is unchanged.
+     *
+     * @param  Builder<Post>  $query
+     * @return Builder<Post>
+     */
+    public function scopeWithAdminEngagementCounts(Builder $query, ?User $viewer): Builder
+    {
+        return $query
+            ->withCount('reactions')
+            ->withCount('comments')
             ->withCount(['reactions as viewer_reaction_count' => function (Builder $inner) use ($viewer): void {
                 $inner->where('user_id', $viewer?->id);
             }]);

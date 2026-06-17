@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminMediaController;
+use App\Http\Controllers\Admin\AdminPostCommentController;
+use App\Http\Controllers\Admin\AdminPostController;
 use App\Http\Controllers\Admin\AdminStaticPageController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -231,6 +233,11 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
+
+    Route::get('/posts', [AdminPostController::class, 'apiIndex']);
+    Route::post('/posts/{post}/moderate', [AdminPostController::class, 'moderate']);
+    Route::get('/post-comments', [AdminPostCommentController::class, 'apiIndex']);
+    Route::post('/post-comments/{postComment}/moderate', [AdminPostCommentController::class, 'moderate']);
 
     Route::get('/stories', [AdminStoryController::class, 'apiIndex']);
     Route::post('/stories/{story}/moderate', [AdminStoryController::class, 'moderate']);
