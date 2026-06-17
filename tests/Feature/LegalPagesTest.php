@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\StaticPage;
+use App\Models\User;
+use App\Support\DefaultStaticPages;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -79,5 +81,27 @@ class LegalPagesTest extends TestCase
             ->assertOk()
             ->assertSee('href="'.route('privacy').'"', false)
             ->assertSee('href="'.route('terms').'"', false);
+    }
+
+    public function test_default_legal_pages_use_a_fixed_revision_date(): void
+    {
+        // Travel a year forward: a fixed revision date must not drift to "today".
+        $this->travelTo(now()->addYear());
+
+        $this->get('/privacy')
+            ->assertOk()
+            ->assertSee('Last updated: '.DefaultStaticPages::REVISION_DATE)
+            ->assertDontSee(now()->format('F j, Y'));
+    }
+
+    public function test_deactivated_user_can_still_reach_legal_pages(): void
+    {
+        $user = User::factory()->approved()->create(['deactivated_at' => now()]);
+
+        $this->actingAs($user)->get('/privacy')->assertOk()->assertSee('Privacy Policy');
+        $this->actingAs($user)->get('/terms')->assertOk()->assertSee('Terms of Service');
+
+        // A gated route still bounces them to the reactivate page.
+        $this->actingAs($user)->get('/')->assertRedirect(route('account.deactivated'));
     }
 }

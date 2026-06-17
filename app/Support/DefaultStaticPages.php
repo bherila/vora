@@ -5,6 +5,13 @@ namespace App\Support;
 class DefaultStaticPages
 {
     /**
+     * Revision date for the built-in legal boilerplate. Bump this only when the
+     * default policy text below actually changes, so "Last updated" reflects the
+     * document revision rather than the current request date.
+     */
+    public const REVISION_DATE = 'June 16, 2026';
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public static function all(): array
@@ -27,7 +34,7 @@ class DefaultStaticPages
                 'slug' => 'privacy',
                 'title' => 'Privacy Policy',
                 'body_markdown' => self::privacyMarkdown(),
-                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => date('F j, Y')],
+                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => self::REVISION_DATE],
                 'is_published' => true,
                 'show_in_footer' => true,
                 'footer_label' => 'Privacy',
@@ -37,7 +44,7 @@ class DefaultStaticPages
                 'slug' => 'terms',
                 'title' => 'Terms of Service',
                 'body_markdown' => self::termsMarkdown(),
-                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => date('F j, Y')],
+                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => self::REVISION_DATE],
                 'is_published' => true,
                 'show_in_footer' => true,
                 'footer_label' => 'Terms',
