@@ -130,6 +130,25 @@ class WebPushSubscriptionTest extends TestCase
             ->assertJsonValidationErrorFor('keys.auth');
     }
 
+    public function test_overlong_key_payloads_are_rejected_before_decoding(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        // A request-sized base64url-looking key must be rejected on length, before
+        // the validator base64-decodes the whole string.
+        $this->actingAs($user)->postJson('/api/push-subscriptions', [
+            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'keys' => ['p256dh' => str_repeat('A', 5000), 'auth' => self::AUTH],
+        ])->assertStatus(422)
+            ->assertJsonValidationErrorFor('keys.p256dh');
+
+        $this->actingAs($user)->postJson('/api/push-subscriptions', [
+            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'keys' => ['p256dh' => self::P256DH, 'auth' => str_repeat('A', 5000)],
+        ])->assertStatus(422)
+            ->assertJsonValidationErrorFor('keys.auth');
+    }
+
     public function test_account_purge_removes_push_subscriptions(): void
     {
         $user = User::factory()->approved()->create();

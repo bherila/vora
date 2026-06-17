@@ -17,7 +17,16 @@ class StaticPageController extends Controller
 
     public function show(string $slug): View
     {
-        $page = StaticPage::query()->where('slug', $slug)->where('is_published', true)->first();
+        $row = StaticPage::query()->where('slug', $slug)->first();
+
+        // An existing-but-unpublished row was deliberately taken down: 404 rather
+        // than silently reverting to the built-in boilerplate. The fallback only
+        // applies when no row exists at all (e.g. defaults never seeded).
+        if ($row !== null && ! $row->is_published) {
+            throw new NotFoundHttpException;
+        }
+
+        $page = $row;
         $fallback = $page === null ? DefaultStaticPages::get($slug) : null;
 
         if ($page === null && $fallback === null) {

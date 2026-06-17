@@ -73,6 +73,12 @@ function payloadFromForm(form: PageForm) {
 }
 
 function getErrorMessage(error: unknown): string {
+  // fetchWrapper rejects failed responses with a plain string (Laravel's message),
+  // so surface that instead of the generic fallback for validation/auth errors.
+  if (typeof error === 'string') {
+    return error;
+  }
+
   return error instanceof Error ? error.message : 'Request failed.';
 }
 

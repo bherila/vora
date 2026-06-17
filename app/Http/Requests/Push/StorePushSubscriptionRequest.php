@@ -36,9 +36,14 @@ class StorePushSubscriptionRequest extends FormRequest
                 },
             ],
             'keys' => ['required', 'array'],
+            // p256dh is a 65-byte EC point (~88 base64url chars) and auth is 16
+            // bytes (~24 chars). Cap length and `bail` so an oversized payload is
+            // rejected before the closure base64-decodes the whole string.
             'keys.p256dh' => [
+                'bail',
                 'required',
                 'string',
+                'max:128',
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     if (! is_string($value)) {
                         return;
@@ -49,8 +54,10 @@ class StorePushSubscriptionRequest extends FormRequest
                 },
             ],
             'keys.auth' => [
+                'bail',
                 'required',
                 'string',
+                'max:64',
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     if (! is_string($value)) {
                         return;
