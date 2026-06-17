@@ -236,6 +236,11 @@ function UserSettingsPage() {
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
   const [pushSubscribed, setPushSubscribed] = useState(false);
+  // True until the browser/server ownership check resolves. The enable path
+  // unsubscribes any existing browser subscription first, so the button must stay
+  // disabled until we know whether this device is already subscribed — otherwise a
+  // premature Enable click could destroy a valid subscription mid-check.
+  const [pushStatusLoading, setPushStatusLoading] = useState(true);
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState(initialData.web_push_subscription_count);
   const [pushSaving, setPushSaving] = useState(false);
   const [pushMessage, setPushMessage] = useState('');
@@ -294,6 +299,7 @@ function UserSettingsPage() {
     setPushPermission(supported ? Notification.permission : 'denied');
 
     if (!supported) {
+      setPushStatusLoading(false);
       return;
     }
 
@@ -313,6 +319,11 @@ function UserSettingsPage() {
       .catch(() => {
         if (active) {
           setPushSubscribed(false);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPushStatusLoading(false);
         }
       });
 
@@ -885,10 +896,10 @@ function UserSettingsPage() {
                     <Button
                       type="button"
                       variant={pushSubscribed ? 'outline' : 'default'}
-                      disabled={pushSaving || pushPermission === 'denied'}
+                      disabled={pushSaving || pushStatusLoading || pushPermission === 'denied'}
                       onClick={() => void (pushSubscribed ? handleDisablePush() : handleEnablePush())}
                     >
-                      {pushSaving ? 'Saving...' : (pushSubscribed ? 'Disable on this device' : 'Enable on this device')}
+                      {pushStatusLoading ? 'Checking...' : pushSaving ? 'Saving...' : (pushSubscribed ? 'Disable on this device' : 'Enable on this device')}
                     </Button>
                     {pushPermission === 'denied' && (
                       <span className="text-sm text-muted-foreground">Push permission is blocked in this browser.</span>

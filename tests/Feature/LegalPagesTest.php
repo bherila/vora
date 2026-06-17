@@ -94,6 +94,64 @@ class LegalPagesTest extends TestCase
             ->assertDontSee(now()->format('F j, Y'));
     }
 
+    public function test_unpublished_static_page_returns_404_rather_than_built_in_fallback(): void
+    {
+        // A deliberately unpublished privacy row must not silently revert to the
+        // built-in boilerplate — the Published toggle has to be effective.
+        StaticPage::query()->create([
+            'slug' => 'privacy',
+            'title' => 'Draft Privacy',
+            'body_markdown' => 'Work in progress.',
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => false,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 10,
+        ]);
+
+        $this->get('/privacy')->assertNotFound();
+    }
+
+    public function test_seeded_legal_pages_follow_live_contact_config(): void
+    {
+        // Seed the defaults into the database, mirroring the admin "seed defaults"
+        // action, so the rendered page comes from a stored row.
+        foreach (DefaultStaticPages::all() as $page) {
+            StaticPage::query()->create(array_merge($page, [
+                'variables' => json_encode($page['variables'], JSON_THROW_ON_ERROR),
+            ]));
+        }
+
+        // Changing the configured contact must flow through to the seeded page; the
+        // address is not frozen into the stored variables.
+        config(['app.privacy_contact_email' => 'newcontact@example.test']);
+
+        $this->get('/privacy')
+            ->assertOk()
+            ->assertSee('newcontact@example.test');
+    }
+
+    public function test_footer_keeps_legal_links_when_a_custom_footer_page_exists(): void
+    {
+        StaticPage::query()->create([
+            'slug' => 'about-us',
+            'title' => 'About Us',
+            'body_markdown' => 'Hello.',
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => true,
+            'footer_label' => 'About',
+            'sort_order' => 5,
+        ]);
+
+        // Adding a custom footer page must not drop the required legal links.
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('href="'.route('privacy').'"', false)
+            ->assertSee('href="'.route('terms').'"', false)
+            ->assertSee('href="'.route('pages.show', 'about-us').'"', false);
+    }
+
     public function test_deactivated_user_can_still_reach_legal_pages(): void
     {
         $user = User::factory()->approved()->create(['deactivated_at' => now()]);

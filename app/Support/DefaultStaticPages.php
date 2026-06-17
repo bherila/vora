@@ -17,14 +17,18 @@ class DefaultStaticPages
     public static function all(): array
     {
         $app = config('app.name');
-        $privacy = config('app.privacy_contact_email');
 
+        // Note: app_name and privacy_contact_email are intentionally NOT stored as
+        // page variables. StaticPageRenderer::variables() supplies them live from
+        // config, and stored variables override that — so freezing them here would
+        // pin a stale value into seeded rows and defeat the PRIVACY_CONTACT_EMAIL
+        // knob. Only page-specific values (the fixed revision date) are stored.
         return [
             'home' => [
                 'slug' => 'home',
                 'title' => $app,
                 'body_markdown' => "# Welcome to {{app_name}}\n\nCreate, organize, and share media, characters, stories, and interests from one private-by-default workspace.\n\nUse the admin static page editor to replace this boilerplate home page with launch-ready copy.",
-                'variables' => ['app_name' => $app],
+                'variables' => [],
                 'is_published' => true,
                 'show_in_footer' => false,
                 'footer_label' => null,
@@ -34,7 +38,7 @@ class DefaultStaticPages
                 'slug' => 'privacy',
                 'title' => 'Privacy Policy',
                 'body_markdown' => self::privacyMarkdown(),
-                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => self::REVISION_DATE],
+                'variables' => ['last_updated' => self::REVISION_DATE],
                 'is_published' => true,
                 'show_in_footer' => true,
                 'footer_label' => 'Privacy',
@@ -44,7 +48,7 @@ class DefaultStaticPages
                 'slug' => 'terms',
                 'title' => 'Terms of Service',
                 'body_markdown' => self::termsMarkdown(),
-                'variables' => ['app_name' => $app, 'privacy_contact_email' => $privacy, 'last_updated' => self::REVISION_DATE],
+                'variables' => ['last_updated' => self::REVISION_DATE],
                 'is_published' => true,
                 'show_in_footer' => true,
                 'footer_label' => 'Terms',

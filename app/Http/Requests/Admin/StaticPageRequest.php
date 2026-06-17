@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StaticPageRequest extends FormRequest
 {
@@ -17,7 +18,16 @@ class StaticPageRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'slug' => ['required', 'string', 'max:120', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
+            // Unique slug so a clashing create/rename returns a 422 instead of the
+            // database's unique-index integrity exception (a 500). On update, the
+            // bound page is ignored so an unchanged slug still validates.
+            'slug' => [
+                'required',
+                'string',
+                'max:120',
+                'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                Rule::unique('static_pages', 'slug')->ignore($this->route('staticPage')),
+            ],
             'title' => ['required', 'string', 'max:255'],
             'body_markdown' => ['required', 'string'],
             'variables' => ['nullable', 'array'],
