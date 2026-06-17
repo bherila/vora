@@ -298,22 +298,16 @@ function UserSettingsPage() {
     }
 
     let active = true;
-    // Verify the browser subscription endpoint is registered for THIS account —
-    // not just any account. On shared browsers or after account-switching the
-    // service worker may hold a subscription that belongs to a different user.
-    // We cross-check the browser endpoint against the server's recorded count
-    // by re-fetching status; a mismatch means we silently drop the stale state.
-    Promise.all([
-      currentBrowserPushSubscription(),
-      fetchWrapper.get('/api/push-subscriptions').catch(() => null),
-    ])
-      .then(([subscription, status]) => {
+    currentBrowserPushSubscription()
+      .then(async (subscription) => {
         if (!active) return;
-        const serverCount = (status as { data?: { subscription_count?: number } } | null)?.data?.subscription_count ?? 0;
-        // The browser has a subscription AND the server knows about at least one
-        // for this account — treat as subscribed. If either is missing the state
-        // is stale (account switch, purge, etc.) so default to unsubscribed.
-        setPushSubscribed(subscription !== null && serverCount > 0);
+
+        const endpoint = subscription?.endpoint ?? '';
+        const status = await fetchWrapper.get(`/api/push-subscriptions${endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ''}`).catch(() => null);
+        const data = (status as { data?: { subscription_count?: number; endpoint_registered?: boolean } } | null)?.data;
+        const serverCount = data?.subscription_count ?? 0;
+
+        setPushSubscribed(subscription !== null && data?.endpoint_registered === true);
         setPushSubscriptionCount(serverCount);
       })
       .catch(() => {
