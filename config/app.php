@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'privacy_contact_email' => env('PRIVACY_CONTACT_EMAIL', env('MAIL_FROM_ADDRESS', 'privacy@example.com')),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

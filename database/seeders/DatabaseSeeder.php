@@ -2,7 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\StaticPage;
 use App\Models\User;
+use App\Support\DefaultStaticPages;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -21,5 +23,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        foreach (DefaultStaticPages::all() as $page) {
+            StaticPage::query()->updateOrCreate(
+                ['slug' => $page['slug']],
+                array_merge($page, ['variables' => json_encode($page['variables'], JSON_THROW_ON_ERROR)])
+            );
+        }
     }
 }
