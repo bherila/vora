@@ -12,8 +12,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('follow_request_id')->nullable()->constrained('follow_requests')->nullOnDelete();
             $table->foreignId('actor_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('requester_id')->constrained('users')->cascadeOnDelete();
-            $table->foreignId('recipient_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('requester_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('recipient_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('action', 30);
             $table->json('metadata')->nullable();
             $table->timestamps();

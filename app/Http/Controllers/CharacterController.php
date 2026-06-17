@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
-use App\Enums\Visibility;
 use App\Http\Requests\Character\CompleteCharacterProfilePictureRequest;
 use App\Http\Requests\Character\StoreCharacterProfilePictureRequest;
 use App\Http\Requests\Character\UpsertCharacterRequest;
@@ -106,7 +106,7 @@ class CharacterController extends Controller
             $request->validated('filename'),
             $request->validated('content_type'),
             $character->display_name.' profile picture',
-            Visibility::Users,
+            Audience::Everyone,
             [],
             false,
             null,

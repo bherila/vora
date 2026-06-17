@@ -9,8 +9,10 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
+use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\TestCase;
 
 class FollowRequestTest extends TestCase
@@ -52,33 +54,41 @@ class FollowRequestTest extends TestCase
     public function test_users_can_request_accept_and_follow_back_with_audit_logs(): void
     {
         Notification::fake();
-        $requester = User::factory()->approved()->create(['email_follow_request_accepted' => true]);
-        $recipient = User::factory()->approved()->create(['email_follow_request_received' => true]);
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
 
         $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")
             ->assertOk()
             ->assertJsonPath('data.status', 'pending');
 
         $followRequest = FollowRequest::query()->where('requester_id', $requester->id)->where('recipient_id', $recipient->id)->firstOrFail();
-        Notification::assertSentTo($recipient, FollowRequestReceived::class);
+        Notification::assertSentTo(
+            $recipient,
+            FollowRequestReceived::class,
+            fn (FollowRequestReceived $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
+        );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'requested']);
 
         $this->actingAs($recipient)->postJson("/api/users/follow-requests/{$followRequest->id}/accept")
             ->assertOk()
             ->assertJsonPath('data.status', 'accepted');
 
-        Notification::assertSentTo($requester, FollowRequestAccepted::class);
+        Notification::assertSentTo(
+            $requester,
+            FollowRequestAccepted::class,
+            fn (FollowRequestAccepted $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
+        );
         $this->assertDatabaseHas('follow_request_audit_logs', ['follow_request_id' => $followRequest->id, 'action' => 'accepted']);
         $this->actingAs($recipient)->getJson("/api/users/{$requester->id}")
             ->assertOk()
             ->assertJsonPath('data.can_follow_back', true);
     }
 
-    public function test_declined_requests_are_rate_limited_for_24_hours_without_email(): void
+    public function test_declined_requests_are_rate_limited_for_24_hours_without_notifications(): void
     {
         Notification::fake();
         $requester = User::factory()->approved()->create();
-        $recipient = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create(['notify_follow_request' => false]);
 
         $this->actingAs($requester)->postJson("/api/users/{$recipient->id}/follow-requests")
             ->assertOk();
@@ -99,6 +109,45 @@ class FollowRequestTest extends TestCase
             ->assertOk();
 
         $this->assertSame(3, FollowRequestAuditLog::query()->count());
+    }
+
+    public function test_audit_logs_survive_permanent_deletion_of_follow_participants(): void
+    {
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
+        $followRequest = FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'status' => 'pending',
+        ]);
+        $auditLog = FollowRequestAuditLog::query()->create([
+            'follow_request_id' => $followRequest->id,
+            'actor_id' => $requester->id,
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'action' => 'requested',
+        ]);
+
+        app(UserAccountService::class)->purge($requester);
+
+        $this->assertSame(1, FollowRequestAuditLog::query()->count());
+        $this->assertDatabaseHas('follow_request_audit_logs', [
+            'id' => $auditLog->id,
+            'follow_request_id' => null,
+            'actor_id' => null,
+            'requester_id' => null,
+            'recipient_id' => $recipient->id,
+        ]);
+
+        app(UserAccountService::class)->purge($recipient);
+
+        $this->assertSame(1, FollowRequestAuditLog::query()->count());
+        $this->assertDatabaseHas('follow_request_audit_logs', [
+            'id' => $auditLog->id,
+            'follow_request_id' => null,
+            'requester_id' => null,
+            'recipient_id' => null,
+        ]);
     }
 
     public function test_profile_marks_declined_requests_retryable_after_24_hours(): void

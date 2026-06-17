@@ -41,7 +41,7 @@ class MediaApiTest extends TestCase
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
             'title' => 'Beach',
-            'visibility' => 'users',
+            'audience' => 'everyone',
             'interest_ids' => [$interest->id],
         ]);
 
@@ -72,7 +72,7 @@ class MediaApiTest extends TestCase
             'type' => 'video',
             'filename' => 'x.jpg',
             'content_type' => 'image/jpeg',
-            'visibility' => 'users',
+            'audience' => 'everyone',
         ])->assertStatus(422)->assertJsonValidationErrors('content_type');
     }
 
@@ -98,7 +98,7 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
-            'visibility' => 'users',
+            'audience' => 'everyone',
             'has_thumbnail' => true,
             'perceptual_hash' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
         ])
@@ -120,7 +120,7 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
-            'visibility' => 'users',
+            'audience' => 'everyone',
         ])
             ->assertCreated()
             ->assertJsonPath('thumbnail_upload_url', null);
@@ -236,6 +236,19 @@ class MediaApiTest extends TestCase
         $video = Media::factory()->for($owner)->video()->unlisted()->approved()->create();
 
         $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$video->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.url', null)
+            ->assertJsonPath('data.video.status', 'processing');
+    }
+
+    public function test_other_user_video_by_id_does_not_expose_original_signed_url(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $video = Media::factory()->for($owner)->video()->approved()->create();
+
+        $this->actingAs($viewer)->getJson("/api/media/{$video->id}")
             ->assertOk()
             ->assertJsonPath('data.url', null)
             ->assertJsonPath('data.video.status', 'processing');

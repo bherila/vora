@@ -11,10 +11,16 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\ExploreController;
+use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PostCommentController;
+use App\Http\Controllers\PostController;
+use App\Http\Controllers\PostReactionController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
@@ -66,6 +72,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
+
+    Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'status']);
+    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
@@ -157,6 +167,30 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);
+    });
+
+    Route::prefix('api/posts')->group(function () {
+        Route::get('/', [PostController::class, 'index']);
+        Route::post('/', [PostController::class, 'store']);
+        Route::get('/by-ulid/{ulid}', [PostController::class, 'showByUlid']);
+        Route::delete('/{post}', [PostController::class, 'destroy']);
+        Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
+        Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
+        Route::get('/{post}/comments', [PostCommentController::class, 'index']);
+        Route::post('/{post}/comments', [PostCommentController::class, 'store']);
+        Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
+    });
+
+    // Shareable single-post page (the URL notifications link to).
+    Route::get('/p/{ulid}', [PostController::class, 'viewPage'])->name('posts.view');
+
+    Route::get('/api/feed', [FeedController::class, 'index']);
+
+    Route::prefix('api/notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('/read-all', [NotificationController::class, 'markAllRead']);
+        Route::post('/{id}/read', [NotificationController::class, 'markRead']);
     });
 });
 

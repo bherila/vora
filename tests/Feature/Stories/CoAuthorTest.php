@@ -10,6 +10,7 @@ use App\Notifications\CoAuthorInviteAccepted;
 use App\Notifications\CoAuthorInviteReceived;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 use Tests\TestCase;
 
 class CoAuthorTest extends TestCase
@@ -25,7 +26,11 @@ class CoAuthorTest extends TestCase
 
         $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])
             ->assertCreated();
-        Notification::assertSentTo($invitee, CoAuthorInviteReceived::class);
+        Notification::assertSentTo(
+            $invitee,
+            CoAuthorInviteReceived::class,
+            fn (CoAuthorInviteReceived $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
+        );
 
         $invite = StoryAuthor::query()->where('story_id', $story->id)->where('user_id', $invitee->id)->firstOrFail();
         $this->assertSame('pending', $invite->status);
@@ -41,7 +46,11 @@ class CoAuthorTest extends TestCase
         $this->actingAs($invitee)->postJson("/api/authorship-invites/{$invite->id}/accept")
             ->assertOk()
             ->assertJsonPath('data.status', 'accepted');
-        Notification::assertSentTo($owner, CoAuthorInviteAccepted::class);
+        Notification::assertSentTo(
+            $owner,
+            CoAuthorInviteAccepted::class,
+            fn (CoAuthorInviteAccepted $notification, array $channels): bool => $channels === ['database', WebPushChannel::class],
+        );
 
         // Now an author, the co-author can edit.
         $this->actingAs($invitee)->patchJson("/api/stories/{$story->id}", ['title' => 'Edited together'])

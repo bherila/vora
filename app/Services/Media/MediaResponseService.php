@@ -11,8 +11,8 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 /**
  * Turns Media models into API payloads. Centralising this keeps every surface —
  * the owner's library, single-item views, and cross-user exploration — emitting
- * the exact same shape (signed original URL, signed thumbnail URL, HLS status)
- * so the listings cannot drift apart.
+ * the exact same shape (signed original URL where allowed, signed thumbnail URL,
+ * HLS status) so the listings cannot drift apart.
  */
 class MediaResponseService
 {
@@ -28,7 +28,7 @@ class MediaResponseService
      *
      * @return array{url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
      */
-    public function extras(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = true): array
+    public function extras(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = false): array
     {
         $extras = ['url' => null, 'thumbnail_url' => null, 'video' => null];
 
@@ -69,7 +69,7 @@ class MediaResponseService
      *
      * @return array<string, mixed>
      */
-    public function item(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = true): array
+    public function item(Media $media, bool $resolveHls = true, bool $includeOriginalVideoUrl = false): array
     {
         return MediaPresenter::ownerView($media, $this->extras($media, $resolveHls, $includeOriginalVideoUrl));
     }
@@ -81,7 +81,7 @@ class MediaResponseService
      * @param  LengthAwarePaginator<int, Media>  $paginator
      * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
      */
-    public function page(LengthAwarePaginator $paginator, bool $includeOriginalVideoUrls = true): array
+    public function page(LengthAwarePaginator $paginator, bool $includeOriginalVideoUrls = false): array
     {
         $data = collect($paginator->items())
             ->map(fn (Media $m): array => $this->item($m, resolveHls: false, includeOriginalVideoUrl: $includeOriginalVideoUrls))

@@ -11,6 +11,15 @@ class FollowRequest extends Model
 {
     use HasFactory;
 
+    /** A follow that has been requested but not yet answered. */
+    public const STATUS_PENDING = 'pending';
+
+    /** An accepted follow — requester now follows recipient. */
+    public const STATUS_ACCEPTED = 'accepted';
+
+    /** A follow the recipient turned down. */
+    public const STATUS_DECLINED = 'declined';
+
     protected $fillable = ['requester_id', 'recipient_id', 'status', 'responded_at'];
 
     protected function casts(): array

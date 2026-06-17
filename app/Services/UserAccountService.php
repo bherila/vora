@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\AudienceMember;
 use App\Models\FollowRequest;
 use App\Models\Media;
+use App\Models\Post;
+use App\Models\Story;
 use App\Models\StoryInvolvement;
 use App\Models\User;
 use App\Services\Media\MediaService;
@@ -34,6 +37,19 @@ class UserAccountService
 
         DB::transaction(function () use ($user): void {
             $user->interestRatings()->delete();
+            $user->pushSubscriptions()->delete();
+
+            // audience_members has no FK to its polymorphic target, and
+            // force-deleting the user cascades stories/media at the DB level
+            // without firing the model hook that prunes them. Clear the
+            // allowlists for this user's content explicitly (same reason the
+            // story "involves" tags are cleaned by hand below).
+            $this->purgeAudienceMembers($user);
+
+            // Notifications about this user's actions live in other users' rows as
+            // a denormalized JSON snapshot (actor_id/actor_name). Erasure must
+            // remove that PII too, like the privacy audit trail's actor handling.
+            DB::table('notifications')->where('data->actor_id', $user->id)->delete();
 
             // Bulk character deletion bypasses the Character `deleting` hook, so
             // explicitly remove the polymorphic story "involves" tags pointing at
@@ -56,5 +72,32 @@ class UserAccountService
 
             $user->forceDelete();
         });
+    }
+
+    /**
+     * Remove "specific people" allowlist grants attached to all of a user's
+     * content before that content is cascade-deleted with the account.
+     */
+    private function purgeAudienceMembers(User $user): void
+    {
+        AudienceMember::query()
+            ->where(function ($query) use ($user): void {
+                $query->where('privacyable_type', (new Story)->getMorphClass())
+                    ->whereIn('privacyable_id', $user->stories()->select('id'));
+            })
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', (new Media)->getMorphClass())
+                    ->whereIn('privacyable_id', $user->media()->select('id'));
+            })
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', (new Post)->getMorphClass())
+                    ->whereIn('privacyable_id', $user->posts()->select('id'));
+            })
+            // The user's own profile allowlist (they are the privacyable).
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', $user->getMorphClass())
+                    ->where('privacyable_id', $user->id);
+            })
+            ->delete();
     }
 }

@@ -3,12 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\FollowRequest;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
-class FollowRequestAccepted extends Notification
+class FollowRequestAccepted extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(private readonly FollowRequest $followRequest) {}
@@ -16,17 +19,29 @@ class FollowRequestAccepted extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return $this->deliveryChannels($notifiable, 'notify_follow_accepted');
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
     {
-        $recipient = $this->followRequest->recipient;
+        $accepter = $this->followRequest->recipient;
 
-        return (new MailMessage)
-            ->subject('Follow request accepted')
-            ->greeting('Your follow request was accepted')
-            ->line(($recipient?->display_name ?: $recipient?->name ?: 'A user').' accepted your follow request.')
-            ->action('View profile', url('/users/'.$this->followRequest->recipient_id));
+        return [
+            'type' => 'follow_accepted',
+            'actor_id' => $this->followRequest->recipient_id,
+            'actor_name' => $accepter?->display_name ?: $accepter?->name,
+            'url' => '/users/'.$this->followRequest->recipient_id,
+        ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('Follow request accepted', $actor.' accepted your follow request.', $data);
     }
 }

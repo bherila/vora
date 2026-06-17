@@ -2,19 +2,23 @@
 
 namespace App\Models;
 
+use App\Enums\Audience;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory;
+    use HasPushSubscriptions;
     use Notifiable;
     use SoftDeletes;
 
@@ -34,11 +38,15 @@ class User extends Authenticatable implements MustVerifyEmail
         'gender_other',
         'user_type',
         'user_type_other',
+        'profile_audience',
         'preferred_user_types',
         'preferred_genders',
         'last_login_at',
-        'email_follow_request_received',
-        'email_follow_request_accepted',
+        'notify_new_post',
+        'notify_post_reaction',
+        'notify_post_comment',
+        'notify_follow_request',
+        'notify_follow_accepted',
         'profile_picture_media_id',
     ];
 
@@ -62,6 +70,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'deactivated_at' => 'datetime',
             'id_verified_at' => 'datetime',
             'birth_date' => 'date',
+            'profile_audience' => Audience::class,
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
             'last_media_interest_ids' => 'array',
@@ -72,8 +81,11 @@ class User extends Authenticatable implements MustVerifyEmail
             'name_locked' => 'boolean',
             'email_locked' => 'boolean',
             'force_change_pw' => 'boolean',
-            'email_follow_request_received' => 'boolean',
-            'email_follow_request_accepted' => 'boolean',
+            'notify_new_post' => 'boolean',
+            'notify_post_reaction' => 'boolean',
+            'notify_post_comment' => 'boolean',
+            'notify_follow_request' => 'boolean',
+            'notify_follow_accepted' => 'boolean',
         ];
     }
 
@@ -182,6 +194,25 @@ class User extends Authenticatable implements MustVerifyEmail
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /**
+     * @return HasMany<Post, $this>
+     */
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
+     * The "specific people" allowlist for this user's profile, reusing the shared
+     * polymorphic audience_members table with the User as the privacyable.
+     *
+     * @return MorphMany<AudienceMember, $this>
+     */
+    public function profileAudienceMembers(): MorphMany
+    {
+        return $this->morphMany(AudienceMember::class, 'privacyable');
     }
 
     /**

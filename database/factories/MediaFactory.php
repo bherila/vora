@@ -2,10 +2,10 @@
 
 namespace Database\Factories;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
-use App\Enums\Visibility;
 use App\Models\Media;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -35,9 +35,15 @@ class MediaFactory extends Factory
             'size_bytes' => fake()->numberBetween(10_000, 5_000_000),
             'title' => fake()->optional()->sentence(3),
             'upload_status' => 'ready',
-            'visibility' => Visibility::Users,
+            'audience' => Audience::Everyone,
+            'discoverable' => true,
             'moderation_status' => ModerationStatus::Pending,
         ];
+    }
+
+    public function audience(Audience $audience): static
+    {
+        return $this->state(fn (): array => ['audience' => $audience]);
     }
 
     public function profilePicture(): static
@@ -64,9 +70,12 @@ class MediaFactory extends Factory
         });
     }
 
+    /**
+     * Link-only: discoverable off, audience unchanged (Everyone by default).
+     */
     public function unlisted(): static
     {
-        return $this->state(fn (): array => ['visibility' => Visibility::Unlisted]);
+        return $this->state(fn (): array => ['discoverable' => false]);
     }
 
     public function pendingUpload(): static

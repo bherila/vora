@@ -15,6 +15,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { RequestInterestForm } from '@/interests/request-interest-form';
+import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import {
@@ -23,6 +24,12 @@ import {
   normalizeProfileSelections,
   USER_TYPE_OPTIONS,
 } from '@/profile-options';
+import {
+  currentBrowserPushSubscription,
+  isWebPushSupported,
+  subscribeBrowserToWebPush,
+  unsubscribeBrowserFromWebPush,
+} from '@/push';
 
 import { getAuthComponents } from './shared-components';
 
@@ -37,11 +44,17 @@ interface UserSettingsInitialPayload {
   user_type_other?: string | null;
   preferred_user_types?: unknown;
   preferred_genders?: unknown;
+  profile_audience?: string | null;
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
-  email_follow_request_received?: boolean | null;
-  email_follow_request_accepted?: boolean | null;
+  notify_new_post?: boolean | null;
+  notify_post_reaction?: boolean | null;
+  notify_post_comment?: boolean | null;
+  notify_follow_request?: boolean | null;
+  notify_follow_accepted?: boolean | null;
+  web_push_public_key?: string | null;
+  web_push_subscription_count?: number | null;
   can_manage_interests?: boolean | null;
 }
 
@@ -56,11 +69,17 @@ interface UserSettingsInitialData {
   user_type_other: string;
   preferred_user_types: string[];
   preferred_genders: string[];
+  profile_audience: string;
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
-  email_follow_request_received: boolean;
-  email_follow_request_accepted: boolean;
+  notify_new_post: boolean;
+  notify_post_reaction: boolean;
+  notify_post_comment: boolean;
+  notify_follow_request: boolean;
+  notify_follow_accepted: boolean;
+  web_push_public_key: string;
+  web_push_subscription_count: number;
   can_manage_interests: boolean;
 }
 
@@ -89,8 +108,11 @@ interface UserSettingsResponse {
     user_type_other: string | null;
     preferred_user_types: string[] | null;
     preferred_genders: string[] | null;
-    email_follow_request_received: boolean;
-    email_follow_request_accepted: boolean;
+    notify_new_post: boolean;
+    notify_post_reaction: boolean;
+    notify_post_comment: boolean;
+    notify_follow_request: boolean;
+    notify_follow_accepted: boolean;
   };
 }
 
@@ -104,8 +126,12 @@ interface AccountPayload {
   user_type_other: string | null;
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
-  email_follow_request_received: boolean;
-  email_follow_request_accepted: boolean;
+  profile_audience: string;
+  notify_new_post: boolean;
+  notify_post_reaction: boolean;
+  notify_post_comment: boolean;
+  notify_follow_request: boolean;
+  notify_follow_accepted: boolean;
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -120,11 +146,17 @@ function emptyInitialData(): UserSettingsInitialData {
     user_type_other: '',
     preferred_user_types: [],
     preferred_genders: [],
+    profile_audience: 'everyone',
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
-    email_follow_request_received: false,
-    email_follow_request_accepted: false,
+    notify_new_post: true,
+    notify_post_reaction: true,
+    notify_post_comment: true,
+    notify_follow_request: true,
+    notify_follow_accepted: true,
+    web_push_public_key: '',
+    web_push_subscription_count: 0,
     can_manage_interests: false,
   };
 }
@@ -141,11 +173,17 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     user_type_other: payload.user_type_other ?? '',
     preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, payload.preferred_user_types),
     preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, payload.preferred_genders),
+    profile_audience: payload.profile_audience ?? 'everyone',
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
-    email_follow_request_received: payload.email_follow_request_received ?? false,
-    email_follow_request_accepted: payload.email_follow_request_accepted ?? false,
+    notify_new_post: payload.notify_new_post ?? true,
+    notify_post_reaction: payload.notify_post_reaction ?? true,
+    notify_post_comment: payload.notify_post_comment ?? true,
+    notify_follow_request: payload.notify_follow_request ?? true,
+    notify_follow_accepted: payload.notify_follow_accepted ?? true,
+    web_push_public_key: payload.web_push_public_key ?? '',
+    web_push_subscription_count: payload.web_push_subscription_count ?? 0,
     can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
@@ -186,11 +224,22 @@ function UserSettingsPage() {
   const [profileUserTypeOther, setProfileUserTypeOther] = useState(initialData.user_type_other);
   const [preferredUserTypes, setPreferredUserTypes] = useState(initialData.preferred_user_types);
   const [preferredGenders, setPreferredGenders] = useState(initialData.preferred_genders);
+  const [profileAudience, setProfileAudience] = useState(initialData.profile_audience);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
-  const [emailFollowRequestReceived, setEmailFollowRequestReceived] = useState(initialData.email_follow_request_received);
-  const [emailFollowRequestAccepted, setEmailFollowRequestAccepted] = useState(initialData.email_follow_request_accepted);
+  const [notifyNewPost, setNotifyNewPost] = useState(initialData.notify_new_post);
+  const [notifyPostReaction, setNotifyPostReaction] = useState(initialData.notify_post_reaction);
+  const [notifyPostComment, setNotifyPostComment] = useState(initialData.notify_post_comment);
+  const [notifyFollowRequest, setNotifyFollowRequest] = useState(initialData.notify_follow_request);
+  const [notifyFollowAccepted, setNotifyFollowAccepted] = useState(initialData.notify_follow_accepted);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushSubscriptionCount, setPushSubscriptionCount] = useState(initialData.web_push_subscription_count);
+  const [pushSaving, setPushSaving] = useState(false);
+  const [pushMessage, setPushMessage] = useState('');
+  const [pushError, setPushError] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
@@ -239,6 +288,45 @@ function UserSettingsPage() {
     };
   }, [interestsEnabled]);
 
+  useEffect(() => {
+    const supported = isWebPushSupported();
+    setPushSupported(supported);
+    setPushPermission(supported ? Notification.permission : 'denied');
+
+    if (!supported) {
+      return;
+    }
+
+    let active = true;
+    // Verify the browser subscription endpoint is registered for THIS account —
+    // not just any account. On shared browsers or after account-switching the
+    // service worker may hold a subscription that belongs to a different user.
+    // We cross-check the browser endpoint against the server's recorded count
+    // by re-fetching status; a mismatch means we silently drop the stale state.
+    Promise.all([
+      currentBrowserPushSubscription(),
+      fetchWrapper.get('/api/push-subscriptions').catch(() => null),
+    ])
+      .then(([subscription, status]) => {
+        if (!active) return;
+        const serverCount = (status as { data?: { subscription_count?: number } } | null)?.data?.subscription_count ?? 0;
+        // The browser has a subscription AND the server knows about at least one
+        // for this account — treat as subscribed. If either is missing the state
+        // is stale (account switch, purge, etc.) so default to unsubscribed.
+        setPushSubscribed(subscription !== null && serverCount > 0);
+        setPushSubscriptionCount(serverCount);
+      })
+      .catch(() => {
+        if (active) {
+          setPushSubscribed(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
     try {
       await persistRatings(null, [{ interest_id: interestId, level }]);
@@ -274,8 +362,11 @@ function UserSettingsPage() {
     setProfileUserTypeOther(data.user_type_other ?? '');
     setPreferredUserTypes(normalizeProfileSelections(USER_TYPE_OPTIONS, data.preferred_user_types));
     setPreferredGenders(normalizeProfileSelections(GENDER_OPTIONS, data.preferred_genders));
-    setEmailFollowRequestReceived(data.email_follow_request_received);
-    setEmailFollowRequestAccepted(data.email_follow_request_accepted);
+    setNotifyNewPost(data.notify_new_post);
+    setNotifyPostReaction(data.notify_post_reaction);
+    setNotifyPostComment(data.notify_post_comment);
+    setNotifyFollowRequest(data.notify_follow_request);
+    setNotifyFollowAccepted(data.notify_follow_accepted);
   };
 
   const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'display_name' | 'email'>> = {}): AccountPayload => ({
@@ -288,8 +379,12 @@ function UserSettingsPage() {
     user_type_other: profileUserType === 'other' ? blankToNull(profileUserTypeOther) : null,
     preferred_user_types: selectionsToPayload(preferredUserTypes),
     preferred_genders: selectionsToPayload(preferredGenders),
-    email_follow_request_received: emailFollowRequestReceived,
-    email_follow_request_accepted: emailFollowRequestAccepted,
+    profile_audience: profileAudience,
+    notify_new_post: notifyNewPost,
+    notify_post_reaction: notifyPostReaction,
+    notify_post_comment: notifyPostComment,
+    notify_follow_request: notifyFollowRequest,
+    notify_follow_accepted: notifyFollowAccepted,
   });
 
   const handleProfilePictureChange = async (selectedFiles: File[]): Promise<void> => {
@@ -372,6 +467,42 @@ function UserSettingsPage() {
       window.location.href = '/login';
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to delete account.');
+    }
+  };
+
+  const handleEnablePush = async (): Promise<void> => {
+    setPushSaving(true);
+    setPushMessage('');
+    setPushError('');
+
+    try {
+      const count = await subscribeBrowserToWebPush(initialData.web_push_public_key);
+      setPushSubscriptionCount(count);
+      setPushPermission(Notification.permission);
+      setPushSubscribed(true);
+      setPushMessage('Browser push enabled for this device.');
+    } catch (err) {
+      setPushPermission(isWebPushSupported() ? Notification.permission : 'denied');
+      setPushError(err instanceof Error ? err.message : 'Could not enable browser push.');
+    } finally {
+      setPushSaving(false);
+    }
+  };
+
+  const handleDisablePush = async (): Promise<void> => {
+    setPushSaving(true);
+    setPushMessage('');
+    setPushError('');
+
+    try {
+      const count = await unsubscribeBrowserFromWebPush();
+      setPushSubscriptionCount(count);
+      setPushSubscribed(false);
+      setPushMessage('Browser push disabled for this device.');
+    } catch (err) {
+      setPushError(typeof err === 'string' ? err : 'Could not disable browser push.');
+    } finally {
+      setPushSaving(false);
     }
   };
 
@@ -576,6 +707,22 @@ function UserSettingsPage() {
                 values={preferredGenders}
                 onChange={setPreferredGenders}
               />
+              <div className="grid gap-1.5">
+                <Label htmlFor="account-profile-audience">Who can see your profile</Label>
+                <select
+                  id="account-profile-audience"
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={profileAudience}
+                  onChange={(event) => setProfileAudience(event.target.value)}
+                >
+                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <p className="text-sm text-muted-foreground">
+                  Restricted profiles stay listed so people can still request to follow you — only your details are hidden.
+                </p>
+              </div>
               <Button type="submit" disabled={profileSaving}>
                 {profileSaving ? 'Saving...' : 'Save profile'}
               </Button>
@@ -674,24 +821,86 @@ function UserSettingsPage() {
                 {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
               </p>
               <div className="space-y-3 rounded-md border border-input p-3">
-                <p className="text-sm font-medium">Follow email notifications</p>
+                <p className="text-sm font-medium">In-app notifications</p>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={emailFollowRequestReceived}
-                    onChange={(event) => setEmailFollowRequestReceived(event.target.checked)}
+                    checked={notifyNewPost}
+                    onChange={(event) => setNotifyNewPost(event.target.checked)}
                   />
-                  Email me when I receive a follow request
+                  Notify me when someone I follow posts
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={emailFollowRequestAccepted}
-                    onChange={(event) => setEmailFollowRequestAccepted(event.target.checked)}
+                    checked={notifyPostReaction}
+                    onChange={(event) => setNotifyPostReaction(event.target.checked)}
                   />
-                  Email me when one of my follow requests is accepted
+                  Notify me when someone reacts to my post
                 </label>
-                <p className="text-xs text-muted-foreground">Declined follow requests do not send email.</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyPostComment}
+                    onChange={(event) => setNotifyPostComment(event.target.checked)}
+                  />
+                  Notify me when someone comments on my post
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyFollowRequest}
+                    onChange={(event) => setNotifyFollowRequest(event.target.checked)}
+                  />
+                  Notify me when I receive a follow request
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyFollowAccepted}
+                    onChange={(event) => setNotifyFollowAccepted(event.target.checked)}
+                  />
+                  Notify me when one of my follow requests is accepted
+                </label>
+                <p className="text-xs text-muted-foreground">Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.</p>
+              </div>
+              <div className="space-y-3 rounded-md border border-input p-3">
+                <div>
+                  <p className="text-sm font-medium">Browser push notifications</p>
+                  <p className="text-xs text-muted-foreground">
+                    {pushSupported
+                      ? `This account has ${pushSubscriptionCount} subscribed ${pushSubscriptionCount === 1 ? 'device' : 'devices'}.`
+                      : 'This browser does not support push notifications.'}
+                  </p>
+                </div>
+                {pushMessage && (
+                  <Alert>
+                    <AlertDescription>{pushMessage}</AlertDescription>
+                  </Alert>
+                )}
+                {pushError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{pushError}</AlertDescription>
+                  </Alert>
+                )}
+                {pushSupported && !initialData.web_push_public_key && (
+                  <p className="text-sm text-muted-foreground">Browser push is not configured.</p>
+                )}
+                {pushSupported && initialData.web_push_public_key && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant={pushSubscribed ? 'outline' : 'default'}
+                      disabled={pushSaving || pushPermission === 'denied'}
+                      onClick={() => void (pushSubscribed ? handleDisablePush() : handleEnablePush())}
+                    >
+                      {pushSaving ? 'Saving...' : (pushSubscribed ? 'Disable on this device' : 'Enable on this device')}
+                    </Button>
+                    {pushPermission === 'denied' && (
+                      <span className="text-sm text-muted-foreground">Push permission is blocked in this browser.</span>
+                    )}
+                  </div>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}

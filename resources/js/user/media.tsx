@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
-import { type MediaItem, type MediaTypeFilter, mediaTypeForFile, type VisibilityValue } from '@/media/types';
+import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { useMediaListing } from '@/media/useMediaListing';
 
@@ -85,7 +86,8 @@ function UserMediaPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState('');
-  const [visibility, setVisibility] = useState<VisibilityValue>('users');
+  const [audience, setAudience] = useState<Audience>('everyone');
+  const [discoverable, setDiscoverable] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -95,7 +97,8 @@ function UserMediaPage() {
   const resetForm = (): void => {
     setFiles([]);
     setTitle('');
-    setVisibility('users');
+    setAudience('everyone');
+    setDiscoverable(true);
     setUploadInterestIds(initial.last_interest_ids);
     setProgress(0);
   };
@@ -117,6 +120,7 @@ function UserMediaPage() {
     uploadAbortRef.current = abortController;
     setUploading(true);
     setProgress(0);
+    let completedCount = 0;
     try {
       for (const [index, selectedFile] of files.entries()) {
         const type = mediaTypeForFile(selectedFile);
@@ -133,7 +137,8 @@ function UserMediaPage() {
           content_type: selectedFile.type,
           size: selectedFile.size,
           title: files.length === 1 ? title.trim() || null : selectedFile.name,
-          visibility,
+          audience,
+          discoverable,
           interest_ids: uploadInterestIds,
           has_thumbnail: thumbnail !== null,
           perceptual_hash: perceptualHash,
@@ -157,6 +162,7 @@ function UserMediaPage() {
         }
 
         await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+        completedCount += 1;
       }
 
       toast.success(files.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
@@ -164,10 +170,16 @@ function UserMediaPage() {
       resetForm();
       listing.reload();
     } catch (err) {
+      if (completedCount > 0) {
+        setFiles(files.slice(completedCount));
+        listing.reload();
+      }
+
       if (err instanceof DOMException && err.name === 'AbortError') {
-        toast.info('Upload canceled.');
+        toast.info(completedCount > 0 ? `${completedCount} upload${completedCount === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');
       } else {
-        toast.error(getErrorMessage(err));
+        const message = getErrorMessage(err);
+        toast.error(completedCount > 0 ? `${message} ${completedCount} upload${completedCount === 1 ? '' : 's'} completed before the failure.` : message);
       }
     } finally {
       setUploading(false);
@@ -226,14 +238,25 @@ function UserMediaPage() {
               <label className="grid gap-1">
                 <span className="text-sm">Who can see this?</span>
                 <select
-                  value={visibility}
-                  onChange={(event) => setVisibility(event.target.value as VisibilityValue)}
+                  value={audience}
+                  onChange={(event) => setAudience(event.target.value as Audience)}
                   disabled={uploading}
                   className="w-full rounded-md border border-input bg-background px-3 py-2"
                 >
-                  <option value="users">Any user</option>
-                  <option value="unlisted">Only people with the link</option>
+                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={discoverable}
+                  onChange={(event) => setDiscoverable(event.target.checked)}
+                  disabled={uploading}
+                  className="mt-0.5"
+                />
+                <span>List in discovery — otherwise only people with the link can find it.</span>
               </label>
               <div className="grid gap-1">
                 <span className="text-sm">Interests</span>

@@ -3,12 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\StoryAuthor;
+use App\Notifications\Concerns\DeliversWebPush;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
-class CoAuthorInviteReceived extends Notification
+class CoAuthorInviteReceived extends Notification implements ShouldQueue
 {
+    use DeliversWebPush;
     use Queueable;
 
     public function __construct(private readonly StoryAuthor $storyAuthor) {}
@@ -16,19 +19,33 @@ class CoAuthorInviteReceived extends Notification
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return $this->deliveryChannels($notifiable);
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
     {
         $inviter = $this->storyAuthor->invitedBy;
         $story = $this->storyAuthor->story;
 
-        return (new MailMessage)
-            ->subject('Co-author invitation')
-            ->greeting('You have been invited to co-author a story')
-            ->line(($inviter?->display_name ?: $inviter?->name ?: 'Someone')
-                .' invited you to co-author "'.($story?->title ?? 'a story').'".')
-            ->action('Review invitations', url('/users/follow-requests'));
+        return [
+            'type' => 'co_author_invite',
+            'actor_id' => $this->storyAuthor->invited_by_user_id,
+            'actor_name' => $inviter?->display_name ?: $inviter?->name,
+            'story_id' => $story?->id,
+            'story_ulid' => $story?->ulid,
+            'story_title' => $story?->title,
+            'url' => '/users/follow-requests',
+        ];
+    }
+
+    public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
+    {
+        $data = $this->toArray($notifiable);
+        $actor = (string) ($data['actor_name'] ?? 'Someone');
+
+        return $this->webPushMessage('Co-author invitation', $actor.' invited you to co-author a story.', $data);
     }
 }
