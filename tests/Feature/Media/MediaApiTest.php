@@ -198,8 +198,9 @@ class MediaApiTest extends TestCase
         $intruder = User::factory()->approved()->create();
         $media = Media::factory()->for($owner)->pendingUpload()->create();
 
-        $this->actingAs($intruder)->postJson("/api/media/{$media->id}/complete")->assertForbidden();
-        $this->actingAs($intruder)->deleteJson("/api/media/{$media->id}")->assertForbidden();
+        // 404 (not 403) so a non-owner can't use the id as an existence oracle.
+        $this->actingAs($intruder)->postJson("/api/media/{$media->id}/complete")->assertNotFound();
+        $this->actingAs($intruder)->deleteJson("/api/media/{$media->id}")->assertNotFound();
     }
 
     public function test_delete_removes_media(): void
@@ -225,7 +226,8 @@ class MediaApiTest extends TestCase
             ->assertOk()
             ->assertJsonMissingPath('data.moderation_status');
 
-        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$pending->ulid}")->assertForbidden();
+        // Pending media reads as not-found to non-owners (same as a bad ulid).
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$pending->ulid}")->assertNotFound();
     }
 
     public function test_other_user_video_by_ulid_does_not_expose_original_signed_url(): void
@@ -280,7 +282,25 @@ class MediaApiTest extends TestCase
         // the deactivated/deleted treatment (and StoryPolicy).
         $owner->forceFill(['is_disabled' => true])->save();
 
-        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertForbidden();
-        $this->actingAs($viewer)->getJson("/api/media/{$approved->id}")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertNotFound();
+        $this->actingAs($viewer)->getJson("/api/media/{$approved->id}")->assertNotFound();
+    }
+
+    public function test_probing_an_existing_hidden_media_id_is_indistinguishable_from_a_missing_one(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        // Pending media is never visible to a non-owner, so this is the "exists but
+        // you may not see it" case.
+        $hidden = Media::factory()->for($owner)->create(['moderation_status' => ModerationStatus::Pending]);
+
+        // "Exists but hidden" and "doesn't exist" must answer identically so the
+        // numeric id can't be used to enumerate other users' media.
+        $existing = $this->actingAs($viewer)->getJson("/api/media/{$hidden->id}");
+        $missing = $this->actingAs($viewer)->getJson('/api/media/99999999');
+
+        $existing->assertNotFound();
+        $missing->assertNotFound();
+        $this->assertSame($missing->getStatusCode(), $existing->getStatusCode());
     }
 }

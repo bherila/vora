@@ -170,6 +170,21 @@ class StoryTest extends TestCase
         $this->assertDatabaseHas('stories', ['id' => $story->id]);
     }
 
+    public function test_reassigning_a_character_owner_drops_its_story_involvement_tags(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $newOwner = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $owner->id, 'display_name' => 'Sidekick']);
+        $story = Story::factory()->for($owner)->create();
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $character->id]);
+
+        // Moving the character to another owner would strand the "involves" tag in
+        // a story the new owner doesn't author; the model invariant clears it.
+        $character->forceFill(['user_id' => $newOwner->id])->save();
+
+        $this->assertDatabaseMissing('story_involvements', ['involvable_type' => 'character', 'involvable_id' => $character->id]);
+    }
+
     public function test_story_from_disabled_owner_is_hidden_from_readers(): void
     {
         $owner = User::factory()->approved()->create();

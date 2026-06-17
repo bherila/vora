@@ -214,8 +214,9 @@ class AccountLifecycleTest extends TestCase
 
         $owner->forceFill(['deactivated_at' => now()])->save();
 
-        // Hidden once the owner is deactivated, even with the direct link.
-        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$media->ulid}")->assertForbidden();
+        // Hidden once the owner is deactivated, even with the direct link. Reads
+        // as not-found so the link can't confirm the media ever existed.
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$media->ulid}")->assertNotFound();
     }
 
     public function test_follow_inbox_hides_requests_from_deactivated_users(): void
