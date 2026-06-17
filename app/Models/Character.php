@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Story\StoryService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,14 +22,21 @@ class Character extends Model
             $character->storyInvolvements()->delete();
         });
 
-        // Reassigning a character to a new owner would strand its story "involves"
-        // tags in stories the new owner does not author. No user-facing path
-        // changes user_id today, but guard the invariant at the model so any
-        // future admin/import/maintenance path cannot leave invalid tags behind.
+        // Reassigning a character to a new owner can strand its story "involves"
+        // tags in stories the new owner does not author. Prune through the same
+        // allowed-involvables rule as the rest of the app rather than deleting
+        // every tag, so a tag in a story the new owner *does* author (i.e. still
+        // valid) is kept. No user-facing path changes user_id today; this guards
+        // the invariant for future admin/import/maintenance paths.
         static::updated(function (Character $character): void {
-            if ($character->wasChanged('user_id')) {
-                $character->storyInvolvements()->delete();
+            if (! $character->wasChanged('user_id')) {
+                return;
             }
+
+            $service = app(StoryService::class);
+            $storyIds = $character->storyInvolvements()->pluck('story_id')->unique();
+            Story::query()->whereIn('id', $storyIds)->get()
+                ->each(fn (Story $story) => $service->pruneDisallowedInvolvements($story));
         });
     }
 

@@ -303,4 +303,21 @@ class CharacterTest extends TestCase
             ])
             ->assertCreated();
     }
+
+    public function test_character_avatar_rejects_non_string_content_type_with_422_not_500(): void
+    {
+        $user = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $user->id, 'display_name' => 'Nova']);
+
+        // A malformed array content_type must validate as 422, not blow up the MIME
+        // allowlist closure with an "Array to string conversion" 500.
+        $this->actingAs($user)
+            ->postJson("/api/characters/{$character->id}/profile-picture", [
+                'filename' => 'avatar',
+                'content_type' => ['image/png'],
+                'size' => 2048,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('content_type');
+    }
 }
