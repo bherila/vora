@@ -168,7 +168,12 @@ class MediaController extends Controller
         $media = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
             ->where('ulid', $ulid)
-            ->firstOrFail();
+            ->first();
+        // first() + a generic abort (not firstOrFail) so a missing ulid yields the
+        // same body as a hidden one — firstOrFail leaks the model name.
+        if ($media === null) {
+            abort(404, 'Not found.');
+        }
         $this->authorizeOr404('view', $media);
         $media->load('interests');
         $viewer = $request->user();
@@ -257,7 +262,10 @@ class MediaController extends Controller
      */
     private function authorizeOr404(string $ability, Media $media): void
     {
-        abort_unless(Gate::allows($ability, $media), 404);
+        // Same generic body as a missing-row 404 (see the {media} route binding in
+        // AppServiceProvider) so the response can't be diffed to tell "hidden" from
+        // "does not exist".
+        abort_unless(Gate::allows($ability, $media), 404, 'Not found.');
     }
 
     /**

@@ -288,19 +288,33 @@ class MediaApiTest extends TestCase
 
     public function test_probing_an_existing_hidden_media_id_is_indistinguishable_from_a_missing_one(): void
     {
+        // Mirror production: with debug off the 404 body is just the message, so an
+        // identical body is what actually closes the oracle (debug adds per-throw
+        // trace fields that would otherwise differ between the two paths).
+        config(['app.debug' => false]);
+
         $owner = User::factory()->approved()->create();
         $viewer = User::factory()->approved()->create();
         // Pending media is never visible to a non-owner, so this is the "exists but
         // you may not see it" case.
-        $hidden = Media::factory()->for($owner)->create(['moderation_status' => ModerationStatus::Pending]);
+        $hidden = Media::factory()->for($owner)->unlisted()->create(['moderation_status' => ModerationStatus::Pending]);
 
-        // "Exists but hidden" and "doesn't exist" must answer identically so the
-        // numeric id can't be used to enumerate other users' media.
-        $existing = $this->actingAs($viewer)->getJson("/api/media/{$hidden->id}");
-        $missing = $this->actingAs($viewer)->getJson('/api/media/99999999');
+        // "Exists but hidden" and "doesn't exist" must answer identically — same
+        // status AND same body — so neither numeric id nor ulid can be used to
+        // enumerate other users' media.
+        $existingById = $this->actingAs($viewer)->getJson("/api/media/{$hidden->id}");
+        $missingById = $this->actingAs($viewer)->getJson('/api/media/99999999');
 
-        $existing->assertNotFound();
-        $missing->assertNotFound();
-        $this->assertSame($missing->getStatusCode(), $existing->getStatusCode());
+        $existingById->assertNotFound();
+        $missingById->assertNotFound();
+        $this->assertSame($missingById->getStatusCode(), $existingById->getStatusCode());
+        $this->assertSame($missingById->getContent(), $existingById->getContent());
+
+        $existingByUlid = $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$hidden->ulid}");
+        $missingByUlid = $this->actingAs($viewer)->getJson('/api/media/by-ulid/01HZZZZZZZZZZZZZZZZZZZZZZZ');
+
+        $existingByUlid->assertNotFound();
+        $missingByUlid->assertNotFound();
+        $this->assertSame($missingByUlid->getContent(), $existingByUlid->getContent());
     }
 }
