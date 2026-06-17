@@ -17,6 +17,7 @@ use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -50,6 +51,13 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(Media::class, MediaPolicy::class);
         Gate::policy(Story::class, StoryPolicy::class);
+
+        // Resolve {media} bindings ourselves so a missing row returns the same
+        // generic 404 body as an existing-but-hidden one (MediaController normalises
+        // the hidden case to abort(404, 'Not found.')). Implicit binding would emit
+        // Laravel's ModelNotFoundException message naming the model and id, which
+        // re-opens the existence oracle the MediaPolicy closes.
+        Route::bind('media', fn (string $value): Media => Media::find($value) ?? abort(404, 'Not found.'));
 
         // Stable aliases for polymorphic story "involves" tags, so the database
         // stores short type keys instead of fully-qualified class names.

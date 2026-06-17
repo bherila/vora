@@ -6,13 +6,29 @@ use App\Models\Character;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\User;
+use App\Services\FileStorageService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 class CharacterTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function fakeStorage(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('getSignedUploadUrl')->andReturn([
+                'url' => 'https://r2.example/put',
+                'headers' => ['Content-Type' => 'image/png'],
+            ]);
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+            $mock->shouldReceive('fileExists')->andReturn(true);
+            $mock->shouldReceive('getFileSize')->andReturn(2048);
+            $mock->shouldReceive('deleteFile')->andReturn(true);
+        });
+    }
 
     public function test_characters_are_optional_and_user_scoped(): void
     {
@@ -251,5 +267,57 @@ class CharacterTest extends TestCase
                 'display_name' => 'Stolen Persona',
             ])
             ->assertNotFound();
+    }
+
+    public function test_character_avatar_rejects_disallowed_image_types(): void
+    {
+        $user = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $user->id, 'display_name' => 'Nova']);
+
+        // Active/odd image formats outside the photo allowlist (e.g. SVG) must be
+        // rejected at presign, matching the user profile-picture path — a bare
+        // starts_with:image/ check would have let these through.
+        foreach (['image/svg+xml', 'image/bmp'] as $contentType) {
+            $this->actingAs($user)
+                ->postJson("/api/characters/{$character->id}/profile-picture", [
+                    'filename' => 'avatar',
+                    'content_type' => $contentType,
+                    'size' => 2048,
+                ])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('content_type');
+        }
+    }
+
+    public function test_character_avatar_accepts_allowed_image_type(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $user->id, 'display_name' => 'Nova']);
+
+        $this->actingAs($user)
+            ->postJson("/api/characters/{$character->id}/profile-picture", [
+                'filename' => 'avatar.png',
+                'content_type' => 'image/png',
+                'size' => 2048,
+            ])
+            ->assertCreated();
+    }
+
+    public function test_character_avatar_rejects_non_string_content_type_with_422_not_500(): void
+    {
+        $user = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $user->id, 'display_name' => 'Nova']);
+
+        // A malformed array content_type must validate as 422, not blow up the MIME
+        // allowlist closure with an "Array to string conversion" 500.
+        $this->actingAs($user)
+            ->postJson("/api/characters/{$character->id}/profile-picture", [
+                'filename' => 'avatar',
+                'content_type' => ['image/png'],
+                'size' => 2048,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('content_type');
     }
 }

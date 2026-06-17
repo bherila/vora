@@ -85,6 +85,8 @@ class MediaHlsProxyTest extends TestCase
         $media = Media::factory()->for($owner)->video()->create(['disk' => 's3']); // pending review
         $this->seedHls($media);
 
-        $this->actingAs($viewer)->get("/api/media/{$media->id}/hls/master.m3u8")->assertForbidden();
+        // 404 (not 403): a non-owner can't tell a private/pending video apart
+        // from a video that doesn't exist.
+        $this->actingAs($viewer)->get("/api/media/{$media->id}/hls/master.m3u8")->assertNotFound();
     }
 }

@@ -170,6 +170,37 @@ class StoryTest extends TestCase
         $this->assertDatabaseHas('stories', ['id' => $story->id]);
     }
 
+    public function test_reassigning_a_character_owner_drops_now_invalid_involvement_tags(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $newOwner = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $owner->id, 'display_name' => 'Sidekick']);
+        $story = Story::factory()->for($owner)->create();
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $character->id]);
+
+        // Moving the character to a user who does not author the story strands the
+        // "involves" tag, so the model invariant prunes it.
+        $character->forceFill(['user_id' => $newOwner->id])->save();
+
+        $this->assertDatabaseMissing('story_involvements', ['involvable_type' => 'character', 'involvable_id' => $character->id]);
+    }
+
+    public function test_reassigning_a_character_to_a_co_author_keeps_its_involvement_tag(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $character = Character::query()->create(['user_id' => $owner->id, 'display_name' => 'Sidekick']);
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $character->id]);
+
+        // The new owner is an accepted author of this story, so the character tag is
+        // still valid and must be kept rather than blanket-deleted.
+        $character->forceFill(['user_id' => $coAuthor->id])->save();
+
+        $this->assertDatabaseHas('story_involvements', ['involvable_type' => 'character', 'involvable_id' => $character->id]);
+    }
+
     public function test_story_from_disabled_owner_is_hidden_from_readers(): void
     {
         $owner = User::factory()->approved()->create();

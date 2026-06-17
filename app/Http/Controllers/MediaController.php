@@ -10,6 +10,7 @@ use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
+use App\Policies\MediaPolicy;
 use App\Services\Media\HlsService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
@@ -115,7 +116,7 @@ class MediaController extends Controller
      */
     public function complete(Request $request, Media $media): JsonResponse
     {
-        Gate::authorize('complete', $media);
+        $this->authorizeOr404('complete', $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -142,7 +143,7 @@ class MediaController extends Controller
      */
     public function show(Request $request, Media $media): JsonResponse
     {
-        Gate::authorize('view', $media);
+        $this->authorizeOr404('view', $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -167,8 +168,13 @@ class MediaController extends Controller
         $media = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
             ->where('ulid', $ulid)
-            ->firstOrFail();
-        Gate::authorize('view', $media);
+            ->first();
+        // first() + a generic abort (not firstOrFail) so a missing ulid yields the
+        // same body as a hidden one — firstOrFail leaks the model name.
+        if ($media === null) {
+            abort(404, 'Not found.');
+        }
+        $this->authorizeOr404('view', $media);
         $media->load('interests');
         $viewer = $request->user();
         $includeOriginalVideoUrl = $viewer instanceof User
@@ -182,7 +188,7 @@ class MediaController extends Controller
 
     public function destroy(Request $request, Media $media): JsonResponse
     {
-        Gate::authorize('delete', $media);
+        $this->authorizeOr404('delete', $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -201,7 +207,7 @@ class MediaController extends Controller
      */
     public function streamHls(Request $request, Media $media, string $path = 'master.m3u8'): Response|RedirectResponse|JsonResponse
     {
-        Gate::authorize('view', $media);
+        $this->authorizeOr404('view', $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -245,6 +251,21 @@ class MediaController extends Controller
         $this->auditPlayback($request, $media, 'hls_segment_redirect', $path);
 
         return redirect()->away($url, 302);
+    }
+
+    /**
+     * Authorize a media action, answering 404 (not 403) when the viewer may not
+     * act on the row. This keeps "exists but isn't yours / isn't approved /
+     * is private" indistinguishable from "doesn't exist", so numeric ids and
+     * ulids can't be used as an existence oracle. Admins satisfy the policy via
+     * {@see MediaPolicy::before()}, so their visibility is unchanged.
+     */
+    private function authorizeOr404(string $ability, Media $media): void
+    {
+        // Same generic body as a missing-row 404 (see the {media} route binding in
+        // AppServiceProvider) so the response can't be diffed to tell "hidden" from
+        // "does not exist".
+        abort_unless(Gate::allows($ability, $media), 404, 'Not found.');
     }
 
     /**

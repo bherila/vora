@@ -29,9 +29,11 @@ class StoreProfilePictureRequest extends FormRequest
     {
         $validator->after(function (Validator $validator): void {
             $type = MediaType::Photo;
-            $contentType = (string) $this->input('content_type');
+            $contentType = $this->input('content_type');
 
-            if ($contentType !== '' && ! $type->allowsMimeType($contentType)) {
+            // after() runs even when the base `string` rule already failed, so a
+            // non-string (e.g. an array) would raise "Array to string conversion".
+            if (is_string($contentType) && $contentType !== '' && ! $type->allowsMimeType($contentType)) {
                 $validator->errors()->add('content_type', 'Profile pictures must be uploaded as an image.');
             }
 
