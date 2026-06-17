@@ -19,6 +19,7 @@ class PushSubscriptionController extends Controller
             'data' => [
                 'public_key' => config('webpush.vapid.public_key'),
                 'subscription_count' => $user instanceof User ? $user->pushSubscriptions()->count() : 0,
+                'endpoint_registered' => $this->endpointRegistered($request),
             ],
         ]);
     }
@@ -60,5 +61,15 @@ class PushSubscriptionController extends Controller
             'success' => true,
             'data' => ['subscription_count' => $user->pushSubscriptions()->count()],
         ]);
+    }
+
+    private function endpointRegistered(Request $request): bool
+    {
+        $user = $request->user();
+        $endpoint = (string) $request->query('endpoint', '');
+
+        return $user instanceof User
+            && $endpoint !== ''
+            && $user->pushSubscriptions()->where('endpoint', $endpoint)->exists();
     }
 }

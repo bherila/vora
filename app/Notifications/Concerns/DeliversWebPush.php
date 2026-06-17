@@ -20,9 +20,19 @@ trait DeliversWebPush
         // outbound HTTP call to the browser push service. Separating the channels
         // lets 'database' run inline while web push is dispatched asynchronously
         // to the queue so a slow or unreachable push service cannot delay or fail
-        // the caller's request. Classes using this trait should implement
-        // ShouldQueue so Laravel routes web push via the queue worker.
+        // the caller's request.
         return ['database', WebPushChannel::class];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return [
+            'database' => 'sync',
+            WebPushChannel::class => (string) config('queue.default', 'sync'),
+        ];
     }
 
     /**
