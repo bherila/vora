@@ -26,7 +26,10 @@ class StorePushSubscriptionRequest extends FormRequest
                 'url',
                 'max:500',
                 function (string $attribute, mixed $value, \Closure $fail): void {
-                    $error = WebPushEndpoint::validationError((string) $value);
+                    if (! is_string($value)) {
+                        return;
+                    }
+                    $error = WebPushEndpoint::validationError($value);
                     if ($error !== null) {
                         $fail($error);
                     }
@@ -37,7 +40,10 @@ class StorePushSubscriptionRequest extends FormRequest
                 'required',
                 'string',
                 function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (! WebPushKeyMaterial::isValidP256dh((string) $value)) {
+                    if (! is_string($value)) {
+                        return;
+                    }
+                    if (! WebPushKeyMaterial::isValidP256dh($value)) {
                         $fail('The p256dh key is not valid Web Push key material.');
                     }
                 },
@@ -46,7 +52,10 @@ class StorePushSubscriptionRequest extends FormRequest
                 'required',
                 'string',
                 function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (! WebPushKeyMaterial::isValidAuthToken((string) $value)) {
+                    if (! is_string($value)) {
+                        return;
+                    }
+                    if (! WebPushKeyMaterial::isValidAuthToken($value)) {
                         $fail('The auth key is not valid Web Push key material.');
                     }
                 },
