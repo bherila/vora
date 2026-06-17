@@ -50,7 +50,12 @@
     </main>
 
     <footer class="border-t border-gray-200 dark:border-[#3E3E3A] py-6 text-sm text-center text-gray-600 dark:text-[#A1A09A]">
-      © {{ date('Y') }}
+      <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+        <span>© {{ date('Y') }} {{ config('app.name') }}</span>
+        @foreach ($footerPages ?? [] as $footerPage)
+          <a class="underline-offset-4 hover:underline" href="{{ $footerPage['url'] }}">{{ $footerPage['label'] }}</a>
+        @endforeach
+      </div>
     </footer>
 
     @stack('scripts')
