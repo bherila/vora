@@ -9,11 +9,13 @@ export interface AudienceOption {
   label: string;
 }
 
-// Audiences offered in the content selectors. "Specific people" is a valid
-// backend audience but needs a user picker (a follow-up), so it is intentionally
-// not yet offered here.
 export const AUDIENCE_SELECT_OPTIONS: AudienceOption[] = [
   { value: 'everyone', label: 'Everyone' },
   { value: 'followers', label: 'Followers' },
   { value: 'mutuals', label: 'Mutuals (people you follow back)' },
+];
+
+export const AUDIENCE_WITH_SPECIFIC_OPTIONS: AudienceOption[] = [
+  ...AUDIENCE_SELECT_OPTIONS,
+  { value: 'specific', label: 'Specific people' },
 ];

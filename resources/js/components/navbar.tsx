@@ -1,6 +1,7 @@
 import { ChevronDown, Laptop, Moon, Sun } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { NotificationBell } from '@/community/NotificationBell';
 import { fetchWrapper } from '@/fetchWrapper';
 
 type NavbarProps = {
@@ -70,6 +71,9 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
             <li><a className='hover:underline underline-offset-4' href='/dashboard'>Dashboard</a></li>
           )}
           {authenticated && (
+            <li><a className='hover:underline underline-offset-4' href='/feed'>Feed</a></li>
+          )}
+          {authenticated && (
             <li><a className='hover:underline underline-offset-4' href='/media'>Media</a></li>
           )}
           {authenticated && (
@@ -132,6 +136,13 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
                     Story review
                   </a>
                   <a
+                    href='/admin/posts'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Posts review
+                  </a>
+                  <a
                     href='/admin/pages'
                     className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
                     onClick={() => setAdminMenuOpen(false)}
@@ -154,6 +165,7 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
 
       {/* Right: Auth links + Theme toggle */}
       <div className='flex items-center gap-3'>
+        {authenticated && <NotificationBell />}
         {!authenticated ? (
           <div className='flex items-center gap-2 text-sm'>
             <a href='/login' className='hover:underline underline-offset-4'>Log in</a>

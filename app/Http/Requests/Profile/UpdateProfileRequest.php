@@ -32,6 +32,8 @@ class UpdateProfileRequest extends FormRequest
             'preferred_genders' => ['nullable', 'array'],
             'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
             'profile_audience' => ['sometimes', Rule::in(Audience::values())],
+            'audience_user_ids' => ['nullable', 'array'],
+            'audience_user_ids.*' => ['integer', 'distinct', Rule::exists('users', 'id')->whereNot('id', $userId)],
             'notify_new_post' => ['sometimes', 'boolean'],
             'notify_post_reaction' => ['sometimes', 'boolean'],
             'notify_post_comment' => ['sometimes', 'boolean'],
@@ -45,5 +47,13 @@ class UpdateProfileRequest extends FormRequest
                 Rule::unique('users', 'email')->ignore($userId),
             ],
         ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function audienceUserIds(): array
+    {
+        return array_values(array_unique(array_map('intval', (array) $this->input('audience_user_ids', []))));
     }
 }

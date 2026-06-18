@@ -9,6 +9,8 @@ use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Models\Media;
+use App\Models\PostComment;
+use App\Models\PostReaction;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
@@ -246,9 +248,13 @@ class ProfileController extends Controller
         }
         if (array_key_exists('profile_audience', $data)) {
             $user->profile_audience = Audience::from($data['profile_audience']);
-            // Leaving the specific tier drops any stale grants, so switching back
-            // later cannot silently re-enable old access (mirrors the story path).
-            if ($user->profile_audience !== Audience::SpecificPeople) {
+        }
+        if (array_key_exists('profile_audience', $data) || array_key_exists('audience_user_ids', $data)) {
+            if ($user->profile_audience === Audience::SpecificPeople) {
+                $this->syncProfileAudienceMembers($user, $request->audienceUserIds());
+            } else {
+                // Leaving the specific tier drops any stale grants, so switching
+                // back later cannot silently re-enable old access.
                 $user->profileAudienceMembers()->delete();
             }
         }
@@ -278,6 +284,7 @@ class ProfileController extends Controller
                 'user_type' => $user->user_type,
                 'user_type_other' => $user->user_type_other,
                 'profile_audience' => $user->profile_audience->value,
+                'audience_user_ids' => $user->profileAudienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all(),
                 'preferred_user_types' => $user->preferred_user_types,
                 'preferred_genders' => $user->preferred_genders,
                 'notify_new_post' => (bool) $user->notify_new_post,
@@ -287,5 +294,172 @@ class ProfileController extends Controller
                 'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
             ],
         ]);
+    }
+
+    public function export(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $user->load([
+            'characters',
+            'media.interests',
+            'posts.attachments',
+            'posts.audienceMembers',
+            'stories.interests',
+            'stories.involvements',
+            'sentFollowRequests.recipient:id,display_name,name',
+            'receivedFollowRequests.requester:id,display_name,name',
+            'profileAudienceMembers',
+            'interestRatings.interest:id,name',
+        ]);
+
+        $comments = PostComment::query()
+            ->where('user_id', $user->id)
+            ->with('post:id,ulid,body')
+            ->latest()
+            ->get();
+        $reactions = PostReaction::query()
+            ->where('user_id', $user->id)
+            ->with('post:id,ulid,body')
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'exported_at' => now()->toIso8601String(),
+                'account' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'display_name' => $user->display_name,
+                    'email' => $user->email,
+                    'birth_date' => $user->birth_date?->toDateString(),
+                    'gender' => $user->gender,
+                    'gender_other' => $user->gender_other,
+                    'user_type' => $user->user_type,
+                    'user_type_other' => $user->user_type_other,
+                    'profile_audience' => $user->profile_audience->value,
+                    'profile_audience_user_ids' => $user->profileAudienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
+                    'preferred_user_types' => $user->preferred_user_types,
+                    'preferred_genders' => $user->preferred_genders,
+                    'email_verified_at' => $user->email_verified_at?->toIso8601String(),
+                    'approved_at' => $user->approved_at?->toIso8601String(),
+                    'deactivated_at' => $user->deactivated_at?->toIso8601String(),
+                    'created_at' => $user->created_at?->toIso8601String(),
+                    'updated_at' => $user->updated_at?->toIso8601String(),
+                ],
+                'notification_preferences' => [
+                    'notify_new_post' => (bool) $user->notify_new_post,
+                    'notify_post_reaction' => (bool) $user->notify_post_reaction,
+                    'notify_post_comment' => (bool) $user->notify_post_comment,
+                    'notify_follow_request' => (bool) $user->notify_follow_request,
+                    'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
+                ],
+                'characters' => $user->characters->map(fn ($character): array => [
+                    'id' => $character->id,
+                    'display_name' => $character->display_name,
+                    'description' => $character->description,
+                    'gender' => $character->gender,
+                    'user_type' => $character->user_type,
+                    'created_at' => $character->created_at?->toIso8601String(),
+                ])->values(),
+                'media' => $user->media->map(fn (Media $media): array => [
+                    'id' => $media->id,
+                    'ulid' => $media->ulid,
+                    'title' => $media->title,
+                    'type' => $media->type->value,
+                    'purpose' => $media->purpose->value,
+                    'audience' => $media->audience->value,
+                    'discoverable' => (bool) $media->discoverable,
+                    'interests' => $media->interests->pluck('name')->values(),
+                    'created_at' => $media->created_at?->toIso8601String(),
+                ])->values(),
+                'stories' => $user->stories->map(fn ($story): array => [
+                    'id' => $story->id,
+                    'ulid' => $story->ulid,
+                    'title' => $story->title,
+                    'type' => $story->type->value,
+                    'status' => $story->status->value,
+                    'audience' => $story->audience->value,
+                    'discoverable' => (bool) $story->discoverable,
+                    'interests' => $story->interests->pluck('name')->values(),
+                    'created_at' => $story->created_at?->toIso8601String(),
+                ])->values(),
+                'posts' => $user->posts->map(fn ($post): array => [
+                    'id' => $post->id,
+                    'ulid' => $post->ulid,
+                    'body' => $post->body,
+                    'audience' => $post->audience->value,
+                    'discoverable' => (bool) $post->discoverable,
+                    'character_id' => $post->character_id,
+                    'audience_user_ids' => $post->audienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
+                    'attachments' => $post->attachments->map(fn ($attachment): array => [
+                        'type' => $attachment->attachable_type,
+                        'id' => $attachment->attachable_id,
+                    ])->values(),
+                    'created_at' => $post->created_at?->toIso8601String(),
+                ])->values(),
+                'comments' => $comments->map(fn (PostComment $comment): array => [
+                    'id' => $comment->id,
+                    'post_ulid' => $comment->post?->ulid,
+                    'parent_id' => $comment->parent_id,
+                    'body' => $comment->body,
+                    'created_at' => $comment->created_at?->toIso8601String(),
+                ])->values(),
+                'reactions' => $reactions->map(fn (PostReaction $reaction): array => [
+                    'id' => $reaction->id,
+                    'post_ulid' => $reaction->post?->ulid,
+                    'type' => $reaction->type,
+                    'created_at' => $reaction->created_at?->toIso8601String(),
+                ])->values(),
+                'follow_requests_sent' => $user->sentFollowRequests->map(fn ($follow): array => [
+                    'recipient_id' => $follow->recipient_id,
+                    'recipient_display_name' => $follow->recipient?->display_name ?? $follow->recipient?->name,
+                    'status' => $follow->status,
+                    'created_at' => $follow->created_at?->toIso8601String(),
+                ])->values(),
+                'follow_requests_received' => $user->receivedFollowRequests->map(fn ($follow): array => [
+                    'requester_id' => $follow->requester_id,
+                    'requester_display_name' => $follow->requester?->display_name ?? $follow->requester?->name,
+                    'status' => $follow->status,
+                    'created_at' => $follow->created_at?->toIso8601String(),
+                ])->values(),
+                'interest_ratings' => $user->interestRatings->map(fn ($rating): array => [
+                    'interest_id' => $rating->interest_id,
+                    'interest_name' => $rating->interest?->name,
+                    'character_id' => $rating->character_id,
+                    'level' => $rating->level,
+                ])->values(),
+                'notifications' => $user->notifications()->latest()->get()->map(fn ($notification): array => [
+                    'id' => $notification->id,
+                    'type' => $notification->data['type'] ?? $notification->type,
+                    'data' => $notification->data,
+                    'read_at' => $notification->read_at?->toIso8601String(),
+                    'created_at' => $notification->created_at?->toIso8601String(),
+                ])->values(),
+            ],
+        ]);
+    }
+
+    /**
+     * @param  list<int>  $userIds
+     */
+    private function syncProfileAudienceMembers(User $user, array $userIds): void
+    {
+        $target = array_values(array_unique(array_filter($userIds, fn (int $id): bool => $id !== $user->id)));
+        $existing = $user->profileAudienceMembers()->pluck('user_id')->map('intval')->all();
+
+        $removed = array_values(array_diff($existing, $target));
+        if ($removed !== []) {
+            $user->profileAudienceMembers()->whereIn('user_id', $removed)->delete();
+        }
+
+        foreach (array_values(array_diff($target, $existing)) as $userId) {
+            $user->profileAudienceMembers()->create(['user_id' => $userId]);
+        }
     }
 }
