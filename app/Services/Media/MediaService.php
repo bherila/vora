@@ -41,12 +41,22 @@ class MediaService
      */
     public function delete(Media $media): void
     {
+        if ($media->multipart_upload_id !== null) {
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
+        }
+
         $this->storage->deleteFile($media->disk, $media->object_key);
+        if ($media->reviewed_object_key !== null) {
+            $this->storage->deleteFile($media->disk, $media->reviewed_object_key);
+        }
 
         // The thumbnail/poster is private to this row (not content-shared like
         // HLS output), so it is safe to remove alongside the source.
         if ($media->thumbnail_key !== null) {
             $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->thumbnail_key);
+        }
+        if ($media->reviewed_thumbnail_key !== null) {
+            $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
         }
 
         $media->delete();

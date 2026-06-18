@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use Aws\S3\S3Client;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -30,6 +32,17 @@ class FileStorageService
         return $bucket;
     }
 
+    protected function s3Client(string $disk): S3Client
+    {
+        $storage = $this->storage($disk);
+
+        if (! $storage instanceof AwsS3V3Adapter) {
+            throw new \RuntimeException("Disk [{$disk}] does not support S3 object operations.");
+        }
+
+        return $storage->getClient();
+    }
+
     /**
      * Generate a presigned URL the browser can PUT a file to directly, avoiding
      * server upload size limits. The S3/R2 adapter returns both the URL and the
@@ -53,6 +66,107 @@ class FileStorageService
             'url' => $result['url'],
             'headers' => $result['headers'] ?? [],
         ];
+    }
+
+    public function createMultipartUpload(string $disk, string $key, string $contentType): string
+    {
+        $result = $this->s3Client($disk)->createMultipartUpload([
+            'Bucket' => $this->bucket($disk),
+            'Key' => $key,
+            'ContentType' => $contentType,
+        ]);
+
+        $uploadId = $result->get('UploadId');
+        if (! is_string($uploadId) || $uploadId === '') {
+            throw new \RuntimeException('Storage did not return a multipart upload id.');
+        }
+
+        return $uploadId;
+    }
+
+    /**
+     * @return array{url: string, headers: array<string, string>}
+     */
+    public function getSignedMultipartUploadPartUrl(string $disk, string $key, string $uploadId, int $partNumber, int $ttlMinutes = 30): array
+    {
+        $client = $this->s3Client($disk);
+        $command = $client->getCommand('UploadPart', [
+            'Bucket' => $this->bucket($disk),
+            'Key' => $key,
+            'UploadId' => $uploadId,
+            'PartNumber' => $partNumber,
+        ]);
+
+        $signedRequest = $client->createPresignedRequest($command, now()->addMinutes($ttlMinutes));
+
+        return [
+            'url' => (string) $signedRequest->getUri(),
+            'headers' => $this->flattenHeaders($signedRequest->getHeaders()),
+        ];
+    }
+
+    /**
+     * @param  list<array{part_number: int, etag: string}>  $parts
+     */
+    public function completeMultipartUpload(string $disk, string $key, string $uploadId, array $parts): bool
+    {
+        $completed = collect($parts)
+            ->sortBy('part_number')
+            ->map(fn (array $part): array => [
+                'PartNumber' => $part['part_number'],
+                'ETag' => $part['etag'],
+            ])
+            ->values()
+            ->all();
+
+        $this->s3Client($disk)->completeMultipartUpload([
+            'Bucket' => $this->bucket($disk),
+            'Key' => $key,
+            'UploadId' => $uploadId,
+            'MultipartUpload' => ['Parts' => $completed],
+        ]);
+
+        return true;
+    }
+
+    public function abortMultipartUpload(string $disk, string $key, string $uploadId): bool
+    {
+        $this->s3Client($disk)->abortMultipartUpload([
+            'Bucket' => $this->bucket($disk),
+            'Key' => $key,
+            'UploadId' => $uploadId,
+        ]);
+
+        return true;
+    }
+
+    public function copyFile(string $sourceDisk, string $sourceKey, string $targetDisk, string $targetKey, ?string $contentType = null): bool
+    {
+        $source = $this->storage($sourceDisk);
+        $target = $this->storage($targetDisk);
+
+        if ($source instanceof AwsS3V3Adapter && $target instanceof AwsS3V3Adapter) {
+            $options = [
+                'Bucket' => $this->bucket($targetDisk),
+                'Key' => $targetKey,
+                'CopySource' => $this->bucket($sourceDisk).'/'.$sourceKey,
+            ];
+
+            if ($contentType !== null) {
+                $options['ContentType'] = $contentType;
+                $options['MetadataDirective'] = 'REPLACE';
+            }
+
+            $target->getClient()->copyObject($options);
+
+            return true;
+        }
+
+        if (! $source->exists($sourceKey)) {
+            return false;
+        }
+
+        return $target->put($targetKey, $source->get($sourceKey));
     }
 
     /**
@@ -116,5 +230,19 @@ class FileStorageService
         } catch (\Exception) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<string, list<string>|string>  $headers
+     * @return array<string, string>
+     */
+    private function flattenHeaders(array $headers): array
+    {
+        $flat = [];
+        foreach ($headers as $name => $value) {
+            $flat[$name] = is_array($value) ? implode(', ', $value) : $value;
+        }
+
+        return $flat;
     }
 }

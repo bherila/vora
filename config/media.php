@@ -90,6 +90,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Multipart upload policy
+    |--------------------------------------------------------------------------
+    |
+    | Large videos can use presigned S3/R2 multipart uploads for retry/resume.
+    | The app aborts sessions when the user cancels and prunes stale pending rows,
+    | but storage should also enforce an AbortIncompleteMultipartUpload lifecycle
+    | rule after MEDIA_MULTIPART_INCOMPLETE_RETENTION_DAYS as a backstop.
+    |
+    */
+
+    'multipart' => [
+        'enabled' => filter_var(env('MEDIA_MULTIPART_UPLOADS_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'threshold_bytes' => (int) env('MEDIA_MULTIPART_THRESHOLD_BYTES', 100 * 1024 * 1024),
+        'part_size_bytes' => (int) env('MEDIA_MULTIPART_PART_SIZE_BYTES', 16 * 1024 * 1024),
+        'url_ttl' => (int) env('MEDIA_MULTIPART_URL_TTL', 30),
+        'max_parts' => 10_000,
+        'incomplete_retention_days' => (int) env('MEDIA_MULTIPART_INCOMPLETE_RETENTION_DAYS', 7),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | List pagination
     |--------------------------------------------------------------------------
     |

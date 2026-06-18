@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
+use App\Http\Requests\Media\AbortMultipartMediaUploadRequest;
+use App\Http\Requests\Media\CompleteMultipartMediaUploadRequest;
+use App\Http\Requests\Media\InitMultipartMediaUploadRequest;
 use App\Http\Requests\Media\ListMediaRequest;
+use App\Http\Requests\Media\PresignMultipartMediaPartsRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
@@ -108,7 +112,95 @@ class MediaController extends Controller
             'upload_headers' => $result['upload_headers'],
             'thumbnail_upload_url' => $result['thumbnail_upload_url'],
             'thumbnail_upload_headers' => $result['thumbnail_upload_headers'],
+            'multipart' => [
+                'enabled' => (bool) config('media.multipart.enabled', true)
+                    && MediaType::from($request->validated('type'))->isVideo(),
+                'threshold_bytes' => (int) config('media.multipart.threshold_bytes'),
+                'part_size_bytes' => (int) config('media.multipart.part_size_bytes'),
+            ],
         ], 201);
+    }
+
+    public function initMultipart(InitMultipartMediaUploadRequest $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('complete', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        if (! (bool) config('media.multipart.enabled', true)) {
+            return response()->json(['success' => false, 'message' => 'Multipart uploads are disabled.'], 422);
+        }
+
+        $session = $this->uploads->initMultipartUpload($media);
+        if ($session === null) {
+            return response()->json(['success' => false, 'message' => 'This upload cannot start a multipart session.'], 422);
+        }
+
+        return response()->json(['success' => true, 'data' => $session]);
+    }
+
+    public function presignMultipartParts(PresignMultipartMediaPartsRequest $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('complete', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        $parts = $this->uploads->signedMultipartPartUrls(
+            $media,
+            (string) $request->validated('upload_id'),
+            $request->partNumbers(),
+        );
+
+        if ($parts === null) {
+            return response()->json(['success' => false, 'message' => 'Multipart upload session was not found.'], 404);
+        }
+
+        return response()->json(['success' => true, 'data' => $parts]);
+    }
+
+    public function completeMultipart(CompleteMultipartMediaUploadRequest $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('complete', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        $completed = $this->uploads->completeMultipartUpload(
+            $media,
+            (string) $request->validated('upload_id'),
+            $request->parts(),
+        );
+
+        if (! $completed) {
+            return response()->json(['success' => false, 'message' => 'Multipart upload could not be completed.'], 422);
+        }
+
+        $media->refresh()->load('interests');
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->responder->item($media, includeOriginalVideoUrl: true),
+        ]);
+    }
+
+    public function abortMultipart(AbortMultipartMediaUploadRequest $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('complete', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        if (! $this->uploads->abortMultipartUpload($media, (string) $request->validated('upload_id'))) {
+            return response()->json(['success' => false, 'message' => 'Multipart upload session was not found.'], 404);
+        }
+
+        return response()->json(['success' => true]);
     }
 
     /**

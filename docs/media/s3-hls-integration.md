@@ -13,9 +13,11 @@ conventions — there is no shared database or API between them.
 
 1. The app uploads a source video to the **video-source** bucket under
    `<prefix>/<user-id>/<ulid>.<ext>`.
-2. The transcoder polls that bucket on a schedule, transcodes new videos, and
+2. When the video is approved, the app copies that exact reviewed object to
+   `<prefix>/reviewed/<user-id>/<ulid>.<ext>`.
+3. The transcoder polls that bucket on a schedule, transcodes new videos, and
    writes output to the **HLS-output** bucket.
-3. For each source it writes a mapping object:
+4. For each source it writes a mapping object:
 
    ```
    mappings/<source-object-key>.json
@@ -23,7 +25,7 @@ conventions — there is no shared database or API between them.
 
    containing (among other fields) an `hlsRoot` pointing at the master playlist,
    e.g. `by-id/<content-hash>/master.m3u8`.
-4. To play a video, the app resolves the mapping (`HlsService::ensureResolved()`),
+5. To play a video, the app resolves the mapping (`HlsService::ensureResolved()`),
    caching the `contentId` on the media row:
    - **missing** → still `processing`;
    - **present** → `ready`, and the app exposes a `master_url` pointing at the
@@ -60,6 +62,10 @@ source maps to it.
 > output is retained indefinitely after sources are deleted.
 
 ## Playback notes
+
+Approved videos resolve HLS from the reviewed copy key. This prevents an uploader
+from overwriting the original presigned PUT key after approval and having a later
+transcode expose unreviewed bytes.
 
 `resources/js/media/HlsVideoPlayer.tsx` plays the adaptive HLS stream via hls.js
 (native HLS on Safari/iOS) against the proxy `master_url`, falling back to the
