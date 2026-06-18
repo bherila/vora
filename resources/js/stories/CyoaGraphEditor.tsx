@@ -14,6 +14,8 @@ interface EditorNode {
   title: string;
   body: string;
   is_start: boolean;
+  position_x: number;
+  position_y: number;
 }
 
 interface EditorChoice {
@@ -31,6 +33,85 @@ function randomKey(): string {
   return `n-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function defaultPosition(index: number): { x: number; y: number } {
+  return {
+    x: 24 + (index % 4) * 220,
+    y: 24 + Math.floor(index / 4) * 150,
+  };
+}
+
+export function graphWarnings(nodes: EditorNode[], choices: EditorChoice[]): string[] {
+  const warnings: string[] = [];
+  const start = nodes.find((node) => node.is_start) ?? null;
+  const nodeKeys = new Set(nodes.map((node) => node.key));
+  const adjacency = new Map<string, string[]>();
+  nodes.forEach((node) => adjacency.set(node.key, []));
+  choices.forEach((choice) => {
+    if (nodeKeys.has(choice.fromKey) && choice.toKey !== null && nodeKeys.has(choice.toKey)) {
+      adjacency.get(choice.fromKey)?.push(choice.toKey);
+    }
+  });
+
+  if (nodes.length > 0 && start === null) {
+    warnings.push('No start passage is selected.');
+  }
+
+  const reachable = new Set<string>();
+  if (start !== null) {
+    const queue = [start.key];
+    reachable.add(start.key);
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      for (const next of adjacency.get(current) ?? []) {
+        if (!reachable.has(next)) {
+          reachable.add(next);
+          queue.push(next);
+        }
+      }
+    }
+  }
+
+  const unreachableTitles = nodes
+    .filter((node) => !reachable.has(node.key))
+    .map((node) => node.title || 'Untitled passage');
+  if (unreachableTitles.length > 0) {
+    warnings.push(`Unreachable passages: ${unreachableTitles.join(', ')}.`);
+  }
+
+  const reachesEnding = new Map<string, boolean>();
+  const canReachEnding = (key: string, visiting: Set<string>): boolean => {
+    if (reachesEnding.has(key)) {
+      return reachesEnding.get(key) ?? false;
+    }
+
+    const outgoing = choices.filter((choice) => choice.fromKey === key && nodeKeys.has(choice.fromKey));
+    if (outgoing.length === 0 || outgoing.some((choice) => choice.toKey === null)) {
+      reachesEnding.set(key, true);
+      return true;
+    }
+
+    if (visiting.has(key)) {
+      return false;
+    }
+
+    visiting.add(key);
+    const result = outgoing.some((choice) => choice.toKey !== null && nodeKeys.has(choice.toKey) && canReachEnding(choice.toKey, visiting));
+    visiting.delete(key);
+    reachesEnding.set(key, result);
+    return result;
+  };
+
+  const loopTitles = nodes
+    .filter((node) => reachable.has(node.key) && !canReachEnding(node.key, new Set()))
+    .map((node) => node.title || 'Untitled passage');
+  if (loopTitles.length > 0) {
+    warnings.push(`No ending can be reached from: ${loopTitles.join(', ')}.`);
+  }
+
+  return warnings;
+}
+
 /**
  * Passage + choices editor for choose-your-own-adventure stories. Authors edit
  * each passage's markdown and wire up the choices that lead to other passages;
@@ -43,7 +124,17 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
       if (typeof n.id === 'number') idToKey.set(n.id, n.key);
     });
     return {
-      nodes: s.nodes.map((n) => ({ key: n.key, title: n.title ?? '', body: n.body ?? '', is_start: n.is_start })),
+      nodes: s.nodes.map((n, index) => {
+        const fallback = defaultPosition(index);
+        return {
+          key: n.key,
+          title: n.title ?? '',
+          body: n.body ?? '',
+          is_start: n.is_start,
+          position_x: Number.isFinite(n.position_x) ? n.position_x : fallback.x,
+          position_y: Number.isFinite(n.position_y) ? n.position_y : fallback.y,
+        };
+      }),
       choices: s.choices
         .map((c) => ({
           fromKey: idToKey.get(c.from_node_id ?? -1) ?? '',
@@ -63,10 +154,14 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
 
   const selected = nodes.find((n) => n.key === selectedKey) ?? null;
   const selectedChoices = choices.filter((c) => c.fromKey === selectedKey);
+  const warnings = graphWarnings(nodes, choices);
 
   const addNode = (): void => {
     const key = randomKey();
-    setNodes((prev) => [...prev, { key, title: '', body: '', is_start: prev.length === 0 }]);
+    setNodes((prev) => {
+      const position = defaultPosition(prev.length);
+      return [...prev, { key, title: '', body: '', is_start: prev.length === 0, position_x: position.x, position_y: position.y }];
+    });
     setSelectedKey(key);
   };
 
@@ -106,8 +201,8 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
         title: n.title || null,
         body: n.body || null,
         is_start: n.is_start,
-        position_x: (i % 4) * 220,
-        position_y: Math.floor(i / 4) * 160,
+        position_x: n.position_x,
+        position_y: n.position_y,
       }));
       const choicePayload = choices
         .filter((c) => nodes.some((n) => n.key === c.fromKey))
@@ -143,6 +238,16 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
         </div>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {warnings.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-medium">Graph warnings</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[220px_1fr]">
         {/* Passage list */}
@@ -240,9 +345,17 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
       </div>
 
       <CyoaGraphDiagram
-        nodes={nodes.map((n) => ({ key: n.key, title: n.title || 'Untitled', is_start: n.is_start }))}
+        nodes={nodes.map((n) => ({
+          key: n.key,
+          title: n.title || 'Untitled',
+          is_start: n.is_start,
+          position_x: n.position_x,
+          position_y: n.position_y,
+        }))}
         edges={choices.map((c) => ({ from: c.fromKey, to: c.toKey, label: c.label }))}
+        selectedKey={selectedKey}
         onSelect={setSelectedKey}
+        onMove={(key, position) => updateNode(key, { position_x: position.x, position_y: position.y })}
       />
     </div>
   );

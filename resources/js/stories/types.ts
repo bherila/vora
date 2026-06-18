@@ -4,6 +4,7 @@ export type { Audience };
 export type StoryType = 'long_form' | 'cyoa';
 export type StoryStatus = 'draft' | 'published';
 export type AuthorStatus = 'pending' | 'accepted';
+export type StoryReviewStatus = 'pending' | 'approved' | 'rejected';
 
 export interface InterestTag {
   id: number;
@@ -29,6 +30,12 @@ export interface StoryAuthorRef {
   role: 'owner' | 'co_author';
   status: AuthorStatus;
   is_owner: boolean;
+}
+
+export interface StoryReview {
+  status: StoryReviewStatus;
+  label: string;
+  note: string | null;
 }
 
 export interface StoryNode {
@@ -64,6 +71,7 @@ export interface StorySummary {
   interests: InterestTag[];
   involves: InvolvementTag[];
   authors: StoryAuthorRef[];
+  review: StoryReview;
   node_count: number | null;
   published_at: string | null;
   created_at: string | null;
@@ -91,5 +99,17 @@ export interface StoryReader {
   involves: InvolvementTag[];
   nodes: Array<StoryNode & { id: number }>;
   choices: Array<StoryChoice & { from_node_id: number; to_node_id: number | null }>;
+  published_at: string | null;
+}
+
+export interface StoryDiscoveryItem {
+  id: number;
+  ulid: string;
+  title: string;
+  type: StoryType;
+  owner: { id: number; display_name: string } | null;
+  authors: StoryAuthorRef[];
+  interests: InterestTag[];
+  node_count: number | null;
   published_at: string | null;
 }

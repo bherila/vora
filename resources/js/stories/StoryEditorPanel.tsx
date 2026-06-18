@@ -175,6 +175,13 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
               <option value="published">Published</option>
             </select>
           </div>
+          {story.status === 'published' && (
+            <div className="grid gap-1 rounded-md border border-border p-3 text-sm">
+              <span className="font-medium">Review status</span>
+              <span className={story.review.status === 'rejected' ? 'text-destructive' : 'text-muted-foreground'}>{story.review.label}</span>
+              {story.review.note && <p className="text-xs text-muted-foreground">{story.review.note}</p>}
+            </div>
+          )}
           <div className="grid gap-2">
             <label className="text-sm font-medium" htmlFor="story-audience">Who can see this?</label>
             <select id="story-audience" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={audience} onChange={(e) => setAudience(e.target.value as Audience)}>

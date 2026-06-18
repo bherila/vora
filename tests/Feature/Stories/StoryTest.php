@@ -154,6 +154,23 @@ class StoryTest extends TestCase
         $this->assertSame('pending', $story->refresh()->moderation_status->value);
     }
 
+    public function test_author_payload_includes_limited_review_status(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->published()->rejected()->create([
+            'title' => 'Needs work',
+            'moderation_notes' => 'Please revise the ending.',
+        ]);
+
+        $this->actingAs($owner)->getJson("/api/stories/{$story->id}")
+            ->assertOk()
+            ->assertJsonPath('data.review.status', 'rejected')
+            ->assertJsonPath('data.review.label', 'Rejected')
+            ->assertJsonPath('data.review.note', 'Please revise the ending.')
+            ->assertJsonMissingPath('data.moderation_status')
+            ->assertJsonMissingPath('data.moderated_by_user_id');
+    }
+
     public function test_purging_a_co_author_removes_their_character_involvement_tags(): void
     {
         $owner = User::factory()->approved()->create();

@@ -252,7 +252,15 @@ class ProfileController extends Controller
                 $user->profileAudienceMembers()->delete();
             }
         }
-        foreach (['notify_new_post', 'notify_post_reaction', 'notify_post_comment', 'notify_follow_request', 'notify_follow_accepted'] as $pref) {
+        foreach ([
+            'notify_new_post',
+            'notify_post_reaction',
+            'notify_post_comment',
+            'notify_follow_request',
+            'notify_follow_accepted',
+            'notify_co_author_invite',
+            'notify_co_author_invite_accepted',
+        ] as $pref) {
             if (array_key_exists($pref, $data)) {
                 $user->{$pref} = (bool) $data[$pref];
             }
@@ -285,6 +293,8 @@ class ProfileController extends Controller
                 'notify_post_comment' => (bool) $user->notify_post_comment,
                 'notify_follow_request' => (bool) $user->notify_follow_request,
                 'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
+                'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
+                'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
             ],
         ]);
     }

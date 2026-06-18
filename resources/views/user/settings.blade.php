@@ -23,6 +23,8 @@
       'notify_post_comment' => (bool) $__currentUser->notify_post_comment,
       'notify_follow_request' => (bool) $__currentUser->notify_follow_request,
       'notify_follow_accepted' => (bool) $__currentUser->notify_follow_accepted,
+      'notify_co_author_invite' => (bool) $__currentUser->notify_co_author_invite,
+      'notify_co_author_invite_accepted' => (bool) $__currentUser->notify_co_author_invite_accepted,
       'web_push_public_key' => config('webpush.vapid.public_key'),
       'web_push_subscription_count' => $__currentUser->pushSubscriptions()->count(),
       // Mirrors the EnsureApproved gate on /api/interests so the interest panels
