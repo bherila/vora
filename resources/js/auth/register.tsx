@@ -20,7 +20,45 @@ function getAdultBirthDateLimit(): string {
   return `${year}-${month}-${day}`;
 }
 
+interface RegisterInitialData {
+  public_signups_enabled: boolean;
+  invite: string | null;
+  invite_valid: boolean;
+  inviter_name: string | null;
+}
+
+function getInitialData(): RegisterInitialData {
+  const fallback: RegisterInitialData = {
+    public_signups_enabled: true,
+    invite: null,
+    invite_valid: false,
+    inviter_name: null,
+  };
+
+  const element = document.getElementById('register-initial-data');
+  if (!element?.textContent) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(element.textContent) as Partial<RegisterInitialData>;
+    return {
+      public_signups_enabled: parsed.public_signups_enabled !== false,
+      invite: typeof parsed.invite === 'string' ? parsed.invite : null,
+      invite_valid: parsed.invite_valid === true,
+      inviter_name: typeof parsed.inviter_name === 'string' ? parsed.inviter_name : null,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function RegisterPage() {
+  const initialData = getInitialData();
+  // When public signups are closed, registration is only possible with a valid
+  // invite link. A missing/invalid invite blocks the form entirely.
+  const inviteOnly = !initialData.public_signups_enabled;
+  const formBlocked = inviteOnly && !initialData.invite_valid;
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -33,6 +71,11 @@ function RegisterPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    if (formBlocked) {
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -74,6 +117,7 @@ function RegisterPage() {
         email,
         password,
         password_confirmation: passwordConfirmation,
+        invite: initialData.invite ?? undefined,
       });
 
       if (response.success && response.redirect) {
@@ -103,6 +147,22 @@ function RegisterPage() {
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {formBlocked && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                {initialData.invite
+                  ? 'This invite link is invalid or has expired. Ask whoever invited you for a new one.'
+                  : 'Public sign-ups are currently closed. You need a valid invite link to join.'}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!formBlocked && initialData.invite_valid && initialData.inviter_name && (
+            <Alert className="mb-4">
+              <AlertDescription>Invited by {initialData.inviter_name}.</AlertDescription>
             </Alert>
           )}
 
@@ -187,7 +247,7 @@ function RegisterPage() {
                 autoComplete="new-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || formBlocked}>
               {loading ? 'Creating account...' : 'Create Account'}
             </Button>
           </form>

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureApproved;
+use App\Http\Middleware\EnsureNotBanned;
 use App\Http\Middleware\EnsureNotDeactivated;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // web surface — including the package auth endpoints (password/passkeys)
         // and the public home page a fresh login would otherwise land them on.
         $middleware->web(append: [
+            EnsureNotBanned::class,
             EnsureNotDeactivated::class,
         ]);
     })
