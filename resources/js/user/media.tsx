@@ -78,6 +78,26 @@ function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : err instanceof Error ? err.message : 'Request failed.';
 }
 
+/** A selected file paired with the (editable) title it will be uploaded under. */
+interface PendingUpload {
+  file: File;
+  title: string;
+}
+
+/**
+ * Default an item's title to its file name without the extension
+ * ("Beach Day.jpg" -> "Beach Day"). The user can edit or clear it before upload.
+ */
+function defaultTitleForFile(file: File): string {
+  const lastDot = file.name.lastIndexOf('.');
+  return lastDot > 0 ? file.name.slice(0, lastDot) : file.name;
+}
+
+/** Stable identity for a selected file, so edited titles survive re-selection. */
+function sameFile(a: File, b: File): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
 interface Derivatives {
   thumbnail: Blob | null;
   perceptualHash: string | null;
@@ -155,8 +175,7 @@ function UserMediaPage() {
   const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds }, initial);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
-  const [title, setTitle] = useState('');
+  const [pending, setPending] = useState<PendingUpload[]>([]);
   const [audience, setAudience] = useState<Audience>('everyone');
   const [discoverable, setDiscoverable] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
@@ -165,9 +184,24 @@ function UserMediaPage() {
   const [uploadLabel, setUploadLabel] = useState('Uploading…');
   const uploadAbortRef = useRef<AbortController | null>(null);
 
+  // Keep the title list in step with the selected files: existing files keep any
+  // title the user already edited; newly added files default to their file name.
+  const handleFilesChange = (newFiles: File[]): void => {
+    setPending((prev) => newFiles.map((file) => {
+      // Keep an already-edited title, but always pair it with the current File —
+      // returning the matched item wholesale would drop the new File (and, when two
+      // selected files share a name/size/lastModified, list the first one twice).
+      const existing = prev.find((item) => sameFile(item.file, file));
+      return { file, title: existing ? existing.title : defaultTitleForFile(file) };
+    }));
+  };
+
+  const setTitleAt = (index: number, value: string): void => {
+    setPending((prev) => prev.map((item, i) => (i === index ? { ...item, title: value } : item)));
+  };
+
   const resetForm = (): void => {
-    setFiles([]);
-    setTitle('');
+    setPending([]);
     setAudience('everyone');
     setDiscoverable(true);
     setUploadInterestIds(initial.last_interest_ids);
@@ -176,14 +210,14 @@ function UserMediaPage() {
 
   const upload = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (files.length === 0) {
+    if (pending.length === 0) {
       toast.error('Choose at least one file to upload.');
       return;
     }
 
-    const unsupported = files.find((selectedFile) => mediaTypeForFile(selectedFile) === null);
+    const unsupported = pending.find((item) => mediaTypeForFile(item.file) === null);
     if (unsupported) {
-      toast.error(`${unsupported.name} is not supported. Only image and video files can be uploaded.`);
+      toast.error(`${unsupported.file.name} is not supported. Only image and video files can be uploaded.`);
       return;
     }
 
@@ -193,12 +227,13 @@ function UserMediaPage() {
     setProgress(0);
     let completedCount = 0;
     try {
-      for (const [index, selectedFile] of files.entries()) {
+      for (const [index, item] of pending.entries()) {
+        const selectedFile = item.file;
         const type = mediaTypeForFile(selectedFile);
         if (type === null) {
           continue;
         }
-        setUploadLabel(`Uploading ${index + 1} of ${files.length}: ${selectedFile.name}`);
+        setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
         setProgress(0);
         const { thumbnail, perceptualHash } = await buildDerivatives(selectedFile, type);
 
@@ -210,7 +245,7 @@ function UserMediaPage() {
               filename: selectedFile.name,
               content_type: selectedFile.type,
               size: selectedFile.size,
-              title: files.length === 1 ? title.trim() || null : selectedFile.name,
+              title: item.title.trim() || null,
               audience,
               discoverable,
               interest_ids: uploadInterestIds,
@@ -264,13 +299,13 @@ function UserMediaPage() {
         completedCount += 1;
       }
 
-      toast.success(files.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
+      toast.success(pending.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
       setDialogOpen(false);
       resetForm();
       listing.reload();
     } catch (err) {
       if (completedCount > 0) {
-        setFiles(files.slice(completedCount));
+        setPending(pending.slice(completedCount));
         listing.reload();
       }
 
@@ -321,19 +356,32 @@ function UserMediaPage() {
             <form onSubmit={(event) => void upload(event)} className="grid gap-4">
               <FileDropzone
                 accept="image/*,video/*"
-                files={files}
+                files={pending.map((item) => item.file)}
                 label="Drop photos or videos here"
                 multiple
-                onFilesChange={setFiles}
+                onFilesChange={handleFilesChange}
                 disabled={uploading}
                 helperText="Select one or more files. Each file uploads in its own request."
               />
-              <Input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Title (optional)"
-                disabled={uploading}
-              />
+              {pending.length > 0 && (
+                <div className="grid gap-3">
+                  {pending.map((item, index) => (
+                    <div key={`${item.file.name}:${item.file.size}:${item.file.lastModified}`} className="grid gap-1">
+                      {pending.length > 1 && (
+                        <span className="truncate text-xs text-muted-foreground" title={item.file.name}>
+                          {item.file.name}
+                        </span>
+                      )}
+                      <Input
+                        value={item.title}
+                        onChange={(event) => setTitleAt(index, event.target.value)}
+                        placeholder="Title (optional)"
+                        disabled={uploading}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               <label className="grid gap-1">
                 <span className="text-sm">Who can see this?</span>
                 <select
