@@ -122,6 +122,13 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
                     Invites &amp; signups
                   </a>
                   <a
+                    href='/admin/waitlist'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Invitation requests
+                  </a>
+                  <a
                     href='/admin/interests'
                     className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
                     onClick={() => setAdminMenuOpen(false)}

@@ -22,6 +22,8 @@ class Invite extends Model
         'used_at',
         'invited_user_id',
         'revoked_at',
+        'auto_approve',
+        'email',
     ];
 
     /**
@@ -33,6 +35,7 @@ class Invite extends Model
             'expires_at' => 'datetime',
             'used_at' => 'datetime',
             'revoked_at' => 'datetime',
+            'auto_approve' => 'boolean',
         ];
     }
 
