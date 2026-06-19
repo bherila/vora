@@ -55,6 +55,8 @@ interface UserSettingsInitialPayload {
   notify_post_comment?: boolean | null;
   notify_follow_request?: boolean | null;
   notify_follow_accepted?: boolean | null;
+  notify_co_author_invite?: boolean | null;
+  notify_co_author_invite_accepted?: boolean | null;
   web_push_public_key?: string | null;
   web_push_subscription_count?: number | null;
   can_manage_interests?: boolean | null;
@@ -81,6 +83,8 @@ interface UserSettingsInitialData {
   notify_post_comment: boolean;
   notify_follow_request: boolean;
   notify_follow_accepted: boolean;
+  notify_co_author_invite: boolean;
+  notify_co_author_invite_accepted: boolean;
   web_push_public_key: string;
   web_push_subscription_count: number;
   can_manage_interests: boolean;
@@ -118,6 +122,8 @@ interface UserSettingsResponse {
     notify_post_comment: boolean;
     notify_follow_request: boolean;
     notify_follow_accepted: boolean;
+    notify_co_author_invite: boolean;
+    notify_co_author_invite_accepted: boolean;
   };
 }
 
@@ -138,6 +144,8 @@ interface AccountPayload {
   notify_post_comment: boolean;
   notify_follow_request: boolean;
   notify_follow_accepted: boolean;
+  notify_co_author_invite: boolean;
+  notify_co_author_invite_accepted: boolean;
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -162,6 +170,8 @@ function emptyInitialData(): UserSettingsInitialData {
     notify_post_comment: true,
     notify_follow_request: true,
     notify_follow_accepted: true,
+    notify_co_author_invite: true,
+    notify_co_author_invite_accepted: true,
     web_push_public_key: '',
     web_push_subscription_count: 0,
     can_manage_interests: false,
@@ -190,6 +200,8 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     notify_post_comment: payload.notify_post_comment ?? true,
     notify_follow_request: payload.notify_follow_request ?? true,
     notify_follow_accepted: payload.notify_follow_accepted ?? true,
+    notify_co_author_invite: payload.notify_co_author_invite ?? true,
+    notify_co_author_invite_accepted: payload.notify_co_author_invite_accepted ?? true,
     web_push_public_key: payload.web_push_public_key ?? '',
     web_push_subscription_count: payload.web_push_subscription_count ?? 0,
     can_manage_interests: payload.can_manage_interests ?? false,
@@ -252,6 +264,8 @@ function UserSettingsPage() {
   const [notifyPostComment, setNotifyPostComment] = useState(initialData.notify_post_comment);
   const [notifyFollowRequest, setNotifyFollowRequest] = useState(initialData.notify_follow_request);
   const [notifyFollowAccepted, setNotifyFollowAccepted] = useState(initialData.notify_follow_accepted);
+  const [notifyCoAuthorInvite, setNotifyCoAuthorInvite] = useState(initialData.notify_co_author_invite);
+  const [notifyCoAuthorInviteAccepted, setNotifyCoAuthorInviteAccepted] = useState(initialData.notify_co_author_invite_accepted);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
   const [pushSubscribed, setPushSubscribed] = useState(false);
@@ -393,6 +407,8 @@ function UserSettingsPage() {
     setNotifyPostComment(data.notify_post_comment);
     setNotifyFollowRequest(data.notify_follow_request);
     setNotifyFollowAccepted(data.notify_follow_accepted);
+    setNotifyCoAuthorInvite(data.notify_co_author_invite);
+    setNotifyCoAuthorInviteAccepted(data.notify_co_author_invite_accepted);
   };
 
   const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'display_name' | 'email'>> = {}): AccountPayload => ({
@@ -412,6 +428,8 @@ function UserSettingsPage() {
     notify_post_comment: notifyPostComment,
     notify_follow_request: notifyFollowRequest,
     notify_follow_accepted: notifyFollowAccepted,
+    notify_co_author_invite: notifyCoAuthorInvite,
+    notify_co_author_invite_accepted: notifyCoAuthorInviteAccepted,
   });
 
   const handleProfilePictureChange = async (selectedFiles: File[]): Promise<void> => {
@@ -888,6 +906,22 @@ function UserSettingsPage() {
                     onChange={(event) => setNotifyFollowAccepted(event.target.checked)}
                   />
                   Notify me when one of my follow requests is accepted
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyCoAuthorInvite}
+                    onChange={(event) => setNotifyCoAuthorInvite(event.target.checked)}
+                  />
+                  Notify me when I receive a co-author invite
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={notifyCoAuthorInviteAccepted}
+                    onChange={(event) => setNotifyCoAuthorInviteAccepted(event.target.checked)}
+                  />
+                  Notify me when a co-author invite is accepted
                 </label>
                 <p className="text-xs text-muted-foreground">Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.</p>
               </div>

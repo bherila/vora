@@ -267,6 +267,85 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.url', 'https://r2.example/view');
     }
 
+    public function test_multipart_upload_can_init_presign_and_complete(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('createMultipartUpload')
+                ->once()
+                ->with('s3', 'uploads/0/video.mp4', 'video/mp4')
+                ->andReturn('upload-123');
+            $mock->shouldReceive('getSignedMultipartUploadPartUrl')
+                ->once()
+                ->with('s3', 'uploads/0/video.mp4', 'upload-123', 1, 30)
+                ->andReturn(['url' => 'https://r2.example/part/1', 'headers' => []]);
+            $mock->shouldReceive('completeMultipartUpload')
+                ->once()
+                ->with('s3', 'uploads/0/video.mp4', 'upload-123', [['part_number' => 1, 'etag' => '"etag-1"']])
+                ->andReturn(true);
+            $mock->shouldReceive('fileExists')->with('s3', 'uploads/0/video.mp4')->andReturn(true);
+            $mock->shouldReceive('getFileSize')->with('s3', 'uploads/0/video.mp4')->andReturn(1024);
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+            $mock->shouldReceive('get')->andReturn(null);
+        });
+
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->video()->pendingUpload()->create([
+            'disk' => 's3',
+            'object_key' => 'uploads/0/video.mp4',
+            'mime_type' => 'video/mp4',
+        ]);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/init")
+            ->assertOk()
+            ->assertJsonPath('data.upload_id', 'upload-123')
+            ->assertJsonPath('data.part_size_bytes', 16 * 1024 * 1024);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/parts", [
+            'upload_id' => 'upload-123',
+            'part_numbers' => [1],
+        ])->assertOk()
+            ->assertJsonPath('data.0.part_number', 1)
+            ->assertJsonPath('data.0.url', 'https://r2.example/part/1');
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/complete", [
+            'upload_id' => 'upload-123',
+            'parts' => [
+                ['part_number' => 1, 'etag' => '"etag-1"'],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('data.upload_status', 'ready');
+
+        $fresh = $media->fresh();
+        $this->assertSame('ready', $fresh->upload_status);
+        $this->assertNull($fresh->multipart_upload_id);
+        $this->assertSame(1024, $fresh->size_bytes);
+    }
+
+    public function test_multipart_upload_can_be_aborted(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('abortMultipartUpload')
+                ->once()
+                ->with('s3', 'uploads/0/video.mp4', 'upload-123')
+                ->andReturn(true);
+        });
+
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->video()->pendingUpload()->create([
+            'disk' => 's3',
+            'object_key' => 'uploads/0/video.mp4',
+            'multipart_upload_id' => 'upload-123',
+            'multipart_part_size_bytes' => 16 * 1024 * 1024,
+            'multipart_initiated_at' => now(),
+        ]);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/abort", [
+            'upload_id' => 'upload-123',
+        ])->assertOk();
+
+        $this->assertNull($media->fresh()->multipart_upload_id);
+    }
+
     public function test_media_from_a_disabled_owner_is_hidden_from_other_viewers(): void
     {
         $this->fakeStorage();

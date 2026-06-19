@@ -34,6 +34,8 @@ class UserFactory extends Factory
             'notify_post_comment' => true,
             'notify_follow_request' => true,
             'notify_follow_accepted' => true,
+            'notify_co_author_invite' => true,
+            'notify_co_author_invite_accepted' => true,
             'preferred_user_types' => ['human', 'furry', 'other'],
             'preferred_genders' => ['male', 'female', 'other'],
             'remember_token' => Str::random(10),

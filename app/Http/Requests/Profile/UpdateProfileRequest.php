@@ -39,6 +39,8 @@ class UpdateProfileRequest extends FormRequest
             'notify_post_comment' => ['sometimes', 'boolean'],
             'notify_follow_request' => ['sometimes', 'boolean'],
             'notify_follow_accepted' => ['sometimes', 'boolean'],
+            'notify_co_author_invite' => ['sometimes', 'boolean'],
+            'notify_co_author_invite_accepted' => ['sometimes', 'boolean'],
             'email' => [
                 'required',
                 'string',

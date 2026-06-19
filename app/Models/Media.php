@@ -40,7 +40,10 @@ class Media extends Model
     protected $hidden = [
         'hls_content_id',
         'hls_checked_at',
+        'reviewed_object_key',
+        'reviewed_thumbnail_key',
         'thumbnail_key',
+        'multipart_upload_id',
     ];
 
     /**
@@ -56,13 +59,18 @@ class Media extends Model
         'purpose',
         'disk',
         'object_key',
+        'reviewed_object_key',
         'thumbnail_key',
+        'reviewed_thumbnail_key',
         'original_filename',
         'mime_type',
         'perceptual_hash',
         'size_bytes',
         'title',
         'upload_status',
+        'multipart_upload_id',
+        'multipart_part_size_bytes',
+        'multipart_initiated_at',
         'audience',
         'discoverable',
     ];
@@ -81,6 +89,8 @@ class Media extends Model
             'moderated_at' => 'datetime',
             'hls_checked_at' => 'datetime',
             'size_bytes' => 'integer',
+            'multipart_part_size_bytes' => 'integer',
+            'multipart_initiated_at' => 'datetime',
         ];
     }
 
@@ -122,6 +132,24 @@ class Media extends Model
     public function isReady(): bool
     {
         return $this->upload_status === 'ready';
+    }
+
+    public function playbackObjectKey(): string
+    {
+        if ($this->isApprovedContent() && $this->reviewed_object_key !== null) {
+            return $this->reviewed_object_key;
+        }
+
+        return $this->object_key;
+    }
+
+    public function playbackThumbnailKey(): ?string
+    {
+        if ($this->isApprovedContent() && $this->reviewed_thumbnail_key !== null) {
+            return $this->reviewed_thumbnail_key;
+        }
+
+        return $this->thumbnail_key;
     }
 
     /**

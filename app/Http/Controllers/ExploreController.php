@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
+use App\Enums\StoryStatus;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Models\Media;
+use App\Models\Story;
 use App\Services\Media\MediaResponseService;
 use App\Support\MediaFilter;
+use App\Support\PaginationMeta;
+use App\Support\StoryPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
@@ -61,6 +65,39 @@ class ExploreController extends Controller
         return response()->json([
             'success' => true,
             ...$this->responder->page($paginator, includeOriginalVideoUrls: false),
+        ]);
+    }
+
+    /**
+     * List published, approved stories discoverable by the current viewer.
+     */
+    public function apiStories(ListMediaRequest $request): JsonResponse
+    {
+        $interestIds = array_values(array_unique(array_map(
+            'intval',
+            (array) $request->input('interest_ids', []),
+        )));
+
+        $query = Story::query()
+            ->where('status', StoryStatus::Published->value)
+            ->discoverable()
+            ->moderationStatus(ModerationStatus::Approved)
+            ->whereHas('user', fn ($q) => $q->active())
+            ->with(['user', 'interests', 'authors.user'])
+            ->withCount('nodes')
+            ->withAnyInterest($interestIds)
+            ->latest('published_at')
+            ->latest('id');
+
+        $paginator = $query->paginate((int) config('media.page_size', 24));
+
+        return response()->json([
+            'success' => true,
+            'data' => collect($paginator->items())
+                ->map(fn (Story $story): array => StoryPresenter::discoverableView($story))
+                ->values()
+                ->all(),
+            'meta' => PaginationMeta::from($paginator),
         ]);
     }
 }

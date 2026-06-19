@@ -8,10 +8,11 @@ use Illuminate\Support\Str;
 
 /**
  * Bridges the app to the out-of-band s3-hls transcoder's output bucket (the
- * `hls` disk). For every source video at `<object_key>` the transcoder writes a
- * mapping at `mappings/<object_key>.json` whose `contentId` points at the
+ * `hls` disk). For every playable video object the transcoder writes a mapping
+ * at `mappings/<object-key>.json` whose `contentId` points at the
  * content-addressed output tree `by-id/<contentId>/…` (master + per-rung
- * playlists + fMP4 segments).
+ * playlists + fMP4 segments). Approved media resolve from the immutable
+ * reviewed copy, not the client-overwritable upload key.
  *
  * Playback is served through an authenticated proxy (see MediaController@streamHls):
  * small `.m3u8` manifests are fetched and their child URIs rewritten back through
@@ -53,7 +54,7 @@ class HlsService
             return false;
         }
 
-        $contentId = $this->lookupContentId($video->object_key);
+        $contentId = $this->lookupContentId($video->playbackObjectKey());
 
         $video->hls_checked_at = now();
         if ($contentId !== null) {

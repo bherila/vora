@@ -158,13 +158,17 @@ class NotificationPreferencesTest extends TestCase
             'notify_new_post' => false,
             'notify_post_reaction' => false,
             'notify_follow_request' => false,
+            'notify_co_author_invite' => false,
         ])->assertOk()
             ->assertJsonPath('data.notify_new_post', false)
             ->assertJsonPath('data.notify_post_comment', true)
-            ->assertJsonPath('data.notify_follow_request', false);
+            ->assertJsonPath('data.notify_follow_request', false)
+            ->assertJsonPath('data.notify_co_author_invite', false)
+            ->assertJsonPath('data.notify_co_author_invite_accepted', true);
 
         $this->assertFalse($user->fresh()->notify_new_post);
         $this->assertFalse($user->fresh()->notify_post_reaction);
         $this->assertFalse($user->fresh()->notify_follow_request);
+        $this->assertFalse($user->fresh()->notify_co_author_invite);
     }
 }

@@ -48,11 +48,19 @@ class PruneOrphanMedia extends Command
             if ($dryRun) {
                 $this->line("would prune pending media #{$media->id} ({$media->disk}/{$media->object_key})");
 
+                if ($media->multipart_upload_id !== null) {
+                    $this->line('  and abort incomplete multipart upload '.$media->multipart_upload_id);
+                }
+
                 if ($media->thumbnail_key !== null) {
                     $this->line("  and thumbnail ({$thumbnailDisk}/{$media->thumbnail_key})");
                 }
 
                 continue;
+            }
+
+            if ($media->multipart_upload_id !== null) {
+                $storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
             }
 
             if ($storage->fileExists($media->disk, $media->object_key)) {

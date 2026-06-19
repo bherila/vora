@@ -37,6 +37,12 @@ class StoryGraphTest extends TestCase
         $this->assertDatabaseCount('story_nodes', 3);
         $this->assertDatabaseCount('story_choices', 3);
         $this->assertSame(1, $story->nodes()->where('is_start', true)->count());
+        $this->assertDatabaseHas('story_nodes', [
+            'story_id' => $story->id,
+            'key' => 'right',
+            'position_x' => 200,
+            'position_y' => 100,
+        ]);
 
         // Removing a node on a subsequent save cascades its choices and nulls the
         // incoming target.
@@ -97,6 +103,18 @@ class StoryGraphTest extends TestCase
         // Re-saving the identical graph must NOT knock it back to pending.
         $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", $payload)->assertOk();
         $this->assertSame('approved', $story->refresh()->moderation_status->value);
+
+        // Moving cards on the author canvas is cosmetic and must stay approved.
+        $payload['nodes'][0]['position_x'] = 240;
+        $payload['nodes'][0]['position_y'] = 180;
+        $this->actingAs($owner)->putJson("/api/stories/{$story->id}/graph", $payload)->assertOk();
+        $this->assertSame('approved', $story->refresh()->moderation_status->value);
+        $this->assertDatabaseHas('story_nodes', [
+            'story_id' => $story->id,
+            'key' => 'start',
+            'position_x' => 240,
+            'position_y' => 180,
+        ]);
 
         // A real content change does re-queue it.
         $payload['nodes'][0]['body'] = 'A different beginning';

@@ -19,7 +19,7 @@ class CoAuthorInviteReceived extends Notification implements ShouldQueue
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return $this->deliveryChannels($notifiable);
+        return $this->deliveryChannels($notifiable, 'notify_co_author_invite');
     }
 
     /**

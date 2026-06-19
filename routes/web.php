@@ -108,6 +108,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Cross-user exploration of approved, discoverable media.
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
     Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
+    Route::get('/api/explore/stories', [ExploreController::class, 'apiStories']);
 
     // Stories workspace + shareable single-story reader.
     Route::get('/stories', [StoryController::class, 'page'])->name('stories');
@@ -164,6 +165,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/', [MediaController::class, 'index']);
         Route::post('/', [MediaController::class, 'store']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
+        Route::post('/{media}/multipart/init', [MediaController::class, 'initMultipart']);
+        Route::post('/{media}/multipart/parts', [MediaController::class, 'presignMultipartParts']);
+        Route::post('/{media}/multipart/complete', [MediaController::class, 'completeMultipart']);
+        Route::post('/{media}/multipart/abort', [MediaController::class, 'abortMultipart']);
         // HLS playback proxy: manifests served inline (rewritten), segments 302-redirected to R2.
         Route::get('/{media}/hls/{path?}', [MediaController::class, 'streamHls'])
             ->where('path', '.*')
