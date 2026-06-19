@@ -175,6 +175,13 @@ class MediaUploadService
 
         $media->size_bytes = $size;
         $media->upload_status = 'ready';
+        $media->multipart_upload_id = null;
+        $media->multipart_part_size_bytes = null;
+        $media->multipart_initiated_at = null;
+        $media->reviewed_object_key = null;
+        $media->reviewed_thumbnail_key = null;
+        $media->hls_content_id = null;
+        $media->hls_checked_at = null;
         // Review only begins once the content actually exists; reset any prior
         // state so an approval made before the upload landed cannot carry over.
         $media->moderation_status = ModerationStatus::Pending;
@@ -182,6 +189,105 @@ class MediaUploadService
         $media->moderated_at = null;
         $media->moderation_notes = null;
         $media->save();
+
+        return true;
+    }
+
+    /**
+     * @return array{upload_id: string, part_size_bytes: int, expires_in_minutes: int}|null
+     */
+    public function initMultipartUpload(Media $media): ?array
+    {
+        if ($media->isReady()) {
+            return null;
+        }
+
+        if ($media->multipart_upload_id !== null) {
+            $this->abortMultipartUpload($media, $media->multipart_upload_id);
+        }
+
+        $uploadId = $this->storage->createMultipartUpload($media->disk, $media->object_key, $media->mime_type);
+        $partSize = $this->multipartPartSizeBytes();
+
+        $media->multipart_upload_id = $uploadId;
+        $media->multipart_part_size_bytes = $partSize;
+        $media->multipart_initiated_at = now();
+        $media->save();
+
+        return [
+            'upload_id' => $uploadId,
+            'part_size_bytes' => $partSize,
+            'expires_in_minutes' => (int) config('media.multipart.url_ttl', 30),
+        ];
+    }
+
+    /**
+     * @param  list<int>  $partNumbers
+     * @return list<array{part_number: int, url: string, headers: array<string, string>}>|null
+     */
+    public function signedMultipartPartUrls(Media $media, string $uploadId, array $partNumbers): ?array
+    {
+        if ($media->multipart_upload_id !== $uploadId || $media->isReady()) {
+            return null;
+        }
+
+        $ttl = (int) config('media.multipart.url_ttl', 30);
+
+        return collect($partNumbers)
+            ->unique()
+            ->sort()
+            ->map(function (int $partNumber) use ($media, $uploadId, $ttl): array {
+                $signed = $this->storage->getSignedMultipartUploadPartUrl(
+                    $media->disk,
+                    $media->object_key,
+                    $uploadId,
+                    $partNumber,
+                    $ttl,
+                );
+
+                return [
+                    'part_number' => $partNumber,
+                    'url' => $signed['url'],
+                    'headers' => $signed['headers'],
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<array{part_number: int, etag: string}>  $parts
+     */
+    public function completeMultipartUpload(Media $media, string $uploadId, array $parts): bool
+    {
+        if ($media->multipart_upload_id !== $uploadId || $media->isReady() || $parts === []) {
+            return false;
+        }
+
+        $this->storage->completeMultipartUpload($media->disk, $media->object_key, $uploadId, $parts);
+        $media->refresh();
+        $media->multipart_upload_id = null;
+        $media->multipart_part_size_bytes = null;
+        $media->multipart_initiated_at = null;
+        $media->save();
+
+        return $this->completeUpload($media->refresh());
+    }
+
+    public function abortMultipartUpload(Media $media, string $uploadId): bool
+    {
+        if ($media->multipart_upload_id !== $uploadId) {
+            return false;
+        }
+
+        try {
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $uploadId);
+        } finally {
+            $media->multipart_upload_id = null;
+            $media->multipart_part_size_bytes = null;
+            $media->multipart_initiated_at = null;
+            $media->save();
+        }
 
         return true;
     }
@@ -214,5 +320,10 @@ class MediaUploadService
         }
 
         return self::EXTENSION_BY_MIME[strtolower($mimeType)] ?? 'bin';
+    }
+
+    private function multipartPartSizeBytes(): int
+    {
+        return max(5 * 1024 * 1024, (int) config('media.multipart.part_size_bytes', 16 * 1024 * 1024));
     }
 }

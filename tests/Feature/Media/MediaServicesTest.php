@@ -9,6 +9,7 @@ use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\Media\HlsService;
+use App\Services\Media\MediaModerationService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -164,6 +165,53 @@ class MediaServicesTest extends TestCase
         $this->assertTrue($media->fresh()->isApprovedContent());
     }
 
+    public function test_approval_copies_reviewed_source_and_thumbnail_before_serving(): void
+    {
+        Storage::fake('photos');
+        $admin = User::factory()->admin()->create();
+        $media = Media::factory()->create([
+            'disk' => 'photos',
+            'object_key' => 'uploads/0/source.jpg',
+            'thumbnail_key' => 'uploads/thumbnails/0/source.jpg',
+            'mime_type' => 'image/jpeg',
+        ]);
+        Storage::disk('photos')->put($media->object_key, 'benign source');
+        Storage::disk('photos')->put($media->thumbnail_key, 'benign thumbnail');
+
+        $this->assertTrue(app(MediaModerationService::class)->approve($media, $admin));
+
+        $fresh = $media->fresh();
+        $this->assertTrue($fresh->isApprovedContent());
+        $this->assertSame($fresh->reviewed_object_key, $fresh->playbackObjectKey());
+        $this->assertSame($fresh->reviewed_thumbnail_key, $fresh->playbackThumbnailKey());
+        $this->assertSame('benign source', Storage::disk('photos')->get($fresh->reviewed_object_key));
+        $this->assertSame('benign thumbnail', Storage::disk('photos')->get($fresh->reviewed_thumbnail_key));
+
+        Storage::disk('photos')->put($media->object_key, 'swapped source');
+        Storage::disk('photos')->put($media->thumbnail_key, 'swapped thumbnail');
+
+        $this->assertSame('benign source', Storage::disk('photos')->get($fresh->reviewed_object_key));
+        $this->assertSame('benign thumbnail', Storage::disk('photos')->get($fresh->reviewed_thumbnail_key));
+    }
+
+    public function test_completion_clears_previous_reviewed_copies_when_reentering_review(): void
+    {
+        Storage::fake('photos');
+        $media = Media::factory()->pendingUpload()->create([
+            'disk' => 'photos',
+            'reviewed_object_key' => 'uploads/reviewed/0/old.jpg',
+            'reviewed_thumbnail_key' => 'uploads/reviewed-thumbnails/0/old.jpg',
+        ]);
+        Storage::disk('photos')->put($media->object_key, 'new source');
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+
+        $fresh = $media->fresh();
+        $this->assertNull($fresh->reviewed_object_key);
+        $this->assertNull($fresh->reviewed_thumbnail_key);
+        $this->assertTrue($fresh->isPendingReview());
+    }
+
     public function test_hls_status_processing_then_ready_with_proxy_url(): void
     {
         Storage::fake('hls');
@@ -183,6 +231,23 @@ class MediaServicesTest extends TestCase
         $this->assertSame('ready', $resolved['status']);
         $this->assertStringContainsString("/api/media/{$media->id}/hls/master.m3u8", $resolved['master_url']);
         $this->assertSame('sha256:abc', $media->fresh()->hls_content_id);
+    }
+
+    public function test_hls_resolves_approved_video_from_reviewed_copy_key(): void
+    {
+        Storage::fake('hls');
+        $media = Media::factory()->video()->approved()->create([
+            'disk' => 's3',
+            'object_key' => 'uploads/0/original.mp4',
+            'reviewed_object_key' => 'uploads/reviewed/0/original.mp4',
+        ]);
+        Storage::disk('hls')->put('mappings/uploads/0/original.mp4.json', json_encode(['contentId' => 'sha256:source']));
+        Storage::disk('hls')->put('mappings/uploads/reviewed/0/original.mp4.json', json_encode(['contentId' => 'sha256:reviewed']));
+
+        $resolved = app(HlsService::class)->status($media);
+
+        $this->assertSame('ready', $resolved['status']);
+        $this->assertSame('sha256:reviewed', $media->fresh()->hls_content_id);
     }
 
     public function test_hls_manifest_rewrites_child_uris_and_segments_presign(): void

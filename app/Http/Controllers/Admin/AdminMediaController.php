@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\ModerateMediaRequest;
 use App\Models\Media;
 use App\Services\FileStorageService;
 use App\Services\Media\HlsService;
+use App\Services\Media\MediaModerationService;
 use App\Support\MediaPresenter;
 use App\Support\PaginationMeta;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,6 +21,7 @@ class AdminMediaController extends Controller
     public function __construct(
         private readonly HlsService $hls,
         private readonly FileStorageService $storage,
+        private readonly MediaModerationService $moderation,
     ) {}
 
     /**
@@ -83,9 +85,14 @@ class AdminMediaController extends Controller
         $notes = $request->validated()['notes'] ?? null;
 
         if ($request->validated()['action'] === 'approve') {
-            $media->approve($admin, $notes);
+            if (! $this->moderation->approve($media, $admin, $notes)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Media could not be copied into reviewed storage.',
+                ], 422);
+            }
         } else {
-            $media->reject($admin, $notes);
+            $this->moderation->reject($media, $admin, $notes);
         }
 
         $media->load(['interests', 'user']);
@@ -106,7 +113,7 @@ class AdminMediaController extends Controller
 
         $extras['url'] = $this->storage->getSignedViewUrl(
             $media->disk,
-            $media->object_key,
+            $media->playbackObjectKey(),
             (int) config('media.view_url_ttl', 60),
             $media->mime_type,
         );
@@ -115,10 +122,11 @@ class AdminMediaController extends Controller
         // owner library and Explore grids display, so the reviewer must see and
         // approve it here — otherwise an arbitrary uploaded JPEG would reach
         // discovery surfaces without ever being reviewed.
-        if ($media->thumbnail_key !== null) {
+        $thumbnailKey = $media->playbackThumbnailKey();
+        if ($thumbnailKey !== null) {
             $extras['thumbnail_url'] = $this->storage->getSignedViewUrl(
                 (string) config('media.thumbnail_disk'),
-                $media->thumbnail_key,
+                $thumbnailKey,
                 (int) config('media.view_url_ttl', 60),
                 'image/jpeg',
             );

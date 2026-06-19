@@ -18,6 +18,9 @@ class AdminMediaApiTest extends TestCase
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
             $mock->shouldReceive('get')->andReturn(null);
+            $mock->shouldReceive('fileExists')->andReturn(true);
+            $mock->shouldReceive('copyFile')->andReturn(true);
+            $mock->shouldReceive('deleteFile')->andReturn(true);
         });
     }
 
@@ -72,12 +75,48 @@ class AdminMediaApiTest extends TestCase
             'notes' => 'ok',
         ])->assertOk()->assertJsonPath('data.moderation_status', 'approved');
 
-        $this->assertSame($admin->id, $media->fresh()->moderated_by_user_id);
-        $this->assertSame('ok', $media->fresh()->moderation_notes);
+        $fresh = $media->fresh();
+        $this->assertSame($admin->id, $fresh->moderated_by_user_id);
+        $this->assertSame('ok', $fresh->moderation_notes);
+        $this->assertSame('uploads/reviewed/'.$fresh->user_id.'/'.$fresh->ulid.'.jpg', $fresh->reviewed_object_key);
 
         $this->actingAs($admin)->postJson("/api/admin/media/{$media->id}/moderate", [
             'action' => 'reject',
         ])->assertOk()->assertJsonPath('data.moderation_status', 'rejected');
+    }
+
+    public function test_admin_approval_copies_source_and_thumbnail_to_reviewed_keys(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fileExists')->once()->with('photos', 'uploads/0/source.jpg')->andReturn(true);
+            $mock->shouldReceive('copyFile')->once()
+                ->with('photos', 'uploads/0/source.jpg', 'photos', 'uploads/reviewed/2/01HZ0000000000000000000000.jpg', 'image/jpeg')
+                ->andReturn(true);
+            $mock->shouldReceive('copyFile')->once()
+                ->with('photos', 'uploads/thumbnails/0/source.jpg', 'photos', 'uploads/reviewed-thumbnails/2/01HZ0000000000000000000000.jpg', 'image/jpeg')
+                ->andReturn(true);
+            $mock->shouldReceive('getSignedViewUrl')->andReturnUsing(fn (string $disk, string $key): string => 'signed:'.$disk.':'.$key);
+            $mock->shouldReceive('get')->andReturn(null);
+        });
+
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->create([
+            'ulid' => '01HZ0000000000000000000000',
+            'disk' => 'photos',
+            'object_key' => 'uploads/0/source.jpg',
+            'thumbnail_key' => 'uploads/thumbnails/0/source.jpg',
+        ]);
+
+        $this->actingAs($admin)->postJson("/api/admin/media/{$media->id}/moderate", [
+            'action' => 'approve',
+        ])->assertOk()
+            ->assertJsonPath('data.url', 'signed:photos:uploads/reviewed/2/01HZ0000000000000000000000.jpg')
+            ->assertJsonPath('data.thumbnail_url', 'signed:photos:uploads/reviewed-thumbnails/2/01HZ0000000000000000000000.jpg');
+
+        $fresh = $media->fresh();
+        $this->assertSame('uploads/reviewed/2/01HZ0000000000000000000000.jpg', $fresh->reviewed_object_key);
+        $this->assertSame('uploads/reviewed-thumbnails/2/01HZ0000000000000000000000.jpg', $fresh->reviewed_thumbnail_key);
     }
 
     public function test_pending_uploads_are_excluded_from_review_queue(): void
