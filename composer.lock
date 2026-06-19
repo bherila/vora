@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "04c2d01c1e4cad52ff8ab766003e6177",
+    "content-hash": "e7f06882dbe5d68eb7cba1bdc442ce7b",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -202,23 +202,14 @@
                     "BWH\\Auth\\": "php/src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "BWH\\Auth\\Tests\\": "php/tests/"
-                }
-            },
-            "scripts": {
-                "test": [
-                    "phpunit"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
             "description": "Shared Laravel authentication services for BWH applications.",
             "support": {
-                "source": "https://github.com/bherila/auth/tree/v0.5.0",
-                "issues": "https://github.com/bherila/auth/issues"
+                "issues": "https://github.com/bherila/auth/issues",
+                "source": "https://github.com/bherila/auth/tree/v0.5.0"
             },
             "time": "2026-06-14T00:53:17+00:00"
         },
@@ -10399,15 +10390,15 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": "^8.3"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "platform-overrides": {
         "php": "8.3.0"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
