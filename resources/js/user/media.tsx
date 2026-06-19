@@ -188,8 +188,11 @@ function UserMediaPage() {
   // title the user already edited; newly added files default to their file name.
   const handleFilesChange = (newFiles: File[]): void => {
     setPending((prev) => newFiles.map((file) => {
+      // Keep an already-edited title, but always pair it with the current File —
+      // returning the matched item wholesale would drop the new File (and, when two
+      // selected files share a name/size/lastModified, list the first one twice).
       const existing = prev.find((item) => sameFile(item.file, file));
-      return existing ?? { file, title: defaultTitleForFile(file) };
+      return { file, title: existing ? existing.title : defaultTitleForFile(file) };
     }));
   };
 
