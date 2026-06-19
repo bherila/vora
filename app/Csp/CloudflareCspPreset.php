@@ -3,43 +3,45 @@
 namespace App\Csp;
 
 use Spatie\Csp\Directive;
-use Spatie\Csp\Policies\Policy;
+use Spatie\Csp\Keyword;
+use Spatie\Csp\Policy;
+use Spatie\Csp\Preset;
 
-class CloudflareCspPolicy extends Policy
+class CloudflareCspPreset implements Preset
 {
-    public function configure()
+    public function configure(Policy $policy): void
     {
         $mediaOrigins = $this->mediaOrigins();
 
-        $this
-            ->addDirective(Directive::DEFAULT_SRC, ["'self'"])
-            ->addDirective(Directive::SCRIPT_SRC, [
-                "'self'",
+        $policy
+            ->add(Directive::DEFAULT, Keyword::SELF)
+            ->add(Directive::SCRIPT, [
+                Keyword::SELF,
                 'https://static.cloudflareinsights.com',
             ])
-            ->addNonce(Directive::SCRIPT_SRC)
-            ->addDirective(Directive::CONNECT_SRC, [
-                "'self'",
+            ->addNonce(Directive::SCRIPT)
+            ->add(Directive::CONNECT, [
+                Keyword::SELF,
                 'https://static.cloudflareinsights.com',
                 // Presigned PUT uploads and fetching HLS playlists/segments.
                 ...$mediaOrigins,
             ])
-            ->addDirective(Directive::IMG_SRC, [
-                "'self'",
+            ->add(Directive::IMG, [
+                Keyword::SELF,
                 'https://static.cloudflareinsights.com',
                 // Signed photo URLs and HLS poster frames.
                 ...$mediaOrigins,
             ])
-            ->addDirective(Directive::MEDIA_SRC, [
-                "'self'",
+            ->add(Directive::MEDIA, [
+                Keyword::SELF,
                 // Signed video preview URLs and HLS segments.
                 ...$mediaOrigins,
             ])
-            ->addDirective(Directive::STYLE_SRC, ["'self'"])
-            ->addDirective(Directive::OBJECT_SRC, ["'none'"])
-            ->addDirective(Directive::BASE_URI, ["'self'"])
-            ->addDirective(Directive::FRAME_ANCESTORS, ["'none'"])
-            ->addDirective(Directive::FORM_ACTION, ["'self'"]);
+            ->add(Directive::STYLE, Keyword::SELF)
+            ->add(Directive::OBJECT, Keyword::NONE)
+            ->add(Directive::BASE, Keyword::SELF)
+            ->add(Directive::FRAME_ANCESTORS, Keyword::NONE)
+            ->add(Directive::FORM_ACTION, Keyword::SELF);
     }
 
     /**
