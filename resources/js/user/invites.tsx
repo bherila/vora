@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast, Toaster } from 'sonner';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -50,7 +51,6 @@ function InvitesPage() {
   const [data, setData] = useState<InvitesData | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -104,10 +104,9 @@ function InvitesPage() {
   const copy = async (invite: InviteRow) => {
     try {
       await navigator.clipboard.writeText(invite.url);
-      setCopied(invite.uuid);
-      window.setTimeout(() => setCopied(null), 2000);
+      toast.success('Copied');
     } catch {
-      setError('Could not copy the link. Copy it manually instead.');
+      toast.error('Could not copy the link. Copy it manually instead.');
     }
   };
 
@@ -115,6 +114,7 @@ function InvitesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
+      <Toaster position="top-right" richColors closeButton />
       <Card>
         <CardHeader>
           <CardTitle>Invites</CardTitle>
@@ -161,14 +161,27 @@ function InvitesPage() {
               <TableBody>
                 {data.invites.map((invite) => (
                   <TableRow key={invite.uuid}>
-                    <TableCell className="max-w-[18rem] truncate font-mono text-xs">{invite.url}</TableCell>
+                    <TableCell className="max-w-[18rem]">
+                      {invite.status === 'active' ? (
+                        <button
+                          type="button"
+                          className="block max-w-full cursor-copy truncate rounded-sm text-left font-mono text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          title="Copy invite link"
+                          onClick={() => void copy(invite)}
+                        >
+                          {invite.url}
+                        </button>
+                      ) : (
+                        <span className="block truncate font-mono text-xs">{invite.url}</span>
+                      )}
+                    </TableCell>
                     <TableCell>{statusBadge(invite)}</TableCell>
                     <TableCell>{formatDate(invite.expires_at)}</TableCell>
                     <TableCell className="text-right">
                       {invite.status === 'active' && (
                         <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => void copy(invite)}>
-                            {copied === invite.uuid ? 'Copied' : 'Copy'}
+                            Copy
                           </Button>
                           <Button
                             type="button"
