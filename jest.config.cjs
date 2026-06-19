@@ -7,12 +7,12 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/resources/js/$1',
   },
-  transformIgnorePatterns: [
-    '/node_modules/(?!dayjs).+\\.js$',
-  ],
+  // pnpm resolves ESM packages to node_modules/.pnpm/... paths; transform those
+  // so dependencies like react-markdown/remark-gfm run under Jest's CJS runtime.
+  transformIgnorePatterns: ['^((?!\\.pnpm).)*node_modules/(?!\\.pnpm/)'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
+    '^.+\\.(ts|tsx|js|jsx)$': ['ts-jest', { tsconfig: { allowJs: true, module: 'commonjs', jsx: 'react-jsx' } }],
   },
 };
 

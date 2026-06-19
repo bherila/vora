@@ -1,6 +1,6 @@
 import { fetchWrapper } from '@/fetchWrapper';
 
-import type { Audience, InvolvementTag, StoryEditor, StoryNode, StoryReader, StorySummary, StoryType } from './types';
+import type { Audience, InvolvementTag, StoryDiscoveryItem, StoryEditor, StoryNode, StoryReader, StorySummary, StoryType } from './types';
 
 interface Envelope<T> {
   success: boolean;
@@ -30,6 +30,7 @@ export const storiesApi = {
   list: () => fetchWrapper.get('/api/stories').then((r) => (r as Envelope<StorySummary[]>).data),
   get: (id: number) => fetchWrapper.get(`/api/stories/${id}`).then((r) => (r as Envelope<StoryEditor>).data),
   reader: (ulid: string) => fetchWrapper.get(`/api/stories/by-ulid/${ulid}`).then((r) => (r as Envelope<StoryReader>).data),
+  explore: (query: string) => fetchWrapper.get(`/api/explore/stories?${query}`) as Promise<{ data: StoryDiscoveryItem[]; meta?: { has_more?: boolean } }>,
   create: (input: CreateStoryInput) => fetchWrapper.post('/api/stories', input).then((r) => (r as Envelope<StoryEditor>).data),
   update: (id: number, input: UpdateStoryInput) => fetchWrapper.patch(`/api/stories/${id}`, input).then((r) => (r as Envelope<StoryEditor>).data),
   remove: (id: number) => fetchWrapper.delete(`/api/stories/${id}`),
