@@ -46,4 +46,16 @@ class InviteFactory extends Factory
             'revoked_at' => now(),
         ]);
     }
+
+    /**
+     * A waitlist-admit invite: auto-approves the new account and is bound to the
+     * verified email.
+     */
+    public function autoApprove(?string $email = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'auto_approve' => true,
+            'email' => $email ?? fake()->unique()->safeEmail(),
+        ]);
+    }
 }
