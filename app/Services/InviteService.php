@@ -121,6 +121,24 @@ class InviteService
     }
 
     /**
+     * Create a grant-free invite directly (no balance drawn). Used when an admin
+     * admits a waitlist request: the invite is bound to the requester's verified
+     * email and flagged `auto_approve` so the resulting account skips the approval
+     * gate the admin has already satisfied.
+     */
+    public function createDirectInvite(User $inviter, ?string $email, bool $autoApprove, ?CarbonInterface $expiresAt): Invite
+    {
+        return Invite::create([
+            'uuid' => (string) Str::uuid(),
+            'inviter_user_id' => $inviter->id,
+            'invite_grant_id' => null,
+            'expires_at' => $expiresAt,
+            'auto_approve' => $autoApprove,
+            'email' => $email,
+        ]);
+    }
+
+    /**
      * Resolve a redeemable invite by uuid: unused, unrevoked, unexpired, and
      * whose inviter is still an active account. Banning/disabling an inviter
      * therefore halts tree growth through their outstanding links.

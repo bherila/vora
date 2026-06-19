@@ -25,6 +25,7 @@ interface RegisterInitialData {
   invite: string | null;
   invite_valid: boolean;
   inviter_name: string | null;
+  locked_email: string | null;
 }
 
 function getInitialData(): RegisterInitialData {
@@ -33,6 +34,7 @@ function getInitialData(): RegisterInitialData {
     invite: null,
     invite_valid: false,
     inviter_name: null,
+    locked_email: null,
   };
 
   const element = document.getElementById('register-initial-data');
@@ -47,6 +49,7 @@ function getInitialData(): RegisterInitialData {
       invite: typeof parsed.invite === 'string' ? parsed.invite : null,
       invite_valid: parsed.invite_valid === true,
       inviter_name: typeof parsed.inviter_name === 'string' ? parsed.inviter_name : null,
+      locked_email: typeof parsed.locked_email === 'string' ? parsed.locked_email : null,
     };
   } catch {
     return fallback;
@@ -62,7 +65,9 @@ function RegisterPage() {
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [email, setEmail] = useState('');
+  // A waitlist-admit invite binds the account to the already-verified email.
+  const emailLocked = initialData.locked_email !== null;
+  const [email, setEmail] = useState(initialData.locked_email ?? '');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [error, setError] = useState('');
@@ -217,9 +222,13 @@ function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                readOnly={emailLocked}
+                disabled={emailLocked}
               />
               <p className="text-xs text-muted-foreground">
-                Use an email address you can access. We will send verification and two-factor authentication messages there.
+                {emailLocked
+                  ? 'This invitation is tied to the email you verified, so it cannot be changed here.'
+                  : 'Use an email address you can access. We will send verification and two-factor authentication messages there.'}
               </p>
             </div>
             <div className="space-y-2">

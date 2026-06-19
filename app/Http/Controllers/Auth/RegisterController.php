@@ -35,6 +35,9 @@ class RegisterController extends Controller
                 'invite' => $inviteUuid,
                 'invite_valid' => $invite !== null,
                 'inviter_name' => $invite?->inviter?->display_name,
+                // Waitlist-admit invites are bound to the verified email; the form
+                // locks the field to it so the address can't drift from the invite.
+                'locked_email' => $invite?->email,
             ],
         ]);
     }
@@ -71,8 +74,12 @@ class RegisterController extends Controller
             return redirect()->route('register')->withErrors(['invite' => $message])->withInput();
         }
 
-        // A trusted inviter's invitees skip the admin approval gate.
-        $autoApprove = $isFirstUser || ($invite?->inviter?->isTrustedInviter() === true);
+        // The admin approval gate is skipped for the bootstrap user, a trusted
+        // inviter's invitees, and waitlist-admit invites (the admin already vetted
+        // the requester when admitting).
+        $autoApprove = $isFirstUser
+            || ($invite?->auto_approve === true)
+            || ($invite?->inviter?->isTrustedInviter() === true);
 
         try {
             $user = DB::transaction(function () use ($data, $isFirstUser, $invite, $autoApprove): User {
@@ -80,7 +87,9 @@ class RegisterController extends Controller
                 $user->name = $data['name'];
                 $user->display_name = $data['display_name'];
                 $user->birth_date = $data['birth_date'];
-                $user->email = $data['email'];
+                // A bound invite locks the email to the address the waitlist
+                // verified, so a tampered body can't redirect the invite.
+                $user->email = $invite?->email ?? $data['email'];
                 $user->password = $data['password']; // hashed via the model cast
                 // Bootstrap: the very first account is an approved admin so the app is usable.
                 if ($isFirstUser) {
@@ -89,6 +98,11 @@ class RegisterController extends Controller
                 if ($autoApprove) {
                     $user->approved_at = now();
                     $user->approved_by_user_id = $invite?->inviter?->id;
+                }
+                // The waitlist already proved ownership of this exact address, so
+                // carry the verification over instead of re-prompting for it.
+                if ($invite?->email !== null) {
+                    $user->email_verified_at = now();
                 }
                 $user->save();
 

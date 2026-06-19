@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\AdminPostController;
 use App\Http\Controllers\Admin\AdminStaticPageController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
+use App\Http\Controllers\WaitlistController;
 use Illuminate\Support\Facades\Route;
 
 // Home page and static pages (public).
@@ -49,6 +51,13 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [RegisterController::class, 'store']);
     Route::post('/api/auth/register', [RegisterController::class, 'store']);
     Route::get('/i/{uuid}', [RegisterController::class, 'landing'])->name('invite.landing');
+
+    // Public waitlist ("request an invitation"). Active only while public signups
+    // are closed — the controller redirects to /register otherwise.
+    Route::get('/request-invitation', [WaitlistController::class, 'show'])->name('waitlist.request');
+    Route::post('/api/waitlist', [WaitlistController::class, 'store'])->middleware('throttle:5,1');
+    Route::get('/waitlist/verify/{uuid}/{token}', [WaitlistController::class, 'verifyLink'])->name('waitlist.verify');
+    Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1');
 
     Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
@@ -225,6 +234,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
     Route::get('/invites', [AdminInviteController::class, 'index'])->name('invites');
+    Route::get('/waitlist', [AdminWaitlistController::class, 'index'])->name('waitlist');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
@@ -251,6 +261,10 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/invites', [AdminInviteController::class, 'apiIndex']);
     Route::put('/invites/settings', [AdminInviteController::class, 'updateSettings']);
     Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
+
+    Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
+    Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
+    Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);
