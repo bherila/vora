@@ -210,6 +210,38 @@ class CoAuthorTest extends TestCase
         $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])->assertStatus(422);
     }
 
+    public function test_co_author_invite_notification_respects_recipient_preference(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->approved()->create();
+        $invitee = User::factory()->approved()->create(['notify_co_author_invite' => false]);
+        $story = Story::factory()->for($owner)->create();
+
+        $this->actingAs($owner)->postJson("/api/stories/{$story->id}/authors", ['user_id' => $invitee->id])
+            ->assertCreated();
+
+        Notification::assertNotSentTo($invitee, CoAuthorInviteReceived::class);
+    }
+
+    public function test_co_author_invite_accepted_notification_respects_owner_preference(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->approved()->create(['notify_co_author_invite_accepted' => false]);
+        $invitee = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+        $invite = $story->authors()->create([
+            'user_id' => $invitee->id,
+            'invited_by_user_id' => $owner->id,
+            'role' => 'co_author',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($invitee)->postJson("/api/authorship-invites/{$invite->id}/accept")
+            ->assertOk();
+
+        Notification::assertNotSentTo($owner, CoAuthorInviteAccepted::class);
+    }
+
     public function test_editor_payload_keeps_pending_co_author_invites(): void
     {
         // The editor's CoAuthorPanel relies on pending rows being present (to show

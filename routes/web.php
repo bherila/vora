@@ -106,6 +106,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Cross-user exploration of approved, discoverable media.
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
     Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
+    Route::get('/api/explore/stories', [ExploreController::class, 'apiStories']);
 
     // Stories workspace + shareable single-story reader.
     Route::get('/stories', [StoryController::class, 'page'])->name('stories');

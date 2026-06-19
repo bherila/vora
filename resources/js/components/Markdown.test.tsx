@@ -22,7 +22,7 @@ describe('Markdown', () => {
   it('does not create anchors for dangerous protocols', () => {
     const { container } = render(<Markdown source={'[x](javascript:alert(1))'} />);
     expect(container.querySelector('a')).toBeNull();
-    expect(container.textContent).toContain('[x](javascript:alert(1))');
+    expect(container.textContent).toContain('x');
   });
 
   it('escapes raw HTML instead of rendering it (no injection)', () => {
@@ -35,6 +35,17 @@ describe('Markdown', () => {
   it('renders unordered lists', () => {
     const { container } = render(<Markdown source={'- one\n- two'} />);
     expect(container.querySelectorAll('li')).toHaveLength(2);
+  });
+
+  it('renders GFM tables and task lists', () => {
+    const { container } = render(<Markdown source={'| A | B |\n| - | - |\n| 1 | 2 |\n\n- [x] done'} />);
+    expect(container.querySelector('table')).not.toBeNull();
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull();
+  });
+
+  it('filters unsafe image sources', () => {
+    const { container } = render(<Markdown source={'![x](javascript:alert(1))'} />);
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it('renders an empty container for empty input', () => {

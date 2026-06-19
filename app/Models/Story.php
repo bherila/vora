@@ -9,6 +9,7 @@ use App\Enums\StoryType;
 use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -116,6 +117,25 @@ class Story extends Model
     public function interests(): BelongsToMany
     {
         return $this->belongsToMany(Interest::class, 'story_interests')->withTimestamps();
+    }
+
+    /**
+     * Restrict a listing to rows tagged with at least one of the given interest
+     * ids. An empty list is a no-op, matching Media discovery filtering.
+     *
+     * @param  Builder<Story>  $query
+     * @param  list<int>  $interestIds
+     * @return Builder<Story>
+     */
+    public function scopeWithAnyInterest(Builder $query, array $interestIds): Builder
+    {
+        if ($interestIds === []) {
+            return $query;
+        }
+
+        return $query->whereHas('interests', function (Builder $q) use ($interestIds): void {
+            $q->whereIn('interests.id', $interestIds);
+        });
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\ModerationStatus;
 use App\Models\Character;
 use App\Models\Story;
 use App\Models\StoryAuthor;
@@ -15,8 +16,9 @@ use App\Traits\Moderatable;
  * Turns Story models into API payloads. Centralised so the author editor, the
  * public reader, the library listing, and the admin queue stay in lock-step.
  *
- * Moderation state is internal (see {@see Moderatable}); only
- * {@see self::adminView()} exposes it.
+ * Moderation state is internal (see {@see Moderatable}); author-facing review
+ * status is intentionally limited to a small public subset, and only
+ * {@see self::adminView()} exposes the full moderation model.
  */
 class StoryPresenter
 {
@@ -45,6 +47,7 @@ class StoryPresenter
             'interests' => self::interests($story),
             'involves' => self::involvements($story),
             'authors' => self::authors($story),
+            'review' => self::review($story),
             'node_count' => $story->isCyoa() ? ($story->nodes_count ?? $story->nodes()->count()) : null,
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
             'created_at' => $story->created_at?->format('Y-m-d H:i:s'),
@@ -103,6 +106,31 @@ class StoryPresenter
     }
 
     /**
+     * Compact discovery row for public Explore. Mirrors reader-safe fields and
+     * does not include body, graph, moderation internals, or involvement tags.
+     *
+     * @return array<string, mixed>
+     */
+    public static function discoverableView(Story $story): array
+    {
+        return [
+            'id' => $story->id,
+            'ulid' => $story->ulid,
+            'title' => $story->title,
+            'type' => $story->type->value,
+            'owner' => self::userRef($story->user),
+            'authors' => $story->authors
+                ->filter(fn (StoryAuthor $author): bool => $author->isAccepted() && self::isActiveUser($author->user))
+                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
+                ->values()
+                ->all(),
+            'interests' => self::interests($story),
+            'node_count' => $story->isCyoa() ? ($story->nodes_count ?? $story->nodes()->count()) : null,
+            'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
      * Admin review payload — includes the internal moderation fields.
      *
      * @return array<string, mixed>
@@ -126,6 +154,23 @@ class StoryPresenter
             ->map(fn ($interest): array => ['id' => $interest->id, 'name' => $interest->name])
             ->values()
             ->all();
+    }
+
+    /**
+     * Minimal author-facing review information. This deliberately avoids
+     * exposing moderator ids/timestamps or raw internal column names.
+     *
+     * @return array{status: string, label: string, note: string|null}
+     */
+    private static function review(Story $story): array
+    {
+        $status = $story->moderation_status ?? ModerationStatus::Pending;
+
+        return [
+            'status' => $status->value,
+            'label' => $status->label(),
+            'note' => $story->isRejected() ? $story->moderation_notes : null,
+        ];
     }
 
     /**

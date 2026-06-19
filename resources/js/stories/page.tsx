@@ -37,6 +37,7 @@ function StoryCard({ story, currentUserId, onEdit }: { story: StorySummary; curr
           </span>
           {story.audience !== 'everyone' && <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">{story.audience}</span>}
           {!story.discoverable && <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">link-only</span>}
+          <ReviewBadge story={story} />
           {!story.authors.some((a) => a.is_owner && a.user_id === currentUserId) && (
             <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">co-author</span>
           )}
@@ -54,6 +55,20 @@ function StoryCard({ story, currentUserId, onEdit }: { story: StorySummary; curr
       </CardContent>
     </Card>
   );
+}
+
+function ReviewBadge({ story }: { story: StorySummary }) {
+  if (story.status !== 'published') {
+    return null;
+  }
+
+  const className = story.review.status === 'approved'
+    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+    : story.review.status === 'rejected'
+      ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200';
+
+  return <span className={`rounded px-2 py-0.5 ${className}`}>{story.review.label}</span>;
 }
 
 function StoriesPage() {
