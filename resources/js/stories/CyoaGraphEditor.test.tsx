@@ -37,4 +37,25 @@ describe('graphWarnings', () => {
       ),
     ).toEqual([]);
   });
+
+  it('does not warn when an ending is only reachable through a back-edge to an ancestor', () => {
+    // start -> mid (mid loops back to start) and start -> end. `mid` reaches an
+    // ending via mid -> start -> end, so it must not be flagged regardless of
+    // the order nodes are evaluated.
+    const warnings = graphWarnings(
+      [
+        { key: 'start', title: 'Start', body: '', is_start: true, position_x: 24, position_y: 24 },
+        { key: 'mid', title: 'Mid', body: '', is_start: false, position_x: 244, position_y: 24 },
+        { key: 'end', title: 'End', body: '', is_start: false, position_x: 464, position_y: 24 },
+      ],
+      [
+        { fromKey: 'start', toKey: 'mid', label: 'Go' },
+        { fromKey: 'start', toKey: 'end', label: 'Finish' },
+        { fromKey: 'mid', toKey: 'start', label: 'Back' },
+        { fromKey: 'end', toKey: null, label: 'The end' },
+      ],
+    );
+
+    expect(warnings.some((warning) => warning.includes('No ending can be reached'))).toBe(false);
+  });
 });

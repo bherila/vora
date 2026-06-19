@@ -79,31 +79,41 @@ export function graphWarnings(nodes: EditorNode[], choices: EditorChoice[]): str
     warnings.push(`Unreachable passages: ${unreachableTitles.join(', ')}.`);
   }
 
-  const reachesEnding = new Map<string, boolean>();
-  const canReachEnding = (key: string, visiting: Set<string>): boolean => {
-    if (reachesEnding.has(key)) {
-      return reachesEnding.get(key) ?? false;
-    }
-
-    const outgoing = choices.filter((choice) => choice.fromKey === key && nodeKeys.has(choice.fromKey));
+  // A node reaches an ending if it has a terminal choice (or no choices) or an
+  // outgoing edge to another node that does. Solved by reverse reachability from
+  // the ending nodes so the result is independent of node/edge order and correct
+  // for cyclic graphs (a back-edge to an ancestor cannot poison the result).
+  const reverse = new Map<string, string[]>();
+  nodes.forEach((node) => reverse.set(node.key, []));
+  const canReachEnding = new Set<string>();
+  const queue: string[] = [];
+  nodes.forEach((node) => {
+    const outgoing = choices.filter((choice) => choice.fromKey === node.key);
     if (outgoing.length === 0 || outgoing.some((choice) => choice.toKey === null)) {
-      reachesEnding.set(key, true);
-      return true;
+      if (!canReachEnding.has(node.key)) {
+        canReachEnding.add(node.key);
+        queue.push(node.key);
+      }
     }
-
-    if (visiting.has(key)) {
-      return false;
+    outgoing.forEach((choice) => {
+      if (choice.toKey !== null && nodeKeys.has(choice.toKey)) {
+        reverse.get(choice.toKey)?.push(node.key);
+      }
+    });
+  });
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    for (const prev of reverse.get(current) ?? []) {
+      if (!canReachEnding.has(prev)) {
+        canReachEnding.add(prev);
+        queue.push(prev);
+      }
     }
-
-    visiting.add(key);
-    const result = outgoing.some((choice) => choice.toKey !== null && nodeKeys.has(choice.toKey) && canReachEnding(choice.toKey, visiting));
-    visiting.delete(key);
-    reachesEnding.set(key, result);
-    return result;
-  };
+  }
 
   const loopTitles = nodes
-    .filter((node) => reachable.has(node.key) && !canReachEnding(node.key, new Set()))
+    .filter((node) => reachable.has(node.key) && !canReachEnding.has(node.key))
     .map((node) => node.title || 'Untitled passage');
   if (loopTitles.length > 0) {
     warnings.push(`No ending can be reached from: ${loopTitles.join(', ')}.`);
