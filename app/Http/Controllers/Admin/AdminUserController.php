@@ -236,6 +236,12 @@ class AdminUserController extends Controller
             return $this->forbidden('You cannot delete this account.');
         }
 
+        // A legal hold preserves the account and its data; it must block the admin
+        // purge too, not just the user's self-service delete. Lift the hold first.
+        if ($user->isOnLegalHold()) {
+            return $this->forbidden('This account is under a legal hold and cannot be deleted. Lift the hold first.');
+        }
+
         $this->accounts->purge($user);
 
         return response()->json(['success' => true, 'message' => 'User permanently deleted.']);

@@ -38,7 +38,9 @@ class AdminInviteController extends Controller
 
         // Nodes for the referral tree. referrer_user_id is the inviter (via the
         // invite the user redeemed); null = signed up without an invite (a root).
-        $users = User::query()
+        // Include soft-deleted accounts so a deleted invitee (and its descendants)
+        // stays linked in the chain instead of being promoted to spurious roots.
+        $users = User::withTrashed()
             ->with('referredByInvite:id,inviter_user_id')
             ->orderBy('id')
             ->get(['id', 'display_name', 'trusted_inviter', 'banned_at', 'referred_by_invite_id'])

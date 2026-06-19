@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use RuntimeException;
 
 class RegisterController extends Controller
 {
@@ -73,40 +74,53 @@ class RegisterController extends Controller
         // A trusted inviter's invitees skip the admin approval gate.
         $autoApprove = $isFirstUser || ($invite?->inviter?->isTrustedInviter() === true);
 
-        $user = DB::transaction(function () use ($data, $isFirstUser, $invite, $autoApprove): User {
-            $user = new User;
-            $user->name = $data['name'];
-            $user->display_name = $data['display_name'];
-            $user->birth_date = $data['birth_date'];
-            $user->email = $data['email'];
-            $user->password = $data['password']; // hashed via the model cast
-            // Bootstrap: the very first account is an approved admin so the app is usable.
-            if ($isFirstUser) {
-                $user->is_admin = true;
-            }
-            if ($autoApprove) {
-                $user->approved_at = now();
-                $user->approved_by_user_id = $invite?->inviter?->id;
-            }
-            $user->save();
+        try {
+            $user = DB::transaction(function () use ($data, $isFirstUser, $invite, $autoApprove): User {
+                $user = new User;
+                $user->name = $data['name'];
+                $user->display_name = $data['display_name'];
+                $user->birth_date = $data['birth_date'];
+                $user->email = $data['email'];
+                $user->password = $data['password']; // hashed via the model cast
+                // Bootstrap: the very first account is an approved admin so the app is usable.
+                if ($isFirstUser) {
+                    $user->is_admin = true;
+                }
+                if ($autoApprove) {
+                    $user->approved_at = now();
+                    $user->approved_by_user_id = $invite?->inviter?->id;
+                }
+                $user->save();
 
-            if ($invite !== null) {
-                $this->invites->consume($invite, $user);
+                if ($invite !== null) {
+                    $this->invites->consume($invite, $user);
+                }
+
+                // Seed brand-new accounts with the configured default invite balance.
+                $defaultInvites = $this->settings->defaultNewUserInvites();
+                if ($defaultInvites > 0) {
+                    $expiryDays = $this->settings->defaultNewUserInviteExpiryDays();
+                    $this->invites->issueGrant(
+                        $user,
+                        $defaultInvites,
+                        $expiryDays !== null ? now()->addDays($expiryDays) : null,
+                    );
+                }
+
+                return $user;
+            });
+        } catch (RuntimeException) {
+            // Concurrency: another registration consumed this invite between
+            // findUsable() and consume()'s locked re-check. The transaction rolled
+            // back; surface the same stale-invite response as the up-front check.
+            $message = 'This invite link is no longer valid. Ask your inviter for a new one.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
             }
 
-            // Seed brand-new accounts with the configured default invite balance.
-            $defaultInvites = $this->settings->defaultNewUserInvites();
-            if ($defaultInvites > 0) {
-                $expiryDays = $this->settings->defaultNewUserInviteExpiryDays();
-                $this->invites->issueGrant(
-                    $user,
-                    $defaultInvites,
-                    $expiryDays !== null ? now()->addDays($expiryDays) : null,
-                );
-            }
-
-            return $user;
-        });
+            return redirect()->route('register')->withErrors(['invite' => $message])->withInput();
+        }
 
         $pending = ! $autoApprove;
         $signupRedirect = route('verification.notice', $pending ? ['signup_status' => 'pending-approval'] : []);

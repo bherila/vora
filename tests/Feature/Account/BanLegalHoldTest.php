@@ -100,6 +100,25 @@ class BanLegalHoldTest extends TestCase
     }
 
     #[Test]
+    public function test_legal_hold_blocks_admin_purge(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $target = User::factory()->approved()->onLegalHold()->create();
+
+        $this->actingAs($admin)
+            ->deleteJson("/api/admin/users/{$target->id}")
+            ->assertStatus(403);
+        $this->assertNull($target->refresh()->deleted_at);
+
+        // Lifting the hold allows the purge to proceed.
+        $target->forceFill(['legal_hold_at' => null])->save();
+        $this->actingAs($admin)
+            ->deleteJson("/api/admin/users/{$target->id}")
+            ->assertOk();
+        $this->assertNull(User::find($target->id));
+    }
+
+    #[Test]
     public function test_admin_can_issue_invites_to_a_user(): void
     {
         $admin = User::factory()->admin()->create();

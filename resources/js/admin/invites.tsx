@@ -51,14 +51,13 @@ function formatDate(value: string | null): string {
 interface TreeNodeProps {
   user: TreeUser;
   childrenByParent: Map<number, TreeUser[]>;
-  depth: number;
 }
 
-function TreeNode({ user, childrenByParent, depth }: TreeNodeProps) {
+function TreeNode({ user, childrenByParent }: TreeNodeProps) {
   const children = childrenByParent.get(user.id) ?? [];
   return (
     <li>
-      <div className="flex items-center gap-2 py-1" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+      <div className="flex items-center gap-2 py-1">
         <span className="font-medium">{user.display_name ?? `User #${user.id}`}</span>
         {user.trusted_inviter && <Badge>Trusted</Badge>}
         {user.is_banned && <Badge variant="destructive">Banned</Badge>}
@@ -68,9 +67,11 @@ function TreeNode({ user, childrenByParent, depth }: TreeNodeProps) {
         )}
       </div>
       {children.length > 0 && (
-        <ul>
+        // Static class-based indentation per nesting level keeps the tree readable
+        // without inline styles, which the app's CSP (style-src 'self') would block.
+        <ul className="ml-5 border-l border-border pl-2">
           {children.map((child) => (
-            <TreeNode key={child.id} user={child} childrenByParent={childrenByParent} depth={depth + 1} />
+            <TreeNode key={child.id} user={child} childrenByParent={childrenByParent} />
           ))}
         </ul>
       )}
@@ -282,7 +283,7 @@ function AdminInvitesPage() {
           ) : (
             <ul className="text-sm">
               {roots.map((user) => (
-                <TreeNode key={user.id} user={user} childrenByParent={childrenByParent} depth={0} />
+                <TreeNode key={user.id} user={user} childrenByParent={childrenByParent} />
               ))}
             </ul>
           )}

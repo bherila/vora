@@ -28,10 +28,11 @@ class StoryPolicy
             return true;
         }
 
-        // Stories owned by a deleted, deactivated, or disabled account are hidden
-        // from other users on every path (direct ULID links included).
+        // Stories owned by a deleted, deactivated, disabled, or ban-hidden account
+        // are hidden from other users on every path (direct ULID links included).
+        // Mirrors MediaPolicy::view — isActive() folds in banHidesContent().
         $owner = User::withTrashed()->find($story->user_id);
-        if ($owner === null || $owner->trashed() || $owner->isDeactivated() || ! $owner->canLogin()) {
+        if ($owner === null || $owner->trashed() || ! $owner->isActive()) {
             return false;
         }
 
