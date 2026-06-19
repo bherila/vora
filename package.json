@@ -50,7 +50,7 @@
         "@base-ui/react": "^1.4.1",
         "@hookform/resolvers": "^5.2.2",
         "blockhash-core": "^0.1.0",
-        "bwh-auth": "https://github.com/bherila/auth/releases/download/bwh-auth-v0.2.0/bwh-auth-0.2.0.tgz",
+        "bwh-auth": "0.2.0",
         "class-variance-authority": "^0.7.1",
         "classnames": "^2.5.1",
         "clsx": "^2.1.1",

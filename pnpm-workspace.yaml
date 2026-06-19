@@ -2,9 +2,7 @@ overrides:
   glob: ">=10.5.0"
 allowBuilds:
   unrs-resolver: true
-# bwh-auth is a first-party package (source at github.com/bherila/auth) consumed
-# as a GitHub-release tarball. The supply-chain minimumReleaseAge policy would
-# otherwise block installs whenever a fresh 0.x publish is still within the age
-# window; exclude our own package from that check while keeping it for the rest.
+# bwh-auth is a first-party package; skip the release-age supply-chain gate so a
+# freshly published version installs immediately in policy-enabled environments.
 minimumReleaseAgeExclude:
   - bwh-auth
