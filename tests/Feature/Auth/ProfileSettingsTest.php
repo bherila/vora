@@ -2,8 +2,12 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Models\Media;
+use App\Models\Post;
+use App\Models\PostComment;
+use App\Models\PostReaction;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Auth\Notifications\VerifyEmail;
@@ -325,5 +329,30 @@ class ProfileSettingsTest extends TestCase
         $this->assertNull($data['user_type']);
         $this->assertSame([], $data['preferred_user_types']);
         $this->assertSame([], $data['preferred_genders']);
+    }
+
+    #[Test]
+    public function authenticated_users_can_export_their_account_data(): void
+    {
+        $user = User::factory()->approved()->create([
+            'profile_audience' => Audience::SpecificPeople,
+            'notify_post_comment' => false,
+        ]);
+        $granted = User::factory()->approved()->create();
+        $user->profileAudienceMembers()->create(['user_id' => $granted->id]);
+
+        $post = Post::factory()->for($user)->approved()->create(['body' => 'Exported post']);
+        PostComment::factory()->for($post)->for($user)->create(['body' => 'Exported comment']);
+        PostReaction::query()->create(['post_id' => $post->id, 'user_id' => $user->id, 'type' => PostReaction::DEFAULT_TYPE]);
+
+        $this->actingAs($user)->getJson('/api/account/export')
+            ->assertOk()
+            ->assertJsonPath('data.account.email', $user->email)
+            ->assertJsonPath('data.account.profile_audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.account.profile_audience_user_ids', [$granted->id])
+            ->assertJsonPath('data.notification_preferences.notify_post_comment', false)
+            ->assertJsonPath('data.posts.0.body', 'Exported post')
+            ->assertJsonPath('data.comments.0.body', 'Exported comment')
+            ->assertJsonPath('data.reactions.0.post_ulid', $post->ulid);
     }
 }

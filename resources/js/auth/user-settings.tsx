@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
+import { AudienceField } from '@/community/AudienceField';
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
@@ -15,7 +16,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { RequestInterestForm } from '@/interests/request-interest-form';
-import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
+import { type Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import {
@@ -45,6 +46,7 @@ interface UserSettingsInitialPayload {
   preferred_user_types?: unknown;
   preferred_genders?: unknown;
   profile_audience?: string | null;
+  audience_user_ids?: unknown;
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
@@ -71,7 +73,8 @@ interface UserSettingsInitialData {
   user_type_other: string;
   preferred_user_types: string[];
   preferred_genders: string[];
-  profile_audience: string;
+  profile_audience: Audience;
+  audience_user_ids: number[];
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
@@ -112,6 +115,8 @@ interface UserSettingsResponse {
     user_type_other: string | null;
     preferred_user_types: string[] | null;
     preferred_genders: string[] | null;
+    profile_audience: Audience;
+    audience_user_ids: number[];
     notify_new_post: boolean;
     notify_post_reaction: boolean;
     notify_post_comment: boolean;
@@ -132,7 +137,8 @@ interface AccountPayload {
   user_type_other: string | null;
   preferred_user_types: string[] | null;
   preferred_genders: string[] | null;
-  profile_audience: string;
+  profile_audience: Audience;
+  audience_user_ids: number[];
   notify_new_post: boolean;
   notify_post_reaction: boolean;
   notify_post_comment: boolean;
@@ -155,6 +161,7 @@ function emptyInitialData(): UserSettingsInitialData {
     preferred_user_types: [],
     preferred_genders: [],
     profile_audience: 'everyone',
+    audience_user_ids: [],
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
@@ -183,7 +190,8 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     user_type_other: payload.user_type_other ?? '',
     preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, payload.preferred_user_types),
     preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, payload.preferred_genders),
-    profile_audience: payload.profile_audience ?? 'everyone',
+    profile_audience: normalizeAudience(payload.profile_audience),
+    audience_user_ids: normalizeNumberList(payload.audience_user_ids),
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
@@ -223,6 +231,16 @@ function selectionsToPayload(values: string[]): string[] | null {
   return values.length > 0 ? values : null;
 }
 
+function normalizeAudience(value: unknown): Audience {
+  return value === 'followers' || value === 'mutuals' || value === 'specific' ? value : 'everyone';
+}
+
+function normalizeNumberList(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === 'number')
+    : [];
+}
+
 function UserSettingsPage() {
   const initialData = getInitialData();
 
@@ -237,6 +255,7 @@ function UserSettingsPage() {
   const [preferredUserTypes, setPreferredUserTypes] = useState(initialData.preferred_user_types);
   const [preferredGenders, setPreferredGenders] = useState(initialData.preferred_genders);
   const [profileAudience, setProfileAudience] = useState(initialData.profile_audience);
+  const [profileAudienceUserIds, setProfileAudienceUserIds] = useState(initialData.audience_user_ids);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
@@ -381,6 +400,8 @@ function UserSettingsPage() {
     setProfileUserTypeOther(data.user_type_other ?? '');
     setPreferredUserTypes(normalizeProfileSelections(USER_TYPE_OPTIONS, data.preferred_user_types));
     setPreferredGenders(normalizeProfileSelections(GENDER_OPTIONS, data.preferred_genders));
+    setProfileAudience(data.profile_audience);
+    setProfileAudienceUserIds(data.audience_user_ids);
     setNotifyNewPost(data.notify_new_post);
     setNotifyPostReaction(data.notify_post_reaction);
     setNotifyPostComment(data.notify_post_comment);
@@ -401,6 +422,7 @@ function UserSettingsPage() {
     preferred_user_types: selectionsToPayload(preferredUserTypes),
     preferred_genders: selectionsToPayload(preferredGenders),
     profile_audience: profileAudience,
+    audience_user_ids: profileAudience === 'specific' ? profileAudienceUserIds : [],
     notify_new_post: notifyNewPost,
     notify_post_reaction: notifyPostReaction,
     notify_post_comment: notifyPostComment,
@@ -491,6 +513,10 @@ function UserSettingsPage() {
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to delete account.');
     }
+  };
+
+  const handleExportAccount = (): void => {
+    window.location.href = '/api/account/export';
   };
 
   const handleEnablePush = async (): Promise<void> => {
@@ -730,18 +756,14 @@ function UserSettingsPage() {
                 values={preferredGenders}
                 onChange={setPreferredGenders}
               />
-              <div className="grid gap-1.5">
-                <Label htmlFor="account-profile-audience">Who can see your profile</Label>
-                <select
-                  id="account-profile-audience"
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={profileAudience}
-                  onChange={(event) => setProfileAudience(event.target.value)}
-                >
-                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+              <div className="space-y-2">
+                <AudienceField
+                  audience={profileAudience}
+                  onAudienceChange={setProfileAudience}
+                  selectedUserIds={profileAudienceUserIds}
+                  onSelectedUserIdsChange={setProfileAudienceUserIds}
+                  label="Who can see your profile"
+                />
                 <p className="text-sm text-muted-foreground">
                   Restricted profiles stay listed so people can still request to follow you — only your details are hidden.
                 </p>
@@ -946,6 +968,9 @@ function UserSettingsPage() {
               </p>
               <Button type="submit" disabled={accountSaving}>
                 {accountSaving ? 'Saving...' : 'Save account settings'}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleExportAccount}>
+                Export account data
               </Button>
             </form>
           </CardContent>

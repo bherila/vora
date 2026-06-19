@@ -72,6 +72,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
+    Route::get('/api/account/export', [ProfileController::class, 'export']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
@@ -97,6 +98,7 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
+    Route::get('/feed', fn () => view('feed'))->name('feed');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Media library + shareable single-media view.
@@ -213,6 +215,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
     Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
     Route::get('/pages', [AdminStaticPageController::class, 'index'])->name('pages');
+    Route::get('/posts', fn () => view('admin.posts'))->name('posts');
 });
 
 // Admin JSON API — session-authenticated (web middleware), admin-gated. The
