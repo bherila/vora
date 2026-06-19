@@ -147,6 +147,28 @@ class ProfilePrivacyTest extends TestCase
         $this->assertSame(0, AudienceMember::query()->count(), 'stale grants cannot survive a tier change');
     }
 
+    public function test_account_settings_can_set_specific_profile_allowlist(): void
+    {
+        $owner = $this->withProfileAudience(Audience::Everyone);
+        $granted = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+
+        $this->actingAs($owner)->patchJson('/api/account', [
+            'name' => $owner->name,
+            'display_name' => $owner->display_name,
+            'email' => $owner->email,
+            'profile_audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$granted->id],
+        ])->assertOk()
+            ->assertJsonPath('data.profile_audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.audience_user_ids', [$granted->id]);
+
+        $this->actingAs($granted)->getJson("/api/users/{$owner->id}")
+            ->assertJsonPath('data.restricted', false);
+        $this->actingAs($other)->getJson("/api/users/{$owner->id}")
+            ->assertJsonPath('data.restricted', true);
+    }
+
     public function test_follow_request_inbox_masks_restricted_requester_details(): void
     {
         // The requester's own profile is followers-only. Create it first so the

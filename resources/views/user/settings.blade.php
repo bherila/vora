@@ -15,6 +15,7 @@
       'preferred_user_types' => $__currentUser->preferred_user_types ?? [],
       'preferred_genders' => $__currentUser->preferred_genders ?? [],
       'profile_audience' => $__currentUser->profile_audience?->value ?? 'everyone',
+      'audience_user_ids' => $__currentUser->profileAudienceMembers()->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all(),
       'id_verified_at' => $__currentUser->id_verified_at?->toIso8601String(),
       'name_locked' => (bool) $__currentUser->name_locked,
       'email_locked' => (bool) $__currentUser->email_locked,
