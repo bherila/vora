@@ -23,6 +23,7 @@ class RegisterRequest extends FormRequest
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
+            'invite' => ['nullable', 'string', 'uuid'],
         ];
     }
 }

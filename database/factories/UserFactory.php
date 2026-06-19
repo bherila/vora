@@ -89,4 +89,59 @@ class UserFactory extends Factory
             'is_disabled' => true,
         ]);
     }
+
+    /**
+     * Banned account (login allowed, gated to appeal/deactivate/delete). Content
+     * stays visible — "memorialized".
+     */
+    public function banned(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'approved_at' => now(),
+            'banned_at' => now(),
+            'ban_reason' => 'Violated community rules.',
+            'ban_hides_content' => false,
+        ]);
+    }
+
+    /**
+     * Banned account whose content is also hidden from other users.
+     */
+    public function bannedAndHidden(): static
+    {
+        return $this->banned()->state(fn (array $attributes) => [
+            'ban_hides_content' => true,
+        ]);
+    }
+
+    /**
+     * Account under a legal hold (cannot delete their account).
+     */
+    public function onLegalHold(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'legal_hold_at' => now(),
+        ]);
+    }
+
+    /**
+     * A trusted inviter — their invitees skip the admin approval gate.
+     */
+    public function trustedInviter(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'approved_at' => now(),
+            'trusted_inviter' => true,
+        ]);
+    }
+
+    /**
+     * Barred from receiving future invite grants.
+     */
+    public function cannotReceiveInvites(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'can_receive_invites' => false,
+        ]);
+    }
 }

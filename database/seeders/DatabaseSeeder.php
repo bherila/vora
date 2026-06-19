@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\StaticPage;
 use App\Models\User;
+use App\Services\SettingsService;
 use App\Support\DefaultStaticPages;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -30,5 +31,10 @@ class DatabaseSeeder extends Seeder
                 array_merge($page, ['variables' => json_encode($page['variables'], JSON_THROW_ON_ERROR)])
             );
         }
+
+        // Default signup settings (public signups open, no auto-granted invites).
+        $settings = app(SettingsService::class);
+        $settings->set(SettingsService::PUBLIC_SIGNUPS_ENABLED, true);
+        $settings->set(SettingsService::DEFAULT_NEW_USER_INVITES, 0);
     }
 }

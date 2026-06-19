@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminInterestController;
+use App\Http\Controllers\Admin\AdminInviteController;
 use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminPostCommentController;
 use App\Http\Controllers\Admin\AdminPostController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
+use App\Http\Controllers\InviteController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostCommentController;
@@ -46,6 +48,7 @@ Route::middleware('guest')->group(function () {
     Route::get('/register', [RegisterController::class, 'show'])->name('register');
     Route::post('/register', [RegisterController::class, 'store']);
     Route::post('/api/auth/register', [RegisterController::class, 'store']);
+    Route::get('/i/{uuid}', [RegisterController::class, 'landing'])->name('invite.landing');
 
     Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
@@ -88,6 +91,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/account/deactivated', fn () => view('auth.deactivated'))->name('account.deactivated');
     Route::post('/account/reactivate', [ProfileController::class, 'reactivate'])->name('account.reactivate');
 
+    // Reachable while banned (exempt in EnsureNotBanned) so the user can appeal,
+    // deactivate, delete, or sign out.
+    Route::get('/account/banned', [ProfileController::class, 'bannedPage'])->name('account.banned');
+    Route::post('/api/account/appeal', [ProfileController::class, 'appeal'])->name('account.appeal');
+
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 });
 
@@ -100,6 +108,12 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
     Route::get('/feed', fn () => view('feed'))->name('feed');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
+
+    // Invites the user can hand out (balance issued by an admin).
+    Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');
+    Route::get('/api/invites', [InviteController::class, 'apiIndex']);
+    Route::post('/api/invites', [InviteController::class, 'generate']);
+    Route::delete('/api/invites/{invite}', [InviteController::class, 'revoke']);
 
     // Media library + shareable single-media view.
     Route::get('/media', [MediaController::class, 'library'])->name('media');
@@ -210,6 +224,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 */
 Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/users', [AdminUserController::class, 'index'])->name('users');
+    Route::get('/invites', [AdminInviteController::class, 'index'])->name('invites');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
@@ -225,9 +240,17 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
+    Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);
+    Route::post('/users/{user}/unban', [AdminUserController::class, 'unban']);
+    Route::post('/users/{user}/legal-hold', [AdminUserController::class, 'legalHold']);
+    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites']);
     // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
     Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
+
+    Route::get('/invites', [AdminInviteController::class, 'apiIndex']);
+    Route::put('/invites/settings', [AdminInviteController::class, 'updateSettings']);
+    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);
