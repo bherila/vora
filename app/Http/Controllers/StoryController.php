@@ -17,6 +17,7 @@ use App\Services\Story\StoryService;
 use App\Support\StoryPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -33,7 +34,14 @@ class StoryController extends Controller
      */
     public function page(): View
     {
-        return view('user.stories');
+        $user = request()->user();
+
+        return view('user.stories', ['initialData' => [
+            'stories' => [
+                'currentUserId' => $user?->id,
+                'data' => $user instanceof User ? $this->storiesPayload($user) : [],
+            ],
+        ]]);
     }
 
     /**
@@ -41,7 +49,12 @@ class StoryController extends Controller
      */
     public function readerPage(string $ulid): View
     {
-        return view('stories.show', ['ulid' => $ulid]);
+        $story = Story::query()->where('ulid', $ulid)->firstOrFail();
+        Gate::authorize('view', $story);
+
+        return view('stories.show', ['initialData' => [
+            'storyReader' => StoryPresenter::readerView($this->stories->loadForPresentation($story)),
+        ]]);
     }
 
     /**
@@ -54,6 +67,17 @@ class StoryController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
+        return response()->json([
+            'success' => true,
+            'data' => $this->storiesPayload($user),
+        ]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function storiesPayload(User $user): Collection
+    {
         $stories = Story::query()
             ->where(function (Builder $q) use ($user): void {
                 $q->where('user_id', $user->id)
@@ -66,10 +90,7 @@ class StoryController extends Controller
             ->latest()
             ->get();
 
-        return response()->json([
-            'success' => true,
-            'data' => $stories->map(fn (Story $story): array => StoryPresenter::summary($story))->values(),
-        ]);
+        return $stories->map(fn (Story $story): array => StoryPresenter::summary($story))->values();
     }
 
     public function store(StoreStoryRequest $request): JsonResponse

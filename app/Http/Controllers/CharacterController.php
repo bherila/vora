@@ -15,6 +15,7 @@ use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class CharacterController extends Controller
@@ -27,7 +28,11 @@ class CharacterController extends Controller
 
     public function page(): View
     {
-        return view('user.characters');
+        $user = request()->user();
+
+        return view('user.characters', ['initialData' => [
+            'characters' => $user instanceof User ? $this->charactersPayload($user) : [],
+        ]]);
     }
 
     public function index(): JsonResponse
@@ -38,12 +43,20 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        $characters = $user->characters()->with('profilePicture')->latest()->get();
-
         return response()->json([
             'success' => true,
-            'data' => $characters->map(fn (Character $character): array => $this->present($character))->values(),
+            'data' => $this->charactersPayload($user),
         ]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function charactersPayload(User $user): Collection
+    {
+        $characters = $user->characters()->with('profilePicture')->latest()->get();
+
+        return $characters->map(fn (Character $character): array => $this->present($character))->values();
     }
 
     public function store(UpsertCharacterRequest $request): JsonResponse

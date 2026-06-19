@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 function getAdultBirthDateLimit(): string {
   const date = new Date();
@@ -29,31 +30,14 @@ interface RegisterInitialData {
 }
 
 function getInitialData(): RegisterInitialData {
-  const fallback: RegisterInitialData = {
-    public_signups_enabled: true,
-    invite: null,
-    invite_valid: false,
-    inviter_name: null,
-    locked_email: null,
+  const parsed = readInitialData<{ register?: Partial<RegisterInitialData> }>().register;
+  return {
+    public_signups_enabled: parsed?.public_signups_enabled !== false,
+    invite: typeof parsed?.invite === 'string' ? parsed.invite : null,
+    invite_valid: parsed?.invite_valid === true,
+    inviter_name: typeof parsed?.inviter_name === 'string' ? parsed.inviter_name : null,
+    locked_email: typeof parsed?.locked_email === 'string' ? parsed.locked_email : null,
   };
-
-  const element = document.getElementById('register-initial-data');
-  if (!element?.textContent) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(element.textContent) as Partial<RegisterInitialData>;
-    return {
-      public_signups_enabled: parsed.public_signups_enabled !== false,
-      invite: typeof parsed.invite === 'string' ? parsed.invite : null,
-      invite_valid: parsed.invite_valid === true,
-      inviter_name: typeof parsed.inviter_name === 'string' ? parsed.inviter_name : null,
-      locked_email: typeof parsed.locked_email === 'string' ? parsed.locked_email : null,
-    };
-  } catch {
-    return fallback;
-  }
 }
 
 function RegisterPage() {

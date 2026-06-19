@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\View\View;
 
 /**
  * The viewer's reverse-chronological timeline: their own posts plus posts from
@@ -23,7 +24,20 @@ class FeedController extends Controller
 {
     public function __construct(private readonly MediaResponseService $mediaResponder) {}
 
+    public function page(Request $request): View
+    {
+        return view('feed', ['initialData' => ['feed' => $this->payload($request)]]);
+    }
+
     public function index(Request $request): JsonResponse
+    {
+        return response()->json(['success' => true, ...$this->payload($request)]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payload(Request $request): array
     {
         $viewer = $request->user();
         $viewerId = $viewer?->id;
@@ -55,12 +69,11 @@ class FeedController extends Controller
             ->orderByDesc('id')
             ->cursorPaginate((int) config('media.page_size', 24));
 
-        return response()->json([
-            'success' => true,
+        return [
             'data' => collect($posts->items())
                 ->map(fn (Post $post): array => PostPresenter::view($post, $viewer instanceof User ? $viewer : null, $this->mediaResponder))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),
-        ]);
+        ];
     }
 }

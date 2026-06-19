@@ -317,18 +317,20 @@ class ProfileSettingsTest extends TestCase
             ->getContent();
 
         $this->assertMatchesRegularExpression(
-            '/<script id="user-settings-initial-data"[^>]*>\s*(.*?)\s*<\/script>/s',
+            '/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s',
             $content,
         );
-        preg_match('/<script id="user-settings-initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $content, $matches);
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $content, $matches);
 
         /** @var array<string, mixed> $data */
         $data = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
 
-        $this->assertNull($data['gender']);
-        $this->assertNull($data['user_type']);
-        $this->assertSame([], $data['preferred_user_types']);
-        $this->assertSame([], $data['preferred_genders']);
+        $settings = $data['userSettings'];
+
+        $this->assertNull($settings['gender']);
+        $this->assertNull($settings['user_type']);
+        $this->assertSame([], $settings['preferred_user_types']);
+        $this->assertSame([], $settings['preferred_genders']);
     }
 
     #[Test]

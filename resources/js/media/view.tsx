@@ -1,53 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
 
-function getUlid(): string | null {
-  const el = document.getElementById('media-view-initial-data');
-  if (!el?.textContent) {
-    return null;
-  }
-  try {
-    return (JSON.parse(el.textContent) as { ulid?: string }).ulid ?? null;
-  } catch {
-    return null;
-  }
+function getInitialMedia(): MediaItem | null {
+  return readInitialData<{ mediaView?: MediaItem }>().mediaView ?? null;
 }
 
 function MediaViewPage() {
-  const ulid = useMemo(() => getUlid(), []);
-  const [item, setItem] = useState<MediaItem | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!ulid) {
-      setError('Media not found.');
-      setLoading(false);
-      return;
-    }
-    void (async () => {
-      try {
-        const response = (await fetchWrapper.get(`/api/media/by-ulid/${ulid}`)) as { data: MediaItem };
-        setItem(response.data);
-      } catch {
-        setError('This media is unavailable.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [ulid]);
-
+  const [item] = useState<MediaItem | null>(getInitialMedia);
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      {loading ? (
-        <p className="text-muted-foreground">Loading…</p>
-      ) : error || !item ? (
-        <p className="text-muted-foreground">{error || 'This media is unavailable.'}</p>
+      {!item ? (
+        <p className="text-muted-foreground">This media is unavailable.</p>
       ) : (
         <Card>
           <CardHeader>

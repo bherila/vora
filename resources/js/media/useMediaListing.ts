@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchWrapper } from '@/fetchWrapper';
 import type { MediaItem, MediaTypeFilter, PagedResponse } from '@/media/types';
@@ -48,13 +48,14 @@ function getErrorMessage(err: unknown): string {
  * they render — the fetching, filtering, and pagination are identical and live
  * here so they cannot drift.
  */
-export function useMediaListing(endpoint: string, filters: MediaListingFilters): UseMediaListing {
-  const [items, setItems] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useMediaListing(endpoint: string, filters: MediaListingFilters, initial?: PagedResponse<MediaItem>): UseMediaListing {
+  const [items, setItems] = useState<MediaItem[]>(initial?.data ?? []);
+  const [loading, setLoading] = useState(initial === undefined);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initial?.meta?.has_more ?? false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const skipInitialLoadRef = useRef(initial !== undefined);
 
   const { type, interestIds } = filters;
   // Serialize the interest list so the effect re-runs on content change, not identity.
@@ -89,6 +90,11 @@ export function useMediaListing(endpoint: string, filters: MediaListingFilters):
 
   // Reload from page 1 whenever the endpoint or filters change.
   useEffect(() => {
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      return;
+    }
+
     void loadPage(1);
   }, [loadPage]);
 

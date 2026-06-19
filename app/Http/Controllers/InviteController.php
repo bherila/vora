@@ -19,7 +19,12 @@ class InviteController extends Controller
      */
     public function page(): View
     {
-        return view('user.invites');
+        /** @var User $user */
+        $user = auth()->user();
+
+        return view('user.invites', ['initialData' => [
+            'invites' => $this->indexPayload($user),
+        ]]);
     }
 
     /**
@@ -31,6 +36,17 @@ class InviteController extends Controller
         /** @var User $user */
         $user = auth()->user();
 
+        return response()->json([
+            'success' => true,
+            'data' => $this->indexPayload($user),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function indexPayload(User $user): array
+    {
         $invites = $user->sentInvites()
             ->with('invitedUser:id,display_name')
             ->orderByDesc('id')
@@ -43,14 +59,11 @@ class InviteController extends Controller
             ->where('expires_at', '>', Carbon::now())
             ->min('expires_at');
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'balance' => $this->invites->availableBalance($user),
-                'next_grant_expires_at' => $nextExpiry ? Carbon::parse($nextExpiry)->toIso8601String() : null,
-                'invites' => $invites,
-            ],
-        ]);
+        return [
+            'balance' => $this->invites->availableBalance($user),
+            'next_grant_expires_at' => $nextExpiry ? Carbon::parse($nextExpiry)->toIso8601String() : null,
+            'invites' => $invites,
+        ];
     }
 
     /**

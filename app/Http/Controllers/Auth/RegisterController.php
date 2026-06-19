@@ -30,7 +30,7 @@ class RegisterController extends Controller
         $invite = $this->invites->findUsable($inviteUuid);
 
         return view('auth.register', [
-            'registerBootstrap' => [
+            'initialData' => ['register' => [
                 'public_signups_enabled' => $this->settings->publicSignupsEnabled(),
                 'invite' => $inviteUuid,
                 'invite_valid' => $invite !== null,
@@ -38,7 +38,7 @@ class RegisterController extends Controller
                 // Waitlist-admit invites are bound to the verified email; the form
                 // locks the field to it so the address can't drift from the invite.
                 'locked_email' => $invite?->email,
-            ],
+            ]],
         ]);
     }
 

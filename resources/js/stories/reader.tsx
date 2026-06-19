@@ -1,42 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Markdown } from '@/components/Markdown';
+import { readInitialData } from '@/initialData';
 
-import { storiesApi } from './api';
 import { CyoaPlayer } from './CyoaPlayer';
 import type { StoryReader } from './types';
 
-function readUlid(): string {
-  const script = document.getElementById('story-reader-data');
-  try {
-    const data = JSON.parse(script?.textContent?.trim() ?? '{}') as { ulid?: string };
-    return typeof data.ulid === 'string' ? data.ulid : '';
-  } catch {
-    return '';
-  }
+function getInitialStory(): StoryReader | null {
+  return readInitialData<{ storyReader?: StoryReader }>().storyReader ?? null;
 }
 
 function StoryReaderPage() {
-  const [story, setStory] = useState<StoryReader | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [story] = useState<StoryReader | null>(getInitialStory);
+  const error = 'This story is unavailable.';
 
-  useEffect(() => {
-    const ulid = readUlid();
-    if (ulid === '') {
-      setError('Story not found.');
-      setLoading(false);
-      return;
-    }
-    storiesApi
-      .reader(ulid)
-      .then(setStory)
-      .catch((e) => setError(typeof e === 'string' ? e : 'This story is unavailable.'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-muted-foreground">Loading…</div>;
   if (story === null) return <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-destructive">{error}</div>;
 
   const authorNames = story.authors.map((a) => a.display_name).join(', ');

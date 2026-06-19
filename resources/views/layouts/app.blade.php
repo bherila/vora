@@ -17,11 +17,6 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
-    @vite(['resources/css/app.css', 'resources/js/navbar.tsx'])
-    @stack('head')
-    <script @cspNonce>(_=>{let a})()</script>
-  </head>
-  <body class="min-h-screen flex flex-col">
     @php
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
@@ -32,15 +27,18 @@
       // Mirror the invite-inbox filter (pendingForActiveOwner) so the badge count
       // never includes invites the inbox hides (owner since gone inactive).
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;
-      $__navbarInitialData = json_encode([
+      $__payload = ['navbar' => [
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
         'requestCount' => $__followRequestCount + $__authorshipInviteCount,
-      ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+      ]] + ($initialData ?? []);
     @endphp
-    <script id="navbar-initial-data" type="application/json" @cspNonce>
-      {!! $__navbarInitialData !!}
-    </script>
+    <script id="initial-data" type="application/json" @cspNonce>{!! json_encode($__payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) !!}</script>
+    @vite(['resources/css/app.css', 'resources/js/navbar.tsx'])
+    @stack('head')
+    <script @cspNonce>(_=>{let a})()</script>
+  </head>
+  <body class="min-h-screen flex flex-col">
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
       <div id="navbar"></div>
     </header>

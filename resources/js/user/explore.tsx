@@ -1,14 +1,15 @@
 import { BookOpen, GitBranch, Images } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
 import { InterestPicker } from '@/components/interest-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { readInitialData } from '@/initialData';
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
-import type { MediaTypeFilter } from '@/media/types';
+import type { MediaItem, MediaTypeFilter, PagedResponse } from '@/media/types';
 import { buildListingQuery, useMediaListing } from '@/media/useMediaListing';
 import { storiesApi } from '@/stories/api';
 import type { StoryDiscoveryItem } from '@/stories/types';
@@ -28,13 +29,14 @@ function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : err instanceof Error ? err.message : 'Request failed.';
 }
 
-function useStoryListing(interestIds: number[]): UseStoryListing {
-  const [items, setItems] = useState<StoryDiscoveryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+function useStoryListing(interestIds: number[], initial?: PagedResponse<StoryDiscoveryItem>): UseStoryListing {
+  const [items, setItems] = useState<StoryDiscoveryItem[]>(initial?.data ?? []);
+  const [loading, setLoading] = useState(initial === undefined);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initial?.meta?.has_more ?? false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const skipInitialLoadRef = useRef(initial !== undefined);
   const interestKey = interestIds.join(',');
 
   const loadPage = useCallback(
@@ -62,6 +64,11 @@ function useStoryListing(interestIds: number[]): UseStoryListing {
   );
 
   useEffect(() => {
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      return;
+    }
+
     void loadPage(1);
   }, [loadPage]);
 
@@ -112,11 +119,12 @@ function StoryGrid({ items }: { items: StoryDiscoveryItem[] }) {
  * same interest filter.
  */
 function ExplorePage() {
+  const initial = readInitialData<{ explore?: { media?: PagedResponse<MediaItem>; stories?: PagedResponse<StoryDiscoveryItem> } }>().explore;
   const [tab, setTab] = useState<ExploreTab>('media');
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
   const [interestIds, setInterestIds] = useState<number[]>([]);
-  const mediaListing = useMediaListing('/api/explore', { type: typeFilter, interestIds });
-  const storyListing = useStoryListing(interestIds);
+  const mediaListing = useMediaListing('/api/explore', { type: typeFilter, interestIds }, initial?.media);
+  const storyListing = useStoryListing(interestIds, initial?.stories);
   const activeListing = tab === 'media' ? mediaListing : storyListing;
 
   return (

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * The co-authorship side of the shared acceptance inbox. Mirrors the follow
@@ -24,12 +25,20 @@ class AuthorshipInviteController extends Controller
      */
     public function inbox(Request $request): JsonResponse
     {
-        $invites = $this->pendingInvitesFor($request->user()?->id)
+        return response()->json(['success' => true, 'data' => $this->inboxPayload($request->user())]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function inboxPayload(?User $user): Collection
+    {
+        $invites = $this->pendingInvitesFor($user?->id)
             ->with(['story', 'invitedBy'])
             ->latest()
             ->get();
 
-        return response()->json(['success' => true, 'data' => $invites->map(fn (StoryAuthor $invite): array => [
+        return $invites->map(fn (StoryAuthor $invite): array => [
             'id' => $invite->id,
             'story' => [
                 'id' => $invite->story?->id,
@@ -39,7 +48,7 @@ class AuthorshipInviteController extends Controller
             ],
             'invited_by' => $invite->invitedBy?->display_name ?: $invite->invitedBy?->name,
             'created_at' => $invite->created_at?->toIso8601String(),
-        ])]);
+        ]);
     }
 
     public function count(Request $request): JsonResponse

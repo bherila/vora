@@ -36,15 +36,31 @@ class ExploreController extends Controller
     /**
      * The exploration page (results are fetched client-side from `apiIndex`).
      */
-    public function page(): View
+    public function page(ListMediaRequest $request): View
     {
-        return view('user.explore');
+        return view('user.explore', ['initialData' => [
+            'explore' => [
+                'media' => $this->mediaPayload($request),
+                'stories' => $this->storiesPayload($request),
+            ],
+        ]]);
     }
 
     /**
      * List media discoverable by the current viewer, newest first, paginated.
      */
     public function apiIndex(ListMediaRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->mediaPayload($request),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mediaPayload(ListMediaRequest $request): array
     {
         $query = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
@@ -62,16 +78,24 @@ class ExploreController extends Controller
             ->applyTo($query)
             ->paginate((int) config('media.page_size', 24));
 
-        return response()->json([
-            'success' => true,
-            ...$this->responder->page($paginator, includeOriginalVideoUrls: false),
-        ]);
+        return $this->responder->page($paginator, includeOriginalVideoUrls: false);
     }
 
     /**
      * List published, approved stories discoverable by the current viewer.
      */
     public function apiStories(ListMediaRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->storiesPayload($request),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function storiesPayload(ListMediaRequest $request): array
     {
         $interestIds = array_values(array_unique(array_map(
             'intval',
@@ -91,13 +115,12 @@ class ExploreController extends Controller
 
         $paginator = $query->paginate((int) config('media.page_size', 24));
 
-        return response()->json([
-            'success' => true,
+        return [
             'data' => collect($paginator->items())
                 ->map(fn (Story $story): array => StoryPresenter::discoverableView($story))
                 ->values()
                 ->all(),
             'meta' => PaginationMeta::from($paginator),
-        ]);
+        ];
     }
 }
