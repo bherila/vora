@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Audience;
+use App\Http\Middleware\EnsureNotBanned;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -71,6 +72,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'approved_at' => 'datetime',
             'deactivated_at' => 'datetime',
             'id_verified_at' => 'datetime',
+            'banned_at' => 'datetime',
+            'ban_appeal_at' => 'datetime',
+            'legal_hold_at' => 'datetime',
             'birth_date' => 'date',
             'profile_audience' => Audience::class,
             'preferred_user_types' => 'array',
@@ -80,6 +84,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
+            'can_receive_invites' => 'boolean',
+            'ban_hides_content' => 'boolean',
+            'trusted_inviter' => 'boolean',
             'name_locked' => 'boolean',
             'email_locked' => 'boolean',
             'force_change_pw' => 'boolean',
@@ -135,27 +142,64 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Banned by an admin. Banned users can still log in but are gated by
+     * {@see EnsureNotBanned} to appeal/deactivate/delete.
+     */
+    public function isBanned(): bool
+    {
+        return $this->banned_at !== null;
+    }
+
+    /**
+     * Whether the ban also hides the user's content from others. A ban without
+     * this flag is "memorialized" — the account is gated but content stays visible.
+     */
+    public function banHidesContent(): bool
+    {
+        return $this->isBanned() && $this->ban_hides_content === true;
+    }
+
+    /**
+     * Admin-only legal hold: blocks account deletion (only). Independent of the
+     * ban state and never surfaced to the user until they attempt to delete.
+     */
+    public function isOnLegalHold(): bool
+    {
+        return $this->legal_hold_at !== null;
+    }
+
+    /**
+     * Whether this user's invitees skip the admin approval gate (auto-approved).
+     */
+    public function isTrustedInviter(): bool
+    {
+        return $this->trusted_inviter === true;
+    }
+
+    /**
      * Whether this account is visible to and interactable with by other users:
-     * not self-deactivated and not admin-disabled. Soft-deleted users resolve to
-     * null before this is ever reached. The single source of truth shared with
-     * {@see self::scopeActive()}; mirror any change there.
+     * not self-deactivated, not admin-disabled, and not banned-with-content-hidden.
+     * Soft-deleted users resolve to null before this is ever reached. The single
+     * source of truth shared with {@see self::scopeActive()}; mirror any change there.
      */
     public function isActive(): bool
     {
-        return ! $this->isDeactivated() && $this->canLogin();
+        return ! $this->isDeactivated() && $this->canLogin() && ! $this->banHidesContent();
     }
 
     /**
      * Query counterpart to {@see self::isActive()}: limit to accounts that are
-     * neither deactivated nor disabled. Soft-deleted rows are already excluded by
-     * the model's default scope.
+     * neither deactivated, disabled, nor banned-with-content-hidden. Soft-deleted
+     * rows are already excluded by the model's default scope.
      *
      * @param  Builder<User>  $query
      * @return Builder<User>
      */
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereNull('deactivated_at')->where('is_disabled', false);
+        return $query->whereNull('deactivated_at')
+            ->where('is_disabled', false)
+            ->where(fn (Builder $q) => $q->whereNull('banned_at')->orWhere('ban_hides_content', false));
     }
 
     /**
@@ -174,6 +218,37 @@ class User extends Authenticatable implements MustVerifyEmail
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    /**
+     * Invite grants issued to this user (their invite balance lives here).
+     *
+     * @return HasMany<InviteGrant, $this>
+     */
+    public function inviteGrants(): HasMany
+    {
+        return $this->hasMany(InviteGrant::class);
+    }
+
+    /**
+     * Invite links this user has generated.
+     *
+     * @return HasMany<Invite, $this>
+     */
+    public function sentInvites(): HasMany
+    {
+        return $this->hasMany(Invite::class, 'inviter_user_id');
+    }
+
+    /**
+     * The invite that referred this account, if any (null = no inviter). The
+     * inviter is reached via {@see Invite::inviter()}, forming the invite tree.
+     *
+     * @return BelongsTo<Invite, $this>
+     */
+    public function referredByInvite(): BelongsTo
+    {
+        return $this->belongsTo(Invite::class, 'referred_by_invite_id');
     }
 
     /**

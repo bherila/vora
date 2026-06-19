@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
+use App\Http\Requests\Profile\BanAppealRequest;
 use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
@@ -19,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
@@ -167,6 +169,15 @@ class ProfileController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
+        // Legal hold blocks deletion only, and is surfaced to the user only here
+        // (when they actually attempt to delete). Deactivation remains available.
+        if ($user->isOnLegalHold()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account cannot be deleted at this time. Please contact support.',
+            ], 403);
+        }
+
         // Protect the app from being left with no administrator who can restore
         // or manage accounts (mirrors the admin delete guards).
         if ($user->id === 1) {
@@ -194,6 +205,51 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return response()->json(['success' => true, 'message' => 'Account deleted.']);
+    }
+
+    /**
+     * The ban notice page. Non-banned users are sent home. Bootstraps the ban
+     * reason and any prior appeal for the React page.
+     */
+    public function bannedPage(Request $request): RedirectResponse|View
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User || ! $user->isBanned()) {
+            return redirect('/');
+        }
+
+        return view('auth.banned', [
+            'bannedBootstrap' => [
+                'reason' => $user->ban_reason,
+                'appeal_message' => $user->ban_appeal_message,
+                'appeal_at' => $user->ban_appeal_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
+     * Banned user's appeal to the admin. Stored on the account and surfaced in
+     * the admin users UI; reachable while banned (see EnsureNotBanned).
+     */
+    public function appeal(BanAppealRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        if (! $user->isBanned()) {
+            return response()->json(['success' => false, 'message' => 'Your account is not banned.'], 422);
+        }
+
+        $user->forceFill([
+            'ban_appeal_message' => $request->validated('message'),
+            'ban_appeal_at' => now(),
+        ])->save();
+
+        return response()->json(['success' => true, 'message' => 'Your appeal has been submitted.']);
     }
 
     public function update(UpdateProfileRequest $request): JsonResponse

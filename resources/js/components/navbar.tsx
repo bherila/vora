@@ -115,6 +115,13 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
                     Users
                   </a>
                   <a
+                    href='/admin/invites'
+                    className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    onClick={() => setAdminMenuOpen(false)}
+                  >
+                    Invites &amp; signups
+                  </a>
+                  <a
                     href='/admin/interests'
                     className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
                     onClick={() => setAdminMenuOpen(false)}
@@ -194,6 +201,13 @@ export default function Navbar({ authenticated, isAdmin, requestCount }: NavbarP
                   onClick={() => setUserMenuOpen(false)}
                 >
                   Settings
+                </a>
+                <a
+                  href='/user/invites'
+                  className='block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  Invites
                 </a>
                 <button
                   type='button'

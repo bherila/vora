@@ -230,6 +230,23 @@ class StoryTest extends TestCase
         $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
     }
 
+    public function test_story_from_ban_hidden_owner_is_hidden_on_direct_reads(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $reader = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->readable()->create();
+
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
+
+        // Ban + hide content: the direct ULID read path must respect isActive().
+        $owner->forceFill(['banned_at' => now(), 'ban_hides_content' => true])->save();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+
+        // Ban that keeps content visible (memorialized) does not hide the story.
+        $owner->forceFill(['ban_hides_content' => false])->save();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
+    }
+
     public function test_reader_payload_hides_deactivated_co_authors_and_their_tags(): void
     {
         $owner = User::factory()->approved()->create();
