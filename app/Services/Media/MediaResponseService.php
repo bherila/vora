@@ -42,16 +42,17 @@ class MediaResponseService
         if ($shouldSignOriginal) {
             $extras['url'] = $this->storage->getSignedViewUrl(
                 $media->disk,
-                $media->object_key,
+                $media->playbackObjectKey(),
                 $ttl,
                 $media->mime_type,
             );
         }
 
-        if ($media->thumbnail_key !== null) {
+        $thumbnailKey = $media->playbackThumbnailKey();
+        if ($thumbnailKey !== null) {
             $extras['thumbnail_url'] = $this->storage->getSignedViewUrl(
                 (string) config('media.thumbnail_disk'),
-                $media->thumbnail_key,
+                $thumbnailKey,
                 $ttl,
                 'image/jpeg',
             );

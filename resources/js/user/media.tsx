@@ -20,7 +20,14 @@ import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivative
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
 import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile } from '@/media/types';
-import { putToSignedUrl } from '@/media/upload';
+import {
+  type CompletedMultipartPart,
+  type MultipartUploadSession,
+  putToSignedUrl,
+  readMultipartSession,
+  saveMultipartSession,
+  uploadMultipartFile,
+} from '@/media/upload';
 import { useMediaListing } from '@/media/useMediaListing';
 
 interface InitialData {
@@ -33,6 +40,31 @@ interface StoreResponse {
   upload_headers: Record<string, string>;
   thumbnail_upload_url: string | null;
   thumbnail_upload_headers: Record<string, string> | null;
+  multipart: {
+    enabled: boolean;
+    threshold_bytes: number;
+    part_size_bytes: number;
+  };
+}
+
+interface InitMultipartResponse {
+  data: {
+    upload_id: string;
+    part_size_bytes: number;
+    expires_in_minutes: number;
+  };
+}
+
+interface PresignMultipartPartsResponse {
+  data: {
+    part_number: number;
+    url: string;
+    headers: Record<string, string>;
+  }[];
+}
+
+interface CompleteMultipartResponse {
+  data: MediaItem;
 }
 
 function getInitialData(): InitialData {
@@ -73,6 +105,51 @@ async function buildDerivatives(file: File, type: 'photo' | 'video'): Promise<De
     return { thumbnail: await generateVideoPoster(file), perceptualHash: null };
   } catch {
     return { thumbnail: null, perceptualHash: null };
+  }
+}
+
+function multipartSessionKey(file: File): string {
+  return `vora:media:multipart:${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+}
+
+async function beginMultipartSession(
+  created: StoreResponse | null,
+  sessionKey: string,
+): Promise<MultipartUploadSession> {
+  if (created === null) {
+    throw new Error('Upload session is missing.');
+  }
+
+  const init = (await fetchWrapper.post(`/api/media/${created.data.id}/multipart/init`, {})) as InitMultipartResponse;
+  const session = {
+    mediaId: created.data.id,
+    uploadId: init.data.upload_id,
+    partSizeBytes: init.data.part_size_bytes,
+    completedParts: [],
+    createdAt: new Date().toISOString(),
+  };
+
+  saveMultipartSession(sessionKey, session);
+
+  return session;
+}
+
+async function uploadThumbnailBestEffort(
+  created: StoreResponse,
+  thumbnail: Blob | null,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!thumbnail || !created.thumbnail_upload_url || !created.thumbnail_upload_headers) {
+    return;
+  }
+
+  try {
+    await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {}, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
+    /* ignore — thumbnail is optional */
   }
 }
 
@@ -131,37 +208,65 @@ function UserMediaPage() {
         setProgress(0);
         const { thumbnail, perceptualHash } = await buildDerivatives(selectedFile, type);
 
-        const created = (await fetchWrapper.post('/api/media', {
-          type,
-          filename: selectedFile.name,
-          content_type: selectedFile.type,
-          size: selectedFile.size,
-          title: files.length === 1 ? title.trim() || null : selectedFile.name,
-          audience,
-          discoverable,
-          interest_ids: uploadInterestIds,
-          has_thumbnail: thumbnail !== null,
-          perceptual_hash: perceptualHash,
-        })) as StoreResponse;
+        const sessionKey = multipartSessionKey(selectedFile);
+        const existingSession = readMultipartSession(sessionKey);
+        const created = existingSession === null
+          ? (await fetchWrapper.post('/api/media', {
+              type,
+              filename: selectedFile.name,
+              content_type: selectedFile.type,
+              size: selectedFile.size,
+              title: files.length === 1 ? title.trim() || null : selectedFile.name,
+              audience,
+              discoverable,
+              interest_ids: uploadInterestIds,
+              has_thumbnail: thumbnail !== null,
+              perceptual_hash: perceptualHash,
+            })) as StoreResponse
+          : null;
 
-        await putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
-          setProgress(fraction * 100);
-        }, { signal: abortController.signal });
+        const shouldMultipart = existingSession !== null
+          || (created?.multipart.enabled === true && selectedFile.size >= created.multipart.threshold_bytes);
 
-        // Best-effort: if the thumbnail PUT fails, completion drops the key and the
-        // item still works, just without a generated preview.
-        if (thumbnail && created.thumbnail_upload_url && created.thumbnail_upload_headers) {
-          try {
-            await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {}, { signal: abortController.signal });
-          } catch (err) {
-            if (err instanceof DOMException && err.name === 'AbortError') {
-              throw err;
-            }
-            /* ignore — thumbnail is optional */
-          }
+        if (shouldMultipart) {
+          const session = existingSession ?? await beginMultipartSession(created, sessionKey);
+          await uploadMultipartFile(selectedFile, {
+            sessionKey,
+            session,
+            signal: abortController.signal,
+            onProgress: (fraction) => setProgress(fraction * 100),
+            presignParts: async (partNumbers) => {
+              const response = (await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/parts`, {
+                upload_id: session.uploadId,
+                part_numbers: partNumbers,
+              })) as PresignMultipartPartsResponse;
+
+              return response.data;
+            },
+            complete: async (parts: CompletedMultipartPart[]) => {
+              if (created !== null) {
+                await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
+              }
+
+              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/complete`, {
+                upload_id: session.uploadId,
+                parts,
+              }) as CompleteMultipartResponse;
+            },
+            abort: async () => {
+              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/abort`, {
+                upload_id: session.uploadId,
+              });
+            },
+          });
+        } else if (created !== null) {
+          await putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
+            setProgress(fraction * 100);
+          }, { signal: abortController.signal });
+
+          await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
+          await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
         }
-
-        await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
         completedCount += 1;
       }
 
