@@ -220,11 +220,11 @@ class ProfileController extends Controller
         }
 
         return view('auth.banned', [
-            'bannedBootstrap' => [
+            'initialData' => ['banned' => [
                 'reason' => $user->ban_reason,
                 'appeal_message' => $user->ban_appeal_message,
                 'appeal_at' => $user->ban_appeal_at?->toIso8601String(),
-            ],
+            ]],
         ]);
     }
 

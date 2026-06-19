@@ -1,18 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { readInitialData } from '@/initialData';
 
 import { communityApi } from './api';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
 import type { CommunityPost } from './types';
 
+interface FeedInitialData {
+  feed?: {
+    data?: CommunityPost[];
+    next_cursor?: string | null;
+  };
+}
+
+function getInitialFeed() {
+  const { feed } = readInitialData<FeedInitialData>();
+  return {
+    posts: feed?.data ?? [],
+    nextCursor: feed?.next_cursor ?? null,
+  };
+}
+
 function FeedPage() {
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<CommunityPost[]>(() => getInitialFeed().posts);
+  const [nextCursor, setNextCursor] = useState<string | null>(() => getInitialFeed().nextCursor);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,9 +51,6 @@ function FeedPage() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">

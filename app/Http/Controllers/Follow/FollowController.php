@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Follow;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Models\FollowRequest;
 use App\Models\FollowRequestAuditLog;
 use App\Models\InterestRating;
@@ -13,15 +14,18 @@ use App\Services\Privacy\ProfileGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class FollowController extends Controller
 {
     public function __construct(private readonly ProfileGate $gate) {}
 
-    public function directory(): View
+    public function directory(Request $request): View
     {
-        return view('user.follow-directory');
+        return view('user.follow-directory', ['initialData' => [
+            'followDirectory' => $this->usersPayload($request),
+        ]]);
     }
 
     public function profilePage(Request $request, User $user): View
@@ -31,23 +35,30 @@ class FollowController extends Controller
             abort(404);
         }
 
-        // Hydrate the page with the same payload the JSON endpoint returns so the
-        // React entry renders immediately, with no initial AJAX round-trip. This
-        // mirrors the navbar's navbar-initial-data bootstrap.
         return view('user.follow-profile', [
-            'profileData' => json_encode(
-                $this->profilePayload($current, $user),
-                JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
-            ),
+            'initialData' => ['followProfile' => $this->profilePayload($current, $user)],
         ]);
     }
 
-    public function inboxPage(): View
+    public function inboxPage(Request $request): View
     {
-        return view('user.follow-requests');
+        return view('user.follow-requests', ['initialData' => [
+            'followRequests' => [
+                'requests' => $this->inboxPayload($request),
+                'invites' => app(AuthorshipInviteController::class)->inboxPayload($request->user()),
+            ],
+        ]]);
     }
 
     public function users(Request $request): JsonResponse
+    {
+        return response()->json(['success' => true, 'data' => $this->usersPayload($request)]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function usersPayload(Request $request): Collection
     {
         $current = $request->user();
         $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active()->orderBy('display_name')->get();
@@ -57,7 +68,7 @@ class FollowController extends Controller
         // viewers their audience tier doesn't admit.
         $canView = $current instanceof User ? $this->gate->canViewMany($current, $users) : [];
 
-        return response()->json(['success' => true, 'data' => $users->map(function (User $user) use ($canView): array {
+        return $users->map(function (User $user) use ($canView): array {
             $visible = $canView[$user->id] ?? false;
 
             return [
@@ -67,7 +78,7 @@ class FollowController extends Controller
                 'user_type' => $visible ? $user->user_type : null,
                 'gender' => $visible ? $user->gender : null,
             ];
-        })]);
+        });
     }
 
     public function profile(Request $request, User $user): JsonResponse
@@ -159,6 +170,14 @@ class FollowController extends Controller
 
     public function inbox(Request $request): JsonResponse
     {
+        return response()->json(['success' => true, 'data' => $this->inboxPayload($request)]);
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function inboxPayload(Request $request): Collection
+    {
         $current = $request->user();
         // Hide requests from accounts that have since deactivated, been disabled,
         // or deleted — whereHas('requester') drops soft-deleted requesters via the
@@ -173,7 +192,7 @@ class FollowController extends Controller
         $requesters = $requests->pluck('requester')->filter()->values();
         $canView = $current instanceof User ? $this->gate->canViewMany($current, $requesters) : [];
 
-        return response()->json(['success' => true, 'data' => $requests->map(function (FollowRequest $followRequest) use ($canView): array {
+        return $requests->map(function (FollowRequest $followRequest) use ($canView): array {
             $requester = $followRequest->requester;
             $visible = $requester !== null && ($canView[$requester->id] ?? false);
 
@@ -188,7 +207,7 @@ class FollowController extends Controller
                 ],
                 'created_at' => $followRequest->created_at?->toIso8601String(),
             ];
-        })]);
+        });
     }
 
     public function count(Request $request): JsonResponse

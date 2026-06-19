@@ -24,9 +24,11 @@ class PostController extends Controller
      * A shareable single-post page (resolved client-side by ulid), mirroring the
      * media and story view pages. This is the URL notifications link to.
      */
-    public function viewPage(string $ulid): View
+    public function viewPage(Request $request, string $ulid): View
     {
-        return view('posts.show', ['ulid' => $ulid]);
+        return view('posts.show', ['initialData' => [
+            'postView' => $this->findByUlidPayload($request, $ulid),
+        ]]);
     }
 
     /**
@@ -78,15 +80,23 @@ class PostController extends Controller
      */
     public function showByUlid(Request $request, string $ulid): JsonResponse
     {
+        return response()->json([
+            'success' => true,
+            'data' => $this->findByUlidPayload($request, $ulid),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function findByUlidPayload(Request $request, string $ulid): array
+    {
         $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->firstOrFail();
         Gate::authorize('view', $post);
 
         $post->load(['user', 'character.profilePicture', 'attachments.attachable']);
 
-        return response()->json([
-            'success' => true,
-            'data' => PostPresenter::view($post, $request->user(), $this->mediaResponder),
-        ]);
+        return PostPresenter::view($post, $request->user(), $this->mediaResponder);
     }
 
     public function destroy(Request $request, Post $post): JsonResponse

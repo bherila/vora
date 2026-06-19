@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 interface FollowRequest { id: number; requester: { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; }; created_at: string | null; }
 interface FollowInboxResponse { success: boolean; data: FollowRequest[]; }
@@ -12,15 +13,15 @@ interface AuthorshipInvite { id: number; story: { id: number; ulid: string; titl
 interface AuthorshipInboxResponse { success: boolean; data: AuthorshipInvite[]; }
 
 function RequestsPage() {
-  const [followRequests, setFollowRequests] = useState<FollowRequest[]>([]);
-  const [invites, setInvites] = useState<AuthorshipInvite[]>([]);
+  const initial = readInitialData<{ followRequests?: { requests?: FollowRequest[]; invites?: AuthorshipInvite[] } }>().followRequests;
+  const [followRequests, setFollowRequests] = useState<FollowRequest[]>(initial?.requests ?? []);
+  const [invites, setInvites] = useState<AuthorshipInvite[]>(initial?.invites ?? []);
   const [message, setMessage] = useState('');
 
   const load = (): void => {
     fetchWrapper.get('/api/users/follow-requests').then((r) => setFollowRequests((r as FollowInboxResponse).data));
     fetchWrapper.get('/api/authorship-invites').then((r) => setInvites((r as AuthorshipInboxResponse).data));
   };
-  useEffect(load, []);
 
   const decideFollow = async (id: number, action: 'accept' | 'decline'): Promise<void> => {
     await fetchWrapper.post(`/api/users/follow-requests/${id}/${action}`, {});

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 interface BannedInitialData {
   reason: string | null;
@@ -14,22 +15,7 @@ interface BannedInitialData {
 }
 
 function getInitialData(): BannedInitialData {
-  const fallback: BannedInitialData = { reason: null, appeal_message: null, appeal_at: null };
-  const element = document.getElementById('banned-initial-data');
-  if (!element?.textContent) {
-    return fallback;
-  }
-
-  try {
-    const parsed = JSON.parse(element.textContent) as Partial<BannedInitialData>;
-    return {
-      reason: typeof parsed.reason === 'string' ? parsed.reason : null,
-      appeal_message: typeof parsed.appeal_message === 'string' ? parsed.appeal_message : null,
-      appeal_at: typeof parsed.appeal_at === 'string' ? parsed.appeal_at : null,
-    };
-  } catch {
-    return fallback;
-  }
+  return readInitialData<{ banned?: BannedInitialData }>().banned ?? { reason: null, appeal_message: null, appeal_at: null };
 }
 
 function BannedPage() {

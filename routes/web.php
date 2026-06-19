@@ -93,7 +93,37 @@ Route::middleware('auth')->group(function () {
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
-    Route::get('/user/settings', fn () => view('user.settings'))->name('user.settings');
+    Route::get('/user/settings', function () {
+        $user = auth()->user();
+
+        return view('user.settings', ['initialData' => ['userSettings' => [
+            'name' => $user->name,
+            'display_name' => $user->display_name,
+            'birth_date' => $user->birth_date?->toDateString(),
+            'email' => $user->email,
+            'gender' => $user->gender,
+            'gender_other' => $user->gender_other,
+            'user_type' => $user->user_type,
+            'user_type_other' => $user->user_type_other,
+            'preferred_user_types' => $user->preferred_user_types ?? [],
+            'preferred_genders' => $user->preferred_genders ?? [],
+            'profile_audience' => $user->profile_audience?->value ?? 'everyone',
+            'audience_user_ids' => $user->profileAudienceMembers()->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all(),
+            'id_verified_at' => $user->id_verified_at?->toIso8601String(),
+            'name_locked' => (bool) $user->name_locked,
+            'email_locked' => (bool) $user->email_locked,
+            'notify_new_post' => (bool) $user->notify_new_post,
+            'notify_post_reaction' => (bool) $user->notify_post_reaction,
+            'notify_post_comment' => (bool) $user->notify_post_comment,
+            'notify_follow_request' => (bool) $user->notify_follow_request,
+            'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
+            'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
+            'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
+            'web_push_public_key' => config('webpush.vapid.public_key'),
+            'web_push_subscription_count' => $user->pushSubscriptions()->count(),
+            'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),
+        ]]]);
+    })->name('user.settings');
 
     // Reachable while deactivated (exempt in EnsureNotDeactivated) so the user
     // can reactivate or sign out.
@@ -115,7 +145,7 @@ Route::middleware('auth')->group(function () {
 */
 Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
-    Route::get('/feed', fn () => view('feed'))->name('feed');
+    Route::get('/feed', [FeedController::class, 'page'])->name('feed');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Invites the user can hand out (balance issued by an admin).

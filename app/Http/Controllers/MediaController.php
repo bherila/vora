@@ -41,17 +41,24 @@ class MediaController extends Controller
     /**
      * The signed-in user's media library page.
      */
-    public function library(): View
+    public function library(Request $request): View
     {
-        return view('user.media');
+        return view('user.media', ['initialData' => [
+            'userMedia' => [
+                'last_interest_ids' => array_values(array_map('intval', $request->user()->last_media_interest_ids ?? [])),
+                ...$this->indexPayload($request),
+            ],
+        ]]);
     }
 
     /**
      * A shareable single-media view page (resolved client-side by ulid).
      */
-    public function viewPage(string $ulid): View
+    public function viewPage(Request $request, string $ulid): View
     {
-        return view('media.show', ['ulid' => $ulid]);
+        return view('media.show', ['initialData' => [
+            'mediaView' => $this->findByUlidPayload($request, $ulid),
+        ]]);
     }
 
     /**
@@ -59,6 +66,17 @@ class MediaController extends Controller
      * Accepts the shared type/interest discovery filters.
      */
     public function index(ListMediaRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->indexPayload($request),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function indexPayload(ListMediaRequest|Request $request): array
     {
         $query = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
@@ -70,10 +88,7 @@ class MediaController extends Controller
             ->applyTo($query)
             ->paginate((int) config('media.page_size', 24));
 
-        return response()->json([
-            'success' => true,
-            ...$this->responder->page($paginator, includeOriginalVideoUrls: true),
-        ]);
+        return $this->responder->page($paginator, includeOriginalVideoUrls: true);
     }
 
     /**
@@ -253,9 +268,9 @@ class MediaController extends Controller
     }
 
     /**
-     * Resolve a shareable item by its ulid, honouring visibility.
+     * @return array<string, mixed>
      */
-    public function showByUlid(Request $request, string $ulid): JsonResponse
+    private function findByUlidPayload(Request $request, string $ulid): array
     {
         $media = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
@@ -272,9 +287,17 @@ class MediaController extends Controller
         $includeOriginalVideoUrl = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
 
+        return $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl);
+    }
+
+    /**
+     * Resolve a shareable item by its ulid, honouring visibility.
+     */
+    public function showByUlid(Request $request, string $ulid): JsonResponse
+    {
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl),
+            'data' => $this->findByUlidPayload($request, $ulid),
         ]);
     }
 

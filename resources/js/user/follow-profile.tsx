@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 interface Interest { id: number; name: string; }
 interface FollowRequestState { status: string; can_retry: boolean; }
@@ -13,11 +14,7 @@ interface ProfileData { id: number; display_name: string; restricted: boolean; u
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
 function getInitialProfile(): ProfileData | null {
-  const script = document.getElementById('follow-profile-data');
-  if (!script?.textContent) return null;
-  try {
-    return JSON.parse(script.textContent) as ProfileData;
-  } catch { return null; }
+  return readInitialData<{ followProfile?: ProfileData }>().followProfile ?? null;
 }
 
 function FollowProfilePage() {

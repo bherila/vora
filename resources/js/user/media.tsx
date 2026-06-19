@@ -15,11 +15,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
-import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile } from '@/media/types';
+import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile,type PageMeta } from '@/media/types';
 import {
   type CompletedMultipartPart,
   type MultipartUploadSession,
@@ -32,6 +33,8 @@ import { useMediaListing } from '@/media/useMediaListing';
 
 interface InitialData {
   last_interest_ids: number[];
+  data: MediaItem[];
+  meta?: PageMeta;
 }
 
 interface StoreResponse {
@@ -68,16 +71,7 @@ interface CompleteMultipartResponse {
 }
 
 function getInitialData(): InitialData {
-  const el = document.getElementById('user-media-initial-data');
-  if (!el?.textContent) {
-    return { last_interest_ids: [] };
-  }
-  try {
-    const parsed = JSON.parse(el.textContent) as Partial<InitialData>;
-    return { last_interest_ids: parsed.last_interest_ids ?? [] };
-  } catch {
-    return { last_interest_ids: [] };
-  }
+  return readInitialData<{ userMedia?: InitialData }>().userMedia ?? { last_interest_ids: [], data: [] };
 }
 
 function getErrorMessage(err: unknown): string {
@@ -158,7 +152,7 @@ function UserMediaPage() {
 
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
   const [filterInterestIds, setFilterInterestIds] = useState<number[]>([]);
-  const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds });
+  const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds }, initial);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);

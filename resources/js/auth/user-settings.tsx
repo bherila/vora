@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { RequestInterestForm } from '@/interests/request-interest-form';
@@ -209,16 +210,8 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
 }
 
 function getInitialData(): UserSettingsInitialData {
-  const element = document.getElementById('user-settings-initial-data');
-  if (!element || !element.textContent) {
-    return emptyInitialData();
-  }
-
-  try {
-    return normalizeInitialData(JSON.parse(element.textContent) as UserSettingsInitialPayload);
-  } catch {
-    return emptyInitialData();
-  }
+  const payload = readInitialData<{ userSettings?: UserSettingsInitialPayload }>().userSettings;
+  return payload ? normalizeInitialData(payload) : emptyInitialData();
 }
 
 function blankToNull(value: string): string | null {
