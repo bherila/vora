@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 type InviteStatus = 'active' | 'used' | 'expired' | 'revoked';
 
@@ -48,7 +49,7 @@ function statusBadge(invite: InviteRow) {
 }
 
 function InvitesPage() {
-  const [data, setData] = useState<InvitesData | null>(null);
+  const [data, setData] = useState<InvitesData | null>(() => readInitialData<{ invites?: InvitesData }>().invites ?? null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -63,9 +64,6 @@ function InvitesPage() {
     }
   };
 
-  useEffect(() => {
-    void load();
-  }, []);
 
   const generate = async () => {
     setError('');

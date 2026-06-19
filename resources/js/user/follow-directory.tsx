@@ -1,22 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 interface DirectoryUser { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; }
-interface DirectoryResponse { success: boolean; data: DirectoryUser[]; }
 
 function FollowDirectoryPage() {
-  const [users, setUsers] = useState<DirectoryUser[]>([]);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetchWrapper.get('/api/users')
-      .then((response) => setUsers((response as DirectoryResponse).data))
-      .catch(() => setError('Unable to load users.'));
-  }, []);
+  const [users] = useState<DirectoryUser[]>(() => readInitialData<{ followDirectory?: DirectoryUser[] }>().followDirectory ?? []);
+  const [error] = useState('');
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">

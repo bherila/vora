@@ -221,7 +221,7 @@ class FollowRequestTest extends TestCase
         // The page ships the full payload inline (no follow-up GET on render).
         $this->actingAs($current)->get("/users/{$other->id}")
             ->assertOk()
-            ->assertSee('follow-profile-data')
+            ->assertSee('initial-data')
             ->assertSee('"display_name":"Aria"', false)
             ->assertSee("\"id\":{$other->id}", false);
     }

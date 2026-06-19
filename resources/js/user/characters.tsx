@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 import { CharacterInterestsEditor } from '@/interests/character-interests-editor';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
@@ -84,29 +85,15 @@ function selectionsToPayload(values: string[]): string[] | null {
 }
 
 function CharactersPage() {
-  const [characters, setCharacters] = useState<CharacterRecord[]>([]);
+  const [characters, setCharacters] = useState<CharacterRecord[]>(() => readInitialData<{ characters?: CharacterRecord[] }>().characters ?? []);
   const [form, setForm] = useState<CharacterFormState>(blankForm());
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [uploadingId, setUploadingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    const loadCharacters = async () => {
-      try {
-        const response = await fetchWrapper.get('/api/characters') as CharacterListResponse;
-        setCharacters(response.data);
-      } catch (err) {
-        setError(typeof err === 'string' ? err : 'Failed to load characters.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadCharacters();
-  }, []);
 
   const resetForm = () => {
     setEditingId(null);

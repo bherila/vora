@@ -1,23 +1,29 @@
 import { BookOpen, GitBranch, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { readInitialData } from '@/initialData';
 
 import { storiesApi } from './api';
 import { StoryEditorPanel } from './StoryEditorPanel';
 import type { StorySummary, StoryType } from './types';
 
-function readCurrentUserId(): number {
-  const script = document.getElementById('stories-initial-data');
-  try {
-    const data = JSON.parse(script?.textContent?.trim() ?? '{}') as { currentUserId?: number };
-    return typeof data.currentUserId === 'number' ? data.currentUserId : 0;
-  } catch {
-    return 0;
-  }
+interface StoriesInitialData {
+  stories?: {
+    currentUserId?: number;
+    data?: StorySummary[];
+  };
+}
+
+function getInitialStories() {
+  const { stories } = readInitialData<StoriesInitialData>();
+  return {
+    currentUserId: stories?.currentUserId ?? 0,
+    stories: stories?.data ?? [],
+  };
 }
 
 function StoryCard({ story, currentUserId, onEdit }: { story: StorySummary; currentUserId: number; onEdit: (id: number) => void }) {
@@ -72,8 +78,9 @@ function ReviewBadge({ story }: { story: StorySummary }) {
 }
 
 function StoriesPage() {
-  const currentUserId = readCurrentUserId();
-  const [stories, setStories] = useState<StorySummary[]>([]);
+  const initial = getInitialStories();
+  const currentUserId = initial.currentUserId;
+  const [stories, setStories] = useState<StorySummary[]>(initial.stories);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -83,7 +90,6 @@ function StoriesPage() {
   const load = (): void => {
     storiesApi.list().then(setStories).catch((e) => setError(typeof e === 'string' ? e : 'Could not load stories.'));
   };
-  useEffect(load, []);
 
   const create = async (): Promise<void> => {
     if (newTitle.trim() === '') return;

@@ -1,9 +1,6 @@
 @extends('layouts.app')
 
 @section('content')
-  <script id="banned-initial-data" type="application/json" @cspNonce>
-    @json($bannedBootstrap)
-  </script>
   <div id="banned"></div>
 
   <form method="POST" action="{{ route('logout') }}" class="mx-auto mt-3 max-w-md px-4 text-center">

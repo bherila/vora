@@ -2,9 +2,7 @@
 
 @section('content')
   <div class="mx-auto max-w-3xl px-4 py-8">
-    <div id="post-view" data-ulid="{{ $ulid }}">
-      <p class="text-muted-foreground">Loading post…</p>
-    </div>
+    <div id="post-view"></div>
   </div>
 @endsection
 
