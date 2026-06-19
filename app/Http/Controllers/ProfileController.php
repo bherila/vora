@@ -452,7 +452,7 @@ class ProfileController extends Controller
                     'created_at' => $notification->created_at?->toIso8601String(),
                 ])->values(),
             ],
-        ]);
+        ])->header('Content-Disposition', 'attachment; filename="vora-account-export.json"');
     }
 
     /**
