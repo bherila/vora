@@ -27,7 +27,7 @@ class DefaultStaticPages
             'home' => [
                 'slug' => 'home',
                 'title' => $app,
-                'body_markdown' => "# Welcome to {{app_name}}\n\n{{app_name}} is a private, invite-only community for creating, organizing, and sharing media, characters, stories, and interests.\n\nMembership is by invitation. If you'd like to join, you can [request an invitation](/request-invitation) and we'll review your request.\n\nUse the admin static page editor to replace this boilerplate home page with launch-ready copy.",
+                'body_markdown' => "{{app_name}} is a private, invite-only community for creating, organizing, and sharing media, characters, stories, and interests.\n\nMembership is by invitation. If you'd like to join, you can [request an invitation](/request-invitation) and we'll review your request.",
                 'variables' => [],
                 'is_published' => true,
                 'show_in_footer' => false,
