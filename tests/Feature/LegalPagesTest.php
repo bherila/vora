@@ -34,6 +34,21 @@ class LegalPagesTest extends TestCase
             ->assertSee('at least 18 years old or the age of majority');
     }
 
+    public function test_default_home_page_has_single_heading_and_no_boilerplate_notice(): void
+    {
+        $response = $this->get('/')
+            ->assertOk()
+            ->assertSee('private, invite-only community')
+            ->assertSee('request an invitation')
+            ->assertDontSee('boilerplate', false);
+
+        $content = $response->getContent();
+
+        $this->assertStringContainsString('<h1>'.e(config('app.name')).'</h1>', $content);
+        $this->assertSame(1, substr_count($content, '<h1>'));
+        $this->assertStringNotContainsString('<h1>Welcome to', $content);
+    }
+
     public function test_static_page_content_can_be_loaded_from_database_with_variables(): void
     {
         StaticPage::query()->create([
@@ -204,6 +219,53 @@ class LegalPagesTest extends TestCase
         // The live config now flows through to the rendered page.
         config(['app.privacy_contact_email' => 'fresh@example.test']);
         $this->get('/privacy')->assertOk()->assertSee('fresh@example.test');
+    }
+
+    public function test_legacy_seeded_home_page_copy_is_updated_by_migration(): void
+    {
+        StaticPage::query()->create([
+            'slug' => 'home',
+            'title' => 'Laravel',
+            'body_markdown' => "# Welcome to {{app_name}}\n\n{{app_name}} is a private, invite-only community for creating, organizing, and sharing media, characters, stories, and interests.\n\nMembership is by invitation. If you'd like to join, you can [request an invitation](/request-invitation) and we'll review your request.\n\nUse the admin static page editor to replace this boilerplate home page with launch-ready copy.",
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 0,
+        ]);
+
+        $migration = require database_path('migrations/2026_06_30_000000_update_default_home_page_copy.php');
+        $migration->up();
+
+        $markdown = (string) StaticPage::query()->where('slug', 'home')->value('body_markdown');
+
+        $this->assertStringStartsWith('{{app_name}} is a private, invite-only community', $markdown);
+        $this->assertStringNotContainsString('# Welcome to', $markdown);
+        $this->assertStringNotContainsString('boilerplate', $markdown);
+    }
+
+    public function test_home_page_copy_migration_preserves_custom_content(): void
+    {
+        $customMarkdown = "# Custom welcome\n\nThis page has already been edited.";
+
+        StaticPage::query()->create([
+            'slug' => 'home',
+            'title' => 'Custom Home',
+            'body_markdown' => $customMarkdown,
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 0,
+        ]);
+
+        $migration = require database_path('migrations/2026_06_30_000000_update_default_home_page_copy.php');
+        $migration->up();
+
+        $this->assertSame(
+            $customMarkdown,
+            StaticPage::query()->where('slug', 'home')->value('body_markdown'),
+        );
     }
 
     public function test_deactivated_user_can_still_reach_legal_pages(): void
