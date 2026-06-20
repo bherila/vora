@@ -244,6 +244,31 @@ class LegalPagesTest extends TestCase
         $this->assertStringNotContainsString('boilerplate', $markdown);
     }
 
+    public function test_legacy_seeded_home_page_title_is_updated_by_migration(): void
+    {
+        config(['app.name' => 'Vora']);
+
+        StaticPage::query()->create([
+            'slug' => 'home',
+            'title' => 'Laravel',
+            'body_markdown' => "{{app_name}} is a private, invite-only community for creating, organizing, and sharing media, characters, stories, and interests.\n\nMembership is by invitation. If you'd like to join, you can [request an invitation](/request-invitation) and we'll review your request.",
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 0,
+        ]);
+
+        $migration = require database_path('migrations/2026_06_30_000001_update_default_home_page_title.php');
+        $migration->up();
+
+        $this->assertSame('Vora', StaticPage::query()->where('slug', 'home')->value('title'));
+
+        $content = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('<h1>Vora</h1>', $content);
+        $this->assertStringNotContainsString('<h1>Laravel</h1>', $content);
+    }
+
     public function test_home_page_copy_migration_preserves_custom_content(): void
     {
         $customMarkdown = "# Custom welcome\n\nThis page has already been edited.";
@@ -265,6 +290,31 @@ class LegalPagesTest extends TestCase
         $this->assertSame(
             $customMarkdown,
             StaticPage::query()->where('slug', 'home')->value('body_markdown'),
+        );
+    }
+
+    public function test_home_page_title_migration_preserves_custom_content(): void
+    {
+        config(['app.name' => 'Vora']);
+        $customMarkdown = "# Custom welcome\n\nThis page has already been edited.";
+
+        StaticPage::query()->create([
+            'slug' => 'home',
+            'title' => 'Custom Home',
+            'body_markdown' => $customMarkdown,
+            'variables' => json_encode([], JSON_THROW_ON_ERROR),
+            'is_published' => true,
+            'show_in_footer' => false,
+            'footer_label' => null,
+            'sort_order' => 0,
+        ]);
+
+        $migration = require database_path('migrations/2026_06_30_000001_update_default_home_page_title.php');
+        $migration->up();
+
+        $this->assertSame(
+            'Custom Home',
+            StaticPage::query()->where('slug', 'home')->value('title'),
         );
     }
 
