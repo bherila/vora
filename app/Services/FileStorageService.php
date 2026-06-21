@@ -218,6 +218,11 @@ class FileStorageService
         return $this->storage($disk)->delete($key);
     }
 
+    public function deleteDirectory(string $disk, string $prefix): bool
+    {
+        return $this->storage($disk)->deleteDirectory($prefix);
+    }
+
     public function fileExists(string $disk, string $key): bool
     {
         return $this->storage($disk)->exists($key);

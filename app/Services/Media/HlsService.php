@@ -139,6 +139,46 @@ class HlsService
         }
     }
 
+    /**
+     * Permanent-delete cleanup. Mappings are row-private and can always go; the
+     * content-addressed output tree is removed only when no other media row has
+     * resolved to the same content id.
+     */
+    public function deleteIfUnreferenced(Media $video): void
+    {
+        if (! $video->type->isVideo()) {
+            return;
+        }
+
+        $disk = $this->disk();
+        $contentId = $video->hls_content_id;
+        $mappingKeys = array_values(array_unique(array_filter([
+            $video->object_key,
+            $video->reviewed_object_key,
+        ])));
+
+        foreach ($mappingKeys as $sourceKey) {
+            if ($contentId === null) {
+                $contentId = $this->lookupContentId($sourceKey);
+            }
+
+            $this->storage->deleteFile($disk, 'mappings/'.$sourceKey.'.json');
+        }
+
+        if ($contentId === null) {
+            return;
+        }
+
+        $referenced = Media::withTrashed()
+            ->whereKeyNot($video->id)
+            ->where('hls_content_id', $contentId)
+            ->exists();
+
+        if (! $referenced) {
+            $this->storage->deleteDirectory($disk, 'by-id/'.$contentId);
+        }
+    }
+
     public function isManifestPath(string $relativePath): bool
     {
         return Str::endsWith(strtolower($relativePath), '.m3u8');

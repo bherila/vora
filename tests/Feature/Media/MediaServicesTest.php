@@ -279,4 +279,26 @@ class MediaServicesTest extends TestCase
         Storage::disk('photos')->assertMissing($media->object_key);
         $this->assertDatabaseMissing('media', ['id' => $media->id]);
     }
+
+    public function test_delete_removes_unshared_hls_output(): void
+    {
+        Storage::fake('videos');
+        Storage::fake('hls');
+        config(['media.hls_disk' => 'hls']);
+        $media = Media::factory()->video()->create([
+            'disk' => 'videos',
+            'object_key' => 'uploads/0/video.mp4',
+            'hls_content_id' => 'sha256:abc',
+        ]);
+        Storage::disk('videos')->put($media->object_key, 'video');
+        Storage::disk('hls')->put('mappings/uploads/0/video.mp4.json', json_encode(['contentId' => 'sha256:abc']));
+        Storage::disk('hls')->put('by-id/sha256:abc/master.m3u8', '#EXTM3U');
+
+        app(MediaService::class)->delete($media);
+
+        Storage::disk('videos')->assertMissing('uploads/0/video.mp4');
+        Storage::disk('hls')->assertMissing('mappings/uploads/0/video.mp4.json');
+        Storage::disk('hls')->assertMissing('by-id/sha256:abc/master.m3u8');
+        $this->assertDatabaseMissing('media', ['id' => $media->id]);
+    }
 }

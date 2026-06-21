@@ -12,7 +12,10 @@ use App\Services\FileStorageService;
  */
 class MediaService
 {
-    public function __construct(private readonly FileStorageService $storage) {}
+    public function __construct(
+        private readonly FileStorageService $storage,
+        private readonly HlsService $hls,
+    ) {}
 
     /**
      * Soft-delete a media item only if no user or character still points at it
@@ -69,6 +72,8 @@ class MediaService
         if ($media->reviewed_thumbnail_key !== null) {
             $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
         }
+
+        $this->hls->deleteIfUnreferenced($media);
 
         $media->forceDelete();
     }
