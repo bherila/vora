@@ -1,4 +1,4 @@
-import { Paperclip, Send, X } from 'lucide-react';
+import { ChevronDown, Paperclip, Send, X } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -71,6 +71,20 @@ export function PostComposer({ onCreated }: PostComposerProps) {
   const [attachmentId, setAttachmentId] = useState<number | ''>('');
   const [attachments, setAttachments] = useState<SelectableAttachment[]>([]);
   const [saving, setSaving] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+
+  // Summarise any non-default options so the collapsed toggle still tells the
+  // user what their post will do.
+  const optionsSummary = useMemo((): string => {
+    const parts: string[] = [];
+    if (audience !== 'everyone') parts.push(audience === 'specific' ? 'Specific people' : audience === 'followers' ? 'Followers' : 'Mutuals');
+    if (characterId !== '') {
+      const persona = characters.find((character) => character.id === characterId);
+      if (persona) parts.push(`As ${persona.display_name}`);
+    }
+    if (attachments.length > 0) parts.push(`${attachments.length} attachment${attachments.length === 1 ? '' : 's'}`);
+    return parts.join(' · ');
+  }, [audience, characterId, characters, attachments.length]);
 
   useEffect(() => {
     let active = true;
@@ -152,6 +166,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       setDiscoverable(true);
       setCharacterId('');
       setAttachments([]);
+      setShowOptions(false);
       toast.success('Post published.');
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -168,6 +183,23 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       <CardContent>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
           <Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={5} placeholder="Share an update" disabled={saving} />
+
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+            onClick={() => setShowOptions((value) => !value)}
+            aria-expanded={showOptions}
+            disabled={saving}
+          >
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Paperclip className="h-4 w-4" />
+              {optionsSummary || 'Audience, persona & attachments'}
+            </span>
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showOptions ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showOptions && (
+          <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <AudienceField
               audience={audience}
@@ -246,6 +278,8 @@ export function PostComposer({ onCreated }: PostComposerProps) {
               </div>
             )}
           </div>
+          </div>
+          )}
           <Button type="submit" disabled={saving || body.trim().length === 0}>
             <Send className="mr-2 h-4 w-4" />
             {saving ? 'Posting...' : 'Post'}
