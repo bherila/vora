@@ -30,7 +30,7 @@ class UserAccountService
      */
     public function purge(User $user): void
     {
-        foreach ($user->media()->get() as $media) {
+        foreach ($user->media()->withTrashed()->get() as $media) {
             if ($media instanceof Media) {
                 $this->media->delete($media);
             }
@@ -55,7 +55,7 @@ class UserAccountService
             // Bulk character deletion bypasses the Character `deleting` hook, so
             // explicitly remove the polymorphic story "involves" tags pointing at
             // this user and their characters (these have no FK to cascade).
-            $characterIds = $user->characters()->pluck('id');
+            $characterIds = $user->characters()->withTrashed()->pluck('id');
             StoryInvolvement::query()
                 ->where('involvable_type', 'character')
                 ->whereIn('involvable_id', $characterIds)
@@ -84,19 +84,19 @@ class UserAccountService
         AudienceMember::query()
             ->where(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Story)->getMorphClass())
-                    ->whereIn('privacyable_id', $user->stories()->select('id'));
+                    ->whereIn('privacyable_id', $user->stories()->withTrashed()->select('id'));
             })
             ->orWhere(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Media)->getMorphClass())
-                    ->whereIn('privacyable_id', $user->media()->select('id'));
+                    ->whereIn('privacyable_id', $user->media()->withTrashed()->select('id'));
             })
             ->orWhere(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Post)->getMorphClass())
-                    ->whereIn('privacyable_id', $user->posts()->select('id'));
+                    ->whereIn('privacyable_id', $user->posts()->withTrashed()->select('id'));
             })
             ->orWhere(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Character)->getMorphClass())
-                    ->whereIn('privacyable_id', $user->characters()->select('id'));
+                    ->whereIn('privacyable_id', $user->characters()->withTrashed()->select('id'));
             })
             // The user's own profile allowlist (they are the privacyable).
             ->orWhere(function ($query) use ($user): void {

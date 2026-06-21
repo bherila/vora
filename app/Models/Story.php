@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A user-authored, markdown text story. Either a single long-form body or a
@@ -31,6 +32,7 @@ class Story extends Model
     use HasPrivacyPolicy;
     use Moderatable;
     use SerializesDatesAsLocal;
+    use SoftDeletes;
 
     /**
      * Owner-settable attributes only. Moderation columns are written solely

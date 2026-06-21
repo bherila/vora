@@ -39,6 +39,10 @@ trait HasPrivacyPolicy
     public static function bootHasPrivacyPolicy(): void
     {
         static::deleting(function (self $model): void {
+            if (method_exists($model, 'isForceDeleting') && ! $model->isForceDeleting()) {
+                return;
+            }
+
             $model->audienceMembers()->delete();
         });
     }
@@ -70,6 +74,9 @@ trait HasPrivacyPolicy
 
         $table = $this->getTable();
         $morph = $this->getMorphClass();
+        if (method_exists($this, 'getDeletedAtColumn')) {
+            $query->whereNull($table.'.'.$this->getDeletedAtColumn());
+        }
 
         return $query->where(function (Builder $q) use ($viewer, $table, $morph): void {
             // No authenticated viewer sees nothing — content is never served to
@@ -134,6 +141,10 @@ trait HasPrivacyPolicy
     {
         $table = $this->getTable();
 
+        if (method_exists($this, 'getDeletedAtColumn')) {
+            $query->whereNull($table.'.'.$this->getDeletedAtColumn());
+        }
+
         return $query->where($table.'.audience', Audience::Everyone->value)
             ->where($table.'.discoverable', true);
     }
@@ -145,6 +156,10 @@ trait HasPrivacyPolicy
      */
     public function isViewableBy(?User $viewer): bool
     {
+        if (method_exists($this, 'trashed') && $this->trashed()) {
+            return $viewer !== null && $viewer->isAdmin();
+        }
+
         if ($viewer !== null && ($viewer->isAdmin() || $viewer->id === $this->user_id)) {
             return true;
         }

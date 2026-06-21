@@ -154,7 +154,7 @@ class MediaUploadService
                 $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->thumbnail_key);
             }
 
-            $media->delete();
+            $media->forceDelete();
 
             return false;
         }

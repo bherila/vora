@@ -24,6 +24,10 @@ class StoryPolicy
      */
     public function view(User $user, Story $story): bool
     {
+        if ($story->trashed()) {
+            return false;
+        }
+
         if ($story->isAuthoredBy($user)) {
             return true;
         }
@@ -46,6 +50,10 @@ class StoryPolicy
      */
     public function update(User $user, Story $story): bool
     {
+        if ($story->trashed()) {
+            return false;
+        }
+
         return $story->isAuthoredBy($user);
     }
 
@@ -54,6 +62,10 @@ class StoryPolicy
      */
     public function delete(User $user, Story $story): bool
     {
+        if ($story->trashed()) {
+            return false;
+        }
+
         return $story->user_id === $user->id;
     }
 
@@ -62,6 +74,10 @@ class StoryPolicy
      */
     public function manageAuthors(User $user, Story $story): bool
     {
+        if ($story->trashed()) {
+            return false;
+        }
+
         return $story->user_id === $user->id;
     }
 }

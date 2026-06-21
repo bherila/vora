@@ -15,24 +15,35 @@ class MediaService
     public function __construct(private readonly FileStorageService $storage) {}
 
     /**
-     * Delete a media item only if no user or character still points at it as a
-     * profile picture. Used when an avatar is replaced or its owner deleted, so
-     * the previous object/row does not leak (profile pictures are never shared,
-     * but the reference check keeps this safe if that ever changes).
+     * Soft-delete a media item only if no user or character still points at it
+     * as a profile picture. Used when an avatar is replaced or removed: the row
+     * leaves owner-facing surfaces but stays restorable until admin purge.
      */
     public function deleteIfUnreferenced(Media $media): void
     {
-        $referenced = User::query()->where('profile_picture_media_id', $media->id)->exists()
-            || Character::query()->where('profile_picture_media_id', $media->id)->exists();
+        $referenced = User::withTrashed()->where('profile_picture_media_id', $media->id)->exists()
+            || Character::withTrashed()->where('profile_picture_media_id', $media->id)->exists();
 
         if (! $referenced) {
-            $this->delete($media);
+            $this->softDelete($media);
         }
     }
 
     /**
-     * Delete a media item: remove the source object from its bucket and the
-     * database row (the media_interests pivot cascades).
+     * User-facing deletion: hide the row everywhere outside admin retention, but
+     * leave originals, reviewed copies, thumbnails, and HLS output in place so an
+     * admin can restore it without re-uploading or re-transcoding.
+     */
+    public function softDelete(Media $media): void
+    {
+        if (! $media->trashed()) {
+            $media->delete();
+        }
+    }
+
+    /**
+     * Permanently delete a media item: remove row-private objects from their
+     * buckets and force-delete the database row (pivots cascade).
      *
      * Only the source object is deleted. Transcoded HLS output is shared across
      * sources with identical content (the transcoder deduplicates by content
@@ -59,6 +70,6 @@ class MediaService
             $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
         }
 
-        $media->delete();
+        $media->forceDelete();
     }
 }

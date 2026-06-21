@@ -31,6 +31,7 @@ export default defineConfig({
                 'resources/js/admin/media.tsx',
                 'resources/js/admin/posts.tsx',
                 'resources/js/admin/stories.tsx',
+                'resources/js/admin/deleted-content.tsx',
                 'resources/js/admin/static-pages.tsx',
                 'resources/js/community/feed.tsx',
                 'resources/js/community/post-view.tsx',

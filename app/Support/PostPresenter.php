@@ -175,6 +175,10 @@ class PostPresenter
      */
     private static function canSee(Model $attachable, ?User $viewer): bool
     {
+        if (method_exists($attachable, 'trashed') && $attachable->trashed()) {
+            return $viewer !== null && $viewer->isAdmin();
+        }
+
         if ($attachable instanceof Character) {
             return $attachable->isViewableBy($viewer);
         }

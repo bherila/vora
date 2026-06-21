@@ -10,18 +10,24 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Character extends Model
 {
     use HasFactory;
     use HasPrivacyPolicy;
+    use SoftDeletes;
 
     protected static function booted(): void
     {
-        // Characters hard-delete; drop any story "involves" tags pointing at this
-        // character so they cannot dangle (story_involvements has no FK on the
-        // polymorphic columns).
+        // Characters soft-delete for admin retention. Only a force delete should
+        // drop story "involves" tags, otherwise restore would not put the
+        // character back exactly where it was.
         static::deleting(function (Character $character): void {
+            if (! $character->isForceDeleting()) {
+                return;
+            }
+
             $character->storyInvolvements()->delete();
         });
 
