@@ -1,7 +1,8 @@
-import { ChevronDown, Laptop, Moon, Sun } from 'lucide-react';
+import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { NotificationBell } from '@/community/NotificationBell';
+import { Avatar } from '@/components/avatar';
 import { fetchWrapper } from '@/fetchWrapper';
 
 type NavbarProps = {
@@ -49,6 +50,7 @@ export interface NavMenu {
 
 export interface AccountMenu {
   label: string;
+  avatarUrl?: string | null;
   items: AccountMenuItem[];
 }
 
@@ -81,6 +83,7 @@ export default function Navbar({
 }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const adminMenuRef = useRef<HTMLLIElement | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
@@ -118,9 +121,20 @@ export default function Navbar({
   };
 
   return (
-    <nav className='mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4'>
+    <nav className='relative mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4'>
       {/* Left: Branding + Main nav */}
-      <div className='flex items-center gap-6'>
+      <div className='flex items-center gap-3 md:gap-6'>
+        {authenticated && (
+          <button
+            type='button'
+            className='md:hidden -ml-1 rounded-md p-1 hover:bg-gray-50 dark:hover:bg-[#1f1f1e]'
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-expanded={mobileOpen}
+            aria-label='Toggle navigation menu'
+          >
+            {mobileOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
+          </button>
+        )}
         <a href={safeHref(brand.href)} className='select-none'>
           <h1 className='text-lg font-semibold tracking-tight'>{brand.label}</h1>
         </a>
@@ -182,11 +196,13 @@ export default function Navbar({
           <div className='relative' ref={userMenuRef}>
             <button
               type='button'
-              className='flex items-center gap-1 text-sm hover:underline underline-offset-4'
+              className='flex items-center gap-2 text-sm hover:underline underline-offset-4'
               onClick={() => setUserMenuOpen((v) => !v)}
               aria-expanded={userMenuOpen}
             >
-              {accountMenu?.label ?? ''} <ChevronDown className='w-3 h-3' />
+              <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
+              <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
+              <ChevronDown className='w-3 h-3' />
             </button>
             {userMenuOpen && (
               <div className='absolute right-0 top-full mt-1 w-44 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19] z-50'>
@@ -259,6 +275,68 @@ export default function Navbar({
           </button>
         </div>
       </div>
+
+      {/* Mobile navigation drawer: the desktop nav list is hidden below md, so
+          this is the only way authenticated users reach the app sections on a
+          phone. */}
+      {authenticated && mobileOpen && (
+        <div className='absolute left-0 right-0 top-full z-50 border-b border-gray-200 bg-white shadow-lg md:hidden dark:border-[#3E3E3A] dark:bg-[#1a1a19]'>
+          <ul className='flex flex-col py-2'>
+            {navItems.map((item) => (
+              <li key={`m:${item.href}:${item.label}`}>
+                <a
+                  className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                  href={safeHref(item.href)}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  {navLabel(item)}
+                </a>
+              </li>
+            ))}
+            {adminMenu && (
+              <li className='mt-1 border-t border-gray-200 pt-1 dark:border-[#3E3E3A]'>
+                <p className='px-4 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>{adminMenu.label}</p>
+                {adminMenu.items.map((item) => (
+                  <a
+                    key={`m:${item.href}:${item.label}`}
+                    className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                    href={safeHref(item.href)}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </li>
+            )}
+            {accountMenu && (
+              <li className='mt-1 border-t border-gray-200 pt-1 dark:border-[#3E3E3A]'>
+                <p className='px-4 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>{accountMenu.label}</p>
+                {accountMenu.items.map((item) => (
+                  item.type === 'link' ? (
+                    <a
+                      key={`m:${item.href}:${item.label}`}
+                      className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                      href={safeHref(item.href)}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      {item.label}
+                    </a>
+                  ) : (
+                    <button
+                      key={`m:${item.action}:${item.label}`}
+                      type='button'
+                      className='block w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                      onClick={() => void handleLogout()}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                ))}
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
     </nav>
   );
 }

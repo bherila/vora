@@ -8,6 +8,7 @@ use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
 use App\Notifications\PostCommentedOn;
+use App\Services\Media\MediaResponseService;
 use App\Support\PostCommentPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,8 @@ use Illuminate\Validation\ValidationException;
  */
 class PostCommentController extends Controller
 {
+    public function __construct(private readonly MediaResponseService $mediaResponder) {}
+
     public function index(Request $request, Post $post): JsonResponse
     {
         Gate::authorize('view', $post);
@@ -28,14 +31,14 @@ class PostCommentController extends Controller
         $viewer = $request->user();
 
         $comments = $post->comments()
-            ->with('user:id,name,display_name')
+            ->with(['user:id,name,display_name,profile_picture_media_id', 'user.profilePicture'])
             ->threadVisibleTo($viewer)
             ->orderBy('created_at')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $comments->map(fn (PostComment $comment): array => PostCommentPresenter::view($comment))->values(),
+            'data' => $comments->map(fn (PostComment $comment): array => PostCommentPresenter::view($comment, $this->mediaResponder))->values(),
         ]);
     }
 
@@ -61,11 +64,11 @@ class PostCommentController extends Controller
             $post->user->notify(new PostCommentedOn($post, $user));
         }
 
-        $comment->load('user:id,name,display_name');
+        $comment->load(['user:id,name,display_name,profile_picture_media_id', 'user.profilePicture']);
 
         return response()->json([
             'success' => true,
-            'data' => PostCommentPresenter::view($comment),
+            'data' => PostCommentPresenter::view($comment, $this->mediaResponder),
         ], 201);
     }
 

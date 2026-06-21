@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ModerationStatus;
+use App\Models\FollowRequest;
+use App\Models\InterestRating;
 use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
@@ -26,7 +28,39 @@ class FeedController extends Controller
 
     public function page(Request $request): View
     {
-        return view('feed', ['initialData' => ['feed' => $this->payload($request)]]);
+        $viewer = $request->user();
+
+        return view('feed', ['initialData' => [
+            'feed' => $this->payload($request),
+            'onboarding' => $viewer instanceof User ? $this->onboarding($viewer) : null,
+        ]]);
+    }
+
+    /**
+     * First-run checklist state for the feed header. Returns null once every step
+     * is complete so the checklist disappears for established users. Each flag is
+     * a single existence check, kept cheap because the feed page already does the
+     * heavier timeline query.
+     *
+     * @return array<string, bool>|null
+     */
+    private function onboarding(User $viewer): ?array
+    {
+        $steps = [
+            'has_avatar' => $viewer->profile_picture_media_id !== null,
+            'has_interests' => InterestRating::query()
+                ->where('user_id', $viewer->id)
+                ->whereNull('character_id')
+                ->where('level', '>', 0)
+                ->exists(),
+            'is_following' => FollowRequest::query()
+                ->where('requester_id', $viewer->id)
+                ->where('status', 'accepted')
+                ->exists(),
+            'has_posted' => Post::query()->where('user_id', $viewer->id)->exists(),
+        ];
+
+        return in_array(false, $steps, true) ? $steps : null;
     }
 
     public function index(Request $request): JsonResponse
@@ -63,7 +97,7 @@ class FeedController extends Controller
             // owner the per-record policies would now reject.
             ->whereHas('user', fn (Builder $query) => $query->active())
             ->viewableBy($viewer)
-            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($viewer)
             ->orderByDesc('created_at')
             ->orderByDesc('id')

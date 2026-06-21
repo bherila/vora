@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { readInitialData } from '@/initialData';
 
 import { communityApi } from './api';
+import { OnboardingChecklist, type OnboardingSteps } from './OnboardingChecklist';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
 import type { CommunityPost } from './types';
@@ -15,6 +16,7 @@ interface FeedInitialData {
     data?: CommunityPost[];
     next_cursor?: string | null;
   };
+  onboarding?: OnboardingSteps | null;
 }
 
 function getInitialFeed() {
@@ -28,6 +30,7 @@ function getInitialFeed() {
 function FeedPage() {
   const [posts, setPosts] = useState<CommunityPost[]>(() => getInitialFeed().posts);
   const [nextCursor, setNextCursor] = useState<string | null>(() => getInitialFeed().nextCursor);
+  const [onboarding] = useState<OnboardingSteps | null>(() => readInitialData<FeedInitialData>().onboarding ?? null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -58,6 +61,7 @@ function FeedPage() {
         <h1 className="text-2xl font-bold">Feed</h1>
         <p className="text-sm text-muted-foreground">Posts from you and the people you follow.</p>
       </div>
+      {onboarding && <OnboardingChecklist steps={onboarding} />}
       <PostComposer onCreated={(post) => setPosts((current) => [post, ...current])} />
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (

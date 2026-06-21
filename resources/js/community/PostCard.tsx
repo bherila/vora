@@ -2,6 +2,7 @@ import { Heart, MessageCircle, Trash2 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { Avatar } from '@/components/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
@@ -107,10 +108,13 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
           {roots.map((comment) => (
             <div key={comment.id} className="space-y-2 rounded-md border border-border p-3">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium">{comment.author?.display_name ?? 'Deleted user'}</p>
-                  <p className="whitespace-pre-wrap text-sm">{comment.body}</p>
-                  <p className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</p>
+                <div className="flex min-w-0 items-start gap-2">
+                  <Avatar name={comment.author?.display_name ?? 'Deleted user'} src={comment.author?.avatar_url} sizeClassName="h-7 w-7" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{comment.author?.display_name ?? 'Deleted user'}</p>
+                    <p className="whitespace-pre-wrap text-sm">{comment.body}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</p>
+                  </div>
                 </div>
                 <Button type="button" size="sm" variant="ghost" onClick={() => void remove(comment)} title="Delete comment">
                   <Trash2 className="h-4 w-4" />
@@ -122,10 +126,13 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
               {repliesFor(comment.id).map((reply) => (
                 <div key={reply.id} className="ml-4 rounded-md border border-border p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">{reply.author?.display_name ?? 'Deleted user'}</p>
-                      <p className="whitespace-pre-wrap text-sm">{reply.body}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(reply.created_at)}</p>
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Avatar name={reply.author?.display_name ?? 'Deleted user'} src={reply.author?.avatar_url} sizeClassName="h-7 w-7" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{reply.author?.display_name ?? 'Deleted user'}</p>
+                        <p className="whitespace-pre-wrap text-sm">{reply.body}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(reply.created_at)}</p>
+                      </div>
                     </div>
                     <Button type="button" size="sm" variant="ghost" onClick={() => void remove(reply)} title="Delete comment">
                       <Trash2 className="h-4 w-4" />
@@ -157,6 +164,10 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
   const authorLabel = post.as_character
     ? `${post.as_character.display_name} via ${post.author?.display_name ?? 'Unknown'}`
     : post.author?.display_name ?? 'Unknown';
+  const avatarName = post.as_character?.display_name ?? post.author?.display_name ?? 'Unknown';
+  const avatarSrc = post.as_character
+    ? post.as_character.avatar?.thumbnail_url ?? post.as_character.avatar?.url ?? null
+    : post.author?.avatar_url ?? null;
 
   useEffect(() => {
     setPost(initialPost);
@@ -177,9 +188,12 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
     <Card>
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-medium">{authorLabel}</p>
-            <p className="text-xs text-muted-foreground">{formatDate(post.created_at)}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar name={avatarName} src={avatarSrc} sizeClassName="h-9 w-9" />
+            <div className="min-w-0">
+              <p className="font-medium">{authorLabel}</p>
+              <p className="text-xs text-muted-foreground">{formatDate(post.created_at)}</p>
+            </div>
           </div>
           <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>
         </div>

@@ -20,6 +20,7 @@ export interface PostAttachment {
 export interface PostAuthor {
   id: number;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 export interface CharacterRef {

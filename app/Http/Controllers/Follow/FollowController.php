@@ -10,8 +10,10 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
+use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\FollowGraph;
+use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -20,7 +22,10 @@ use Illuminate\View\View;
 
 class FollowController extends Controller
 {
-    public function __construct(private readonly ProfileGate $gate) {}
+    public function __construct(
+        private readonly ProfileGate $gate,
+        private readonly MediaResponseService $mediaResponder,
+    ) {}
 
     public function directory(Request $request): View
     {
@@ -74,7 +79,7 @@ class FollowController extends Controller
                 ->whereExists(fn ($sub) => FollowGraph::constrainOwnerFollowsViewer($sub, 'users.id', $current->id));
         }
 
-        $users = $query->orderBy('display_name')->get();
+        $users = $query->with('profilePicture')->orderBy('display_name')->get();
 
         // Restricted profiles still appear in the directory so they remain
         // findable for a follow request, but their details are withheld from
@@ -87,6 +92,7 @@ class FollowController extends Controller
             return [
                 'id' => $user->id,
                 'display_name' => $user->display_name ?: $user->name,
+                'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder),
                 'restricted' => ! $visible,
                 'user_type' => $visible ? $user->user_type : null,
                 'gender' => $visible ? $user->gender : null,
@@ -119,6 +125,7 @@ class FollowController extends Controller
         $base = [
             'id' => $user->id,
             'display_name' => $user->display_name ?: $user->name,
+            'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder),
             'follow_request' => $this->followRequestPayload($followRequest),
         ];
 
@@ -195,7 +202,7 @@ class FollowController extends Controller
         // Hide requests from accounts that have since deactivated, been disabled,
         // or deleted — whereHas('requester') drops soft-deleted requesters via the
         // User scope; active() covers deactivated + disabled.
-        $requests = FollowRequest::query()->with('requester:id,name,display_name,user_type,gender,profile_audience')
+        $requests = FollowRequest::query()->with(['requester:id,name,display_name,user_type,gender,profile_audience,profile_picture_media_id', 'requester.profilePicture'])
             ->whereHas('requester', fn ($q) => $q->active())
             ->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
 
@@ -214,6 +221,7 @@ class FollowController extends Controller
                 'requester' => [
                     'id' => $requester?->id,
                     'display_name' => $requester?->display_name ?: $requester?->name,
+                    'avatar_url' => UserPresenter::avatarUrl($requester, $this->mediaResponder),
                     'restricted' => ! $visible,
                     'user_type' => $visible ? $requester?->user_type : null,
                     'gender' => $visible ? $requester?->gender : null,

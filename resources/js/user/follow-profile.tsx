@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { Avatar } from '@/components/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { readInitialData } from '@/initialData';
 
 interface Interest { id: number; name: string; }
 interface FollowRequestState { status: string; can_retry: boolean; }
-interface ProfileData { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
+interface ProfileData { id: number; display_name: string; avatar_url?: string | null; restricted: boolean; user_type: string | null; gender: string | null; mutual_interests: Interest[]; follow_request: FollowRequestState | null; can_follow_back: boolean; }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
 function getInitialProfile(): ProfileData | null {
@@ -56,11 +57,16 @@ function FollowProfilePage() {
       {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
       <Card>
         <CardHeader>
-          <CardTitle>{profile.display_name}</CardTitle>
-          <CardDescription className="flex gap-2">
-            {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
-            {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
-          </CardDescription>
+          <div className="flex items-center gap-4">
+            <Avatar name={profile.display_name} src={profile.avatar_url} sizeClassName="h-14 w-14" />
+            <div className="min-w-0">
+              <CardTitle className="truncate">{profile.display_name}</CardTitle>
+              <CardDescription className="mt-1 flex flex-wrap gap-2">
+                {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
+                {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
           {profile.restricted ? (

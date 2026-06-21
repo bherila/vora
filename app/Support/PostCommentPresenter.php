@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Post;
 use App\Models\PostComment;
+use App\Services\Media\MediaResponseService;
 
 /**
  * Serializes a comment for API responses. Never exposes moderation state.
@@ -13,15 +14,13 @@ class PostCommentPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function view(PostComment $comment): array
+    public static function view(PostComment $comment, ?MediaResponseService $responder = null): array
     {
         return [
             'id' => $comment->id,
             'parent_id' => $comment->parent_id,
             'body' => $comment->body,
-            'author' => $comment->user !== null
-                ? ['id' => $comment->user->id, 'display_name' => $comment->user->display_name ?? $comment->user->name]
-                : null,
+            'author' => UserPresenter::identity($comment->user, $responder),
             'created_at' => $comment->created_at?->toIso8601String(),
         ];
     }
