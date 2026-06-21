@@ -86,5 +86,7 @@ class PostApiTest extends TestCase
         $this->actingAs($other)->deleteJson("/api/posts/{$post->id}")->assertForbidden();
         $this->actingAs($owner)->deleteJson("/api/posts/{$post->id}")->assertOk();
         $this->assertSame(0, Post::query()->count());
+        $this->assertSoftDeleted('posts', ['id' => $post->id]);
+        $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
     }
 }

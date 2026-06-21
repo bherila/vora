@@ -20,7 +20,7 @@ class AccountLifecycleTest extends TestCase
 
     // ---------------------------------------------------------------- #20 media
 
-    public function test_remove_profile_picture_deletes_the_media_and_object(): void
+    public function test_remove_profile_picture_soft_deletes_the_media_and_keeps_object(): void
     {
         Storage::fake('photos');
         $user = User::factory()->approved()->create();
@@ -33,8 +33,8 @@ class AccountLifecycleTest extends TestCase
             ->assertOk();
 
         $this->assertNull($user->refresh()->profile_picture_media_id);
-        $this->assertDatabaseMissing('media', ['id' => $media->id]);
-        Storage::disk('photos')->assertMissing($media->object_key);
+        $this->assertSoftDeleted('media', ['id' => $media->id]);
+        Storage::disk('photos')->assertExists($media->object_key);
     }
 
     public function test_delete_if_unreferenced_keeps_media_still_in_use(): void
@@ -50,7 +50,7 @@ class AccountLifecycleTest extends TestCase
         $this->assertDatabaseHas('media', ['id' => $media->id]);
     }
 
-    public function test_deleting_a_character_removes_its_avatar_media(): void
+    public function test_deleting_a_character_soft_deletes_it_and_keeps_avatar_media(): void
     {
         Storage::fake('photos');
         $user = User::factory()->approved()->create();
@@ -64,9 +64,9 @@ class AccountLifecycleTest extends TestCase
 
         $this->actingAs($user)->deleteJson("/api/characters/{$character->id}")->assertOk();
 
-        $this->assertDatabaseMissing('characters', ['id' => $character->id]);
-        $this->assertDatabaseMissing('media', ['id' => $avatar->id]);
-        Storage::disk('photos')->assertMissing($avatar->object_key);
+        $this->assertSoftDeleted('characters', ['id' => $character->id]);
+        $this->assertDatabaseHas('media', ['id' => $avatar->id]);
+        Storage::disk('photos')->assertExists($avatar->object_key);
     }
 
     public function test_prune_collects_unreferenced_ready_profile_pictures(): void

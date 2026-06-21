@@ -65,7 +65,7 @@ class PostCharacterTest extends TestCase
         $this->assertSame(0, Post::query()->count());
     }
 
-    public function test_deleting_the_character_leaves_the_post_under_the_user(): void
+    public function test_deleting_the_character_hides_the_post_persona_until_restore(): void
     {
         $author = User::factory()->approved()->create();
         $character = $author->characters()->create(['display_name' => 'Ephemeral']);
@@ -77,7 +77,7 @@ class PostCharacterTest extends TestCase
 
         $character->delete();
 
-        $this->assertNull($post->fresh()->character_id, 'the link is nulled, not cascaded');
+        $this->assertSame($character->id, $post->fresh()->character_id, 'the link is retained for restore');
         $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
             ->assertOk()
             ->assertJsonPath('data.as_character', null)

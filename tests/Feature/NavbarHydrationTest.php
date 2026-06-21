@@ -69,6 +69,7 @@ class NavbarHydrationTest extends TestCase
             'Media review',
             'Story review',
             'Posts review',
+            'Deleted content',
             'Static pages',
             'Audit log',
         ], array_column($navbar['adminMenu']['items'], 'label'));

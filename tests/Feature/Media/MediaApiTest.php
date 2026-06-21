@@ -203,14 +203,76 @@ class MediaApiTest extends TestCase
         $this->actingAs($intruder)->deleteJson("/api/media/{$media->id}")->assertNotFound();
     }
 
-    public function test_delete_removes_media(): void
+    public function test_delete_soft_deletes_media_and_hides_it_from_owner(): void
     {
         $this->fakeStorage();
         $user = User::factory()->approved()->create();
         $media = Media::factory()->for($user)->create();
 
         $this->actingAs($user)->deleteJson("/api/media/{$media->id}")->assertOk();
-        $this->assertDatabaseMissing('media', ['id' => $media->id]);
+        $this->assertSoftDeleted('media', ['id' => $media->id]);
+
+        $this->actingAs($user)->getJson('/api/media')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->actingAs($user)->getJson("/api/media/{$media->id}")->assertNotFound();
+    }
+
+    public function test_bulk_delete_soft_deletes_selected_media(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->count(2)->create();
+
+        $this->actingAs($user)->deleteJson('/api/media/bulk', [
+            'media_ids' => $media->pluck('id')->all(),
+        ])->assertOk()
+            ->assertJsonPath('deleted_count', 2);
+
+        foreach ($media as $item) {
+            $this->assertSoftDeleted('media', ['id' => $item->id]);
+        }
+    }
+
+    public function test_bulk_privacy_update_rejects_character_media(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $character = $user->characters()->create(['display_name' => 'Nova']);
+        $media = Media::factory()->for($user)->create(['character_id' => $character->id]);
+
+        $this->actingAs($user)->patchJson('/api/media/bulk', [
+            'media_ids' => [$media->id],
+            'action' => 'set_privacy',
+            'audience' => 'followers',
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('media_ids');
+    }
+
+    public function test_bulk_assign_to_character_inherits_character_privacy(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $character = $user->characters()->create([
+            'display_name' => 'Nova',
+            'audience' => 'followers',
+            'discoverable' => false,
+        ]);
+        $media = Media::factory()->for($user)->create(['audience' => 'everyone', 'discoverable' => true]);
+
+        $this->actingAs($user)->patchJson('/api/media/bulk', [
+            'media_ids' => [$media->id],
+            'action' => 'assign_character',
+            'character_id' => $character->id,
+        ])->assertOk()
+            ->assertJsonPath('data.0.character_id', $character->id)
+            ->assertJsonPath('data.0.audience', 'followers')
+            ->assertJsonPath('data.0.discoverable', false);
+
+        $fresh = $media->fresh();
+        $this->assertSame($character->id, $fresh->character_id);
+        $this->assertSame('followers', $fresh->audience->value);
+        $this->assertFalse($fresh->discoverable);
     }
 
     public function test_other_user_can_view_approved_unlisted_by_ulid_but_not_pending(): void

@@ -140,7 +140,7 @@ class PostCommentTest extends TestCase
             ->assertJsonPath('data.comment_count', 0);
     }
 
-    public function test_comments_cascade_when_the_post_is_deleted(): void
+    public function test_comments_are_retained_when_the_post_is_soft_deleted(): void
     {
         $author = User::factory()->approved()->create();
         $post = Post::factory()->for($author)->approved()->create();
@@ -148,7 +148,7 @@ class PostCommentTest extends TestCase
 
         $post->delete();
 
-        $this->assertSame(0, PostComment::query()->count());
+        $this->assertSame(1, PostComment::query()->count());
     }
 
     public function test_comment_count_appears_in_the_post_payload(): void

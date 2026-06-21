@@ -79,7 +79,7 @@ class PostReactionTest extends TestCase
             ->assertJsonPath('data.viewer_reacted', true);
     }
 
-    public function test_reactions_are_removed_when_the_post_is_deleted(): void
+    public function test_reactions_are_retained_when_the_post_is_soft_deleted(): void
     {
         $author = User::factory()->approved()->create();
         $viewer = User::factory()->approved()->create();
@@ -88,6 +88,6 @@ class PostReactionTest extends TestCase
 
         $post->delete();
 
-        $this->assertSame(0, PostReaction::query()->count(), 'reactions cascade with the post');
+        $this->assertSame(1, PostReaction::query()->count(), 'reactions are retained for restore');
     }
 }
