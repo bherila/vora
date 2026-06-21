@@ -7,8 +7,8 @@ interface HlsVideoPlayerProps {
   className?: string | undefined;
   /**
    * Called when HLS playback fails unrecoverably (manifest/segment 404, stale
-   * mapping, transient failure, or no HLS/MSE support). Lets the parent fall
-   * back to the original-file signed URL.
+   * mapping, transient failure, or no HLS/MSE support). Lets the parent mark
+   * the stream unavailable without falling back to the original video file.
    */
   onError?: (() => void) | undefined;
 }
@@ -58,7 +58,7 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       };
     }
 
-    // Neither native HLS nor MSE support — fall back to the original file.
+    // Neither native HLS nor MSE support.
     onErrorRef.current?.();
     return;
   }, [src]);

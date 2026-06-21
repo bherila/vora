@@ -42,8 +42,10 @@ Playback does **not** expose the HLS bucket publicly. `MediaController@streamHls
 - **Segments / init** objects are **302-redirected** to short-lived presigned R2
   URLs, so R2 — not the app — carries the segment bandwidth.
 
-The frontend points hls.js (or native HLS on Safari) at the `master_url` and
-falls back to a signed URL for the original source file on error.
+The frontend points hls.js (or native HLS on Safari) at the `master_url`.
+Original source files are not used as a playback fallback; when HLS is not ready
+or fails, the video remains unavailable to viewers until the transcoded stream
+works.
 
 ## Content-hash deduplication and deletion
 

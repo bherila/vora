@@ -267,6 +267,24 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.url', 'https://r2.example/view');
     }
 
+    public function test_admin_video_endpoint_exposes_original_signed_url_for_other_users_video(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $video = Media::factory()->for($owner)->video()->approved()->create();
+
+        $this->actingAs($admin)->getJson("/api/media/{$video->id}")
+            ->assertOk()
+            ->assertJsonPath('data.url', 'https://r2.example/view')
+            ->assertJsonPath('data.video.status', 'processing');
+
+        $this->actingAs($admin)->getJson("/api/media/by-ulid/{$video->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.url', 'https://r2.example/view')
+            ->assertJsonPath('data.video.status', 'processing');
+    }
+
     public function test_multipart_upload_can_init_presign_and_complete(): void
     {
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {

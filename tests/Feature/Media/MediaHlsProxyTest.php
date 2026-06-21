@@ -69,6 +69,20 @@ class MediaHlsProxyTest extends TestCase
         ]);
     }
 
+    public function test_other_user_can_stream_approved_video_through_hls(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->video()->approved()->create(['disk' => 's3']);
+        $this->seedHls($media);
+
+        $response = $this->actingAs($viewer)
+            ->get("/api/media/{$media->id}/hls/master.m3u8");
+
+        $response->assertOk();
+        $response->assertSee("/api/media/{$media->id}/hls/720p/index.m3u8", false);
+    }
+
     public function test_unsafe_path_is_rejected(): void
     {
         $owner = User::factory()->approved()->create();

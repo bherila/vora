@@ -1,7 +1,9 @@
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
+import { ProtectedImage } from '@/components/protected-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -131,7 +133,7 @@ function AdminMediaPage() {
                       Thumbnail/poster (shown in listings — review this too)
                     </span>
                     <div className="overflow-hidden rounded-md bg-muted">
-                      <img
+                      <ProtectedImage
                         src={item.thumbnail_url}
                         alt={`Thumbnail for ${item.title || item.original_filename}`}
                         className="max-h-40 w-full object-contain"
@@ -158,6 +160,14 @@ function AdminMediaPage() {
                 )}
                 {item.moderation_notes && (
                   <p className="text-xs">Notes: {item.moderation_notes}</p>
+                )}
+                {item.type === 'video' && item.download_url && (
+                  <Button asChild size="sm" variant="outline">
+                    <a href={item.download_url} download={item.original_filename} target="_blank" rel="noreferrer">
+                      <Download className="h-4 w-4" />
+                      Download original
+                    </a>
+                  </Button>
                 )}
                 <Input
                   value={notes[item.id] ?? ''}

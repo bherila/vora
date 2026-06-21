@@ -17,6 +17,7 @@ class AdminMediaApiTest extends TestCase
     {
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+            $mock->shouldReceive('getSignedDownloadUrl')->andReturn('https://r2.example/download');
             $mock->shouldReceive('get')->andReturn(null);
             $mock->shouldReceive('fileExists')->andReturn(true);
             $mock->shouldReceive('copyFile')->andReturn(true);
@@ -54,6 +55,20 @@ class AdminMediaApiTest extends TestCase
         $this->actingAs($admin)->getJson('/api/admin/media')
             ->assertOk()
             ->assertJsonPath('data.0.thumbnail_url', 'https://r2.example/view');
+    }
+
+    public function test_admin_review_exposes_original_video_url_and_download_url(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        Media::factory()->for($owner)->video()->create();
+
+        $this->actingAs($admin)->getJson('/api/admin/media')
+            ->assertOk()
+            ->assertJsonPath('data.0.url', 'https://r2.example/view')
+            ->assertJsonPath('data.0.download_url', 'https://r2.example/download')
+            ->assertJsonPath('data.0.video.status', 'processing');
     }
 
     public function test_non_admin_cannot_access_admin_media(): void
