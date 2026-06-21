@@ -34,7 +34,7 @@ class PostPresenter
             'body' => $post->body,
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
-            'author' => self::author($post->user),
+            'author' => self::author($post->user, $mediaResponder),
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
@@ -84,13 +84,9 @@ class PostPresenter
     /**
      * @return array<string, mixed>|null
      */
-    private static function author(?User $user): ?array
+    private static function author(?User $user, ?MediaResponseService $mediaResponder): ?array
     {
-        if ($user === null) {
-            return null;
-        }
-
-        return ['id' => $user->id, 'display_name' => $user->display_name ?? $user->name];
+        return UserPresenter::identity($user, $mediaResponder);
     }
 
     /**

@@ -27,7 +27,7 @@ class NavbarHydrationTest extends TestCase
 
     public function test_authenticated_navbar_items_are_hydrated_from_blade(): void
     {
-        $user = User::factory()->approved()->create();
+        $user = User::factory()->approved()->create(['display_name' => 'Nova Vega']);
 
         $payload = $this->initialData($this->actingAs($user)->get('/dashboard')->assertOk()->getContent());
 
@@ -47,7 +47,10 @@ class NavbarHydrationTest extends TestCase
         ], array_column($navbar['navItems'], 'label'));
         $this->assertSame('/users/follow-requests', $navbar['navItems'][8]['href']);
         $this->assertSame(0, $navbar['navItems'][8]['badge']);
-        $this->assertSame('Account', $navbar['accountMenu']['label']);
+        // The account menu now identifies the signed-in user (name + avatar)
+        // rather than a generic "Account" label.
+        $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
+        $this->assertNull($navbar['accountMenu']['avatarUrl']);
         $this->assertSame(['Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
         $this->assertSame([], $navbar['guestMenuItems']);
     }
