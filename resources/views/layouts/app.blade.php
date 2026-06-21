@@ -27,10 +27,53 @@
       // Mirror the invite-inbox filter (pendingForActiveOwner) so the badge count
       // never includes invites the inbox hides (owner since gone inactive).
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;
+      $__requestCount = $__followRequestCount + $__authorshipInviteCount;
+      $__navItems = array_values(array_filter([
+        ['label' => 'Home', 'href' => route('home', [], false)],
+        $__isAuthenticated ? ['label' => 'Dashboard', 'href' => route('dashboard', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Media', 'href' => route('media', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Characters', 'href' => route('characters', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Stories', 'href' => route('stories', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Users', 'href' => route('users.directory', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Requests', 'href' => route('users.follow-requests', [], false), 'badge' => $__requestCount] : null,
+      ]));
+      $__adminMenu = $__isAdmin ? [
+        'label' => 'Admin',
+        'items' => [
+          ['type' => 'link', 'label' => 'Users', 'href' => route('admin.users', [], false)],
+          ['type' => 'link', 'label' => 'Invites & signups', 'href' => route('admin.invites', [], false)],
+          ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
+          ['type' => 'link', 'label' => 'Interests', 'href' => route('admin.interests', [], false)],
+          ['type' => 'link', 'label' => 'Media review', 'href' => route('admin.media', [], false)],
+          ['type' => 'link', 'label' => 'Story review', 'href' => route('admin.stories', [], false)],
+          ['type' => 'link', 'label' => 'Posts review', 'href' => route('admin.posts', [], false)],
+          ['type' => 'link', 'label' => 'Static pages', 'href' => route('admin.pages', [], false)],
+          ['type' => 'link', 'label' => 'Audit log', 'href' => route('admin.audit-log', [], false)],
+        ],
+      ] : null;
+      $__accountMenu = $__isAuthenticated ? [
+        'label' => 'Account',
+        'items' => [
+          ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
+          ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
+          ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],
+        ],
+      ] : null;
+      $__guestMenuItems = $__isAuthenticated ? [] : [
+        ['label' => 'Log in', 'href' => route('login', [], false), 'variant' => 'link'],
+        ['label' => 'Sign up', 'href' => route('register', [], false), 'variant' => 'primary'],
+      ];
       $__payload = ['navbar' => [
+        'brand' => ['label' => config('app.name'), 'href' => route('home', [], false)],
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
-        'requestCount' => $__followRequestCount + $__authorshipInviteCount,
+        'requestCount' => $__requestCount,
+        'navItems' => $__navItems,
+        'adminMenu' => $__adminMenu,
+        'accountMenu' => $__accountMenu,
+        'guestMenuItems' => $__guestMenuItems,
       ]] + ($initialData ?? []);
     @endphp
     <script id="initial-data" type="application/json" @cspNonce>{!! json_encode($__payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) !!}</script>

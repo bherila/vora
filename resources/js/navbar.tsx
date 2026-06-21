@@ -1,13 +1,18 @@
 import { createRoot } from 'react-dom/client';
 
+import type { AccountMenu, GuestMenuItem, NavbarBrand, NavLink, NavMenu } from '@/components/navbar';
 import Navbar from '@/components/navbar';
 import { readInitialData } from '@/initialData';
 
 interface NavbarInitialData {
   navbar?: {
+    brand?: NavbarBrand;
     authenticated?: boolean;
-    isAdmin?: boolean;
     requestCount?: number;
+    navItems?: NavLink[];
+    adminMenu?: NavMenu | null;
+    accountMenu?: AccountMenu | null;
+    guestMenuItems?: GuestMenuItem[];
   };
 }
 
@@ -16,9 +21,12 @@ if (mount) {
   const { navbar } = readInitialData<NavbarInitialData>();
   createRoot(mount).render(
     <Navbar
+      brand={navbar?.brand ?? { label: '', href: '/' }}
       authenticated={navbar?.authenticated === true}
-      isAdmin={navbar?.isAdmin === true}
-      requestCount={typeof navbar?.requestCount === 'number' ? navbar.requestCount : 0}
+      navItems={navbar?.navItems ?? []}
+      adminMenu={navbar?.adminMenu ?? null}
+      accountMenu={navbar?.accountMenu ?? null}
+      guestMenuItems={navbar?.guestMenuItems ?? []}
     />,
   );
 }
