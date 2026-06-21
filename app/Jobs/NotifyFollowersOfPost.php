@@ -30,6 +30,10 @@ class NotifyFollowersOfPost implements ShouldQueue
 
     public function handle(): void
     {
+        if ($this->post->trashed()) {
+            return;
+        }
+
         $author = $this->post->user;
         if ($author === null || ! $author->isActive()) {
             return;

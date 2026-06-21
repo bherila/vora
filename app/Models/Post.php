@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A short text post — the building block of the follower feed. Reuses the shared
@@ -25,6 +26,7 @@ class Post extends Model
     use HasPrivacyPolicy;
     use Moderatable;
     use SerializesDatesAsLocal;
+    use SoftDeletes;
 
     /**
      * @var list<string>

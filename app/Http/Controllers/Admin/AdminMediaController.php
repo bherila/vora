@@ -6,11 +6,8 @@ use App\Enums\ModerationStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ModerateMediaRequest;
 use App\Models\Media;
-use App\Services\FileStorageService;
-use App\Services\Media\HlsService;
+use App\Services\Media\AdminMediaResponseService;
 use App\Services\Media\MediaModerationService;
-use App\Support\MediaPresenter;
-use App\Support\PaginationMeta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,8 +16,7 @@ use Illuminate\View\View;
 class AdminMediaController extends Controller
 {
     public function __construct(
-        private readonly HlsService $hls,
-        private readonly FileStorageService $storage,
+        private readonly AdminMediaResponseService $responder,
         private readonly MediaModerationService $moderation,
     ) {}
 
@@ -55,15 +51,9 @@ class AdminMediaController extends Controller
             ->latest()
             ->paginate((int) config('media.page_size', 24));
 
-        $data = collect($paginator->items())
-            // resolveHls: false — the review queue must not do a per-item R2 read.
-            ->map(fn (Media $m): array => MediaPresenter::adminView($m, $this->extrasFor($m, resolveHls: false)))
-            ->all();
-
         return response()->json([
             'success' => true,
-            'data' => $data,
-            'meta' => PaginationMeta::from($paginator),
+            ...$this->responder->page($paginator, resolveHls: false),
         ]);
     }
 
@@ -97,57 +87,6 @@ class AdminMediaController extends Controller
 
         $media->load(['interests', 'user']);
 
-        return response()->json(['success' => true, 'data' => MediaPresenter::adminView($media, $this->extrasFor($media))]);
-    }
-
-    /**
-     * @return array{url: ?string, download_url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
-     */
-    private function extrasFor(Media $media, bool $resolveHls = true): array
-    {
-        $extras = ['url' => null, 'download_url' => null, 'thumbnail_url' => null, 'video' => null];
-
-        if (! $media->isReady()) {
-            return $extras;
-        }
-
-        $playbackKey = $media->playbackObjectKey();
-        $ttl = (int) config('media.view_url_ttl', 60);
-
-        $extras['url'] = $this->storage->getSignedViewUrl(
-            $media->disk,
-            $playbackKey,
-            $ttl,
-            $media->mime_type,
-        );
-
-        if ($media->type->isVideo()) {
-            $extras['download_url'] = $this->storage->getSignedDownloadUrl(
-                $media->disk,
-                $playbackKey,
-                $media->original_filename,
-                $ttl,
-            );
-        }
-
-        // Sign the client-supplied thumbnail/poster too. It is exactly what the
-        // owner library and Explore grids display, so the reviewer must see and
-        // approve it here — otherwise an arbitrary uploaded JPEG would reach
-        // discovery surfaces without ever being reviewed.
-        $thumbnailKey = $media->playbackThumbnailKey();
-        if ($thumbnailKey !== null) {
-            $extras['thumbnail_url'] = $this->storage->getSignedViewUrl(
-                (string) config('media.thumbnail_disk'),
-                $thumbnailKey,
-                (int) config('media.view_url_ttl', 60),
-                'image/jpeg',
-            );
-        }
-
-        if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media, $resolveHls);
-        }
-
-        return $extras;
+        return response()->json(['success' => true, 'data' => $this->responder->item($media)]);
     }
 }

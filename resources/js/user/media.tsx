@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -182,6 +182,12 @@ function UserMediaPage() {
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
   const [filterInterestIds, setFilterInterestIds] = useState<number[]>([]);
   const listing = useMediaListing('/api/media', { type: typeFilter, interestIds: filterInterestIds }, initial);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkCharacterId, setBulkCharacterId] = useState('');
+  const [bulkAudience, setBulkAudience] = useState<Audience>('everyone');
+  const [bulkAudienceUserIds, setBulkAudienceUserIds] = useState<number[]>([]);
+  const [bulkDiscoverable, setBulkDiscoverable] = useState(true);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState<PendingUpload[]>([]);
@@ -194,6 +200,14 @@ function UserMediaPage() {
   const [progress, setProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState('Uploading…');
   const uploadAbortRef = useRef<AbortController | null>(null);
+  const selectedItems = listing.items.filter((item) => selectedIds.includes(item.id));
+  const selectedHasCharacterMedia = selectedItems.some((item) => item.character_id !== null);
+  const allVisibleSelected = listing.items.length > 0 && listing.items.every((item) => selectedIds.includes(item.id));
+
+  useEffect(() => {
+    const visibleIds = new Set(listing.items.map((item) => item.id));
+    setSelectedIds((current) => current.filter((id) => visibleIds.has(id)));
+  }, [listing.items]);
 
   // Keep the title list in step with the selected files: existing files keep any
   // title the user already edited; newly added files default to their file name.
@@ -343,7 +357,7 @@ function UserMediaPage() {
   };
 
   const remove = async (item: MediaItem): Promise<void> => {
-    if (!window.confirm('Delete this item? This cannot be undone.')) {
+    if (!window.confirm('Delete this item? It will be hidden from your library and retained for admin recovery.')) {
       return;
     }
     try {
@@ -352,6 +366,91 @@ function UserMediaPage() {
       toast.success('Media deleted.');
     } catch (err) {
       toast.error(getErrorMessage(err));
+    }
+  };
+
+  const toggleVisibleSelection = (): void => {
+    if (allVisibleSelected) {
+      const visibleIds = new Set(listing.items.map((item) => item.id));
+      setSelectedIds((current) => current.filter((id) => !visibleIds.has(id)));
+      return;
+    }
+
+    setSelectedIds((current) => Array.from(new Set([...current, ...listing.items.map((item) => item.id)])));
+  };
+
+  const applyBulkUpdate = async (payload: Record<string, unknown>, successMessage: string): Promise<void> => {
+    if (selectedIds.length === 0) {
+      toast.error('Select at least one media item.');
+      return;
+    }
+
+    setBulkBusy(true);
+    try {
+      await fetchWrapper.patch('/api/media/bulk', {
+        media_ids: selectedIds,
+        ...payload,
+      });
+      toast.success(successMessage);
+      setSelectedIds([]);
+      listing.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const assignSelectedToCharacter = async (): Promise<void> => {
+    if (bulkCharacterId === '') {
+      toast.error('Choose a character first.');
+      return;
+    }
+
+    await applyBulkUpdate({
+      action: 'assign_character',
+      character_id: Number(bulkCharacterId),
+    }, 'Selected media assigned to character.');
+  };
+
+  const clearSelectedCharacter = async (): Promise<void> => {
+    await applyBulkUpdate({ action: 'clear_character' }, 'Selected media detached from character.');
+  };
+
+  const updateSelectedPrivacy = async (): Promise<void> => {
+    if (selectedHasCharacterMedia) {
+      toast.error('Character media inherits character privacy. Clear the character first.');
+      return;
+    }
+
+    await applyBulkUpdate({
+      action: 'set_privacy',
+      audience: bulkAudience,
+      audience_user_ids: bulkAudience === 'specific' ? bulkAudienceUserIds : [],
+      discoverable: bulkDiscoverable,
+    }, 'Selected media privacy updated.');
+  };
+
+  const deleteSelected = async (): Promise<void> => {
+    if (selectedIds.length === 0) {
+      toast.error('Select at least one media item.');
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedIds.length} selected item${selectedIds.length === 1 ? '' : 's'}? They will be hidden from your library and retained for admin recovery.`)) {
+      return;
+    }
+
+    setBulkBusy(true);
+    try {
+      await fetchWrapper.delete('/api/media/bulk', { media_ids: selectedIds });
+      toast.success('Selected media deleted.');
+      setSelectedIds([]);
+      listing.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -472,6 +571,82 @@ function UserMediaPage() {
         disabled={listing.loading}
       />
 
+      {listing.items.length > 0 && (
+        <div className="mb-6 grid gap-4 rounded-md border border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-muted-foreground">
+              {selectedIds.length} selected
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={toggleVisibleSelection} disabled={bulkBusy}>
+                {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])} disabled={bulkBusy || selectedIds.length === 0}>
+                Clear selection
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-2">
+              <span className="text-sm font-medium">Character</span>
+              <select
+                value={bulkCharacterId}
+                onChange={(event) => setBulkCharacterId(event.target.value)}
+                disabled={bulkBusy || selectedIds.length === 0 || characters.length === 0}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                <option value="">Choose character</option>
+                {characters.map((character) => (
+                  <option key={character.id} value={character.id}>{character.display_name}</option>
+                ))}
+              </select>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={() => void assignSelectedToCharacter()} disabled={bulkBusy || selectedIds.length === 0 || bulkCharacterId === ''}>
+                  Assign
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void clearSelectedCharacter()} disabled={bulkBusy || selectedIds.length === 0}>
+                  Clear character
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-2 lg:col-span-2">
+              <AudienceField
+                audience={bulkAudience}
+                onAudienceChange={setBulkAudience}
+                selectedUserIds={bulkAudienceUserIds}
+                onSelectedUserIdsChange={setBulkAudienceUserIds}
+                disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}
+                label="Change standalone media privacy"
+                specificRelationship="mutuals"
+              />
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={bulkDiscoverable}
+                  onChange={(event) => setBulkDiscoverable(event.target.checked)}
+                  disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}
+                  className="mt-0.5"
+                />
+                <span>List in discovery</span>
+              </label>
+              {selectedHasCharacterMedia && (
+                <p className="text-xs text-muted-foreground">Character media inherits character privacy. Clear the character before changing media privacy directly.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={() => void updateSelectedPrivacy()} disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}>
+                  Apply privacy
+                </Button>
+                <Button type="button" size="sm" variant="destructive" onClick={() => void deleteSelected()} disabled={bulkBusy || selectedIds.length === 0}>
+                  Delete selected
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {listing.loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : listing.error ? (
@@ -481,6 +656,8 @@ function UserMediaPage() {
       ) : (
         <MediaGrid
           items={listing.items}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
           renderActions={(item) => (
             <Button type="button" size="sm" variant="destructive" onClick={() => void remove(item)}>
               Delete

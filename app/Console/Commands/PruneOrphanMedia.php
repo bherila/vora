@@ -77,7 +77,7 @@ class PruneOrphanMedia extends Command
                 $objectsDeleted++;
             }
 
-            $media->delete();
+            $media->forceDelete();
         }
 
         // Orphaned ready profile pictures: referenced by no (live or soft-deleted)
@@ -87,7 +87,7 @@ class PruneOrphanMedia extends Command
             ->where('upload_status', 'ready')
             ->where('created_at', '<', $cutoff)
             ->whereNotIn('id', User::withTrashed()->whereNotNull('profile_picture_media_id')->select('profile_picture_media_id'))
-            ->whereNotIn('id', Character::query()->whereNotNull('profile_picture_media_id')->select('profile_picture_media_id'))
+            ->whereNotIn('id', Character::withTrashed()->whereNotNull('profile_picture_media_id')->select('profile_picture_media_id'))
             ->get();
 
         foreach ($orphanedAvatars as $media) {

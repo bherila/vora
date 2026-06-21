@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminAuditController;
+use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminInviteController;
 use App\Http\Controllers\Admin\AdminMediaController;
@@ -217,6 +218,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::prefix('api/media')->group(function () {
         Route::get('/', [MediaController::class, 'index']);
         Route::post('/', [MediaController::class, 'store']);
+        Route::patch('/bulk', [MediaController::class, 'bulkUpdate']);
+        Route::delete('/bulk', [MediaController::class, 'bulkDestroy']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
         Route::post('/{media}/multipart/init', [MediaController::class, 'initMultipart']);
         Route::post('/{media}/multipart/parts', [MediaController::class, 'presignMultipartParts']);
@@ -269,6 +272,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
     Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
+    Route::get('/deleted-content', [AdminDeletedContentController::class, 'index'])->name('deleted-content');
     Route::get('/pages', [AdminStaticPageController::class, 'index'])->name('pages');
     Route::get('/posts', fn () => view('admin.posts'))->name('posts');
 });
@@ -308,6 +312,10 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
+
+    Route::get('/deleted-content', [AdminDeletedContentController::class, 'apiIndex']);
+    Route::post('/deleted-content/{type}/{id}/restore', [AdminDeletedContentController::class, 'restore']);
+    Route::delete('/deleted-content/{type}/{id}', [AdminDeletedContentController::class, 'destroy']);
 
     Route::get('/posts', [AdminPostController::class, 'apiIndex']);
     Route::post('/posts/{post}/moderate', [AdminPostController::class, 'moderate']);

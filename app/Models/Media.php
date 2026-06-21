@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A photo or video uploaded by a user. Stored in R2 via a presigned upload;
@@ -29,6 +30,7 @@ class Media extends Model
     use HasPrivacyPolicy;
     use Moderatable;
     use SerializesDatesAsLocal;
+    use SoftDeletes;
 
     protected $table = 'media';
 

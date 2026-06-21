@@ -23,6 +23,10 @@ class MediaPolicy
      */
     public function view(User $user, Media $media): bool
     {
+        if ($media->trashed()) {
+            return false;
+        }
+
         if ($media->user_id === $user->id) {
             return true;
         }
@@ -40,11 +44,19 @@ class MediaPolicy
 
     public function complete(User $user, Media $media): bool
     {
+        if ($media->trashed()) {
+            return false;
+        }
+
         return $media->user_id === $user->id;
     }
 
     public function delete(User $user, Media $media): bool
     {
+        if ($media->trashed()) {
+            return false;
+        }
+
         return $media->user_id === $user->id;
     }
 }

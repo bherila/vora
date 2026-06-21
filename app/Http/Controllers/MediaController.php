@@ -6,6 +6,8 @@ use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Http\Requests\Media\AbortMultipartMediaUploadRequest;
+use App\Http\Requests\Media\BulkMediaRequest;
+use App\Http\Requests\Media\BulkUpdateMediaRequest;
 use App\Http\Requests\Media\CompleteMultipartMediaUploadRequest;
 use App\Http\Requests\Media\InitMultipartMediaUploadRequest;
 use App\Http\Requests\Media\ListMediaRequest;
@@ -347,9 +349,86 @@ class MediaController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
-        $this->media->delete($media);
+        $this->media->softDelete($media);
 
         return response()->json(['success' => true, 'message' => 'Media deleted.']);
+    }
+
+    public function bulkUpdate(BulkUpdateMediaRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $media = Media::query()
+            ->whereIn('id', $request->mediaIds())
+            ->where('user_id', $user->id)
+            ->where('purpose', MediaPurpose::Gallery->value)
+            ->with(['audienceMembers', 'character:id,display_name', 'interests'])
+            ->get();
+
+        $action = $request->action();
+        $character = $request->character();
+        $characterAudienceUserIds = $character instanceof Character ? $this->characterAudienceUserIds($character) : [];
+
+        foreach ($media as $item) {
+            $privacyBefore = $item->privacySnapshot();
+
+            if ($action === BulkUpdateMediaRequest::ACTION_ASSIGN_CHARACTER && $character instanceof Character) {
+                $item->character_id = $character->id;
+                $item->audience = $character->audience;
+                $item->discoverable = $character->discoverable;
+                $item->save();
+                $item->syncAudienceMembers($characterAudienceUserIds);
+                $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
+            } elseif ($action === BulkUpdateMediaRequest::ACTION_CLEAR_CHARACTER) {
+                $item->character_id = null;
+                $item->save();
+            } elseif ($action === BulkUpdateMediaRequest::ACTION_SET_PRIVACY) {
+                $item->audience = $request->audience();
+                $item->discoverable = $request->discoverable();
+                $item->save();
+                $item->syncAudienceMembers($item->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
+                $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
+            }
+        }
+
+        $fresh = Media::query()
+            ->whereIn('id', $request->mediaIds())
+            ->where('user_id', $user->id)
+            ->with(['character:id,display_name', 'interests'])
+            ->latest()
+            ->get()
+            ->map(fn (Media $item): array => $this->responder->item($item, resolveHls: false, includeOriginalVideoUrl: true))
+            ->values()
+            ->all();
+
+        return response()->json(['success' => true, 'data' => $fresh]);
+    }
+
+    public function bulkDestroy(BulkMediaRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $media = Media::query()
+            ->whereIn('id', $request->mediaIds())
+            ->where('user_id', $user->id)
+            ->where('purpose', MediaPurpose::Gallery->value)
+            ->get();
+
+        foreach ($media as $item) {
+            $this->media->softDelete($item);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Media deleted.',
+            'deleted_count' => $media->count(),
+        ]);
     }
 
     /**

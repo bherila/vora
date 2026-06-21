@@ -22,6 +22,10 @@ class PostPolicy
      */
     public function view(User $user, Post $post): bool
     {
+        if ($post->trashed()) {
+            return false;
+        }
+
         if ($post->user_id === $user->id) {
             return true;
         }
@@ -36,6 +40,10 @@ class PostPolicy
 
     public function delete(User $user, Post $post): bool
     {
+        if ($post->trashed()) {
+            return false;
+        }
+
         return $post->user_id === $user->id;
     }
 }
