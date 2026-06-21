@@ -16,6 +16,11 @@ export interface MediaInterest {
   name: string;
 }
 
+export interface MediaCharacter {
+  id: number;
+  display_name: string;
+}
+
 export interface PageMeta {
   current_page: number;
   last_page: number;
@@ -32,6 +37,7 @@ export interface PagedResponse<T> {
 export interface MediaItem {
   id: number;
   ulid: string;
+  character_id: number | null;
   type: MediaTypeValue;
   purpose: MediaPurposeValue;
   title: string | null;
@@ -46,6 +52,7 @@ export interface MediaItem {
   thumbnail_url: string | null;
   video: VideoStatus | null;
   interests: MediaInterest[];
+  character: MediaCharacter | null;
   created_at: string | null;
 }
 
@@ -58,6 +65,7 @@ export interface AdminMediaItem extends MediaItem {
   moderation_notes: string | null;
   moderated_at: string | null;
   moderated_by_user_id: number | null;
+  download_url: string | null;
   user: { id: number; name: string | null; email: string | null };
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { ProtectedImage } from '@/components/protected-image';
 import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
 import type { MediaItem } from '@/media/types';
 
@@ -10,14 +11,13 @@ interface MediaPlayerProps {
 
 /**
  * Renders a photo or video. Videos play the transcoded adaptive HLS stream via
- * the authenticated proxy (hls.js / native HLS); on playback error — or while
- * the transcode is still processing — it falls back to a signed URL for the
- * original source file, which any browser can play in a plain <video>.
+ * the authenticated proxy (hls.js / native HLS). Original video files are never
+ * used as a playback fallback.
  */
 export function MediaPlayer({ item, className }: MediaPlayerProps) {
   const [hlsFailed, setHlsFailed] = useState(false);
 
-  // Reset the fallback flag when the item (or its readiness) changes.
+  // Reset the HLS failure state when the item (or its readiness) changes.
   useEffect(() => {
     setHlsFailed(false);
   }, [item.id, item.video?.master_url]);
@@ -30,7 +30,7 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
     if (!item.url) {
       return <p className="text-sm text-muted-foreground">Unavailable.</p>;
     }
-    return <img src={item.url} alt={item.title ?? item.original_filename} className={className} />;
+    return <ProtectedImage src={item.url} alt={item.title ?? item.original_filename} className={className} />;
   }
 
   // Video.
@@ -38,10 +38,6 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
 
   if (masterUrl && !hlsFailed) {
     return <HlsVideoPlayer src={masterUrl} className={className} onError={() => setHlsFailed(true)} />;
-  }
-
-  if (item.url) {
-    return <video src={item.url} controls playsInline className={className} />;
   }
 
   if (item.video?.status === 'processing') {

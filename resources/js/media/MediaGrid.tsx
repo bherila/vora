@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { ProtectedImage } from '@/components/protected-image';
 import { Card, CardContent } from '@/components/ui/card';
 import type { MediaItem } from '@/media/types';
 
@@ -73,7 +74,7 @@ function MediaThumbnail({ item }: { item: MediaItem }) {
   const src = item.thumbnail_url ?? (item.type === 'photo' ? item.url : null);
 
   if (src) {
-    return <img src={src} alt={alt} loading="lazy" className="h-full w-full object-cover" />;
+    return <ProtectedImage src={src} alt={alt} loading="lazy" className="h-full w-full object-cover" />;
   }
 
   return (

@@ -101,22 +101,34 @@ class AdminMediaController extends Controller
     }
 
     /**
-     * @return array{url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
+     * @return array{url: ?string, download_url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
      */
     private function extrasFor(Media $media, bool $resolveHls = true): array
     {
-        $extras = ['url' => null, 'thumbnail_url' => null, 'video' => null];
+        $extras = ['url' => null, 'download_url' => null, 'thumbnail_url' => null, 'video' => null];
 
         if (! $media->isReady()) {
             return $extras;
         }
 
+        $playbackKey = $media->playbackObjectKey();
+        $ttl = (int) config('media.view_url_ttl', 60);
+
         $extras['url'] = $this->storage->getSignedViewUrl(
             $media->disk,
-            $media->playbackObjectKey(),
-            (int) config('media.view_url_ttl', 60),
+            $playbackKey,
+            $ttl,
             $media->mime_type,
         );
+
+        if ($media->type->isVideo()) {
+            $extras['download_url'] = $this->storage->getSignedDownloadUrl(
+                $media->disk,
+                $playbackKey,
+                $media->original_filename,
+                $ttl,
+            );
+        }
 
         // Sign the client-supplied thumbnail/poster too. It is exactly what the
         // owner library and Explore grids display, so the reviewer must see and

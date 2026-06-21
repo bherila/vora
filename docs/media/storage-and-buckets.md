@@ -75,8 +75,11 @@ The app never serves object bytes itself. `FileStorageService` issues:
 
 - **Presigned PUT URLs** for direct browser uploads (`getSignedUploadUrl`).
 - **Presigned multipart part URLs** for large resumable video uploads.
-- **Signed inline view URLs** for displaying photos and source video
-  (`getSignedViewUrl`).
+- **Signed inline view URLs** for displaying photos, uploader/admin source
+  video access, and HLS segments (`getSignedViewUrl`).
+- **Signed download URLs** for admin source-video review/download
+  (`getSignedDownloadUrl`). Non-admin, non-uploader viewers never receive source
+  video URLs; they view videos through the HLS proxy only.
 
 Their lifetimes are `MEDIA_UPLOAD_URL_TTL` and `MEDIA_VIEW_URL_TTL` minutes.
 

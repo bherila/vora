@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Media;
 
@@ -10,10 +11,11 @@ use App\Models\Media;
  * moderation state — admin review is silent. Only adminView() exposes it.
  *
  * Pure: signed URLs and HLS status are computed by the caller and passed in via
- * $extras (keys: "url" for a signed view URL, "video" for HLS status), so this
- * class performs no I/O and is trivial to test.
+ * $extras (keys: "url" for a signed view URL, "download_url" for an admin-only
+ * source download URL, "video" for HLS status), so this class performs no I/O
+ * and is trivial to test.
  *
- * @phpstan-type Extras array{url?: ?string, thumbnail_url?: ?string, video?: ?array<string, mixed>}
+ * @phpstan-type Extras array{url?: ?string, download_url?: ?string, thumbnail_url?: ?string, video?: ?array<string, mixed>}
  */
 class MediaPresenter
 {
@@ -41,6 +43,7 @@ class MediaPresenter
             'moderation_notes' => $media->moderation_notes,
             'moderated_at' => $media->moderated_at?->toIso8601String(),
             'moderated_by_user_id' => $media->moderated_by_user_id,
+            'download_url' => $extras['download_url'] ?? null,
             'user' => [
                 'id' => $media->user_id,
                 'name' => $media->user?->name,
@@ -58,6 +61,7 @@ class MediaPresenter
         return [
             'id' => $media->id,
             'ulid' => $media->ulid,
+            'character_id' => $media->character_id,
             'type' => $media->type->value,
             'purpose' => $media->purpose->value,
             'title' => $media->title,
@@ -73,6 +77,9 @@ class MediaPresenter
             'interests' => $media->relationLoaded('interests')
                 ? $media->interests->map(fn (Interest $i): array => ['id' => $i->id, 'name' => $i->name])->all()
                 : [],
+            'character' => $media->relationLoaded('character') && $media->character instanceof Character
+                ? ['id' => $media->character->id, 'display_name' => $media->character->display_name]
+                : null,
             'created_at' => $media->created_at?->toIso8601String(),
         ];
     }
