@@ -159,7 +159,7 @@ class PrivacyPolicyTest extends TestCase
         $this->assertSame(2, $media->audienceMembers()->count());
     }
 
-    public function test_allowlist_is_pruned_when_content_is_deleted(): void
+    public function test_allowlist_is_retained_when_content_is_soft_deleted(): void
     {
         $owner = User::factory()->approved()->create();
         $granted = User::factory()->approved()->create();
@@ -167,6 +167,18 @@ class PrivacyPolicyTest extends TestCase
         $media->syncAudienceMembers([$granted->id]);
 
         $media->delete();
+
+        $this->assertSame(1, AudienceMember::query()->count());
+    }
+
+    public function test_allowlist_is_pruned_when_content_is_force_deleted(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $granted = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->create(['audience' => Audience::SpecificPeople]);
+        $media->syncAudienceMembers([$granted->id]);
+
+        $media->forceDelete();
 
         $this->assertSame(0, AudienceMember::query()->count());
     }

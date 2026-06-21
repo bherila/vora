@@ -112,7 +112,8 @@ class StoryTest extends TestCase
 
         $this->actingAs($coAuthor)->deleteJson("/api/stories/{$story->id}")->assertForbidden();
         $this->actingAs($owner)->deleteJson("/api/stories/{$story->id}")->assertOk();
-        $this->assertDatabaseMissing('stories', ['id' => $story->id]);
+        $this->assertSoftDeleted('stories', ['id' => $story->id]);
+        $this->actingAs($owner)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertNotFound();
     }
 
     public function test_editing_an_approved_story_returns_it_to_review(): void
