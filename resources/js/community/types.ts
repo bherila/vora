@@ -50,6 +50,7 @@ export interface PostComment {
   body: string;
   author: PostAuthor | null;
   created_at: string | null;
+  can_delete?: boolean;
 }
 
 export interface FeedResponse {
