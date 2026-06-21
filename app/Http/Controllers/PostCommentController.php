@@ -38,7 +38,14 @@ class PostCommentController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $comments->map(fn (PostComment $comment): array => PostCommentPresenter::view($comment, $this->mediaResponder))->values(),
+            'data' => $comments->map(function (PostComment $comment) use ($post, $viewer): array {
+                // Every comment here belongs to $post, so seed the relation to
+                // keep the delete-policy check from re-querying the post per row.
+                $comment->setRelation('post', $post);
+
+                return PostCommentPresenter::view($comment, $this->mediaResponder)
+                    + ['can_delete' => $viewer !== null && Gate::forUser($viewer)->allows('delete', $comment)];
+            })->values(),
         ]);
     }
 
@@ -65,10 +72,12 @@ class PostCommentController extends Controller
         }
 
         $comment->load(['user:id,name,display_name,profile_picture_media_id', 'user.profilePicture']);
+        $comment->setRelation('post', $post);
 
         return response()->json([
             'success' => true,
-            'data' => PostCommentPresenter::view($comment, $this->mediaResponder),
+            'data' => PostCommentPresenter::view($comment, $this->mediaResponder)
+                + ['can_delete' => Gate::forUser($user)->allows('delete', $comment)],
         ], 201);
     }
 

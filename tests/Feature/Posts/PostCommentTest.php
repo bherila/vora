@@ -78,6 +78,29 @@ class PostCommentTest extends TestCase
         $this->actingAs($admin)->deleteJson($url($make()))->assertOk(); // admin
     }
 
+    public function test_comment_payload_exposes_can_delete_per_viewer(): void
+    {
+        // Spacer takes id 1 so the post owner is not auto-admin.
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->create();
+        PostComment::factory()->for($post)->for($commenter)->create();
+
+        // The comment's author may delete it.
+        $this->actingAs($commenter)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()->assertJsonPath('data.0.can_delete', true);
+
+        // The post owner may delete comments on their post.
+        $this->actingAs($owner)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()->assertJsonPath('data.0.can_delete', true);
+
+        // An unrelated viewer may not.
+        $this->actingAs($stranger)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()->assertJsonPath('data.0.can_delete', false);
+    }
+
     public function test_a_reply_parent_must_be_a_top_level_comment_on_the_same_post(): void
     {
         $author = User::factory()->approved()->create();

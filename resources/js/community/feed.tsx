@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
@@ -35,6 +35,8 @@ function FeedPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   const load = useCallback(async (cursor: string | null = null): Promise<void> => {
     if (cursor) {
       setLoadingMore(true);
@@ -54,6 +56,21 @@ function FeedPage() {
     }
   }, []);
 
+  // Auto-load the next page when the sentinel scrolls into view. The Load more
+  // button stays as a fallback (and for when the observer is unavailable).
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || nextCursor === null) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && !loadingMore) {
+        void load(nextCursor);
+      }
+    }, { rootMargin: '300px' });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [nextCursor, loadingMore, load]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -74,7 +91,7 @@ function FeedPage() {
         </div>
       )}
       {nextCursor && (
-        <div className="flex justify-center">
+        <div ref={sentinelRef} className="flex justify-center">
           <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void load(nextCursor)}>
             {loadingMore ? 'Loading...' : 'Load more'}
           </Button>

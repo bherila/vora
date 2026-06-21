@@ -3,6 +3,16 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
@@ -48,6 +58,7 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
   const [replyTo, setReplyTo] = useState<PostComment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PostComment | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -82,8 +93,10 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
     }
   };
 
-  const remove = async (comment: PostComment): Promise<void> => {
-    if (!window.confirm('Delete this comment?')) return;
+  const confirmDelete = async (): Promise<void> => {
+    const comment = pendingDelete;
+    if (!comment) return;
+    setPendingDelete(null);
 
     try {
       await communityApi.deleteComment(postId, comment.id);
@@ -116,9 +129,11 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
                     <p className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</p>
                   </div>
                 </div>
-                <Button type="button" size="sm" variant="ghost" onClick={() => void remove(comment)} title="Delete comment">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {comment.can_delete && (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDelete(comment)} title="Delete comment">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
               <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>
                 Reply
@@ -134,9 +149,11 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
                         <p className="text-xs text-muted-foreground">{formatDate(reply.created_at)}</p>
                       </div>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => void remove(reply)} title="Delete comment">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {reply.can_delete && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDelete(reply)} title="Delete comment">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -154,6 +171,18 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
         <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment" rows={3} />
         <Button type="submit" disabled={saving || body.trim().length === 0}>{saving ? 'Posting...' : 'Post comment'}</Button>
       </form>
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
+            <AlertDialogDescription>This can’t be undone. The comment and its replies will be removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmDelete()}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
