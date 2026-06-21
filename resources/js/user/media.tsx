@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
+import { AudienceField } from '@/community/AudienceField';
 import { InterestPicker } from '@/components/interest-picker';
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
@@ -16,11 +17,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
-import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { MediaFilters } from '@/media/MediaFilters';
 import { MediaGrid } from '@/media/MediaGrid';
-import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile,type PageMeta } from '@/media/types';
+import { type Audience, type MediaItem, type MediaTypeFilter, mediaTypeForFile, type PageMeta } from '@/media/types';
 import {
   type CompletedMultipartPart,
   type MultipartUploadSession,
@@ -33,8 +33,16 @@ import { useMediaListing } from '@/media/useMediaListing';
 
 interface InitialData {
   last_interest_ids: number[];
+  characters: CharacterOption[];
   data: MediaItem[];
   meta?: PageMeta;
+}
+
+interface CharacterOption {
+  id: number;
+  display_name: string;
+  audience: Audience;
+  audience_user_ids: number[];
 }
 
 interface StoreResponse {
@@ -71,7 +79,7 @@ interface CompleteMultipartResponse {
 }
 
 function getInitialData(): InitialData {
-  return readInitialData<{ userMedia?: InitialData }>().userMedia ?? { last_interest_ids: [], data: [] };
+  return readInitialData<{ userMedia?: InitialData }>().userMedia ?? { last_interest_ids: [], characters: [], data: [] };
 }
 
 function getErrorMessage(err: unknown): string {
@@ -169,6 +177,7 @@ async function uploadThumbnailBestEffort(
 
 function UserMediaPage() {
   const initial = useMemo(() => getInitialData(), []);
+  const characters = initial.characters ?? [];
 
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
   const [filterInterestIds, setFilterInterestIds] = useState<number[]>([]);
@@ -176,7 +185,9 @@ function UserMediaPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState<PendingUpload[]>([]);
+  const [characterId, setCharacterId] = useState('');
   const [audience, setAudience] = useState<Audience>('everyone');
+  const [audienceUserIds, setAudienceUserIds] = useState<number[]>([]);
   const [discoverable, setDiscoverable] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(initial.last_interest_ids);
   const [uploading, setUploading] = useState(false);
@@ -202,7 +213,9 @@ function UserMediaPage() {
 
   const resetForm = (): void => {
     setPending([]);
+    setCharacterId('');
     setAudience('everyone');
+    setAudienceUserIds([]);
     setDiscoverable(true);
     setUploadInterestIds(initial.last_interest_ids);
     setProgress(0);
@@ -220,6 +233,8 @@ function UserMediaPage() {
       toast.error(`${unsupported.file.name} is not supported. Only image and video files can be uploaded.`);
       return;
     }
+
+    const selectedCharacterId = characterId === '' ? null : Number(characterId);
 
     const abortController = new AbortController();
     uploadAbortRef.current = abortController;
@@ -239,19 +254,25 @@ function UserMediaPage() {
 
         const sessionKey = multipartSessionKey(selectedFile);
         const existingSession = readMultipartSession(sessionKey);
+        const uploadPayload = {
+          type,
+          filename: selectedFile.name,
+          content_type: selectedFile.type,
+          size: selectedFile.size,
+          title: item.title.trim() || null,
+          interest_ids: uploadInterestIds,
+          has_thumbnail: thumbnail !== null,
+          perceptual_hash: perceptualHash,
+          ...(selectedCharacterId === null ? {
+            audience,
+            audience_user_ids: audience === 'specific' ? audienceUserIds : [],
+            discoverable,
+          } : {
+            character_id: selectedCharacterId,
+          }),
+        };
         const created = existingSession === null
-          ? (await fetchWrapper.post('/api/media', {
-              type,
-              filename: selectedFile.name,
-              content_type: selectedFile.type,
-              size: selectedFile.size,
-              title: item.title.trim() || null,
-              audience,
-              discoverable,
-              interest_ids: uploadInterestIds,
-              has_thumbnail: thumbnail !== null,
-              perceptual_hash: perceptualHash,
-            })) as StoreResponse
+          ? (await fetchWrapper.post('/api/media', uploadPayload)) as StoreResponse
           : null;
 
         const shouldMultipart = existingSession !== null
@@ -382,29 +403,46 @@ function UserMediaPage() {
                   ))}
                 </div>
               )}
-              <label className="grid gap-1">
-                <span className="text-sm">Who can see this?</span>
-                <select
-                  value={audience}
-                  onChange={(event) => setAudience(event.target.value as Audience)}
-                  disabled={uploading}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2"
-                >
-                  {AUDIENCE_SELECT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={discoverable}
-                  onChange={(event) => setDiscoverable(event.target.checked)}
-                  disabled={uploading}
-                  className="mt-0.5"
-                />
-                <span>List in discovery — otherwise only people with the link can find it.</span>
-              </label>
+              {characters.length > 0 && (
+                <label className="grid gap-1">
+                  <span className="text-sm">Character</span>
+                  <select
+                    value={characterId}
+                    onChange={(event) => setCharacterId(event.target.value)}
+                    disabled={uploading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2"
+                  >
+                    <option value="">No character</option>
+                    {characters.map((character) => (
+                      <option key={character.id} value={character.id}>{character.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {characterId === '' ? (
+                <>
+                  <AudienceField
+                    audience={audience}
+                    onAudienceChange={setAudience}
+                    selectedUserIds={audienceUserIds}
+                    onSelectedUserIdsChange={setAudienceUserIds}
+                    disabled={uploading}
+                    specificRelationship="mutuals"
+                  />
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={discoverable}
+                      onChange={(event) => setDiscoverable(event.target.checked)}
+                      disabled={uploading}
+                      className="mt-0.5"
+                    />
+                    <span>List in discovery — otherwise only people with the link can find it.</span>
+                  </label>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">This upload uses the selected character's privacy setting.</p>
+              )}
               <div className="grid gap-1">
                 <span className="text-sm">Interests</span>
                 <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />

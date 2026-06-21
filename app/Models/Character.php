@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\Audience;
 use App\Services\Story\StoryService;
+use App\Traits\HasPrivacyPolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class Character extends Model
 {
     use HasFactory;
+    use HasPrivacyPolicy;
 
     protected static function booted(): void
     {
@@ -47,6 +50,8 @@ class Character extends Model
         'user_id',
         'display_name',
         'description',
+        'audience',
+        'discoverable',
         'gender',
         'gender_other',
         'user_type',
@@ -63,6 +68,8 @@ class Character extends Model
     protected function casts(): array
     {
         return [
+            'audience' => Audience::class,
+            'discoverable' => 'boolean',
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
             'inherit_interests' => 'boolean',
@@ -96,6 +103,17 @@ class Character extends Model
     public function profilePicture(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'profile_picture_media_id');
+    }
+
+    /**
+     * Uploaded media associated with this character. These rows inherit the
+     * character privacy policy; they do not carry an independent audience.
+     *
+     * @return HasMany<Media, $this>
+     */
+    public function media(): HasMany
+    {
+        return $this->hasMany(Media::class);
     }
 
     /**

@@ -17,16 +17,18 @@ interface UserPickerProps {
   selectedIds: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
+  relationship?: 'all' | 'mutuals';
 }
 
-export function UserPicker({ selectedIds, onChange, disabled = false }: UserPickerProps) {
+export function UserPicker({ selectedIds, onChange, disabled = false, relationship = 'all' }: UserPickerProps) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
-    fetchWrapper.get('/api/users')
+    const path = relationship === 'mutuals' ? '/api/users?relationship=mutuals' : '/api/users';
+    fetchWrapper.get(path)
       .then((response) => {
         if (active) setUsers((response as UsersResponse).data);
       })
@@ -37,7 +39,7 @@ export function UserPicker({ selectedIds, onChange, disabled = false }: UserPick
     return () => {
       active = false;
     };
-  }, []);
+  }, [relationship]);
 
   const selected = new Set(selectedIds);
   const filtered = useMemo(() => {
@@ -85,7 +87,11 @@ export function UserPicker({ selectedIds, onChange, disabled = false }: UserPick
             {user.restricted && <Badge variant="outline">Private</Badge>}
           </label>
         ))}
-        {filtered.length === 0 && <p className="text-sm text-muted-foreground">No people found.</p>}
+        {filtered.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {relationship === 'mutuals' ? 'No mutual followers found.' : 'No people found.'}
+          </p>
+        )}
       </div>
     </div>
   );

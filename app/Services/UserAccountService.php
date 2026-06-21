@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AudienceMember;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\Post;
@@ -92,6 +93,10 @@ class UserAccountService
             ->orWhere(function ($query) use ($user): void {
                 $query->where('privacyable_type', (new Post)->getMorphClass())
                     ->whereIn('privacyable_id', $user->posts()->select('id'));
+            })
+            ->orWhere(function ($query) use ($user): void {
+                $query->where('privacyable_type', (new Character)->getMorphClass())
+                    ->whereIn('privacyable_id', $user->characters()->select('id'));
             })
             // The user's own profile allowlist (they are the privacyable).
             ->orWhere(function ($query) use ($user): void {

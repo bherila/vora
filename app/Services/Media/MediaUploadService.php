@@ -66,6 +66,7 @@ class MediaUploadService
         ?string $perceptualHash = null,
         MediaPurpose $purpose = MediaPurpose::Gallery,
         bool $discoverable = true,
+        ?int $characterId = null,
     ): array {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -73,6 +74,7 @@ class MediaUploadService
 
         $media = new Media([
             'user_id' => $user->id,
+            'character_id' => $characterId,
             'ulid' => $ulid,
             'type' => $type,
             'purpose' => $purpose,

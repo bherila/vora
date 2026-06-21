@@ -2,7 +2,9 @@ import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { AudienceField } from '@/community/AudienceField';
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
+import { ProtectedImage } from '@/components/protected-image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { CharacterInterestsEditor } from '@/interests/character-interests-editor';
+import { type Audience,AUDIENCE_WITH_SPECIFIC_OPTIONS } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
@@ -20,6 +23,8 @@ interface CharacterRecord {
   id: number;
   display_name: string;
   description: string | null;
+  audience: Audience;
+  audience_user_ids: number[];
   gender: string | null;
   gender_other: string | null;
   user_type: string | null;
@@ -33,6 +38,8 @@ interface CharacterRecord {
 interface CharacterFormState {
   display_name: string;
   description: string;
+  audience: Audience;
+  audience_user_ids: number[];
   gender: string;
   gender_other: string;
   user_type: string;
@@ -59,13 +66,26 @@ interface ProfilePictureUploadResponse {
 }
 
 function blankForm(): CharacterFormState {
-  return { display_name: '', description: '', gender: '', gender_other: '', user_type: '', user_type_other: '', preferred_user_types: [], preferred_genders: [] };
+  return {
+    display_name: '',
+    description: '',
+    audience: 'everyone',
+    audience_user_ids: [],
+    gender: '',
+    gender_other: '',
+    user_type: '',
+    user_type_other: '',
+    preferred_user_types: [],
+    preferred_genders: [],
+  };
 }
 
 function formFromCharacter(character: CharacterRecord): CharacterFormState {
   return {
     display_name: character.display_name,
     description: character.description ?? '',
+    audience: character.audience,
+    audience_user_ids: character.audience_user_ids,
     gender: normalizeProfileOptionValue(GENDER_OPTIONS, character.gender),
     gender_other: character.gender_other ?? '',
     user_type: normalizeProfileOptionValue(USER_TYPE_OPTIONS, character.user_type),
@@ -82,6 +102,14 @@ function blankToNull(value: string): string | null {
 
 function selectionsToPayload(values: string[]): string[] | null {
   return values.length > 0 ? values : null;
+}
+
+function audienceLabel(audience: Audience, selectedCount: number): string {
+  if (audience === 'specific') {
+    return selectedCount === 0 ? 'Only me' : 'Specific people';
+  }
+
+  return AUDIENCE_WITH_SPECIFIC_OPTIONS.find((option) => option.value === audience)?.label ?? audience;
 }
 
 function CharactersPage() {
@@ -132,6 +160,8 @@ function CharactersPage() {
     const payload = {
       display_name: form.display_name.trim(),
       description: blankToNull(form.description),
+      audience: form.audience,
+      audience_user_ids: form.audience === 'specific' ? form.audience_user_ids : [],
       gender: blankToNull(form.gender),
       gender_other: form.gender === 'other' ? blankToNull(form.gender_other) : null,
       user_type: blankToNull(form.user_type),
@@ -236,10 +266,13 @@ function CharactersPage() {
                 <CardDescription>{character.description || 'No description yet.'}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {character.profile_picture?.url && <img src={character.profile_picture.url} alt="" className="h-24 w-24 rounded-full object-cover" />}
+                {character.profile_picture?.url && (
+                  <ProtectedImage src={character.profile_picture.url} alt="" className="h-24 w-24 rounded-full object-cover" />
+                )}
                 <div className="text-sm text-muted-foreground">
                   <p>Gender: {character.gender === 'other' ? character.gender_other : character.gender || 'Not set'}</p>
                   <p>Type: {character.user_type === 'other' ? character.user_type_other : character.user_type || 'Not set'}</p>
+                  <p>Visible to: {audienceLabel(character.audience, character.audience_user_ids.length)}</p>
                   <p>Discovery preferences: {[...(character.preferred_user_types ?? []), ...(character.preferred_genders ?? [])].join(', ') || 'Not set'}</p>
                 </div>
                 <CharacterInterestsEditor
@@ -277,6 +310,15 @@ function CharactersPage() {
                   <Label htmlFor="character-description">Description</Label>
                   <Textarea id="character-description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                 </div>
+                <AudienceField
+                  audience={form.audience}
+                  onAudienceChange={(audience) => setForm({ ...form, audience })}
+                  selectedUserIds={form.audience_user_ids}
+                  onSelectedUserIdsChange={(ids) => setForm({ ...form, audience_user_ids: ids })}
+                  disabled={saving}
+                  label="Who can see this character?"
+                  specificRelationship="mutuals"
+                />
                 <ProfileOptionButtonGroup legend="Character gender" name="character-gender" options={GENDER_OPTIONS} value={form.gender} onChange={(value) => setForm({ ...form, gender: value })} />
                 {form.gender === 'other' && (
                   <div className="space-y-1">

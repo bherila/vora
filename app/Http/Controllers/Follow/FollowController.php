@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Privacy\ProfileGate;
+use App\Support\FollowGraph;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -61,7 +62,19 @@ class FollowController extends Controller
     private function usersPayload(Request $request): Collection
     {
         $current = $request->user();
-        $users = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active()->orderBy('display_name')->get();
+        $query = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active();
+
+        if ($request->query('relationship') === 'mutuals') {
+            if (! $current instanceof User) {
+                return collect();
+            }
+
+            $query
+                ->whereExists(fn ($sub) => FollowGraph::constrainViewerFollowsOwner($sub, 'users.id', $current->id))
+                ->whereExists(fn ($sub) => FollowGraph::constrainOwnerFollowsViewer($sub, 'users.id', $current->id));
+        }
+
+        $users = $query->orderBy('display_name')->get();
 
         // Restricted profiles still appear in the directory so they remain
         // findable for a follow request, but their details are withheld from

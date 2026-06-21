@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Characters;
 
+use App\Enums\Audience;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\InterestRating;
+use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Database\QueryException;
@@ -15,6 +18,16 @@ use Tests\TestCase;
 class CharacterTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function follow(User $follower, User $followee): void
+    {
+        FollowRequest::query()->create([
+            'requester_id' => $follower->id,
+            'recipient_id' => $followee->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+    }
 
     private function fakeStorage(): void
     {
@@ -61,6 +74,8 @@ class CharacterTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('data.display_name', 'Nova')
+            ->assertJsonPath('data.audience', Audience::Everyone->value)
+            ->assertJsonPath('data.audience_user_ids', [])
             ->assertJsonPath('data.gender_other', 'nonbinary')
             ->assertJsonPath('data.user_type', 'furry')
             ->assertJsonPath('data.inherit_interests', true)
@@ -82,6 +97,131 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.user_type', 'other')
             ->assertJsonPath('data.user_type_other', 'construct')
             ->assertJsonPath('data.preferred_user_types', []);
+    }
+
+    public function test_specific_character_with_empty_allowlist_is_owner_only(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->audience(Audience::SpecificPeople)->create();
+
+        $this->assertTrue($character->isViewableBy($owner));
+        $this->assertFalse($character->isViewableBy($viewer));
+    }
+
+    public function test_character_specific_access_requires_mutual_followers(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $mutual = User::factory()->approved()->create();
+        $oneWay = User::factory()->approved()->create();
+        $this->follow($mutual, $owner);
+        $this->follow($owner, $mutual);
+        $this->follow($oneWay, $owner);
+
+        $this->actingAs($owner)->postJson('/api/characters', [
+            'display_name' => 'Nova',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$oneWay->id],
+        ])->assertStatus(422)->assertJsonValidationErrors('audience_user_ids.0');
+
+        $this->postJson('/api/characters', [
+            'display_name' => 'Nova',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$mutual->id],
+        ])->assertCreated()
+            ->assertJsonPath('data.audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.audience_user_ids', [$mutual->id]);
+    }
+
+    public function test_mutual_relationship_filter_lists_only_mutual_followers(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $mutual = User::factory()->approved()->create(['display_name' => 'Mutual']);
+        $oneWay = User::factory()->approved()->create(['display_name' => 'One Way']);
+        $unrelated = User::factory()->approved()->create(['display_name' => 'Unrelated']);
+        $this->follow($mutual, $owner);
+        $this->follow($owner, $mutual);
+        $this->follow($oneWay, $owner);
+
+        $ids = collect($this->actingAs($owner)->getJson('/api/users?relationship=mutuals')->assertOk()->json('data'))
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($mutual->id, $ids);
+        $this->assertNotContains($oneWay->id, $ids);
+        $this->assertNotContains($unrelated->id, $ids);
+    }
+
+    public function test_character_media_inherits_character_specific_access(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $mutual = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $this->follow($mutual, $owner);
+        $this->follow($owner, $mutual);
+        $character = Character::factory()->for($owner)->audience(Audience::SpecificPeople)->create();
+        $character->syncAudienceMembers([$mutual->id]);
+
+        $response = $this->actingAs($owner)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'nova.jpg',
+            'content_type' => 'image/jpeg',
+            'character_id' => $character->id,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.character_id', $character->id)
+            ->assertJsonPath('data.audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.character.display_name', $character->display_name);
+
+        $media = Media::query()->firstOrFail();
+        $this->assertSame($character->id, $media->character_id);
+        $this->assertSame(Audience::SpecificPeople, $media->audience);
+        $this->assertSame([$mutual->id], $media->audienceMembers()->pluck('user_id')->map('intval')->all());
+        $this->assertTrue($media->isViewableBy($mutual));
+        $this->assertFalse($media->isViewableBy($other));
+    }
+
+    public function test_updating_character_privacy_propagates_to_associated_media(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $mutual = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $this->follow($mutual, $owner);
+        $this->follow($owner, $mutual);
+
+        $character = Character::factory()->for($owner)->create(['display_name' => 'Nova']);
+        $media = Media::factory()->for($owner)->create([
+            'character_id' => $character->id,
+            'audience' => Audience::Everyone,
+        ]);
+
+        $this->actingAs($owner)->patchJson("/api/characters/{$character->id}", [
+            'display_name' => 'Nova',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$mutual->id],
+        ])->assertOk();
+
+        $fresh = $media->fresh();
+        $this->assertSame(Audience::SpecificPeople, $fresh->audience);
+        $this->assertSame([$mutual->id], $fresh->audienceMembers()->pluck('user_id')->map('intval')->all());
+        $this->assertTrue($fresh->isViewableBy($mutual));
+        $this->assertFalse($fresh->isViewableBy($other));
+    }
+
+    public function test_standalone_media_specific_access_requires_mutual_followers(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $this->actingAs($owner)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'nova.jpg',
+            'content_type' => 'image/jpeg',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$viewer->id],
+        ])->assertStatus(422)->assertJsonValidationErrors('audience_user_ids.0');
     }
 
     public function test_character_type_other_requires_detail(): void

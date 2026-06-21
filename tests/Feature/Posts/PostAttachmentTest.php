@@ -3,6 +3,7 @@
 namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\Media;
@@ -32,6 +33,14 @@ class PostAttachmentTest extends TestCase
         $post->attachments()->create([
             'attachable_type' => $media->getMorphClass(),
             'attachable_id' => $media->id,
+        ]);
+    }
+
+    private function attachCharacter(Post $post, Character $character): void
+    {
+        $post->attachments()->create([
+            'attachable_type' => $character->getMorphClass(),
+            'attachable_id' => $character->id,
         ]);
     }
 
@@ -100,6 +109,36 @@ class PostAttachmentTest extends TestCase
             ->assertOk()->assertJsonCount(1, 'data.attachments');
         $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
             ->assertOk()->assertJsonCount(1, 'data.attachments');
+    }
+
+    public function test_intersection_hides_a_restricted_character_attachment(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($author)->audience(Audience::SpecificPeople)->create();
+        $post = Post::factory()->for($author)->approved()->create(['audience' => Audience::Everyone]);
+        $this->attachCharacter($post, $character);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->assertJsonCount(0, 'data.attachments');
+        $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->assertJsonCount(1, 'data.attachments');
+    }
+
+    public function test_post_as_restricted_character_is_hidden_from_unauthorized_viewers(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($author)->audience(Audience::SpecificPeople)->create();
+        $post = Post::factory()->for($author)->approved()->create([
+            'audience' => Audience::Everyone,
+            'character_id' => $character->id,
+        ]);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->assertJsonPath('data.as_character', null);
+        $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->assertJsonPath('data.as_character.id', $character->id);
     }
 
     public function test_cannot_attach_non_gallery_media(): void

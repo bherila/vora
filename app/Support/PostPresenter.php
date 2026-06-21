@@ -18,9 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  * state.
  *
  * Enforces the attachment privacy intersection: a privacy-controlled attachment
- * (Media/Story) is only included when the viewer could view it on its own — so a
- * post can never widen the audience of the thing it attaches. Characters and
- * Interests are public profile/tag references and are always shown.
+ * (Character/Media/Story) is only included when the viewer could view it on its
+ * own — so a post can never widen the audience of the thing it attaches.
  */
 class PostPresenter
 {
@@ -36,7 +35,7 @@ class PostPresenter
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
             'author' => self::author($post->user),
-            'as_character' => self::asCharacter($post, $mediaResponder),
+            'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
             'viewer_reacted' => self::viewerReacted($post, $viewer),
@@ -106,10 +105,10 @@ class PostPresenter
      *
      * @return array<string, mixed>|null
      */
-    private static function asCharacter(Post $post, ?MediaResponseService $mediaResponder): ?array
+    private static function asCharacter(Post $post, ?User $viewer, ?MediaResponseService $mediaResponder): ?array
     {
         $character = $post->character;
-        if ($character === null) {
+        if ($character === null || ! self::canSee($character, $viewer)) {
             return null;
         }
 
@@ -161,10 +160,11 @@ class PostPresenter
     }
 
     /**
-     * The intersection gate for privacy-controlled attachments (Media/Story):
+     * The intersection gate for privacy-controlled attachments
+     * (Character/Media/Story):
      * the viewer must own it / be an admin, or it must be approved, viewable to
-     * them by its own audience, and (for stories) published — i.e. the same rule
-     * as opening it directly.
+     * them by its own audience, and (for stories) published — i.e. the same
+     * rule as opening it directly.
      *
      * The owner-active check the policies also apply is intentionally omitted: an
      * attachment is always the post author's own content, and the post is only
@@ -175,6 +175,10 @@ class PostPresenter
      */
     private static function canSee(Model $attachable, ?User $viewer): bool
     {
+        if ($attachable instanceof Character) {
+            return $attachable->isViewableBy($viewer);
+        }
+
         if ($attachable instanceof Media) {
             return self::ownerOrAdmin($attachable->user_id, $viewer)
                 || ($attachable->isApprovedContent() && $attachable->isViewableBy($viewer));

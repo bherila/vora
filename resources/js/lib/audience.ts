@@ -17,5 +17,5 @@ export const AUDIENCE_SELECT_OPTIONS: AudienceOption[] = [
 
 export const AUDIENCE_WITH_SPECIFIC_OPTIONS: AudienceOption[] = [
   ...AUDIENCE_SELECT_OPTIONS,
-  { value: 'specific', label: 'Specific people' },
+  { value: 'specific', label: 'Only me / specific people' },
 ];
