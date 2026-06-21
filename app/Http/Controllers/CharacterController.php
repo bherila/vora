@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Privacy\PrivacyAuditor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -24,6 +25,7 @@ class CharacterController extends Controller
         private readonly MediaUploadService $uploads,
         private readonly MediaResponseService $responder,
         private readonly MediaService $media,
+        private readonly PrivacyAuditor $auditor,
     ) {}
 
     public function page(): View
@@ -54,7 +56,7 @@ class CharacterController extends Controller
      */
     private function charactersPayload(User $user): Collection
     {
-        $characters = $user->characters()->with('profilePicture')->latest()->get();
+        $characters = $user->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get();
 
         return $characters->map(fn (Character $character): array => $this->present($character))->values();
     }
@@ -67,9 +69,11 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        $character = $user->characters()->create($this->payload($request->validated()));
+        $character = $user->characters()->create($this->payload($request));
+        $this->syncCharacterAudience($request, $character);
+        $this->auditor->recordCreation($character, $user, $character->privacySnapshot(), $request);
 
-        return response()->json(['success' => true, 'data' => $this->present($character->refresh())], 201);
+        return response()->json(['success' => true, 'data' => $this->present($character->refresh()->load('audienceMembers'))], 201);
     }
 
     public function update(UpsertCharacterRequest $request, Character $character): JsonResponse
@@ -80,9 +84,13 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
-        $character->fill($this->payload($request->validated()))->save();
+        $privacyBefore = $character->privacySnapshot();
+        $character->fill($this->payload($request))->save();
+        $this->syncCharacterAudience($request, $character);
+        $this->auditor->record($character, $user, $privacyBefore, $character->privacySnapshot(), $request);
+        $this->propagateCharacterPrivacy($character, $user, $request);
 
-        return response()->json(['success' => true, 'data' => $this->present($character->refresh())]);
+        return response()->json(['success' => true, 'data' => $this->present($character->refresh()->load('audienceMembers'))]);
     }
 
     public function destroy(Character $character): JsonResponse
@@ -119,16 +127,21 @@ class CharacterController extends Controller
             $request->validated('filename'),
             $request->validated('content_type'),
             $character->display_name.' profile picture',
-            Audience::Everyone,
+            $character->audience,
             [],
             false,
             null,
             MediaPurpose::ProfilePicture,
+            $character->discoverable,
+            $character->id,
         );
+        $media = $result['media'];
+        $media->syncAudienceMembers($this->characterAudienceUserIds($character));
+        $this->auditor->recordCreation($media, $user, $media->privacySnapshot(), $request);
 
         return response()->json([
             'success' => true,
-            'data' => $this->responder->item($result['media']),
+            'data' => $this->responder->item($media),
             'upload_url' => $result['upload_url'],
             'upload_headers' => $result['upload_headers'],
         ], 201);
@@ -183,15 +196,18 @@ class CharacterController extends Controller
         return response()->json(['success' => true, 'data' => $this->present($character->refresh())]);
     }
 
-    /** @param array<string, mixed> $data @return array<string, mixed> */
-    private function payload(array $data): array
+    /** @return array<string, mixed> */
+    private function payload(UpsertCharacterRequest $request): array
     {
+        $data = $request->validated();
         $gender = $data['gender'] ?? null;
         $userType = $data['user_type'] ?? null;
 
         return [
             'display_name' => $data['display_name'],
             'description' => $data['description'] ?? null,
+            'audience' => $request->audience(),
+            'discoverable' => $request->discoverable(),
             'gender' => $gender,
             'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
             'user_type' => $userType,
@@ -199,6 +215,39 @@ class CharacterController extends Controller
             'preferred_user_types' => $data['preferred_user_types'] ?? null,
             'preferred_genders' => $data['preferred_genders'] ?? null,
         ];
+    }
+
+    private function syncCharacterAudience(UpsertCharacterRequest $request, Character $character): void
+    {
+        $character->syncAudienceMembers(
+            $request->audience() === Audience::SpecificPeople ? $request->audienceUserIds() : []
+        );
+    }
+
+    private function propagateCharacterPrivacy(Character $character, User $actor, UpsertCharacterRequest $request): void
+    {
+        $memberIds = $this->characterAudienceUserIds($character);
+
+        $character->media()->with('audienceMembers')->get()->each(function (Media $media) use ($actor, $character, $memberIds, $request): void {
+            $privacyBefore = $media->privacySnapshot();
+            $media->audience = $character->audience;
+            $media->discoverable = $character->discoverable;
+            $media->save();
+            $media->syncAudienceMembers($memberIds);
+            $this->auditor->record($media, $actor, $privacyBefore, $media->privacySnapshot(), $request);
+        });
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function characterAudienceUserIds(Character $character): array
+    {
+        if ($character->audience !== Audience::SpecificPeople) {
+            return [];
+        }
+
+        return $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all();
     }
 
     /** @return array<string, mixed> */
@@ -210,6 +259,10 @@ class CharacterController extends Controller
             'id' => $character->id,
             'display_name' => $character->display_name,
             'description' => $character->description,
+            'audience' => $character->audience->value,
+            'audience_user_ids' => $character->audience === Audience::SpecificPeople
+                ? $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()
+                : [],
             'gender' => $character->gender,
             'gender_other' => $character->gender_other,
             'user_type' => $character->user_type,

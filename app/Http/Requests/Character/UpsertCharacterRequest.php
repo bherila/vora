@@ -2,11 +2,15 @@
 
 namespace App\Http\Requests\Character;
 
+use App\Http\Requests\Concerns\ValidatesAudience;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpsertCharacterRequest extends FormRequest
 {
+    use ValidatesAudience;
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -28,6 +32,12 @@ class UpsertCharacterRequest extends FormRequest
             'preferred_user_types.*' => ['required', 'string', 'distinct', Rule::in(['human', 'furry', 'other'])],
             'preferred_genders' => ['nullable', 'array'],
             'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
+            ...$this->audienceRules(['nullable']),
         ];
+    }
+
+    protected function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $validator) => $this->validateSpecificAudienceMembersAreMutuals($validator));
     }
 }

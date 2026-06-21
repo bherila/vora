@@ -3,6 +3,8 @@ import { type Audience,AUDIENCE_WITH_SPECIFIC_OPTIONS } from '@/lib/audience';
 
 import { UserPicker } from './UserPicker';
 
+type SpecificRelationship = 'all' | 'mutuals';
+
 interface AudienceFieldProps {
   audience: Audience;
   onAudienceChange: (audience: Audience) => void;
@@ -10,6 +12,7 @@ interface AudienceFieldProps {
   onSelectedUserIdsChange: (ids: number[]) => void;
   disabled?: boolean;
   label?: string;
+  specificRelationship?: SpecificRelationship;
 }
 
 export function AudienceField({
@@ -19,6 +22,7 @@ export function AudienceField({
   onSelectedUserIdsChange,
   disabled = false,
   label = 'Who can see this?',
+  specificRelationship = 'all',
 }: AudienceFieldProps) {
   return (
     <div className="grid gap-2">
@@ -35,7 +39,12 @@ export function AudienceField({
         ))}
       </select>
       {audience === 'specific' && (
-        <UserPicker selectedIds={selectedUserIds} onChange={onSelectedUserIdsChange} disabled={disabled} />
+        <UserPicker
+          selectedIds={selectedUserIds}
+          onChange={onSelectedUserIdsChange}
+          disabled={disabled}
+          relationship={specificRelationship}
+        />
       )}
     </div>
   );

@@ -54,6 +54,7 @@ class Media extends Model
      */
     protected $fillable = [
         'user_id',
+        'character_id',
         'ulid',
         'type',
         'purpose',
@@ -91,6 +92,7 @@ class Media extends Model
             'size_bytes' => 'integer',
             'multipart_part_size_bytes' => 'integer',
             'multipart_initiated_at' => 'datetime',
+            'character_id' => 'integer',
         ];
     }
 
@@ -109,6 +111,17 @@ class Media extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Optional character this media is associated with. When present, the media
+     * inherits the character's audience and allowlist.
+     *
+     * @return BelongsTo<Character, $this>
+     */
+    public function character(): BelongsTo
+    {
+        return $this->belongsTo(Character::class);
     }
 
     /**

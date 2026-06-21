@@ -3,6 +3,9 @@
 namespace App\Http\Requests\Concerns;
 
 use App\Enums\Audience;
+use App\Models\User;
+use App\Support\FollowGraph;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 
 /**
@@ -60,5 +63,30 @@ trait ValidatesAudience
     public function audienceUserIds(): array
     {
         return array_values(array_unique(array_map('intval', (array) $this->input('audience_user_ids', []))));
+    }
+
+    /**
+     * For surfaces that allow explicit per-user grants, keep those grants to
+     * mutual followers. An empty allowlist is valid and means "only me".
+     */
+    protected function validateSpecificAudienceMembersAreMutuals(Validator $validator): void
+    {
+        if ($this->audience() !== Audience::SpecificPeople) {
+            return;
+        }
+
+        $user = $this->user();
+        if (! $user instanceof User) {
+            return;
+        }
+
+        foreach ($this->audienceUserIds() as $index => $userId) {
+            if ($userId === $user->id || ! FollowGraph::mutual($user->id, $userId)) {
+                $validator->errors()->add(
+                    'audience_user_ids.'.$index,
+                    'Specific access can only be granted to mutual followers.',
+                );
+            }
+        }
     }
 }

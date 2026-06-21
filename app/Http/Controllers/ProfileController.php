@@ -371,7 +371,8 @@ class ProfileController extends Controller
         }
 
         $user->load([
-            'characters',
+            'characters.audienceMembers',
+            'media.audienceMembers',
             'media.interests',
             'posts.attachments',
             'posts.audienceMembers',
@@ -429,6 +430,9 @@ class ProfileController extends Controller
                     'id' => $character->id,
                     'display_name' => $character->display_name,
                     'description' => $character->description,
+                    'audience' => $character->audience->value,
+                    'discoverable' => (bool) $character->discoverable,
+                    'audience_user_ids' => $character->audienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
                     'gender' => $character->gender,
                     'user_type' => $character->user_type,
                     'created_at' => $character->created_at?->toIso8601String(),
@@ -439,8 +443,10 @@ class ProfileController extends Controller
                     'title' => $media->title,
                     'type' => $media->type->value,
                     'purpose' => $media->purpose->value,
+                    'character_id' => $media->character_id,
                     'audience' => $media->audience->value,
                     'discoverable' => (bool) $media->discoverable,
+                    'audience_user_ids' => $media->audienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
                     'interests' => $media->interests->pluck('name')->values(),
                     'created_at' => $media->created_at?->toIso8601String(),
                 ])->values(),

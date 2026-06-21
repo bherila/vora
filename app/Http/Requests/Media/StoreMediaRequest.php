@@ -4,6 +4,7 @@ namespace App\Http\Requests\Media;
 
 use App\Enums\MediaType;
 use App\Http\Requests\Concerns\ValidatesAudience;
+use App\Models\Character;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -30,7 +31,12 @@ class StoreMediaRequest extends FormRequest
             'content_type' => ['required', 'string', 'max:255'],
             'size' => ['nullable', 'integer', 'min:1'],
             'title' => ['nullable', 'string', 'max:255'],
-            ...$this->audienceRules(['required']),
+            'character_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('characters', 'id')->where('user_id', $this->user()?->id),
+            ],
+            ...$this->audienceRules(['required_without:character_id']),
             'interest_ids' => ['nullable', 'array'],
             'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
             // The client generates the thumbnail/poster itself; ask for a second
@@ -63,6 +69,10 @@ class StoreMediaRequest extends FormRequest
             if (is_numeric($size) && (int) $size > $type->maxBytes()) {
                 $validator->errors()->add('size', 'This file exceeds the maximum allowed size.');
             }
+
+            if ($this->input('character_id') === null) {
+                $this->validateSpecificAudienceMembersAreMutuals($validator);
+            }
         });
     }
 
@@ -72,5 +82,18 @@ class StoreMediaRequest extends FormRequest
     public function interestIds(): array
     {
         return array_values(array_map('intval', (array) $this->input('interest_ids', [])));
+    }
+
+    public function character(): ?Character
+    {
+        $id = $this->input('character_id');
+        if ($id === null) {
+            return null;
+        }
+
+        return Character::query()
+            ->with('audienceMembers')
+            ->where('user_id', $this->user()?->id)
+            ->find((int) $id);
     }
 }

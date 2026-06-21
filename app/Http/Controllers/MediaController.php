@@ -11,6 +11,7 @@ use App\Http\Requests\Media\InitMultipartMediaUploadRequest;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\PresignMultipartMediaPartsRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
+use App\Models\Character;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
@@ -46,6 +47,7 @@ class MediaController extends Controller
         return view('user.media', ['initialData' => [
             'userMedia' => [
                 'last_interest_ids' => array_values(array_map('intval', $request->user()->last_media_interest_ids ?? [])),
+                'characters' => $this->characterOptions($request->user()),
                 ...$this->indexPayload($request),
             ],
         ]]);
@@ -81,7 +83,7 @@ class MediaController extends Controller
         $query = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
             ->where('user_id', $request->user()->id)
-            ->with('interests')
+            ->with(['character:id,display_name', 'interests'])
             ->latest();
 
         $paginator = MediaFilter::fromRequest($request)
@@ -96,29 +98,34 @@ class MediaController extends Controller
      */
     public function store(StoreMediaRequest $request): JsonResponse
     {
+        $character = $request->character();
+        $audience = $character instanceof Character ? $character->audience : $request->audience();
+        $discoverable = $character instanceof Character ? $character->discoverable : $request->discoverable();
+
         $result = $this->uploads->createPendingUpload(
             $request->user(),
             MediaType::from($request->validated('type')),
             $request->validated('filename'),
             $request->validated('content_type'),
             $request->validated('title'),
-            $request->audience(),
+            $audience,
             $request->interestIds(),
             (bool) $request->validated('has_thumbnail', false),
             $request->validated('perceptual_hash'),
-            discoverable: $request->discoverable(),
+            discoverable: $discoverable,
+            characterId: $character?->id,
         );
 
         $media = $result['media'];
 
-        // Apply the allowlist (empty unless the SpecificPeople audience) and
-        // record the initial privacy policy for audit.
-        $media->syncAudienceMembers(
-            $request->audience() === Audience::SpecificPeople ? $request->audienceUserIds() : []
-        );
+        // Apply the allowlist. Character-associated media inherits from the
+        // character; standalone media uses its own specific-people selection.
+        $media->syncAudienceMembers($character instanceof Character
+            ? $this->characterAudienceUserIds($character)
+            : ($audience === Audience::SpecificPeople ? $request->audienceUserIds() : []));
         $this->auditor->recordCreation($media, $request->user(), $media->privacySnapshot(), $request);
 
-        $media->load('interests');
+        $media->load(['character:id,display_name', 'interests']);
 
         return response()->json([
             'success' => true,
@@ -134,6 +141,37 @@ class MediaController extends Controller
                 'part_size_bytes' => (int) config('media.multipart.part_size_bytes'),
             ],
         ], 201);
+    }
+
+    /**
+     * @return list<array{id: int, display_name: string, audience: string, audience_user_ids: list<int>}>
+     */
+    private function characterOptions(User $user): array
+    {
+        return $user->characters()
+            ->with('audienceMembers')
+            ->orderBy('display_name')
+            ->get()
+            ->map(fn (Character $character): array => [
+                'id' => $character->id,
+                'display_name' => $character->display_name,
+                'audience' => $character->audience->value,
+                'audience_user_ids' => $this->characterAudienceUserIds($character),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function characterAudienceUserIds(Character $character): array
+    {
+        if ($character->audience !== Audience::SpecificPeople) {
+            return [];
+        }
+
+        return $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all();
     }
 
     public function initMultipart(InitMultipartMediaUploadRequest $request, Media $media): JsonResponse
@@ -245,8 +283,8 @@ class MediaController extends Controller
     }
 
     /**
-     * Show a single item by id. Owners/admins get video originals; other
-     * authorized viewers only get the HLS playback surface.
+     * Show a single item by id. The uploader and admins get video originals;
+     * other authorized viewers only get the HLS playback surface.
      */
     public function show(Request $request, Media $media): JsonResponse
     {
