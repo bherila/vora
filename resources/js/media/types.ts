@@ -47,6 +47,8 @@ export interface MediaItem {
   audience: Audience;
   discoverable: boolean;
   upload_status: string;
+  /** Owner-only signal that the item isn't visible to others yet (awaiting review). */
+  under_review: boolean;
   url: string | null;
   /** Signed URL of the small JPEG thumbnail/poster, when one was generated. */
   thumbnail_url: string | null;

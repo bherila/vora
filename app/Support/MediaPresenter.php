@@ -2,13 +2,17 @@
 
 namespace App\Support;
 
+use App\Enums\ModerationStatus;
 use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Media;
 
 /**
- * Serializes Media for API responses. The owner/public shape NEVER includes
- * moderation state — admin review is silent. Only adminView() exposes it.
+ * Serializes Media for API responses. The owner/public shape never includes the
+ * moderation DECISION or notes — admin review stays silent; only adminView()
+ * exposes those. It does carry a derived `under_review` flag so an owner knows
+ * their freshly-uploaded item isn't visible to others yet (it is only ever true
+ * on items the viewer owns, since others can't see un-approved media at all).
  *
  * Pure: signed URLs and HLS status are computed by the caller and passed in via
  * $extras (keys: "url" for a signed view URL, "download_url" for an admin-only
@@ -75,6 +79,8 @@ class MediaPresenter
             'audience' => $media->audience->value,
             'discoverable' => $media->discoverable,
             'upload_status' => $media->upload_status,
+            // Derived "not yet visible to others" flag (no decision/notes leaked).
+            'under_review' => $media->moderation_status !== ModerationStatus::Approved,
             'url' => $extras['url'] ?? null,
             'thumbnail_url' => $extras['thumbnail_url'] ?? null,
             'video' => $extras['video'] ?? null,
