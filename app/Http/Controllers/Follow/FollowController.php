@@ -58,8 +58,37 @@ class FollowController extends Controller
         $current = $request->user();
 
         return view('user.follow-profile', [
-            'initialData' => ['followProfile' => $this->profilePayload($current, $current)],
+            'initialData' => [
+                'followProfile' => $this->profilePayload($current, $current),
+                'profileEditable' => $this->editablePayload($current),
+            ],
         ]);
+    }
+
+    /**
+     * The owner's editable identity, hydrated into /me so the inline editor can
+     * patch /api/account. Name and email are included so the editor can resend
+     * them unchanged (the endpoint requires them); account/security fields live
+     * in Settings, not here.
+     *
+     * @return array<string, mixed>
+     */
+    private function editablePayload(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'display_name' => $user->display_name,
+            'gender' => $user->gender,
+            'gender_other' => $user->gender_other,
+            'user_type' => $user->user_type,
+            'user_type_other' => $user->user_type_other,
+            'preferred_user_types' => $user->preferred_user_types ?? [],
+            'preferred_genders' => $user->preferred_genders ?? [],
+            'profile_audience' => $user->profile_audience?->value ?? 'everyone',
+            'audience_user_ids' => $user->profileAudienceMembers()->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
+            'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),
+        ];
     }
 
     public function inboxPage(Request $request): View
