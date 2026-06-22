@@ -29,13 +29,13 @@ class NavbarHydrationTest extends TestCase
     {
         $user = User::factory()->approved()->create(['display_name' => 'Nova Vega']);
 
-        $payload = $this->initialData($this->actingAs($user)->get('/feed')->assertOk()->getContent());
+        $payload = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
 
         $navbar = $payload['navbar'];
 
         $this->assertTrue($navbar['authenticated']);
         $this->assertSame([
-            'Feed',
+            'Profile',
             'Explore',
             'Create',
             'People',
@@ -44,10 +44,12 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame('/users/follow-requests', $navbar['navItems'][4]['href']);
         $this->assertSame(0, $navbar['navItems'][4]['badge']);
         // The account menu now identifies the signed-in user (name + avatar)
-        // rather than a generic "Account" label.
+        // rather than a generic "Account" label. The avatar + name link to /me;
+        // "View profile" is dropped from the menu as redundant.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
         $this->assertNull($navbar['accountMenu']['avatarUrl']);
-        $this->assertSame(['View profile', 'Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
+        $this->assertSame('/me', $navbar['accountMenu']['profileHref']);
+        $this->assertSame(['Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
         $this->assertSame([], $navbar['guestMenuItems']);
     }
 
@@ -55,7 +57,7 @@ class NavbarHydrationTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
 
-        $payload = $this->initialData($this->actingAs($admin)->get('/feed')->assertOk()->getContent());
+        $payload = $this->initialData($this->actingAs($admin)->get('/me')->assertOk()->getContent());
 
         $navbar = $payload['navbar'];
 

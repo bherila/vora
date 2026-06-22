@@ -150,11 +150,12 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'approved'])->group(function () {
-    // The dashboard was a link grid that only duplicated the nav. Keep the named
-    // route as a redirect so old bookmarks and any route('dashboard') callers
-    // land on the feed (the new home for logged-in users).
-    Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
-    Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    // The profile (/me) is the home for logged-in users; the cross-author feed is
+    // a tab there. Keep the dashboard/feed names as redirects so old bookmarks,
+    // notification links, and any route('feed')/route('dashboard') callers land
+    // on the profile.
+    Route::get('/dashboard', fn () => redirect()->route('me'))->name('dashboard');
+    Route::get('/feed', fn () => redirect()->route('me'))->name('feed');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
     // Invites the user can hand out (balance issued by an admin).

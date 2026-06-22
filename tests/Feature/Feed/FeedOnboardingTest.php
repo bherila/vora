@@ -72,13 +72,13 @@ class FeedOnboardingTest extends TestCase
     }
 
     /**
-     * Parse the onboarding slice the feed page hydrates into its initial data.
+     * Parse the onboarding slice the profile home (/me) hydrates for its Feed tab.
      *
      * @return array<string, bool>|null
      */
     private function onboarding(User $user): ?array
     {
-        $html = $this->actingAs($user)->get('/feed')->assertOk()->getContent();
+        $html = $this->actingAs($user)->get('/me')->assertOk()->getContent();
         preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
         $this->assertArrayHasKey(1, $matches, 'initial-data script not found');
 
@@ -86,7 +86,7 @@ class FeedOnboardingTest extends TestCase
         $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
 
         /** @var array<string, bool>|null $onboarding */
-        $onboarding = $payload['onboarding'] ?? null;
+        $onboarding = $payload['feedOnboarding'] ?? null;
 
         return $onboarding;
     }

@@ -219,7 +219,7 @@ class AuthFlowTest extends TestCase
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->get('/feed')->assertOk();
+        $this->actingAs($user)->get('/me')->assertOk();
     }
 
     #[Test]

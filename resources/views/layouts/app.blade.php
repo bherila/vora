@@ -32,7 +32,9 @@
         // Guests see the marketing home; logged-in users land on the feed, so
         // "Home" would just be a redirect — drop it from the authed nav.
         $__isAuthenticated ? null : ['label' => 'Home', 'href' => route('home', [], false)],
-        $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
+        // The profile (/me) is the home: it hosts the feed plus the user's media,
+        // stories, characters, posts, and favorites.
+        $__isAuthenticated ? ['label' => 'Profile', 'href' => route('me', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
         // Media is uploaded and managed on the profile now; Characters and Stories
         // remain consolidated under "Create" (the create-tabs partial sub-navigates).
@@ -59,8 +61,9 @@
       $__accountMenu = $__isAuthenticated ? [
         'label' => $__currentUser->display_name ?: $__currentUser->name,
         'avatarUrl' => \App\Support\UserPresenter::avatarUrl($__currentUser, app(\App\Services\Media\MediaResponseService::class), $__currentUser),
+        // The avatar + name link straight to the profile; the caret opens this menu.
+        'profileHref' => route('me', [], false),
         'items' => [
-          ['type' => 'link', 'label' => 'View profile', 'href' => route('me', [], false)],
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
           ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],

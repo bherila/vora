@@ -16,6 +16,7 @@ use App\Notifications\FollowRequestReceived;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\FollowGraph;
+use App\Support\Onboarding;
 use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -62,6 +63,8 @@ class FollowController extends Controller
                 'followProfile' => $this->profilePayload($current, $current),
                 'profileEditable' => $this->editablePayload($current),
                 'profileMedia' => $this->profileMediaPayload($current),
+                // First-run checklist for the home Feed tab; null once complete.
+                'feedOnboarding' => Onboarding::steps($current),
             ],
         ]);
     }

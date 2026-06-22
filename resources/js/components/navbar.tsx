@@ -51,6 +51,8 @@ export interface NavMenu {
 export interface AccountMenu {
   label: string;
   avatarUrl?: string | null;
+  /** When set, the avatar + name link here (the caret still opens the menu). */
+  profileHref?: string;
   items: AccountMenuItem[];
 }
 
@@ -193,15 +195,28 @@ export default function Navbar({
             ))}
           </div>
         ) : (
-          <div className='relative' ref={userMenuRef}>
+          <div className='relative flex items-center gap-1' ref={userMenuRef}>
+            {accountMenu?.profileHref ? (
+              <a
+                href={safeHref(accountMenu.profileHref)}
+                className='flex items-center gap-2 text-sm hover:underline underline-offset-4'
+              >
+                <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
+                <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
+              </a>
+            ) : (
+              <span className='flex items-center gap-2 text-sm'>
+                <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
+                <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
+              </span>
+            )}
             <button
               type='button'
-              className='flex items-center gap-2 text-sm hover:underline underline-offset-4'
+              className='rounded-md p-1 hover:bg-gray-50 dark:hover:bg-[#1f1f1e]'
               onClick={() => setUserMenuOpen((v) => !v)}
               aria-expanded={userMenuOpen}
+              aria-label='Account menu'
             >
-              <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
-              <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
               <ChevronDown className='w-3 h-3' />
             </button>
             {userMenuOpen && (
