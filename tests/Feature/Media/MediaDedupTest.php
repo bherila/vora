@@ -201,6 +201,7 @@ class MediaDedupTest extends TestCase
 
     public function test_pdq_image_service_resolves_hash_and_flags_duplicate(): void
     {
+        config(['filesystems.disks.hls.bucket' => 'hls-test']);
         $user = User::factory()->approved()->create();
 
         $existing = Media::factory()->for($user)->approved()->create([
@@ -230,6 +231,7 @@ class MediaDedupTest extends TestCase
 
     public function test_pdq_image_service_marks_checked_when_no_mapping_yet(): void
     {
+        config(['filesystems.disks.hls.bucket' => 'hls-test']);
         $user = User::factory()->approved()->create();
         $fresh = Media::factory()->for($user)->approved()->create([
             'type' => MediaType::Photo,
@@ -246,6 +248,48 @@ class MediaDedupTest extends TestCase
         $fresh->refresh();
         $this->assertNull($fresh->pdq_hash);
         $this->assertNotNull($fresh->pdq_checked_at);
+    }
+
+    public function test_pdq_image_service_is_noop_when_results_disk_unconfigured(): void
+    {
+        // No filesystems.disks.hls.bucket configured: ensureResolved must not
+        // touch storage at all (a deployment with photos but no HLS/PDQ).
+        config(['filesystems.disks.hls.bucket' => null]);
+        $user = User::factory()->approved()->create();
+        $fresh = Media::factory()->for($user)->approved()->create([
+            'type' => MediaType::Photo,
+            'upload_status' => 'ready',
+        ]);
+
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('get')->never();
+            $mock->shouldReceive('deleteFile')->never();
+        });
+
+        $this->assertFalse(app(PdqImageService::class)->ensureResolved($fresh));
+        app(PdqImageService::class)->deleteMapping($fresh); // must not throw or hit storage
+        $this->assertNull($fresh->fresh()->pdq_hash);
+    }
+
+    public function test_pdq_flag_direction_is_independent_of_resolution_order(): void
+    {
+        $user = User::factory()->approved()->create();
+        $service = app(MediaDuplicateService::class);
+
+        // Older photo (lower id) and a near-identical newer one.
+        $older = Media::factory()->for($user)->approved()->create([
+            'pdq_hash' => str_repeat('0', 64), 'upload_status' => 'ready',
+        ]);
+        $newer = Media::factory()->for($user)->approved()->create([
+            'pdq_hash' => str_repeat('0', 63).'1', 'upload_status' => 'ready',
+        ]);
+
+        // Flag from the OLDER photo's perspective (its hash resolved last). The
+        // newer one must be flagged as the duplicate — never the original.
+        $service->flagPdqDuplicate($older->fresh());
+
+        $this->assertNull($older->fresh()->duplicate_of_media_id);
+        $this->assertSame($older->id, $newer->fresh()->duplicate_of_media_id);
     }
 
     public function test_video_sharing_a_content_id_is_flagged(): void

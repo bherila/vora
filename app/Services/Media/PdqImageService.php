@@ -33,6 +33,17 @@ class PdqImageService
     }
 
     /**
+     * Whether the PDQ results disk has a bucket configured. The disk defaults to
+     * `hls`, whose bucket is optional — in a deployment that has photos but has
+     * not enabled HLS/PDQ, touching it would fail. When unconfigured there can be
+     * no mappings anyway, so every PDQ operation is a safe no-op.
+     */
+    private function diskConfigured(): bool
+    {
+        return (string) config('filesystems.disks.'.$this->disk().'.bucket', '') !== '';
+    }
+
+    /**
      * Resolve whether a PDQ hash exists for this photo, caching it on the row.
      * Cheap and idempotent: returns immediately once known, otherwise looks up
      * the mapping at most once per RECHECK_AFTER_MINUTES. Flags a per-owner
@@ -48,7 +59,7 @@ class PdqImageService
             return true;
         }
 
-        if (! $this->isRecheckDue($photo)) {
+        if (! $this->isRecheckDue($photo) || ! $this->diskConfigured()) {
             return false;
         }
 
@@ -74,7 +85,7 @@ class PdqImageService
      */
     public function deleteMapping(Media $photo): void
     {
-        if ($photo->type !== MediaType::Photo) {
+        if ($photo->type !== MediaType::Photo || ! $this->diskConfigured()) {
             return;
         }
 

@@ -97,7 +97,7 @@ class MediaDuplicateService
      */
     public function flagPdqDuplicate(Media $media): void
     {
-        if ($media->type !== MediaType::Photo || $media->pdq_hash === null || $media->duplicate_of_media_id !== null) {
+        if ($media->type !== MediaType::Photo || $media->pdq_hash === null) {
             return;
         }
 
@@ -107,9 +107,9 @@ class MediaDuplicateService
             ->where('upload_status', 'ready')
             ->whereNotNull('pdq_hash')
             ->whereKeyNot($media->id)
-            ->get(['id', 'pdq_hash']);
+            ->get(['id', 'pdq_hash', 'duplicate_of_media_id']);
 
-        $bestId = null;
+        $best = null;
         $bestDistance = null;
         foreach ($candidates as $candidate) {
             $distance = PerceptualHash::hammingDistanceHex($media->pdq_hash, $candidate->pdq_hash);
@@ -118,12 +118,23 @@ class MediaDuplicateService
             }
             if ($bestDistance === null || $distance < $bestDistance) {
                 $bestDistance = $distance;
-                $bestId = $candidate->id;
+                $best = $candidate;
             }
         }
 
-        if ($bestId !== null) {
-            $media->forceFill(['duplicate_of_media_id' => $bestId])->save();
+        if ($best === null) {
+            return;
+        }
+
+        // The worker resolves hashes asynchronously and out of order, so this can
+        // run with $media being either the older or the newer of the pair. Always
+        // point the newer (higher id) at the older original, so the flag is stable
+        // regardless of which hash was resolved first — never flag the original as
+        // a duplicate of a later upload.
+        [$newer, $olderId] = $media->id > $best->id ? [$media, $best->id] : [$best, $media->id];
+
+        if ($newer->duplicate_of_media_id === null) {
+            $newer->forceFill(['duplicate_of_media_id' => $olderId])->save();
         }
     }
 

@@ -272,7 +272,7 @@ class MediaServicesTest extends TestCase
     {
         Storage::fake('photos');
         Storage::fake('hls');
-        config(['media.pdq_disk' => 'hls']);
+        config(['media.pdq_disk' => 'hls', 'filesystems.disks.hls.bucket' => 'hls-test']);
         $media = Media::factory()->create(['disk' => 'photos']);
         Storage::disk('photos')->put($media->object_key, 'data');
         Storage::disk('hls')->put('image-mappings/'.$media->object_key.'.json', json_encode(['pdqHash' => str_repeat('0', 64)]));
