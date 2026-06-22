@@ -1,12 +1,8 @@
 import { ChangePasswordForm, PasskeySection } from 'bwh-auth';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { toast, Toaster } from 'sonner';
+import { Toaster } from 'sonner';
 
-import { AudienceField } from '@/community/AudienceField';
-import { FileDropzone } from '@/components/media/FileDropzone';
-import { UploadProgress } from '@/components/media/UploadProgress';
-import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,12 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
-import { loadInterests, persistRatings } from '@/interests/api';
-import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
-import { RequestInterestForm } from '@/interests/request-interest-form';
 import { type Audience } from '@/lib/audience';
-import type { MediaItem } from '@/media/types';
-import { putToSignedUrl } from '@/media/upload';
 import {
   GENDER_OPTIONS,
   normalizeProfileOptionValue,
@@ -91,18 +82,6 @@ interface UserSettingsInitialData {
   can_manage_interests: boolean;
 }
 
-interface ProfilePictureUploadResponse {
-  success: boolean;
-  data: MediaItem;
-  upload_url: string;
-  upload_headers: Record<string, string>;
-}
-
-interface ProfilePictureCompleteResponse {
-  success: boolean;
-  data: MediaItem;
-}
-
 interface UserSettingsResponse {
   success: boolean;
   message?: string;
@@ -130,16 +109,7 @@ interface UserSettingsResponse {
 
 interface AccountPayload {
   name: string;
-  display_name: string;
   email: string;
-  gender: string | null;
-  gender_other: string | null;
-  user_type: string | null;
-  user_type_other: string | null;
-  preferred_user_types: string[] | null;
-  preferred_genders: string[] | null;
-  profile_audience: Audience;
-  audience_user_ids: number[];
   notify_new_post: boolean;
   notify_post_reaction: boolean;
   notify_post_comment: boolean;
@@ -214,16 +184,6 @@ function getInitialData(): UserSettingsInitialData {
   return payload ? normalizeInitialData(payload) : emptyInitialData();
 }
 
-function blankToNull(value: string): string | null {
-  const trimmed = value.trim();
-
-  return trimmed === '' ? null : trimmed;
-}
-
-function selectionsToPayload(values: string[]): string[] | null {
-  return values.length > 0 ? values : null;
-}
-
 function normalizeAudience(value: unknown): Audience {
   return value === 'followers' || value === 'mutuals' || value === 'specific' ? value : 'everyone';
 }
@@ -237,19 +197,9 @@ function normalizeNumberList(value: unknown): number[] {
 function UserSettingsPage() {
   const initialData = getInitialData();
 
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'account'>('profile');
   const [accountName, setAccountName] = useState(initialData.name);
-  const [profileDisplayName, setProfileDisplayName] = useState(initialData.display_name);
   const [accountBirthDate] = useState(initialData.birth_date);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
-  const [profileGender, setProfileGender] = useState(initialData.gender);
-  const [profileGenderOther, setProfileGenderOther] = useState(initialData.gender_other);
-  const [profileUserType, setProfileUserType] = useState(initialData.user_type);
-  const [profileUserTypeOther, setProfileUserTypeOther] = useState(initialData.user_type_other);
-  const [preferredUserTypes, setPreferredUserTypes] = useState(initialData.preferred_user_types);
-  const [preferredGenders, setPreferredGenders] = useState(initialData.preferred_genders);
-  const [profileAudience, setProfileAudience] = useState(initialData.profile_audience);
-  const [profileAudienceUserIds, setProfileAudienceUserIds] = useState(initialData.audience_user_ids);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const [emailLocked] = useState(initialData.email_locked);
@@ -272,53 +222,12 @@ function UserSettingsPage() {
   const [pushSaving, setPushSaving] = useState(false);
   const [pushMessage, setPushMessage] = useState('');
   const [pushError, setPushError] = useState('');
-  const [profileSaving, setProfileSaving] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
-  const [profileMessage, setProfileMessage] = useState('');
-  const [profileError, setProfileError] = useState('');
   const [accountMessage, setAccountMessage] = useState('');
   const [accountError, setAccountError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [profilePictureUploading, setProfilePictureUploading] = useState(false);
-  const [profilePictureProgress, setProfilePictureProgress] = useState(0);
-  const [profilePictureFiles, setProfilePictureFiles] = useState<File[]>([]);
-  const profilePictureAbortRef = useRef<AbortController | null>(null);
-  const [profilePictureMessage, setProfilePictureMessage] = useState('');
-  const [profilePictureError, setProfilePictureError] = useState('');
-  const [interests, setInterests] = useState<RatableInterest[]>([]);
-  // Mirrors the /api/interests access gate. Changing the email clears email
-  // verification server-side, which makes the API 403, so we drop access here
-  // too rather than leave the panels interactive until a reload.
-  const [interestsEnabled, setInterestsEnabled] = useState(initialData.can_manage_interests);
-
-  useEffect(() => {
-    // The interests API is gated behind the approval middleware (approved +
-    // verified + not disabled), so only eligible users can load/rate them.
-    // Other users still see the rest of Settings without a failing request.
-    if (!interestsEnabled) {
-      return;
-    }
-
-    let active = true;
-    const load = async (): Promise<void> => {
-      try {
-        const { interests: loaded } = await loadInterests(null);
-        if (active) {
-          setInterests(loaded);
-        }
-      } catch (err) {
-        toast.error(typeof err === 'string' ? err : 'Failed to load interests.');
-      }
-    };
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [interestsEnabled]);
 
   useEffect(() => {
     const supported = isWebPushSupported();
@@ -359,43 +268,13 @@ function UserSettingsPage() {
     };
   }, []);
 
-  const handleSaveInterestRating = async (interestId: number, level: number): Promise<void> => {
-    try {
-      await persistRatings(null, [{ interest_id: interestId, level }]);
-      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: level } : item)));
-      toast.success('Interest rating saved.');
-    } catch (err) {
-      toast.error(typeof err === 'string' ? err : 'Failed to save interest rating.');
-      throw err; // let the list keep the row pending for retry
-    }
-  };
-
-  const handleClearInterestRating = async (interestId: number): Promise<void> => {
-    try {
-      await persistRatings(null, [{ interest_id: interestId, level: null }]);
-      setInterests((current) => current.map((item) => (item.id === interestId ? { ...item, rating: null } : item)));
-      toast.success('Interest rating cleared.');
-    } catch (err) {
-      toast.error(typeof err === 'string' ? err : 'Failed to clear interest rating.');
-    }
-  };
-
   const applyResponseData = (data: UserSettingsResponse['data']) => {
     if (!data) {
       return;
     }
 
     setAccountName(data.name);
-    setProfileDisplayName(data.display_name);
     setAccountEmail(data.email);
-    setProfileGender(normalizeProfileOptionValue(GENDER_OPTIONS, data.gender));
-    setProfileGenderOther(data.gender_other ?? '');
-    setProfileUserType(normalizeProfileOptionValue(USER_TYPE_OPTIONS, data.user_type));
-    setProfileUserTypeOther(data.user_type_other ?? '');
-    setPreferredUserTypes(normalizeProfileSelections(USER_TYPE_OPTIONS, data.preferred_user_types));
-    setPreferredGenders(normalizeProfileSelections(GENDER_OPTIONS, data.preferred_genders));
-    setProfileAudience(data.profile_audience);
-    setProfileAudienceUserIds(data.audience_user_ids);
     setNotifyNewPost(data.notify_new_post);
     setNotifyPostReaction(data.notify_post_reaction);
     setNotifyPostComment(data.notify_post_comment);
@@ -405,18 +284,13 @@ function UserSettingsPage() {
     setNotifyCoAuthorInviteAccepted(data.notify_co_author_invite_accepted);
   };
 
-  const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'display_name' | 'email'>> = {}): AccountPayload => ({
+  // Settings owns only account + security + notifications now; identity fields
+  // (display name, gender, type, audience, interests, picture) are edited on /me.
+  // Those fields are nullable/sometimes on the endpoint, so omitting them here
+  // leaves them untouched — the account form can never clobber a /me edit.
+  const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'email'>> = {}): AccountPayload => ({
     name: overrides.name ?? accountName.trim(),
-    display_name: overrides.display_name ?? profileDisplayName.trim(),
     email: overrides.email ?? accountEmail.trim(),
-    gender: blankToNull(profileGender),
-    gender_other: profileGender === 'other' ? blankToNull(profileGenderOther) : null,
-    user_type: blankToNull(profileUserType),
-    user_type_other: profileUserType === 'other' ? blankToNull(profileUserTypeOther) : null,
-    preferred_user_types: selectionsToPayload(preferredUserTypes),
-    preferred_genders: selectionsToPayload(preferredGenders),
-    profile_audience: profileAudience,
-    audience_user_ids: profileAudience === 'specific' ? profileAudienceUserIds : [],
     notify_new_post: notifyNewPost,
     notify_post_reaction: notifyPostReaction,
     notify_post_comment: notifyPostComment,
@@ -425,65 +299,6 @@ function UserSettingsPage() {
     notify_co_author_invite: notifyCoAuthorInvite,
     notify_co_author_invite_accepted: notifyCoAuthorInviteAccepted,
   });
-
-  const handleProfilePictureChange = async (selectedFiles: File[]): Promise<void> => {
-    const file = selectedFiles[0] ?? null;
-    setProfilePictureFiles(file ? [file] : []);
-    if (!file) {
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      setProfilePictureError('Profile pictures must be images, not videos.');
-      setProfilePictureMessage('');
-      return;
-    }
-
-    const abortController = new AbortController();
-    profilePictureAbortRef.current = abortController;
-    setProfilePictureUploading(true);
-    setProfilePictureProgress(0);
-    setProfilePictureError('');
-    setProfilePictureMessage('');
-
-    try {
-      const created = await fetchWrapper.post('/api/account/profile-picture', {
-        filename: file.name,
-        content_type: file.type,
-        size: file.size,
-      }) as ProfilePictureUploadResponse;
-
-      await putToSignedUrl(created.upload_url, file, created.upload_headers, (fraction) => {
-        setProfilePictureProgress(fraction * 100);
-      }, { signal: abortController.signal });
-
-      const completed = await fetchWrapper.post(`/api/account/profile-picture/${created.data.id}/complete`, {}) as ProfilePictureCompleteResponse;
-      setProfilePictureMessage(completed.data.upload_status === 'ready'
-        ? 'Profile picture uploaded and waiting for admin review.'
-        : 'Profile picture upload started.');
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setProfilePictureError('Profile picture upload canceled.');
-      } else {
-        setProfilePictureError(typeof err === 'string' ? err : 'Failed to upload profile picture.');
-      }
-    } finally {
-      setProfilePictureUploading(false);
-      profilePictureAbortRef.current = null;
-    }
-  };
-
-  const handleRemoveProfilePicture = async (): Promise<void> => {
-    setProfilePictureError('');
-    setProfilePictureMessage('');
-    try {
-      await fetchWrapper.delete('/api/account/profile-picture', {});
-      setProfilePictureFiles([]);
-      setProfilePictureMessage('Profile picture removed.');
-    } catch (err) {
-      setProfilePictureError(typeof err === 'string' ? err : 'Failed to remove profile picture.');
-    }
-  };
 
   const handleDeactivateAccount = async (): Promise<void> => {
     if (!window.confirm('Deactivate your account? Other users will no longer be able to see you. You can reactivate any time by logging back in.')) {
@@ -549,43 +364,6 @@ function UserSettingsPage() {
     }
   };
 
-  const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const displayName = profileDisplayName.trim();
-    if (!displayName) {
-      setProfileError('Display name is required.');
-      return;
-    }
-
-    if (profileUserType === 'other' && profileUserTypeOther.trim().length === 0) {
-      setProfileError('Please specify your user type when choosing Other.');
-      return;
-    }
-
-    if (profileGender === 'other' && profileGenderOther.trim().length === 0) {
-      setProfileError('Please specify your gender when choosing Other.');
-      return;
-    }
-
-    setProfileSaving(true);
-    setProfileError('');
-    setProfileMessage('');
-
-    try {
-      const response = await fetchWrapper.patch('/api/account', buildAccountPayload({
-        display_name: displayName,
-      })) as UserSettingsResponse;
-
-      setProfileMessage('Profile updated.');
-      applyResponseData(response.data);
-    } catch (err) {
-      setProfileError(typeof err === 'string' ? err : 'Failed to update profile.');
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
   const handleAccountSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -606,12 +384,6 @@ function UserSettingsPage() {
         email,
       })) as UserSettingsResponse;
 
-      // Changing the email resets verification, so the interests API will 403
-      // until the new address is verified — hide the panels immediately.
-      if (email !== initialData.email) {
-        setInterestsEnabled(false);
-      }
-
       setAccountMessage(response.message ?? 'Account updated.');
       applyResponseData(response.data);
     } catch (err) {
@@ -625,195 +397,18 @@ function UserSettingsPage() {
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-bold">Settings</h1>
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Settings sections">
-        <Button type="button" size="sm" variant={settingsTab === 'profile' ? 'default' : 'outline'} aria-pressed={settingsTab === 'profile'} onClick={() => setSettingsTab('profile')}>
-          Profile
-        </Button>
-        <Button type="button" size="sm" variant={settingsTab === 'account' ? 'default' : 'outline'} aria-pressed={settingsTab === 'account'} onClick={() => setSettingsTab('account')}>
-          Account &amp; security
-        </Button>
-      </div>
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div>
+            <p className="font-medium">Your public profile</p>
+            <p className="text-sm text-muted-foreground">Display name, photo, gender/type, audience, and interests are edited on your profile.</p>
+          </div>
+          <Button variant="outline" asChild><a href="/me">Edit profile</a></Button>
+        </CardContent>
+      </Card>
 
-      {settingsTab === 'profile' && (
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold">My Profile</h2>
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile details</CardTitle>
-            <CardDescription>Control how your profile appears in discovery.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {profileError && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{profileError}</AlertDescription>
-              </Alert>
-            )}
-            {profileMessage && (
-              <Alert className="mb-4">
-                <AlertDescription>{profileMessage}</AlertDescription>
-              </Alert>
-            )}
-            <div className="mb-6 space-y-3 rounded-lg border border-border p-4">
-              <div>
-                <h3 className="font-medium">Profile picture</h3>
-                <p className="text-sm text-muted-foreground">
-                  Upload an image for your profile. It will be reviewed by an admin before other users can see it.
-                </p>
-              </div>
-              {profilePictureError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{profilePictureError}</AlertDescription>
-                </Alert>
-              )}
-              {profilePictureMessage && (
-                <Alert>
-                  <AlertDescription>{profilePictureMessage}</AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-2">
-                <FileDropzone
-                  accept="image/*"
-                  files={profilePictureFiles}
-                  label="Drop a profile image here"
-                  onFilesChange={(nextFiles) => void handleProfilePictureChange(nextFiles)}
-                  disabled={profilePictureUploading}
-                  helperText="Select one image. Drag and drop here, or click to browse."
-                />
-                {profilePictureUploading && (
-                  <UploadProgress
-                    label="Uploading profile picture…"
-                    progress={profilePictureProgress}
-                    onCancel={() => profilePictureAbortRef.current?.abort()}
-                  />
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={profilePictureUploading}
-                  onClick={() => void handleRemoveProfilePicture()}
-                >
-                  Remove current picture
-                </Button>
-              </div>
-            </div>
-            <form className="space-y-4" onSubmit={(event) => void handleProfileSubmit(event)}>
-              <div className="space-y-1">
-                <Label htmlFor="account-display-name">Display name</Label>
-                <Input
-                  id="account-display-name"
-                  value={profileDisplayName}
-                  onChange={(event) => setProfileDisplayName(event.target.value)}
-                  autoComplete="nickname"
-                  required
-                />
-              </div>
-              <ProfileOptionButtonGroup
-                legend="User type"
-                name="account-user-type"
-                options={USER_TYPE_OPTIONS}
-                value={profileUserType}
-                onChange={setProfileUserType}
-              />
-              {profileUserType === 'other' && (
-                <div className="space-y-1">
-                  <Label htmlFor="account-user-type-other">Other user type</Label>
-                  <Input
-                    id="account-user-type-other"
-                    value={profileUserTypeOther}
-                    onChange={(event) => setProfileUserTypeOther(event.target.value)}
-                    required
-                  />
-                </div>
-              )}
-              <ProfileOptionButtonGroup
-                legend="Gender"
-                name="account-gender"
-                options={GENDER_OPTIONS}
-                value={profileGender}
-                onChange={setProfileGender}
-              />
-              {profileGender === 'other' && (
-                <div className="space-y-1">
-                  <Label htmlFor="account-gender-other">Other gender</Label>
-                  <Input
-                    id="account-gender-other"
-                    value={profileGenderOther}
-                    onChange={(event) => setProfileGenderOther(event.target.value)}
-                    required
-                  />
-                </div>
-              )}
-              <ProfileOptionCheckboxGroup
-                legend="User types you want to see"
-                description="Used for discovery and matching. You can update this at any time."
-                name="account-preferred-user-types"
-                options={USER_TYPE_OPTIONS}
-                values={preferredUserTypes}
-                onChange={setPreferredUserTypes}
-              />
-              <ProfileOptionCheckboxGroup
-                legend="Genders you want to see"
-                description="Used for discovery and matching. You can update this at any time."
-                name="account-preferred-genders"
-                options={GENDER_OPTIONS}
-                values={preferredGenders}
-                onChange={setPreferredGenders}
-              />
-              <div className="space-y-2">
-                <AudienceField
-                  audience={profileAudience}
-                  onAudienceChange={setProfileAudience}
-                  selectedUserIds={profileAudienceUserIds}
-                  onSelectedUserIdsChange={setProfileAudienceUserIds}
-                  label="Who can see your profile"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Restricted profiles stay listed so people can still request to follow you — only your details are hidden.
-                </p>
-              </div>
-              <Button type="submit" disabled={profileSaving}>
-                {profileSaving ? 'Saving...' : 'Save profile'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {interestsEnabled && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Your interests</CardTitle>
-                <CardDescription>
-                  Rate interests from -10 (fully uninterested) to +10 (fully interested). Characters inherit these unless you set custom interests for them.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <InterestRatingList
-                  interests={interests}
-                  onSave={handleSaveInterestRating}
-                  onClear={handleClearInterestRating}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Request a new interest</CardTitle>
-                <CardDescription>Suggest an interest for an admin to review and add to the catalog.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <RequestInterestForm interests={interests} />
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </section>
-      )}
-
-      {settingsTab === 'account' && (
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold">Account Settings</h2>
+        <h2 className="text-xl font-semibold">Account &amp; security</h2>
         <Card>
           <CardHeader>
             <CardTitle>Account information</CardTitle>
@@ -1039,7 +634,6 @@ function UserSettingsPage() {
           </CardContent>
         </Card>
       </section>
-      )}
       <Toaster position="top-right" richColors closeButton />
     </div>
   );
