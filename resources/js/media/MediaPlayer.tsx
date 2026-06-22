@@ -41,7 +41,15 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
   }
 
   if (item.video?.status === 'processing') {
-    return <p className="text-sm text-muted-foreground">Video is processing…</p>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-8 text-center">
+        <p className="text-sm font-medium">Video is still processing</p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Transcoding usually takes 15–30 minutes. Until it finishes the video won’t play for anyone it’s shared
+          with. Check back soon — no further action is needed.
+        </p>
+      </div>
+    );
   }
 
   return <p className="text-sm text-muted-foreground">Unavailable.</p>;
