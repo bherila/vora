@@ -1,0 +1,111 @@
+<?php
+
+namespace Tests\Feature\Profile;
+
+use App\Enums\Audience;
+use App\Models\Character;
+use App\Models\FollowRequest;
+use App\Models\Media;
+use App\Models\Story;
+use App\Models\User;
+use App\Services\FileStorageService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
+use Tests\TestCase;
+
+class ProfileContentTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function fakeStorage(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+        });
+    }
+
+    private function follow(User $follower, User $owner): void
+    {
+        FollowRequest::query()->create([
+            'requester_id' => $follower->id,
+            'recipient_id' => $owner->id,
+            'status' => 'accepted',
+        ]);
+    }
+
+    public function test_profile_media_is_scoped_to_the_selected_identity(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        $mainMedia = Media::factory()->for($owner)->approved()->create(['title' => 'Main']);
+        $characterMedia = Media::factory()->for($owner)->approved()->create(['title' => 'Char', 'character_id' => $character->id]);
+
+        // Main identity: only character-less media.
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/media")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $mainMedia->id);
+
+        // Character identity: only that character's media.
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/media?character_id={$character->id}")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $characterMedia->id);
+    }
+
+    public function test_profile_media_hides_items_the_viewer_cannot_see(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // spacer so the viewer is not the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $public = Media::factory()->for($owner)->approved()->create(['title' => 'Public']);
+        Media::factory()->for($owner)->approved()->audience(Audience::Followers)->create(['title' => 'Followers']);
+
+        // The viewer does not follow the owner, so only the Everyone item shows.
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/media")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $public->id);
+
+        // After following, the followers-only item appears too.
+        $this->follow($viewer, $owner);
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/media")
+            ->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_profile_content_requires_profile_visibility(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create(['profile_audience' => Audience::Followers]);
+        $viewer = User::factory()->approved()->create();
+
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/media")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/stories")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/posts")->assertForbidden();
+    }
+
+    public function test_a_foreign_character_id_is_not_found(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $foreignCharacter = Character::factory()->for($stranger)->create();
+
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/media?character_id={$foreignCharacter->id}")
+            ->assertNotFound();
+    }
+
+    public function test_profile_stories_lists_published_approved_stories_for_others(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $published = Story::factory()->for($owner)->published()->approved()->create();
+        // A draft must not leak to another viewer.
+        Story::factory()->for($owner)->create(['status' => 'draft']);
+
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/stories")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $published->id);
+    }
+}
