@@ -6,6 +6,11 @@ import type { MediaItem, MediaTypeFilter, PagedResponse } from '@/media/types';
 interface MediaListingFilters {
   type: MediaTypeFilter;
   interestIds: number[];
+  /**
+   * Extra endpoint-specific query params (e.g. the profile's `character_id`
+   * scope). Kept generic so this hook stays shared across surfaces.
+   */
+  extraParams?: Record<string, string | number>;
 }
 
 /**
@@ -21,6 +26,9 @@ export function buildListingQuery(filters: MediaListingFilters, page: number): s
   }
   for (const id of filters.interestIds) {
     params.append('interest_ids[]', String(id));
+  }
+  for (const [key, value] of Object.entries(filters.extraParams ?? {})) {
+    params.set(key, String(value));
   }
   return params.toString();
 }
@@ -57,9 +65,11 @@ export function useMediaListing(endpoint: string, filters: MediaListingFilters, 
   const [error, setError] = useState<string | null>(null);
   const skipInitialLoadRef = useRef(initial !== undefined);
 
-  const { type, interestIds } = filters;
+  const { type, interestIds, extraParams } = filters;
   // Serialize the interest list so the effect re-runs on content change, not identity.
   const interestKey = interestIds.join(',');
+  // Same idea for the extra params object: depend on its contents, not identity.
+  const extraKey = JSON.stringify(extraParams ?? {});
 
   const loadPage = useCallback(
     async (target: number): Promise<void> => {
@@ -70,7 +80,7 @@ export function useMediaListing(endpoint: string, filters: MediaListingFilters, 
       }
       setError(null);
       try {
-        const query = buildListingQuery({ type, interestIds }, target);
+        const query = buildListingQuery({ type, interestIds, extraParams: extraParams ?? {} }, target);
         const response = (await fetchWrapper.get(`${endpoint}?${query}`)) as PagedResponse<MediaItem>;
         const next = response.data ?? [];
         setItems((current) => (target > 1 ? [...current, ...next] : next));
@@ -83,9 +93,9 @@ export function useMediaListing(endpoint: string, filters: MediaListingFilters, 
         setLoadingMore(false);
       }
     },
-    // interestKey stands in for interestIds; endpoint/type are primitives.
+    // interestKey/extraKey stand in for the object deps; endpoint/type are primitives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [endpoint, type, interestKey],
+    [endpoint, type, interestKey, extraKey],
   );
 
   // Reload from page 1 whenever the endpoint or filters change.

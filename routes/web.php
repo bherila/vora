@@ -161,8 +161,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/api/invites', [InviteController::class, 'generate']);
     Route::delete('/api/invites/{invite}', [InviteController::class, 'revoke']);
 
-    // Media library + shareable single-media view.
-    Route::get('/media', [MediaController::class, 'library'])->name('media');
+    // /media is retired: media now lives on the profile (upload + management) and
+    // Explore is the cross-profile browse. Redirect old links/bookmarks there.
+    Route::get('/media', fn () => redirect()->route('explore'))->name('media');
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
 
     // Cross-user exploration of approved, discoverable media.

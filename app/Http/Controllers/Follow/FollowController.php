@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Follow;
 
+use App\Enums\Audience;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Models\Character;
@@ -60,8 +61,40 @@ class FollowController extends Controller
             'initialData' => [
                 'followProfile' => $this->profilePayload($current, $current),
                 'profileEditable' => $this->editablePayload($current),
+                'profileMedia' => $this->profileMediaPayload($current),
             ],
         ]);
+    }
+
+    /**
+     * Upload context for the owner's own profile: the character options (with
+     * inherited privacy) the upload dialog offers, plus the interests pre-filled
+     * from the user's last upload. Media is uploaded on the profile, so this is
+     * hydrated into /me rather than a separate library page.
+     *
+     * @return array{characters: list<array<string, mixed>>, last_interest_ids: list<int>}
+     */
+    private function profileMediaPayload(User $user): array
+    {
+        $characters = $user->characters()
+            ->with('audienceMembers')
+            ->orderBy('display_name')
+            ->get()
+            ->map(fn (Character $character): array => [
+                'id' => $character->id,
+                'display_name' => $character->display_name,
+                'audience' => $character->audience->value,
+                'audience_user_ids' => $character->audience === Audience::SpecificPeople
+                    ? $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()
+                    : [],
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'characters' => $characters,
+            'last_interest_ids' => array_values(array_map('intval', $user->last_media_interest_ids ?? [])),
+        ];
     }
 
     /**

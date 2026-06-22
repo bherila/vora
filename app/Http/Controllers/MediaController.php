@@ -46,20 +46,6 @@ class MediaController extends Controller
     ) {}
 
     /**
-     * The signed-in user's media library page.
-     */
-    public function library(Request $request): View
-    {
-        return view('user.media', ['initialData' => [
-            'userMedia' => [
-                'last_interest_ids' => array_values(array_map('intval', $request->user()->last_media_interest_ids ?? [])),
-                'characters' => $this->characterOptions($request->user()),
-                ...$this->indexPayload($request),
-            ],
-        ]]);
-    }
-
-    /**
      * A shareable single-media view page (resolved client-side by ulid).
      */
     public function viewPage(Request $request, string $ulid): View
@@ -147,25 +133,6 @@ class MediaController extends Controller
                 'part_size_bytes' => (int) config('media.multipart.part_size_bytes'),
             ],
         ], 201);
-    }
-
-    /**
-     * @return list<array{id: int, display_name: string, audience: string, audience_user_ids: list<int>}>
-     */
-    private function characterOptions(User $user): array
-    {
-        return $user->characters()
-            ->with('audienceMembers')
-            ->orderBy('display_name')
-            ->get()
-            ->map(fn (Character $character): array => [
-                'id' => $character->id,
-                'display_name' => $character->display_name,
-                'audience' => $character->audience->value,
-                'audience_user_ids' => $this->characterAudienceUserIds($character),
-            ])
-            ->values()
-            ->all();
     }
 
     /**

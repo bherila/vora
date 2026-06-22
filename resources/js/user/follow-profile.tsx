@@ -7,7 +7,6 @@ import { PostCard } from '@/community/PostCard';
 import type { CommunityPost } from '@/community/types';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
-import { PrivacyBadge } from '@/components/privacy-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,8 @@ import { StoryGrid } from '@/explore/StoryGrid';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { MediaGrid } from '@/media/MediaGrid';
+import type { CharacterOption } from '@/media/MediaUploadDialog';
+import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import type { MediaItem } from '@/media/types';
 import type { StoryDiscoveryItem } from '@/stories/types';
 import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
@@ -44,8 +45,15 @@ interface ProfileResponse { success: boolean; data: ProfileData; }
 type TabKey = 'media' | 'stories' | 'posts' | 'favorites';
 interface FavoriteCard { type: string; id: number; label: string; subtitle: string; href: string; thumbnail_url: string | null; }
 
+/** Upload context for the owner's own profile: character privacy options + last interests. */
+interface ProfileMediaData { characters: CharacterOption[]; last_interest_ids: number[]; }
+
 function getInitialProfile(): ProfileData | null {
   return readInitialData<{ followProfile?: ProfileData }>().followProfile ?? null;
+}
+
+function getProfileMedia(): ProfileMediaData {
+  return readInitialData<{ profileMedia?: ProfileMediaData }>().profileMedia ?? { characters: [], last_interest_ids: [] };
 }
 
 /** Fetch a profile content listing for the active identity/tab; refetch on change. */
@@ -118,24 +126,12 @@ function TabError({ message }: { message: string }) {
   return <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
 }
 
-function MediaTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
+/** Read-only media grid for a profile that isn't the viewer's own. */
+function VisitorMediaTab({ userId, identity }: { userId: number; identity: number | null }) {
   const { items, loading, error } = useProfileList<MediaItem>(`/api/users/${userId}/media${characterQuery(identity)}`);
   if (loading) return <GridSkeleton />;
   if (error) return <TabError message={error} />;
-  if (items.length === 0) {
-    return (
-      <TabEmpty
-        icon={Images}
-        title={isSelf ? 'You haven’t added media to this profile yet.' : 'No media to show.'}
-        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/media">Upload media</a></Button> : undefined}
-      />
-    );
-  }
-  // Only the owner sees the per-item privacy indicator, so an item's audience is
-  // never disclosed to other viewers.
-  if (isSelf) {
-    return <MediaGrid items={items} renderActions={(item) => <PrivacyBadge audience={item.audience} discoverable={item.discoverable} />} />;
-  }
+  if (items.length === 0) return <TabEmpty icon={Images} title="No media to show." />;
   return <MediaGrid items={items} />;
 }
 
@@ -217,6 +213,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof Images }> = [
 
 function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
+  const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   // null = the main user identity; a number = one of their characters.
@@ -359,7 +356,9 @@ function FollowProfilePage() {
               </Button>
             ))}
           </div>
-          {activeTab === 'media' && <MediaTab userId={userId} identity={identity} isSelf={profile.is_self} />}
+          {activeTab === 'media' && (profile.is_self
+            ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
+            : <VisitorMediaTab userId={userId} identity={identity} />)}
           {activeTab === 'stories' && <StoriesTab userId={userId} identity={identity} isSelf={profile.is_self} />}
           {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
