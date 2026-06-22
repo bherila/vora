@@ -22,6 +22,12 @@ return [
     // Disk that holds the s3-hls transcoder output (read-only for the app).
     'hls_disk' => 'hls',
 
+    // Disk that holds the image-hashing worker's PDQ results (read-only for the
+    // app). Defaults to the transcoder output bucket so a worker writing PDQ
+    // mappings needs no new app-side filesystem wiring; override only if results
+    // land in a separate bucket. The app reads `image-mappings/<key>.json` here.
+    'pdq_disk' => env('MEDIA_PDQ_DISK', 'hls'),
+
     // Disk for client-generated thumbnails/posters. Defaults to the photo disk
     // because the video transcoder never scans it and it already accepts image
     // objects. Video posters live here too, never on the video (source) disk.
