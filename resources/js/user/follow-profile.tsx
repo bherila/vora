@@ -12,12 +12,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StoryGrid } from '@/explore/StoryGrid';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { MediaGrid } from '@/media/MediaGrid';
 import type { MediaItem } from '@/media/types';
 import type { StoryDiscoveryItem } from '@/stories/types';
+import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
 
 interface Interest { id: number; name: string; }
 interface CharacterRef { id: number; display_name: string; avatar_url?: string | null; }
@@ -145,6 +147,8 @@ function FollowProfilePage() {
   // null = the main user identity; a number = one of their characters.
   const [identity, setIdentity] = useState<number | null>(null);
   const [tab, setTab] = useState<TabKey>('media');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
   const userId = profile?.id ?? null;
 
   const loadProfile = () => {
@@ -195,7 +199,8 @@ function FollowProfilePage() {
             </div>
             {profile.is_self ? (
               <div className="flex gap-2">
-                <Button variant="outline" asChild><a href="/user/settings">Edit profile</a></Button>
+                {editable && <Button onClick={() => setEditOpen(true)}>Edit profile</Button>}
+                <Button variant="outline" asChild><a href="/user/settings">Account settings</a></Button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -269,6 +274,20 @@ function FollowProfilePage() {
           {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} />}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} />}
         </div>
+      )}
+      {editable && (
+        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit profile</DialogTitle>
+              <DialogDescription>This is how others see you. Account and security settings live in Account settings.</DialogDescription>
+            </DialogHeader>
+            <ProfileIdentityEditor
+              editable={editable}
+              onSaved={(summary) => setProfile((current) => current ? { ...current, display_name: summary.display_name, user_type: summary.user_type, gender: summary.gender } : current)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
       <Toaster position="top-right" richColors closeButton />
     </div>
