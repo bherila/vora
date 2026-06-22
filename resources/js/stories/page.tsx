@@ -1,5 +1,5 @@
 import { BookOpen, GitBranch, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Button } from '@/components/ui/button';
@@ -77,11 +77,19 @@ function ReviewBadge({ story }: { story: StorySummary }) {
   return <span className={`rounded px-2 py-0.5 ${className}`}>{story.review.label}</span>;
 }
 
+/** The story id the URL points at (?edit=123), or null for the list. */
+function readEditIdFromUrl(): number | null {
+  const value = new URLSearchParams(window.location.search).get('edit');
+  return value !== null && /^\d+$/.test(value) ? Number(value) : null;
+}
+
 function StoriesPage() {
   const initial = getInitialStories();
   const currentUserId = initial.currentUserId;
   const [stories, setStories] = useState<StorySummary[]>(initial.stories);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  // The editor has its own URL (?edit=<id>) so it is deep-linkable and the
+  // browser back button returns to the list instead of leaving the page.
+  const [editingId, setEditingId] = useState<number | null>(() => readEditIdFromUrl());
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<StoryType>('long_form');
@@ -91,6 +99,19 @@ function StoriesPage() {
     storiesApi.list().then(setStories).catch((e) => setError(typeof e === 'string' ? e : 'Could not load stories.'));
   };
 
+  // Push a history entry when opening/closing the editor, and follow back/forward.
+  const openEditor = (id: number | null): void => {
+    const url = id === null ? '/stories' : `/stories?edit=${id}`;
+    window.history.pushState({ editingId: id }, '', url);
+    setEditingId(id);
+  };
+
+  useEffect(() => {
+    const onPop = (): void => setEditingId(readEditIdFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const create = async (): Promise<void> => {
     if (newTitle.trim() === '') return;
     setError('');
@@ -99,7 +120,7 @@ function StoriesPage() {
       setNewTitle('');
       setCreating(false);
       load();
-      setEditingId(created.id);
+      openEditor(created.id);
     } catch (e) {
       setError(typeof e === 'string' ? e : 'Could not create story.');
     }
@@ -112,12 +133,12 @@ function StoriesPage() {
           storyId={editingId}
           currentUserId={currentUserId}
           onBack={() => {
-            setEditingId(null);
+            openEditor(null);
             load();
           }}
           onChanged={load}
           onDeleted={() => {
-            setEditingId(null);
+            openEditor(null);
             load();
           }}
         />
@@ -162,7 +183,7 @@ function StoriesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {stories.map((story) => (
-            <StoryCard key={story.id} story={story} currentUserId={currentUserId} onEdit={setEditingId} />
+            <StoryCard key={story.id} story={story} currentUserId={currentUserId} onEdit={openEditor} />
           ))}
         </div>
       )}
