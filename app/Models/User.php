@@ -276,6 +276,16 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * The user's saved favorites (polymorphic over media/story/post/user/character).
+     *
+     * @return HasMany<Favorite, $this>
+     */
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    /**
      * @return HasMany<Post, $this>
      */
     public function posts(): HasMany
