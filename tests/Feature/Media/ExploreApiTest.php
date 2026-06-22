@@ -3,6 +3,7 @@
 namespace Tests\Feature\Media;
 
 use App\Models\Interest;
+use App\Models\InterestRating;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
@@ -142,6 +143,49 @@ class ExploreApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $tagged->id);
+    }
+
+    public function test_explore_page_defaults_the_interest_filter_to_the_viewers_interests(): void
+    {
+        $this->fakeStorage();
+        $viewer = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $travel = Interest::query()->create(['name' => 'Travel']);
+        $food = Interest::query()->create(['name' => 'Food']);
+
+        // The viewer's profile interest.
+        InterestRating::query()->create(['user_id' => $viewer->id, 'character_id' => null, 'interest_id' => $travel->id, 'level' => 3]);
+
+        $tagged = Media::factory()->for($other)->approved()->create();
+        $tagged->interests()->sync([$travel->id]);
+        $offTopic = Media::factory()->for($other)->approved()->create();
+        $offTopic->interests()->sync([$food->id]);
+
+        $html = $this->actingAs($viewer)->get('/explore')->assertOk()->getContent();
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
+        $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+        $explore = $payload['initialData']['explore'] ?? $payload['explore'];
+
+        // Defaults are surfaced to the client and applied to the first page.
+        $this->assertSame([$travel->id], $explore['default_interest_ids']);
+        $this->assertCount(1, $explore['media']['data']);
+        $this->assertSame($tagged->id, $explore['media']['data'][0]['id']);
+    }
+
+    public function test_explore_page_shows_everything_when_the_viewer_has_no_interests(): void
+    {
+        $this->fakeStorage();
+        $viewer = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        Media::factory()->for($other)->approved()->create();
+
+        $html = $this->actingAs($viewer)->get('/explore')->assertOk()->getContent();
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
+        $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+        $explore = $payload['initialData']['explore'] ?? $payload['explore'];
+
+        $this->assertSame([], $explore['default_interest_ids']);
+        $this->assertCount(1, $explore['media']['data']);
     }
 
     public function test_owner_library_shares_the_same_type_filter(): void
