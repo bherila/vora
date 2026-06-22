@@ -61,6 +61,8 @@ class StoryController extends Controller
                 'favorite_count' => $this->favorites->countFor($story),
                 'favorited' => $viewer instanceof User
                     && $this->favorites->favoritedIdsFor($viewer, 'story', [$story->id]) !== [],
+                // Anyone signed in who isn't the author can report the story.
+                'can_report' => $viewer instanceof User && $story->user_id !== $viewer->id,
             ],
         ]]);
     }

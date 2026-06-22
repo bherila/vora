@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 
 import { FavoriteButton } from '@/components/favorite-button';
 import { Markdown } from '@/components/Markdown';
+import { ReportButton } from '@/components/report-button';
 import { readInitialData } from '@/initialData';
 
 import { CyoaPlayer } from './CyoaPlayer';
@@ -31,6 +32,7 @@ function StoryReaderPage() {
               <span className="text-sm text-muted-foreground">{story.favorite_count} {story.favorite_count === 1 ? 'save' : 'saves'}</span>
             )}
             {story.favorited !== undefined && <FavoriteButton type="story" id={story.id} initialFavorited={story.favorited} />}
+            {story.can_report && <ReportButton type="story" id={story.id} />}
           </div>
         </div>
         <p className="text-sm text-muted-foreground">

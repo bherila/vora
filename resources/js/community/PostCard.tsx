@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
+import { ReportButton } from '@/components/report-button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -224,7 +225,10 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
               <p className="text-xs text-muted-foreground">{formatDate(post.created_at)}</p>
             </div>
           </div>
-          <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>
+          <div className="flex shrink-0 items-center gap-2">
+            {post.can_report && <ReportButton type="post" id={post.id} variant="ghost" />}
+            <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

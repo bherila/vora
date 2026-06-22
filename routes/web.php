@@ -29,6 +29,7 @@ use App\Http\Controllers\PostReactionController;
 use App\Http\Controllers\ProfileContentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
@@ -197,6 +198,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // is per-profile and privacy-intersected in the controller.
     Route::post('/api/favorites', [FavoriteController::class, 'store']);
     Route::delete('/api/favorites', [FavoriteController::class, 'destroy']);
+
+    // Abuse reports (polymorphic: media, stories, posts). Throttled — a handful
+    // of reports a minute is plenty and this blunts report-spam.
+    Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
 
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);

@@ -41,6 +41,8 @@ class PostPresenter
             'viewer_reacted' => self::viewerReacted($post, $viewer),
             'comment_count' => (int) ($post->comments_count ?? $post->comments()->count()),
             'created_at' => $post->created_at?->toIso8601String(),
+            // Anyone signed in who isn't the author can report the post for abuse.
+            'can_report' => $viewer !== null && $post->user_id !== $viewer->id,
         ];
     }
 
