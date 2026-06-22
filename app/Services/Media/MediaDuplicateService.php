@@ -23,6 +23,15 @@ class MediaDuplicateService
     private const PERCEPTUAL_THRESHOLD = 10;
 
     /**
+     * Max bit difference between two 256-bit PDQ hashes for a per-owner match.
+     * 31 is the canonical PDQ "same image" distance (Facebook/ThreatExchange);
+     * the per-owner flag tolerates this looser bound because it never blocks and
+     * only surfaces for review. The global admin search will want a tighter
+     * bound for precision.
+     */
+    private const PDQ_THRESHOLD = 31;
+
+    /**
      * The owner's existing, completed, byte-identical upload, if any. Used to
      * reject an exact re-upload before a new pending row is created.
      */
@@ -64,6 +73,47 @@ class MediaDuplicateService
         foreach ($candidates as $candidate) {
             $distance = PerceptualHash::hammingDistance($media->perceptual_hash, $candidate->perceptual_hash);
             if ($distance === null || $distance > self::PERCEPTUAL_THRESHOLD) {
+                continue;
+            }
+            if ($bestDistance === null || $distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestId = $candidate->id;
+            }
+        }
+
+        if ($bestId !== null) {
+            $media->forceFill(['duplicate_of_media_id' => $bestId])->save();
+        }
+    }
+
+    /**
+     * Flag a freshly hashed photo as a likely duplicate of the owner's nearest
+     * existing photo within the PDQ threshold. The PDQ hash (computed by the
+     * out-of-band image worker) is more robust than the client blockhash, so it
+     * catches re-uploads the perceptual_hash pass misses. No-op for videos, when
+     * the PDQ hash is missing, or when the row is already flagged. Stays scoped
+     * to the owner — the global cross-account search is admin-only and lives
+     * elsewhere.
+     */
+    public function flagPdqDuplicate(Media $media): void
+    {
+        if ($media->type !== MediaType::Photo || $media->pdq_hash === null || $media->duplicate_of_media_id !== null) {
+            return;
+        }
+
+        $candidates = Media::query()
+            ->where('user_id', $media->user_id)
+            ->where('type', MediaType::Photo->value)
+            ->where('upload_status', 'ready')
+            ->whereNotNull('pdq_hash')
+            ->whereKeyNot($media->id)
+            ->get(['id', 'pdq_hash']);
+
+        $bestId = null;
+        $bestDistance = null;
+        foreach ($candidates as $candidate) {
+            $distance = PerceptualHash::hammingDistanceHex($media->pdq_hash, $candidate->pdq_hash);
+            if ($distance === null || $distance > self::PDQ_THRESHOLD) {
                 continue;
             }
             if ($bestDistance === null || $distance < $bestDistance) {

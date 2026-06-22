@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use App\Enums\MediaType;
 use App\Models\Media;
 use App\Services\FileStorageService;
 use App\Support\MediaPresenter;
@@ -12,6 +13,7 @@ class AdminMediaResponseService
 {
     public function __construct(
         private readonly HlsService $hls,
+        private readonly PdqImageService $pdq,
         private readonly FileStorageService $storage,
     ) {}
 
@@ -57,6 +59,11 @@ class AdminMediaResponseService
 
         if ($media->type->isVideo()) {
             $extras['video'] = $this->hls->status($media, $resolveHls);
+        } elseif ($resolveHls && $media->type === MediaType::Photo) {
+            // Resolve the worker's PDQ hash and flag a per-owner near-duplicate.
+            // Gated on the single-item flag (same as HLS) so the admin list stays
+            // at O(1) network I/O — the hash is read at most once per review open.
+            $this->pdq->ensureResolved($media);
         }
 
         return $extras;

@@ -72,6 +72,7 @@ class AccountLifecycleTest extends TestCase
     public function test_prune_collects_unreferenced_ready_profile_pictures(): void
     {
         Storage::fake('photos');
+        Storage::fake('hls');
         $user = User::factory()->approved()->create();
 
         $orphan = Media::factory()->profilePicture()->create(['disk' => 'photos', 'created_at' => now()->subDays(2)]);
@@ -171,6 +172,7 @@ class AccountLifecycleTest extends TestCase
     public function test_admin_purge_removes_user_media_characters_and_objects(): void
     {
         Storage::fake('photos');
+        Storage::fake('hls');
         $admin = User::factory()->approved()->create(['is_admin' => true]);
         $target = User::factory()->approved()->create();
 
