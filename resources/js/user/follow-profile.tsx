@@ -224,7 +224,21 @@ function FollowProfilePage() {
   const [tab, setTab] = useState<TabKey>('media');
   const [editOpen, setEditOpen] = useState(false);
   const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
+  const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
   const userId = profile?.id ?? null;
+  const restricted = profile?.restricted ?? true;
+
+  // Per-identity tab counts, refreshed whenever the active identity changes so
+  // every badge is populated up front rather than only after a tab is opened.
+  useEffect(() => {
+    if (!userId || restricted) { setCounts(null); return; }
+    let active = true;
+    setCounts(null);
+    fetchWrapper.get(`/api/users/${userId}/content-counts${characterQuery(identity)}`)
+      .then((response) => { if (active) setCounts((response as { data: Record<TabKey, number> }).data); })
+      .catch(() => { if (active) setCounts(null); });
+    return () => { active = false; };
+  }, [userId, identity, restricted]);
 
   const loadProfile = () => {
     if (!userId) return;
@@ -341,6 +355,7 @@ function FollowProfilePage() {
             {tabs.map(({ key, label, icon: Icon }) => (
               <Button key={key} type="button" size="sm" variant={activeTab === key ? 'default' : 'outline'} aria-pressed={activeTab === key} onClick={() => setTab(key)}>
                 <Icon className="h-4 w-4" /> {label}
+                {counts && <span className="ml-1 text-xs tabular-nums opacity-70">{counts[key]}</span>}
               </Button>
             ))}
           </div>

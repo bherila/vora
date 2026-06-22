@@ -10,6 +10,7 @@ use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\PaginationMeta;
@@ -32,6 +33,7 @@ class ProfileContentController extends Controller
     public function __construct(
         private readonly ProfileGate $gate,
         private readonly MediaResponseService $responder,
+        private readonly FavoriteService $favorites,
     ) {}
 
     public function media(Request $request, User $user): JsonResponse
@@ -39,18 +41,10 @@ class ProfileContentController extends Controller
         $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
 
-        $query = Media::query()
-            ->where('user_id', $user->id)
-            ->where('purpose', MediaPurpose::Gallery->value)
-            ->where('upload_status', 'ready')
+        $paginator = $this->mediaQuery($user, $viewer, $character)
             ->with(['character:id,display_name', 'interests'])
-            ->viewableBy($viewer)
-            ->latest();
-
-        $this->scopeToIdentity($query, $character);
-        $this->hideUnapprovedFromOthers($query, $viewer, $user);
-
-        $paginator = $query->paginate((int) config('media.page_size', 24));
+            ->latest()
+            ->paginate((int) config('media.page_size', 24));
 
         return response()->json(['success' => true, ...$this->responder->page($paginator)]);
     }
@@ -60,17 +54,11 @@ class ProfileContentController extends Controller
         $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
 
-        $query = Post::query()
-            ->where('user_id', $user->id)
+        $paginator = $this->postsQuery($user, $viewer, $character)
             ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($viewer)
-            ->viewableBy($viewer)
-            ->latest();
-
-        $this->scopeToIdentity($query, $character);
-        $this->hideUnapprovedFromOthers($query, $viewer, $user);
-
-        $paginator = $query->paginate((int) config('media.page_size', 24));
+            ->latest()
+            ->paginate((int) config('media.page_size', 24));
 
         return response()->json([
             'success' => true,
@@ -86,11 +74,81 @@ class ProfileContentController extends Controller
         $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
 
-        $query = Story::query()
+        $paginator = $this->storiesQuery($user, $viewer, $character)
             ->with(['user', 'interests', 'authors.user'])
             ->withCount('nodes')
-            ->viewableBy($viewer)
-            ->latest('id');
+            ->latest('id')
+            ->paginate((int) config('media.page_size', 24));
+
+        return response()->json([
+            'success' => true,
+            'data' => collect($paginator->items())
+                ->map(fn (Story $story): array => StoryPresenter::discoverableView($story))
+                ->all(),
+            'meta' => PaginationMeta::from($paginator),
+        ]);
+    }
+
+    /**
+     * Per-identity content counts for the profile tab badges. Each count uses the
+     * exact same gating as its listing, so a badge never implies content the
+     * viewer could not actually open. Favorites belong to the main user, so the
+     * favorites count is zero when a character identity is selected.
+     */
+    public function counts(Request $request, User $user): JsonResponse
+    {
+        $viewer = $this->authorizeProfile($request, $user);
+        $character = $this->resolveCharacter($request, $user);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'media' => $this->mediaQuery($user, $viewer, $character)->count(),
+                'stories' => $this->storiesQuery($user, $viewer, $character)->count(),
+                'posts' => $this->postsQuery($user, $viewer, $character)->count(),
+                'favorites' => $character instanceof Character ? 0 : count($this->favorites->visibleFor($user, $viewer)),
+            ],
+        ]);
+    }
+
+    /**
+     * @return Builder<Media>
+     */
+    private function mediaQuery(User $user, User $viewer, ?Character $character): Builder
+    {
+        $query = Media::query()
+            ->where('user_id', $user->id)
+            ->where('purpose', MediaPurpose::Gallery->value)
+            ->where('upload_status', 'ready')
+            ->viewableBy($viewer);
+
+        $this->scopeToIdentity($query, $character);
+        $this->hideUnapprovedFromOthers($query, $viewer, $user);
+
+        return $query;
+    }
+
+    /**
+     * @return Builder<Post>
+     */
+    private function postsQuery(User $user, User $viewer, ?Character $character): Builder
+    {
+        $query = Post::query()
+            ->where('user_id', $user->id)
+            ->viewableBy($viewer);
+
+        $this->scopeToIdentity($query, $character);
+        $this->hideUnapprovedFromOthers($query, $viewer, $user);
+
+        return $query;
+    }
+
+    /**
+     * @return Builder<Story>
+     */
+    private function storiesQuery(User $user, User $viewer, ?Character $character): Builder
+    {
+        $query = Story::query()->viewableBy($viewer);
 
         if ($character instanceof Character) {
             // Character tab: stories that involve this character (the polymorphic
@@ -108,15 +166,7 @@ class ProfileContentController extends Controller
                 ->where('moderation_status', ModerationStatus::Approved->value);
         }
 
-        $paginator = $query->paginate((int) config('media.page_size', 24));
-
-        return response()->json([
-            'success' => true,
-            'data' => collect($paginator->items())
-                ->map(fn (Story $story): array => StoryPresenter::discoverableView($story))
-                ->all(),
-            'meta' => PaginationMeta::from($paginator),
-        ]);
+        return $query;
     }
 
     /**

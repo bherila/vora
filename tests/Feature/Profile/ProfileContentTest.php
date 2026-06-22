@@ -108,4 +108,44 @@ class ProfileContentTest extends TestCase
         $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/stories")
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $published->id);
     }
+
+    public function test_content_counts_match_listing_gating(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        Media::factory()->for($owner)->approved()->create();
+        Media::factory()->for($owner)->approved()->audience(Audience::Followers)->create();
+
+        // A non-follower counts only the public item.
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/content-counts")
+            ->assertOk()
+            ->assertJsonPath('data.media', 1)
+            ->assertJsonPath('data.posts', 0)
+            ->assertJsonPath('data.stories', 0)
+            ->assertJsonPath('data.favorites', 0);
+
+        // The owner counts both of their own items.
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/content-counts")
+            ->assertOk()
+            ->assertJsonPath('data.media', 2);
+    }
+
+    public function test_content_counts_are_scoped_to_the_selected_identity(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        Media::factory()->for($owner)->approved()->create();
+        Media::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
+
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/content-counts")
+            ->assertOk()->assertJsonPath('data.media', 1);
+
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/content-counts?character_id={$character->id}")
+            ->assertOk()->assertJsonPath('data.media', 1)->assertJsonPath('data.favorites', 0);
+    }
 }
