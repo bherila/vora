@@ -1,4 +1,4 @@
-import { BookOpen, Images, MessageSquare, Newspaper, Star } from 'lucide-react';
+import { BookOpen, Images, MessageSquare, Newspaper, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
@@ -23,6 +23,7 @@ import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import type { MediaItem } from '@/media/types';
 import type { StoryDiscoveryItem } from '@/stories/types';
+import { CharacterEditorDialog,type CharacterRecord } from '@/user/CharacterEditorDialog';
 import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
 
 interface Interest { id: number; name: string; }
@@ -60,6 +61,19 @@ function getProfileMedia(): ProfileMediaData {
 
 function getFeedOnboarding(): OnboardingSteps | null {
   return readInitialData<{ feedOnboarding?: OnboardingSteps | null }>().feedOnboarding ?? null;
+}
+
+function getProfileCharacters(): CharacterRecord[] {
+  return readInitialData<{ profileCharacters?: CharacterRecord[] }>().profileCharacters ?? [];
+}
+
+/** Identity-strip chip data derived from a full character record. */
+function characterRefFrom(record: CharacterRecord): CharacterRef {
+  return {
+    id: record.id,
+    display_name: record.display_name,
+    avatar_url: record.profile_picture?.thumbnail_url ?? record.profile_picture?.url ?? null,
+  };
 }
 
 /** Fetch a profile content listing for the active identity/tab; refetch on change. */
@@ -224,6 +238,9 @@ function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
   const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
   const [feedOnboarding] = useState<OnboardingSteps | null>(getFeedOnboarding);
+  const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
+  const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
+  const [editingCharacter, setEditingCharacter] = useState<CharacterRecord | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   // null = the main user identity; a number = one of their characters.
@@ -265,6 +282,32 @@ function FollowProfilePage() {
       loadProfile();
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Unable to send follow request.');
+    }
+  };
+
+  // Keep the full character records (for the editor) and the identity strip in
+  // step after a create/update/delete.
+  const handleCharacterSaved = (record: CharacterRecord): void => {
+    setProfileCharacters((current) => current.some((c) => c.id === record.id)
+      ? current.map((c) => (c.id === record.id ? record : c))
+      : [record, ...current]);
+    setProfile((current) => {
+      if (!current) return current;
+      const ref = characterRefFrom(record);
+      const exists = current.characters.some((c) => c.id === record.id);
+      return { ...current, characters: exists ? current.characters.map((c) => (c.id === record.id ? ref : c)) : [...current.characters, ref] };
+    });
+  };
+
+  const handleDeleteCharacter = async (record: CharacterRecord): Promise<void> => {
+    if (!window.confirm(`Delete ${record.display_name}? Art ownership stays with your user account.`)) return;
+    try {
+      await fetchWrapper.delete(`/api/characters/${record.id}`);
+      setProfileCharacters((current) => current.filter((c) => c.id !== record.id));
+      setProfile((current) => current ? { ...current, characters: current.characters.filter((c) => c.id !== record.id) } : current);
+      if (identity === record.id) setIdentity(null);
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to delete character.');
     }
   };
 
@@ -354,7 +397,32 @@ function FollowProfilePage() {
                     <span className="max-w-[8rem] truncate">{character.display_name}</span>
                   </button>
                 ))}
+                {profile.is_self && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingCharacter(null); setCharacterDialogOpen(true); }}
+                    className="flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
+                  >
+                    <Plus className="h-4 w-4" /> Add character
+                  </button>
+                )}
               </section>
+
+              {/* Owner controls for the active character identity. */}
+              {profile.is_self && identity !== null && (() => {
+                const active = profileCharacters.find((c) => c.id === identity);
+                if (!active) return null;
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => { setEditingCharacter(active); setCharacterDialogOpen(true); }}>
+                      <Pencil className="h-4 w-4" /> Edit character
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacter(active)}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
+                  </div>
+                );
+              })()}
             </>
           )}
         </CardContent>
@@ -378,6 +446,14 @@ function FollowProfilePage() {
           {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
         </div>
+      )}
+      {profile.is_self && (
+        <CharacterEditorDialog
+          open={characterDialogOpen}
+          onOpenChange={setCharacterDialogOpen}
+          editing={editingCharacter}
+          onSaved={handleCharacterSaved}
+        />
       )}
       {editable && (
         <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>

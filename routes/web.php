@@ -156,7 +156,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // on the profile.
     Route::get('/dashboard', fn () => redirect()->route('me'))->name('dashboard');
     Route::get('/feed', fn () => redirect()->route('me'))->name('feed');
-    Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
+    // Characters are created and managed on the profile (/me) now; keep the named
+    // route as a redirect for old bookmarks.
+    Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
 
     // Invites the user can hand out (balance issued by an admin).
     Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');

@@ -15,6 +15,7 @@ use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
 use App\Support\Onboarding;
 use App\Support\UserPresenter;
@@ -63,6 +64,11 @@ class FollowController extends Controller
                 'followProfile' => $this->profilePayload($current, $current),
                 'profileEditable' => $this->editablePayload($current),
                 'profileMedia' => $this->profileMediaPayload($current),
+                // Full editable character records for the owner's character editor.
+                'profileCharacters' => CharacterPresenter::list(
+                    $current->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get(),
+                    $this->mediaResponder,
+                ),
                 // First-run checklist for the home Feed tab; null once complete.
                 'feedOnboarding' => Onboarding::steps($current),
             ],

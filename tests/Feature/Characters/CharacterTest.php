@@ -460,4 +460,31 @@ class CharacterTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('content_type');
     }
+
+    public function test_characters_page_redirects_to_profile(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->get('/characters')->assertRedirect(route('me'));
+    }
+
+    public function test_profile_home_hydrates_full_character_records_for_owner(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        Character::query()->create(['user_id' => $user->id, 'display_name' => 'Nova', 'description' => 'A test persona']);
+
+        $html = $this->actingAs($user)->get('/me')->assertOk()->getContent();
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
+        $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+
+        $characters = $payload['profileCharacters'] ?? null;
+        $this->assertIsArray($characters);
+        $this->assertCount(1, $characters);
+        $this->assertSame('Nova', $characters[0]['display_name']);
+        $this->assertSame('A test persona', $characters[0]['description']);
+        // The editor needs the full record (privacy, prefs, inherit flag).
+        $this->assertArrayHasKey('inherit_interests', $characters[0]);
+        $this->assertArrayHasKey('audience_user_ids', $characters[0]);
+    }
 }
