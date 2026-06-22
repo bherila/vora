@@ -18,6 +18,8 @@ use App\Services\Story\StoryService;
 use App\Support\StoryPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -32,17 +34,18 @@ class StoryController extends Controller
     ) {}
 
     /**
-     * The signed-in user's stories workspace (library + editor).
+     * The dedicated story editor page (?edit=<id>). The story library and create
+     * flow live on the profile now, so with no edit target this forwards to the
+     * profile home.
      */
-    public function page(): View
+    public function page(Request $request): View|RedirectResponse
     {
-        $user = request()->user();
+        if ($request->query('edit') === null) {
+            return redirect()->route('me');
+        }
 
         return view('user.stories', ['initialData' => [
-            'stories' => [
-                'currentUserId' => $user?->id,
-                'data' => $user instanceof User ? $this->storiesPayload($user) : [],
-            ],
+            'stories' => ['currentUserId' => $request->user()?->id],
         ]]);
     }
 

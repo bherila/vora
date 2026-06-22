@@ -293,4 +293,30 @@ class StoryTest extends TestCase
         $this->assertContains('Pending', $coTitles->all());
         $this->assertNotContains('Mine', $coTitles->all());
     }
+
+    public function test_stories_page_without_an_edit_target_redirects_to_profile(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->get('/stories')->assertRedirect(route('me'));
+    }
+
+    public function test_stories_page_renders_the_editor_for_an_edit_target(): void
+    {
+        $user = User::factory()->approved()->create();
+        $story = Story::factory()->for($user)->create(['title' => 'Draft']);
+
+        $this->actingAs($user)->get("/stories?edit={$story->id}")
+            ->assertOk()
+            ->assertSee('stories-app', false);
+    }
+
+    public function test_index_lists_owner_drafts_for_the_profile_stories_tab(): void
+    {
+        $user = User::factory()->approved()->create();
+        Story::factory()->for($user)->create(['title' => 'A Draft']);
+
+        $titles = collect($this->actingAs($user)->getJson('/api/stories')->assertOk()->json('data'))->pluck('title');
+        $this->assertContains('A Draft', $titles->all());
+    }
 }

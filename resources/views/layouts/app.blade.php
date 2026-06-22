@@ -36,9 +36,8 @@
         // stories, characters, posts, and favorites.
         $__isAuthenticated ? ['label' => 'Profile', 'href' => route('me', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
-        // Media and Characters are managed on the profile now; "Create" is just
-        // the Stories workspace until that, too, moves onto the profile.
-        $__isAuthenticated ? ['label' => 'Create', 'href' => route('stories', [], false)] : null,
+        // Media, characters, and stories are all created and managed on the
+        // profile now, so the standalone "Create" nav entry is gone.
         $__isAuthenticated ? ['label' => 'People', 'href' => route('users.directory', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Requests', 'href' => route('users.follow-requests', [], false), 'badge' => $__requestCount] : null,
       ]));
