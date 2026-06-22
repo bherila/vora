@@ -58,6 +58,20 @@ export interface MediaItem {
   favorited?: boolean;
   /** Present on the single-media view: how many users have saved this item. */
   favorite_count?: number;
+  /** Present on the single-media view: the uploader, for the profile frame. */
+  owner?: MediaOwner | null;
+  /** Present on the single-media view: whether the viewer may report this item. */
+  can_report?: boolean;
+}
+
+/** The uploader of a single media item, used to frame the detail page. */
+export interface MediaOwner {
+  id: number;
+  display_name: string;
+  avatar_url: string | null;
+  /** Profile URL (/me for the owner, /users/{id} otherwise). */
+  href: string;
+  is_self: boolean;
 }
 
 /** Selected media-type filter for a listing. 'all' applies no type constraint. */
