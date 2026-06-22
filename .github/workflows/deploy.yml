@@ -7,14 +7,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vora-ci]
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
+      - name: Verify PHP
+        run: php --version
 
       - name: Install Composer (with dev)
         run: composer install --no-interaction --prefer-dist
@@ -34,7 +33,7 @@ jobs:
         run: vendor/bin/phpunit --configuration phpunit.xml
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vora-ci]
     needs: test
     environment: prod
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
@@ -42,9 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
+      - name: Verify PHP
+        run: php --version
 
       - name: Install Composer (no dev)
         run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
