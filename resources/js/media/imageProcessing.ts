@@ -137,24 +137,77 @@ export async function generateVideoPoster(file: File): Promise<Blob | null> {
  * Compute a 256-bit perceptual hash from an ImageBitmap, returned as a
  * base64-encoded 32-byte string. The bitmap is downscaled to PHASH_MAX_EDGE
  * first to cap memory.
+ *
+ * The hash is canonicalized over the eight dihedral orientations (four 90°
+ * rotations × a mirror): the blockhash of those orientations forms an orbit that
+ * is identical for an image and any 90°-rotated/mirrored copy, so taking the
+ * lexicographically smallest as canonical makes the hash invariant to those
+ * transforms. Combined with blockhash's built-in scale invariance, a re-upload
+ * that was rotated, flipped, and/or resized produces the same (or a near-equal)
+ * hash. (Arbitrary-angle rotation and large crops still need feature matching.)
  */
 export async function computePerceptualHash(bitmap: ImageBitmap): Promise<string> {
   const [w, h] = fitWithin(bitmap.width, bitmap.height, PHASH_MAX_EDGE);
-  const canvas = new OffscreenCanvas(w, h);
+
+  let canonicalHex: string | null = null;
+  for (let orientation = 0; orientation < 8; orientation++) {
+    const hex = blockhashForOrientation(bitmap, w, h, orientation);
+    if (canonicalHex === null || hex < canonicalHex) {
+      canonicalHex = hex;
+    }
+  }
+
+  return hexToBase64(canonicalHex ?? '');
+}
+
+/**
+ * Blockhash (64-char hex) of one dihedral orientation of the bitmap: rotation =
+ * orientation % 4 (×90°), with a horizontal mirror when orientation >= 4. The
+ * source is drawn into a canvas sized for the rotation (width/height swap on the
+ * 90°/270° cases) so nothing is clipped.
+ */
+function blockhashForOrientation(bitmap: ImageBitmap, w: number, h: number, orientation: number): string {
+  const rotation = orientation % 4;
+  const mirror = orientation >= 4;
+  const swap = rotation === 1 || rotation === 3;
+  const cw = swap ? h : w;
+  const ch = swap ? w : h;
+
+  const canvas = new OffscreenCanvas(cw, ch);
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Could not get 2d context from OffscreenCanvas');
   }
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+
+  // Canvas transforms post-multiply, so the mirror (set first) is applied last —
+  // i.e. the source is rotated, then mirrored — which keeps the draw inside the
+  // canvas bounds for every orientation.
+  if (mirror) {
+    ctx.translate(cw, 0);
+    ctx.scale(-1, 1);
+  }
+  if (rotation === 1) {
+    ctx.translate(cw, 0);
+    ctx.rotate(Math.PI / 2);
+  } else if (rotation === 2) {
+    ctx.translate(cw, ch);
+    ctx.rotate(Math.PI);
+  } else if (rotation === 3) {
+    ctx.translate(0, ch);
+    ctx.rotate(-Math.PI / 2);
+  }
   ctx.drawImage(bitmap, 0, 0, w, h);
-  const imageData = ctx.getImageData(0, 0, w, h);
 
   // bmvbhash returns a 64-char hex string (256 bits for bits=16).
-  const hexHash = bmvbhash(imageData, PHASH_BITS);
+  return bmvbhash(ctx.getImageData(0, 0, cw, ch), PHASH_BITS);
+}
+
+function hexToBase64(hex: string): string {
   const bytes = new Uint8Array(32);
   for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hexHash.substring(i * 2, i * 2 + 2), 16);
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
 }
