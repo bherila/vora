@@ -44,6 +44,9 @@ class StoreMediaRequest extends FormRequest
             'has_thumbnail' => ['nullable', 'boolean'],
             // Base64 of a 32-byte blockhash (44 chars incl. padding). Photos only.
             'perceptual_hash' => ['nullable', 'string', 'max:64'],
+            // Lowercase hex SHA-256 of the file bytes (64 chars), for exact-dup
+            // detection. Null when the client could not hash (e.g. a huge video).
+            'file_hash' => ['nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
         ];
     }
 

@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Policies\MediaPolicy;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\HlsService;
+use App\Services\Media\MediaDuplicateService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
@@ -41,6 +42,7 @@ class MediaController extends Controller
         private readonly MediaUploadService $uploads,
         private readonly MediaService $media,
         private readonly HlsService $hls,
+        private readonly MediaDuplicateService $duplicates,
         private readonly MediaResponseService $responder,
         private readonly PrivacyAuditor $auditor,
         private readonly FavoriteService $favorites,
@@ -94,6 +96,17 @@ class MediaController extends Controller
         $character = $request->character();
         $audience = $character instanceof Character ? $character->audience : $request->audience();
         $discoverable = $character instanceof Character ? $character->discoverable : $request->discoverable();
+        $fileHash = $request->validated('file_hash');
+
+        // Block a byte-identical re-upload before creating anything (per-owner).
+        $existing = $this->duplicates->findExactDuplicate($request->user(), $fileHash);
+        if ($existing !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You have already uploaded this file.',
+                'duplicate' => ['id' => $existing->id, 'ulid' => $existing->ulid, 'title' => $existing->title],
+            ], 409);
+        }
 
         $result = $this->uploads->createPendingUpload(
             $request->user(),
@@ -107,6 +120,7 @@ class MediaController extends Controller
             $request->validated('perceptual_hash'),
             discoverable: $discoverable,
             characterId: $character?->id,
+            fileHash: $fileHash,
         );
 
         $media = $result['media'];
@@ -117,6 +131,9 @@ class MediaController extends Controller
             ? $this->characterAudienceUserIds($character)
             : ($audience === Audience::SpecificPeople ? $request->audienceUserIds() : []));
         $this->auditor->recordCreation($media, $request->user(), $media->privacySnapshot(), $request);
+
+        // Flag a likely near-duplicate photo for admin review (never blocking).
+        $this->duplicates->flagPerceptualDuplicate($media);
 
         $media->load(['character:id,display_name', 'interests']);
 
