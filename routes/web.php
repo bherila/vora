@@ -173,6 +173,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/stories', [StoryController::class, 'page'])->name('stories');
     Route::get('/s/{ulid}', [StoryController::class, 'readerPage'])->name('stories.view');
 
+    // The signed-in user's own profile (the same container view as other people's
+    // profiles, in owner mode).
+    Route::get('/me', [FollowController::class, 'me'])->name('me');
+
     Route::get('/users', [FollowController::class, 'directory'])->name('users.directory');
     Route::get('/users/follow-requests', [FollowController::class, 'inboxPage'])->name('users.follow-requests');
     Route::get('/users/{user}', [FollowController::class, 'profilePage'])->name('users.profile');

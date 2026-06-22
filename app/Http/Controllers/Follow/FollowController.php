@@ -48,6 +48,19 @@ class FollowController extends Controller
         ]);
     }
 
+    /**
+     * The signed-in user's own profile, rendered through the same container view
+     * as other people's profiles but in owner mode (is_self = true).
+     */
+    public function me(Request $request): View
+    {
+        $current = $request->user();
+
+        return view('user.follow-profile', [
+            'initialData' => ['followProfile' => $this->profilePayload($current, $current)],
+        ]);
+    }
+
     public function inboxPage(Request $request): View
     {
         return view('user.follow-requests', ['initialData' => [

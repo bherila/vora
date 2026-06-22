@@ -59,6 +59,7 @@
         'label' => $__currentUser->display_name ?: $__currentUser->name,
         'avatarUrl' => \App\Support\UserPresenter::avatarUrl($__currentUser, app(\App\Services\Media\MediaResponseService::class)),
         'items' => [
+          ['type' => 'link', 'label' => 'View profile', 'href' => route('me', [], false)],
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
           ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],

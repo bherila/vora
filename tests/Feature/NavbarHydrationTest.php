@@ -47,7 +47,7 @@ class NavbarHydrationTest extends TestCase
         // rather than a generic "Account" label.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
         $this->assertNull($navbar['accountMenu']['avatarUrl']);
-        $this->assertSame(['Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
+        $this->assertSame(['View profile', 'Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
         $this->assertSame([], $navbar['guestMenuItems']);
     }
 
