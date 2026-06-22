@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use App\Enums\MediaType;
 use App\Models\Media;
 use App\Services\FileStorageService;
 use App\Support\MediaPresenter;
@@ -12,6 +13,7 @@ class AdminMediaResponseService
 {
     public function __construct(
         private readonly HlsService $hls,
+        private readonly PdqImageService $pdq,
         private readonly FileStorageService $storage,
     ) {}
 
@@ -57,6 +59,15 @@ class AdminMediaResponseService
 
         if ($media->type->isVideo()) {
             $extras['video'] = $this->hls->status($media, $resolveHls);
+        } elseif ($media->type === MediaType::Photo) {
+            // Resolve the worker's PDQ hash and flag a per-owner near-duplicate.
+            // Unlike HLS this runs for the review *list* too (not just single
+            // items): admins act on the list and the duplicate flag must be
+            // populated before they moderate. It stays cheap — once a hash is
+            // cached the call is a no-op, and an unresolved one re-checks the
+            // results bucket at most once per recheck interval (and not at all
+            // when the results disk is unconfigured).
+            $this->pdq->ensureResolved($media);
         }
 
         return $extras;

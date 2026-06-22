@@ -15,6 +15,7 @@ class MediaService
     public function __construct(
         private readonly FileStorageService $storage,
         private readonly HlsService $hls,
+        private readonly PdqImageService $pdq,
     ) {}
 
     /**
@@ -74,6 +75,9 @@ class MediaService
         }
 
         $this->hls->deleteIfUnreferenced($media);
+
+        // The PDQ mapping is row-private (just a hash), so it goes with the source.
+        $this->pdq->deleteMapping($media);
 
         $media->forceDelete();
     }

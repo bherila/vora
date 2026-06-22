@@ -49,6 +49,8 @@ class Media extends Model
         // Dedup plumbing is internal; only the admin presenter exposes it.
         'file_hash',
         'duplicate_of_media_id',
+        'pdq_hash',
+        'pdq_checked_at',
     ];
 
     /**
@@ -96,6 +98,7 @@ class Media extends Model
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
             'hls_checked_at' => 'datetime',
+            'pdq_checked_at' => 'datetime',
             'size_bytes' => 'integer',
             'multipart_part_size_bytes' => 'integer',
             'multipart_initiated_at' => 'datetime',
