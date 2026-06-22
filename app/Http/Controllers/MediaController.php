@@ -27,6 +27,7 @@ use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Support\MediaFilter;
+use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -293,7 +294,7 @@ class MediaController extends Controller
             abort(404, 'Not found.');
         }
         $this->authorizeOr404('view', $media);
-        $media->load('interests');
+        $media->load(['interests', 'user']);
         $viewer = $request->user();
         $includeOriginalVideoUrl = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
@@ -305,6 +306,20 @@ class MediaController extends Controller
             ->where('favoritable_id', $media->id)
             ->exists();
         $payload['favorite_count'] = $this->favorites->countFor($media);
+
+        // Uploader context so the single-media view can frame the item inside the
+        // owner's profile (a header back to Explore + a link to that profile).
+        $owner = $media->user;
+        $isSelf = $viewer instanceof User && $owner instanceof User && $owner->id === $viewer->id;
+        $payload['owner'] = $owner instanceof User ? [
+            'id' => $owner->id,
+            'display_name' => $owner->display_name ?: $owner->name,
+            'avatar_url' => UserPresenter::avatarUrl($owner, $this->responder, $viewer),
+            'href' => $isSelf ? route('me', [], false) : route('users.profile', $owner, false),
+            'is_self' => $isSelf,
+        ] : null;
+        // Anyone signed in who isn't the owner can report the item for abuse.
+        $payload['can_report'] = $viewer instanceof User && ! $isSelf;
 
         return $payload;
     }

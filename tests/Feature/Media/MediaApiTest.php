@@ -292,6 +292,31 @@ class MediaApiTest extends TestCase
         $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$pending->ulid}")->assertNotFound();
     }
 
+    public function test_by_ulid_frames_item_with_uploader_profile_context(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create(['display_name' => 'Pat Uploader']);
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->unlisted()->approved()->create();
+
+        // A non-owner sees the uploader frame (linking to the owner's profile)
+        // and may report the item.
+        $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', $owner->id)
+            ->assertJsonPath('data.owner.display_name', 'Pat Uploader')
+            ->assertJsonPath('data.owner.is_self', false)
+            ->assertJsonPath('data.owner.href', "/users/{$owner->id}")
+            ->assertJsonPath('data.can_report', true);
+
+        // The owner sees their own frame (linking to /me) and cannot self-report.
+        $this->actingAs($owner)->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.is_self', true)
+            ->assertJsonPath('data.owner.href', '/me')
+            ->assertJsonPath('data.can_report', false);
+    }
+
     public function test_other_user_video_by_ulid_does_not_expose_original_signed_url(): void
     {
         $this->fakeStorage();
