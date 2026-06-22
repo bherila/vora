@@ -37,12 +37,11 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame([
             'Profile',
             'Explore',
-            'Create',
             'People',
             'Requests',
         ], array_column($navbar['navItems'], 'label'));
-        $this->assertSame('/users/follow-requests', $navbar['navItems'][4]['href']);
-        $this->assertSame(0, $navbar['navItems'][4]['badge']);
+        $this->assertSame('/users/follow-requests', $navbar['navItems'][3]['href']);
+        $this->assertSame(0, $navbar['navItems'][3]['badge']);
         // The account menu now identifies the signed-in user (name + avatar)
         // rather than a generic "Account" label. The avatar + name link to /me;
         // "View profile" is dropped from the menu as redundant.

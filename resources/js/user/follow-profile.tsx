@@ -22,6 +22,7 @@ import { MediaGrid } from '@/media/MediaGrid';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import type { MediaItem } from '@/media/types';
+import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
 import type { StoryDiscoveryItem } from '@/stories/types';
 import { CharacterEditorDialog,type CharacterRecord } from '@/user/CharacterEditorDialog';
 import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
@@ -442,7 +443,9 @@ function FollowProfilePage() {
           {activeTab === 'media' && (profile.is_self
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
             : <VisitorMediaTab userId={userId} identity={identity} />)}
-          {activeTab === 'stories' && <StoriesTab userId={userId} identity={identity} isSelf={profile.is_self} />}
+          {activeTab === 'stories' && (profile.is_self
+            ? <OwnerStoriesManager currentUserId={userId} />
+            : <StoriesTab userId={userId} identity={identity} isSelf={false} />)}
           {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
         </div>
