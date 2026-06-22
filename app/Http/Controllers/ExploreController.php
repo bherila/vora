@@ -6,8 +6,10 @@ use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Http\Requests\Media\ListMediaRequest;
+use App\Models\InterestRating;
 use App\Models\Media;
 use App\Models\Story;
+use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Support\MediaFilter;
 use App\Support\PaginationMeta;
@@ -38,12 +40,45 @@ class ExploreController extends Controller
      */
     public function page(ListMediaRequest $request): View
     {
+        // Explore opens pre-filtered to the viewer's own interests. We seed the
+        // request so the server-rendered first page matches the filter the client
+        // shows; the user can Reset/Clear to deviate (handled client-side, and the
+        // refresh endpoint honours whatever interest_ids the client then sends).
+        $defaultInterestIds = $this->defaultInterestIds($request->user());
+        if ($defaultInterestIds !== [] && (array) $request->input('interest_ids', []) === []) {
+            $request->merge(['interest_ids' => $defaultInterestIds]);
+        }
+
         return view('user.explore', ['initialData' => [
             'explore' => [
                 'media' => $this->mediaPayload($request),
                 'stories' => $this->storiesPayload($request),
+                'default_interest_ids' => $defaultInterestIds,
             ],
         ]]);
+    }
+
+    /**
+     * The viewer's own rated interests (level > 0), used as the default Explore
+     * filter. Empty when the viewer has rated nothing — Explore then shows
+     * everything rather than a blank page.
+     *
+     * @return list<int>
+     */
+    private function defaultInterestIds(?User $user): array
+    {
+        if ($user === null) {
+            return [];
+        }
+
+        return InterestRating::query()
+            ->where('user_id', $user->id)
+            ->whereNull('character_id')
+            ->where('level', '>', 0)
+            ->pluck('interest_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
     }
 
     /**

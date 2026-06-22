@@ -1,5 +1,5 @@
 import { BookOpen, Images } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
@@ -16,19 +16,56 @@ import type { StoryDiscoveryItem } from '@/stories/types';
 
 type ExploreTab = 'media' | 'stories';
 
+interface ExploreInitial {
+  media?: PagedResponse<MediaItem>;
+  stories?: PagedResponse<StoryDiscoveryItem>;
+  default_interest_ids?: number[];
+}
+
+/** Order-independent set equality for two id lists. */
+function sameIds(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
+}
+
 /**
  * Cross-user exploration. Media discovery mirrors the owner's library filters;
  * story discovery lists published, approved, discoverable stories and shares the
- * same interest filter.
+ * same interest filter. Explore opens pre-filtered to the viewer's own profile
+ * interests (seeded server-side); the viewer can reset to those defaults or clear
+ * the filter to browse everything as an explicit exception.
  */
 function ExplorePage() {
-  const initial = readInitialData<{ explore?: { media?: PagedResponse<MediaItem>; stories?: PagedResponse<StoryDiscoveryItem> } }>().explore;
+  const initial = readInitialData<{ explore?: ExploreInitial }>().explore;
+  const defaultInterestIds = useMemo(() => initial?.default_interest_ids ?? [], [initial]);
   const [tab, setTab] = useState<ExploreTab>('media');
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>('all');
-  const [interestIds, setInterestIds] = useState<number[]>([]);
+  const [interestIds, setInterestIds] = useState<number[]>(() => initial?.default_interest_ids ?? []);
   const mediaListing = useMediaListing('/api/explore', { type: typeFilter, interestIds }, initial?.media);
   const storyListing = useStoryListing(interestIds, initial?.stories);
   const activeListing = tab === 'media' ? mediaListing : storyListing;
+
+  const hasDefaults = defaultInterestIds.length > 0;
+  const showingDefaults = hasDefaults && sameIds(interestIds, defaultInterestIds);
+
+  // Auto-load the next page as the sentinel scrolls into view; the Load more
+  // button stays as a fallback. Re-subscribes when the active tab changes.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const { hasMore, loadingMore, loadMore } = activeListing;
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && !loadingMore) {
+        loadMore();
+      }
+    }, { rootMargin: '300px' });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loadMore]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -45,6 +82,22 @@ function ExplorePage() {
           <BookOpen className="h-4 w-4" /> Stories
         </Button>
       </div>
+
+      {hasDefaults && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>{showingDefaults ? 'Showing your interests.' : 'Showing a custom filter.'}</span>
+          {!showingDefaults && (
+            <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => setInterestIds(defaultInterestIds)}>
+              Reset to my interests
+            </button>
+          )}
+          {interestIds.length > 0 && (
+            <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => setInterestIds([])}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {tab === 'media' ? (
         <MediaFilters
@@ -73,7 +126,7 @@ function ExplorePage() {
         <StoryGrid items={storyListing.items} />
       )}
       {activeListing.hasMore && (
-        <div className="mt-6 flex justify-center">
+        <div ref={sentinelRef} className="mt-6 flex justify-center">
           <Button type="button" variant="outline" disabled={activeListing.loadingMore} onClick={activeListing.loadMore}>
             {activeListing.loadingMore ? 'Loading...' : 'Load more'}
           </Button>

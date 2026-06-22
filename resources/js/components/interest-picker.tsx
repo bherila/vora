@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { buildInterestTree, flattenInterestTree, getDepthPaddingClass, sortByName } from '@/interests/tree';
 
 interface InterestOption {
   id: number;
@@ -16,9 +17,11 @@ interface InterestPickerProps {
 }
 
 /**
- * Reusable multi-select of profile interests, sourced from /api/interests.
- * Used by the media uploader to tag uploads; the controlled `value` is a list
- * of selected interest ids.
+ * Reusable multi-select of interests, sourced from /api/interests. The controlled
+ * `value` is a list of selected interest ids. The catalog is rendered as an
+ * indented hierarchy (matching the admin/profile/character editors) so parent and
+ * child interests read in context; a text filter falls back to a flat match list,
+ * since indentation is meaningless once the tree is sliced.
  */
 export function InterestPicker({ value, onChange, disabled = false }: InterestPickerProps) {
   const [interests, setInterests] = useState<InterestOption[]>([]);
@@ -46,13 +49,20 @@ export function InterestPicker({ value, onChange, disabled = false }: InterestPi
 
   const selected = useMemo(() => new Set(value), [value]);
 
-  const visible = useMemo(() => {
+  // Each visible row carries its tree depth so we can indent it. When filtering,
+  // every match is shown flat (depth 0) because its ancestor chain may be absent.
+  const visible = useMemo((): Array<{ id: number; name: string; depth: number }> => {
     const needle = filter.trim().toLowerCase();
-    const sorted = [...interests].sort((a, b) => a.name.localeCompare(b.name));
-    if (!needle) {
-      return sorted;
+    if (needle) {
+      return sortByName(interests)
+        .filter((interest) => interest.name.toLowerCase().includes(needle))
+        .map((interest) => ({ id: interest.id, name: interest.name, depth: 0 }));
     }
-    return sorted.filter((interest) => interest.name.toLowerCase().includes(needle));
+    return flattenInterestTree(buildInterestTree(interests)).map((node) => ({
+      id: node.id,
+      name: node.name,
+      depth: node.depth,
+    }));
   }, [interests, filter]);
 
   const toggle = (id: number): void => {
@@ -83,7 +93,7 @@ export function InterestPicker({ value, onChange, disabled = false }: InterestPi
       />
       <div className="max-h-48 overflow-y-auto rounded-md border border-input p-2">
         {visible.map((interest) => (
-          <label key={interest.id} className="flex items-center gap-2 py-1 text-sm">
+          <label key={interest.id} className={`flex items-center gap-2 py-1 text-sm ${getDepthPaddingClass(interest.depth)}`}>
             <input
               type="checkbox"
               checked={selected.has(interest.id)}
