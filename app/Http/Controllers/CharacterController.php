@@ -15,9 +15,9 @@ use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use App\Services\Privacy\PrivacyAuditor;
+use App\Support\CharacterPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
-use Illuminate\View\View;
 
 class CharacterController extends Controller
 {
@@ -27,15 +27,6 @@ class CharacterController extends Controller
         private readonly MediaService $media,
         private readonly PrivacyAuditor $auditor,
     ) {}
-
-    public function page(): View
-    {
-        $user = request()->user();
-
-        return view('user.characters', ['initialData' => [
-            'characters' => $user instanceof User ? $this->charactersPayload($user) : [],
-        ]]);
-    }
 
     public function index(): JsonResponse
     {
@@ -58,7 +49,7 @@ class CharacterController extends Controller
     {
         $characters = $user->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get();
 
-        return $characters->map(fn (Character $character): array => $this->present($character))->values();
+        return collect(CharacterPresenter::list($characters, $this->responder));
     }
 
     public function store(UpsertCharacterRequest $request): JsonResponse
@@ -251,26 +242,11 @@ class CharacterController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     */
     private function present(Character $character): array
     {
-        $picture = $character->profilePicture;
-
-        return [
-            'id' => $character->id,
-            'display_name' => $character->display_name,
-            'description' => $character->description,
-            'audience' => $character->audience->value,
-            'audience_user_ids' => $character->audience === Audience::SpecificPeople
-                ? $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()
-                : [],
-            'gender' => $character->gender,
-            'gender_other' => $character->gender_other,
-            'user_type' => $character->user_type,
-            'user_type_other' => $character->user_type_other,
-            'preferred_user_types' => $character->preferred_user_types ?? [],
-            'preferred_genders' => $character->preferred_genders ?? [],
-            'inherit_interests' => $character->inherit_interests,
-            'profile_picture' => $picture instanceof Media ? $this->responder->item($picture, resolveHls: false) : null,
-        ];
+        return CharacterPresenter::manage($character, $this->responder);
     }
 }

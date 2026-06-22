@@ -3,7 +3,6 @@
   // and Stories keep their own routes (so each tab is directly linkable) but are
   // presented as one destination in the top nav.
   $__createTabs = [
-    ['label' => 'Characters', 'href' => route('characters', [], false), 'active' => request()->routeIs('characters')],
     ['label' => 'Stories', 'href' => route('stories', [], false), 'active' => request()->routeIs('stories')],
   ];
 @endphp
