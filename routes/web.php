@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminInviteController;
 use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminPostCommentController;
 use App\Http\Controllers\Admin\AdminPostController;
+use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminStaticPageController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -298,6 +299,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
+    Route::get('/reports', [AdminReportController::class, 'index'])->name('reports');
     Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
     Route::get('/deleted-content', [AdminDeletedContentController::class, 'index'])->name('deleted-content');
     Route::get('/pages', [AdminStaticPageController::class, 'index'])->name('pages');
@@ -339,6 +341,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
+
+    Route::get('/reports', [AdminReportController::class, 'apiIndex']);
+    Route::post('/reports/{report}/act', [AdminReportController::class, 'act']);
 
     Route::get('/deleted-content', [AdminDeletedContentController::class, 'apiIndex']);
     Route::post('/deleted-content/{type}/{id}/restore', [AdminDeletedContentController::class, 'restore']);

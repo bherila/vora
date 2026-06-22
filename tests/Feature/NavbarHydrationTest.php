@@ -66,6 +66,7 @@ class NavbarHydrationTest extends TestCase
             'Invitation requests',
             'Interests',
             'Media review',
+            'Abuse reports',
             'Story review',
             'Posts review',
             'Deleted content',
