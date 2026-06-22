@@ -6,8 +6,10 @@ use App\Enums\Audience;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\User;
+use App\Notifications\ContentFavorited;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
@@ -49,6 +51,38 @@ class FavoriteTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $media->id);
+    }
+
+    public function test_favoriting_notifies_the_owner_once_and_never_on_self(): void
+    {
+        Notification::fake();
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $alice = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create(['title' => 'Pic']);
+
+        // Saving your own item never notifies you.
+        $this->actingAs($owner)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+        Notification::assertNothingSentTo($owner);
+
+        // Another user saving it notifies the owner exactly once, even on a repeat save.
+        $this->actingAs($alice)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+        $this->actingAs($alice)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+        Notification::assertSentToTimes($owner, ContentFavorited::class, 1);
+    }
+
+    public function test_owner_can_silence_favorite_notifications(): void
+    {
+        Notification::fake();
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create(['notify_favorite' => false]);
+        $alice = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create();
+
+        $this->actingAs($alice)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+        Notification::assertNothingSentTo($owner);
     }
 
     public function test_media_view_reports_an_aggregate_favorite_count(): void
