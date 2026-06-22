@@ -7,7 +7,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { readInitialData } from '@/initialData';
 
-interface DirectoryUser { id: number; display_name: string; avatar_url?: string | null; restricted: boolean; user_type: string | null; gender: string | null; }
+interface DirectoryUser {
+  id: number;
+  display_name: string;
+  avatar_url?: string | null;
+  restricted: boolean;
+  user_type: string | null;
+  gender: string | null;
+  matching_interests_count: number;
+  interest_match_score: number;
+}
 
 function FollowDirectoryPage() {
   const [users] = useState<DirectoryUser[]>(() => readInitialData<{ followDirectory?: DirectoryUser[] }>().followDirectory ?? []);
@@ -43,6 +52,8 @@ function FollowDirectoryPage() {
                   <CardDescription className="mt-1 flex flex-wrap gap-2">
                     {user.user_type && <Badge variant="outline">{user.user_type}</Badge>}
                     {user.gender && <Badge variant="outline">{user.gender}</Badge>}
+                    <Badge variant="outline">{user.interest_match_score}% interest match</Badge>
+                    {user.matching_interests_count > 0 && <Badge variant="outline">{user.matching_interests_count} shared</Badge>}
                     {user.restricted && <Badge variant="outline">Private</Badge>}
                   </CardDescription>
                 </div>
@@ -54,7 +65,19 @@ function FollowDirectoryPage() {
           </Card>
         ))}
         {filtered.length === 0 && (
-          <p className="text-sm text-muted-foreground">No users match “{query}”.</p>
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>{query.trim() ? 'No matching users yet' : 'No one to browse yet'}</CardTitle>
+              <CardDescription>
+                {query.trim()
+                  ? `We could not find anyone named “${query.trim()}”. Try a different search or clear the filter.`
+                  : 'When more approved members join, this page will sort them by how closely their interests match yours.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Add interests on your profile to make future recommendations more relevant.
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
