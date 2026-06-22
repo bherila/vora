@@ -6,7 +6,9 @@ use App\Enums\ReportStatus;
 use App\Models\Media;
 use App\Models\Report;
 use App\Models\User;
+use App\Notifications\AbuseReportFiled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class ReportTest extends TestCase
@@ -88,5 +90,37 @@ class ReportTest extends TestCase
             'id' => 1,
             'reason' => 'spam',
         ])->assertStatus(422);
+    }
+
+    public function test_filing_a_report_notifies_admins_only(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $reporter = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create();
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'media', 'id' => $media->id, 'reason' => 'spam',
+        ])->assertCreated();
+
+        Notification::assertSentTo($admin, AbuseReportFiled::class);
+        Notification::assertNotSentTo($reporter, AbuseReportFiled::class);
+        Notification::assertNotSentTo($owner, AbuseReportFiled::class);
+    }
+
+    public function test_duplicate_report_does_not_re_notify(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $reporter = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create();
+        $payload = ['type' => 'media', 'id' => $media->id, 'reason' => 'spam'];
+
+        $this->actingAs($reporter)->postJson('/api/reports', $payload)->assertCreated();
+        $this->actingAs($reporter)->postJson('/api/reports', $payload)->assertCreated();
+
+        Notification::assertSentToTimes($admin, AbuseReportFiled::class, 1);
     }
 }

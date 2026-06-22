@@ -13,6 +13,18 @@ class AdminReportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_open_report_count_shows_on_the_admin_nav(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create();
+        Report::factory()->targeting($media)->create([
+            'reporter_user_id' => User::factory()->approved()->create()->id,
+        ]);
+
+        $this->actingAs($admin)->get('/me')->assertOk()->assertSee('Abuse reports (1)', false);
+    }
+
     public function test_non_admin_cannot_list_reports(): void
     {
         // User id 1 is always treated as admin, so burn it on a filler first.

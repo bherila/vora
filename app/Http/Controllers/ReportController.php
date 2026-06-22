@@ -6,8 +6,10 @@ use App\Enums\ReportStatus;
 use App\Http\Requests\Report\StoreReportRequest;
 use App\Models\Report;
 use App\Models\User;
+use App\Notifications\AbuseReportFiled;
 use App\Services\Favorites\FavoriteService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Notification;
 
 class ReportController extends Controller
 {
@@ -37,7 +39,7 @@ class ReportController extends Controller
             return response()->json(['success' => false, 'message' => 'You cannot report your own content.'], 422);
         }
 
-        Report::query()->firstOrCreate(
+        $report = Report::query()->firstOrCreate(
             [
                 'reporter_user_id' => $user->id,
                 'reportable_type' => $item->getMorphClass(),
@@ -49,6 +51,16 @@ class ReportController extends Controller
                 'details' => $request->validated('details'),
             ],
         );
+
+        // Alert admins on a genuinely new report (a repeat is a silent no-op).
+        if ($report->wasRecentlyCreated) {
+            $admins = User::query()
+                ->where(fn ($q) => $q->where('is_admin', true)->orWhere('id', 1))
+                ->whereNotNull('approved_at')
+                ->active()
+                ->get();
+            Notification::send($admins, new AbuseReportFiled($report));
+        }
 
         return response()->json([
             'success' => true,
