@@ -15,7 +15,7 @@ function TwoFactorPage({ attemptToken, appEnv }: { attemptToken: string; appEnv:
             if (result.redirect) {
               window.location.href = result.redirect;
             } else {
-              window.location.href = '/dashboard';
+              window.location.href = '/feed';
             }
           }}
         />

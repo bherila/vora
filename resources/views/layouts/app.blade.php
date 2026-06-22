@@ -29,14 +29,15 @@
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;
       $__requestCount = $__followRequestCount + $__authorshipInviteCount;
       $__navItems = array_values(array_filter([
-        ['label' => 'Home', 'href' => route('home', [], false)],
-        $__isAuthenticated ? ['label' => 'Dashboard', 'href' => route('dashboard', [], false)] : null,
+        // Guests see the marketing home; logged-in users land on the feed, so
+        // "Home" would just be a redirect — drop it from the authed nav.
+        $__isAuthenticated ? null : ['label' => 'Home', 'href' => route('home', [], false)],
         $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Media', 'href' => route('media', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Characters', 'href' => route('characters', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Stories', 'href' => route('stories', [], false)] : null,
-        $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
-        $__isAuthenticated ? ['label' => 'Users', 'href' => route('users.directory', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'People', 'href' => route('users.directory', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Requests', 'href' => route('users.follow-requests', [], false), 'badge' => $__requestCount] : null,
       ]));
       $__adminMenu = $__isAdmin ? [
