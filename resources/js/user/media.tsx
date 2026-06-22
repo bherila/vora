@@ -191,6 +191,7 @@ function UserMediaPage() {
   const [bulkAudienceUserIds, setBulkAudienceUserIds] = useState<number[]>([]);
   const [bulkDiscoverable, setBulkDiscoverable] = useState(true);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
 
   // Single-item edit dialog state.
   const [editItem, setEditItem] = useState<MediaItem | null>(null);
@@ -444,6 +445,7 @@ function UserMediaPage() {
       });
       toast.success(successMessage);
       setSelectedIds([]);
+      setBulkDialogOpen(false);
       listing.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -497,6 +499,7 @@ function UserMediaPage() {
       await fetchWrapper.delete('/api/media/bulk', { media_ids: selectedIds });
       toast.success('Selected media deleted.');
       setSelectedIds([]);
+      setBulkDialogOpen(false);
       listing.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -623,78 +626,89 @@ function UserMediaPage() {
       />
 
       {listing.items.length > 0 && (
-        <div className="mb-6 grid gap-4 rounded-md border border-border p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-muted-foreground">
-              {selectedIds.length} selected
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={toggleVisibleSelection} disabled={bulkBusy}>
-                {allVisibleSelected ? 'Clear visible' : 'Select visible'}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])} disabled={bulkBusy || selectedIds.length === 0}>
-                Clear selection
-              </Button>
-            </div>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-4">
+          <div className="text-sm text-muted-foreground">
+            {selectedIds.length} selected
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={toggleVisibleSelection} disabled={bulkBusy}>
+              {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])} disabled={bulkBusy || selectedIds.length === 0}>
+              Clear selection
+            </Button>
+            <Button type="button" size="sm" onClick={() => setBulkDialogOpen(true)} disabled={bulkBusy || selectedIds.length === 0}>
+              Edit selected
+            </Button>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Character</span>
-              <select
-                value={bulkCharacterId}
-                onChange={(event) => setBulkCharacterId(event.target.value)}
-                disabled={bulkBusy || selectedIds.length === 0 || characters.length === 0}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              >
-                <option value="">Choose character</option>
-                {characters.map((character) => (
-                  <option key={character.id} value={character.id}>{character.display_name}</option>
-                ))}
-              </select>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" onClick={() => void assignSelectedToCharacter()} disabled={bulkBusy || selectedIds.length === 0 || bulkCharacterId === ''}>
-                  Assign
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => void clearSelectedCharacter()} disabled={bulkBusy || selectedIds.length === 0}>
-                  Clear character
-                </Button>
-              </div>
-            </div>
+          <Dialog open={bulkDialogOpen} onOpenChange={(open) => { if (!open) setBulkDialogOpen(false); }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit {selectedIds.length} selected</DialogTitle>
+                <DialogDescription>Assign a character, change privacy, or delete the selected items.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-5">
+                <div className="grid gap-2">
+                  <span className="text-sm font-medium">Character</span>
+                  <select
+                    value={bulkCharacterId}
+                    onChange={(event) => setBulkCharacterId(event.target.value)}
+                    disabled={bulkBusy || characters.length === 0}
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="">Choose character</option>
+                    {characters.map((character) => (
+                      <option key={character.id} value={character.id}>{character.display_name}</option>
+                    ))}
+                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={() => void assignSelectedToCharacter()} disabled={bulkBusy || bulkCharacterId === ''}>
+                      Assign
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void clearSelectedCharacter()} disabled={bulkBusy}>
+                      Clear character
+                    </Button>
+                  </div>
+                </div>
 
-            <div className="grid gap-2 lg:col-span-2">
-              <AudienceField
-                audience={bulkAudience}
-                onAudienceChange={setBulkAudience}
-                selectedUserIds={bulkAudienceUserIds}
-                onSelectedUserIdsChange={setBulkAudienceUserIds}
-                disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}
-                label="Change standalone media privacy"
-                specificRelationship="mutuals"
-              />
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={bulkDiscoverable}
-                  onChange={(event) => setBulkDiscoverable(event.target.checked)}
-                  disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}
-                  className="mt-0.5"
-                />
-                <span>List in discovery</span>
-              </label>
-              {selectedHasCharacterMedia && (
-                <p className="text-xs text-muted-foreground">Character media inherits character privacy. Clear the character before changing media privacy directly.</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" onClick={() => void updateSelectedPrivacy()} disabled={bulkBusy || selectedIds.length === 0 || selectedHasCharacterMedia}>
-                  Apply privacy
-                </Button>
-                <Button type="button" size="sm" variant="destructive" onClick={() => void deleteSelected()} disabled={bulkBusy || selectedIds.length === 0}>
+                <div className="grid gap-2 border-t border-border pt-4">
+                  <AudienceField
+                    audience={bulkAudience}
+                    onAudienceChange={setBulkAudience}
+                    selectedUserIds={bulkAudienceUserIds}
+                    onSelectedUserIdsChange={setBulkAudienceUserIds}
+                    disabled={bulkBusy || selectedHasCharacterMedia}
+                    label="Change standalone media privacy"
+                    specificRelationship="mutuals"
+                  />
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkDiscoverable}
+                      onChange={(event) => setBulkDiscoverable(event.target.checked)}
+                      disabled={bulkBusy || selectedHasCharacterMedia}
+                      className="mt-0.5"
+                    />
+                    <span>List in discovery</span>
+                  </label>
+                  {selectedHasCharacterMedia && (
+                    <p className="text-xs text-muted-foreground">Character media inherits character privacy. Clear the character before changing media privacy directly.</p>
+                  )}
+                  <div>
+                    <Button type="button" size="sm" onClick={() => void updateSelectedPrivacy()} disabled={bulkBusy || selectedHasCharacterMedia}>
+                      Apply privacy
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="destructive" onClick={() => void deleteSelected()} disabled={bulkBusy}>
                   Delete selected
                 </Button>
-              </div>
-            </div>
-          </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 
