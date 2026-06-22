@@ -54,6 +54,8 @@ export interface MediaItem {
   interests: MediaInterest[];
   character: MediaCharacter | null;
   created_at: string | null;
+  /** Present only on the single-media view: whether the current viewer saved it. */
+  favorited?: boolean;
 }
 
 /** Selected media-type filter for a listing. 'all' applies no type constraint. */

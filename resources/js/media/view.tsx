@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 
+import { FavoriteButton } from '@/components/favorite-button';
 import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
@@ -22,7 +24,10 @@ function MediaViewPage() {
     // fraction of the viewport height; object-contain scales the photo/video up
     // or down to fill it while preserving the original aspect ratio.
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-6">
-      <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
+        {item.favorited !== undefined && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+      </div>
       <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
         <MediaPlayer item={item} className="mx-auto h-full w-full object-contain" />
       </div>
@@ -32,6 +37,7 @@ function MediaViewPage() {
       {item.interests.length > 0 && (
         <p className="text-sm text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
       )}
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

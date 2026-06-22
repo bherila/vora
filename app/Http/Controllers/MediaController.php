@@ -14,6 +14,7 @@ use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\PresignMultipartMediaPartsRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Models\Character;
+use App\Models\Favorite;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
@@ -327,7 +328,14 @@ class MediaController extends Controller
         $includeOriginalVideoUrl = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
 
-        return $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl);
+        $payload = $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl);
+        $payload['favorited'] = $viewer instanceof User && Favorite::query()
+            ->where('user_id', $viewer->id)
+            ->where('favoritable_type', $media->getMorphClass())
+            ->where('favoritable_id', $media->id)
+            ->exists();
+
+        return $payload;
     }
 
     /**

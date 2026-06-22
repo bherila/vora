@@ -1,10 +1,12 @@
 import { BookOpen, Images, MessageSquare, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 
 import { PostCard } from '@/community/PostCard';
 import type { CommunityPost } from '@/community/types';
 import { Avatar } from '@/components/avatar';
+import { FavoriteButton } from '@/components/favorite-button';
 import { PrivacyBadge } from '@/components/privacy-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +34,7 @@ interface ProfileData {
   follow_request: FollowRequestState | null;
   can_follow_back: boolean;
   characters: CharacterRef[];
+  viewer_favorited?: boolean;
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
@@ -194,10 +197,15 @@ function FollowProfilePage() {
               <div className="flex gap-2">
                 <Button variant="outline" asChild><a href="/user/settings">Edit profile</a></Button>
               </div>
-            ) : !hasActiveRequest ? (
-              <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
             ) : (
-              <span className="text-sm text-muted-foreground">Request: <strong>{profile.follow_request?.status}</strong></span>
+              <div className="flex items-center gap-2">
+                {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
+                {!hasActiveRequest ? (
+                  <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Request: <strong>{profile.follow_request?.status}</strong></span>
+                )}
+              </div>
             )}
           </div>
         </CardHeader>
@@ -262,6 +270,7 @@ function FollowProfilePage() {
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} />}
         </div>
       )}
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }
