@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Favorite\StoreFavoriteRequest;
 use App\Models\Favorite;
 use App\Models\User;
+use App\Notifications\ContentFavorited;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\ProfileGate;
 use Illuminate\Http\JsonResponse;
@@ -35,15 +36,25 @@ class FavoriteController extends Controller
             return response()->json(['success' => false, 'message' => 'You cannot favorite this.'], 403);
         }
 
-        Favorite::query()->firstOrCreate([
+        $favorite = Favorite::query()->firstOrCreate([
             'user_id' => $user->id,
             'favoritable_type' => $item->getMorphClass(),
             'favoritable_id' => $item->getKey(),
         ]);
 
+        $card = $this->favorites->present($item, $user);
+
+        // Notify the owner the first time their item is saved by this user (not a
+        // repeat firstOrCreate, never a self-save). Visibility is already checked
+        // above, so this never reveals an item the actor could not reach.
+        $owner = $this->favorites->ownerOf($item);
+        if ($favorite->wasRecentlyCreated && $owner instanceof User && $owner->id !== $user->id && $owner->notify_favorite) {
+            $owner->notify(new ContentFavorited($user, (string) $card['type'], (string) $card['label'], (string) $card['href']));
+        }
+
         return response()->json([
             'success' => true,
-            'data' => ['favorited' => true, 'favorite' => $this->favorites->present($item, $user)],
+            'data' => ['favorited' => true, 'favorite' => $card],
         ], 201);
     }
 

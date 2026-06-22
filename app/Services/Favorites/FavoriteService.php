@@ -97,6 +97,23 @@ class FavoriteService
     }
 
     /**
+     * The user who owns a favoritable item — its recipient for a "saved your
+     * content" notification. A favorited user owns itself; media/story/post/
+     * character all belong to their user.
+     */
+    public function ownerOf(Model $item): ?User
+    {
+        return match (true) {
+            $item instanceof User => $item,
+            $item instanceof Media,
+            $item instanceof Post,
+            $item instanceof Story,
+            $item instanceof Character => $item->user,
+            default => null,
+        };
+    }
+
+    /**
      * How many users have favorited this item. An aggregate count only — it
      * names no one — so it is safe to show to anyone who can already see the
      * item.

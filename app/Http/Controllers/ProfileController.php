@@ -322,6 +322,7 @@ class ProfileController extends Controller
             'notify_follow_accepted',
             'notify_co_author_invite',
             'notify_co_author_invite_accepted',
+            'notify_favorite',
         ] as $pref) {
             if (array_key_exists($pref, $data)) {
                 $user->{$pref} = (bool) $data[$pref];
@@ -358,6 +359,7 @@ class ProfileController extends Controller
                 'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
                 'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
                 'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
+                'notify_favorite' => (bool) $user->notify_favorite,
             ],
         ]);
     }

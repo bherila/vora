@@ -11,6 +11,7 @@ interface NotificationItem {
     actor_name?: string;
     url?: string;
     type?: string;
+    item_type?: string;
     [key: string]: unknown;
   };
   read_at: string | null;
@@ -44,6 +45,8 @@ function labelFor(notification: NotificationItem): string {
       return `${actor} invited you to co-author.`;
     case 'co_author_invite_accepted':
       return `${actor} accepted a co-author invite.`;
+    case 'favorite':
+      return `${actor} saved your ${notification.data.item_type ?? 'content'}.`;
     default:
       return 'New notification.';
   }
