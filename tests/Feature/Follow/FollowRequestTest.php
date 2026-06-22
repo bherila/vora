@@ -36,6 +36,35 @@ class FollowRequestTest extends TestCase
             ->assertJsonMissing(['name' => 'Hidden']);
     }
 
+    public function test_directory_sorts_users_by_interest_match_score(): void
+    {
+        $current = User::factory()->approved()->create();
+        $best = User::factory()->approved()->create(['display_name' => 'Best Match']);
+        $partial = User::factory()->approved()->create(['display_name' => 'Partial Match']);
+        $none = User::factory()->approved()->create(['display_name' => 'No Match']);
+
+        $travel = Interest::query()->create(['name' => 'Travel']);
+        $art = Interest::query()->create(['name' => 'Art']);
+        $gaming = Interest::query()->create(['name' => 'Gaming']);
+
+        InterestRating::query()->create(['user_id' => $current->id, 'interest_id' => $travel->id, 'level' => 5]);
+        InterestRating::query()->create(['user_id' => $current->id, 'interest_id' => $art->id, 'level' => 4]);
+        InterestRating::query()->create(['user_id' => $current->id, 'interest_id' => $gaming->id, 'level' => -4]);
+
+        InterestRating::query()->create(['user_id' => $best->id, 'interest_id' => $travel->id, 'level' => 5]);
+        InterestRating::query()->create(['user_id' => $best->id, 'interest_id' => $art->id, 'level' => 5]);
+        InterestRating::query()->create(['user_id' => $partial->id, 'interest_id' => $travel->id, 'level' => 5]);
+        InterestRating::query()->create(['user_id' => $none->id, 'interest_id' => $gaming->id, 'level' => 5]);
+
+        $data = $this->actingAs($current)->getJson('/api/users')->assertOk()->json('data');
+
+        $this->assertSame([$best->id, $partial->id, $none->id], collect($data)->pluck('id')->all());
+        $this->assertSame(100, $data[0]['interest_match_score']);
+        $this->assertSame(2, $data[0]['matching_interests_count']);
+        $this->assertSame(50, $data[1]['interest_match_score']);
+        $this->assertSame(0, $data[2]['interest_match_score']);
+    }
+
     public function test_profile_rejects_non_discoverable_users(): void
     {
         $current = User::factory()->approved()->create();
