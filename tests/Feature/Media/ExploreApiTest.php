@@ -6,6 +6,7 @@ use App\Models\Favorite;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\Media;
+use App\Models\Story;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,6 +40,27 @@ class ExploreApiTest extends TestCase
         ]);
 
         $data = collect($this->actingAs($viewer)->getJson('/api/explore')->assertOk()->json('data'));
+
+        $this->assertTrue($data->firstWhere('id', $saved->id)['favorited']);
+        $this->assertFalse($data->firstWhere('id', $notSaved->id)['favorited']);
+    }
+
+    public function test_explore_stories_carry_the_viewers_favorited_flag(): void
+    {
+        $this->fakeStorage();
+        $other = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $saved = Story::factory()->for($other)->published()->approved()->create(['title' => 'Saved story']);
+        $notSaved = Story::factory()->for($other)->published()->approved()->create(['title' => 'Other story']);
+
+        Favorite::query()->create([
+            'user_id' => $viewer->id,
+            'favoritable_type' => $saved->getMorphClass(),
+            'favoritable_id' => $saved->id,
+        ]);
+
+        $data = collect($this->actingAs($viewer)->getJson('/api/explore/stories')->assertOk()->json('data'));
 
         $this->assertTrue($data->firstWhere('id', $saved->id)['favorited']);
         $this->assertFalse($data->firstWhere('id', $notSaved->id)['favorited']);
