@@ -35,7 +35,6 @@ export default defineConfig({
                 'resources/js/admin/static-pages.tsx',
                 'resources/js/community/feed.tsx',
                 'resources/js/community/post-view.tsx',
-                'resources/js/user/media.tsx',
                 'resources/js/user/characters.tsx',
                 'resources/js/user/explore.tsx',
                 'resources/js/user/follow-directory.tsx',
