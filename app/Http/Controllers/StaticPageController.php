@@ -13,12 +13,12 @@ class StaticPageController extends Controller
 {
     public function home(): View|RedirectResponse
     {
-        // Logged-in users have no use for the marketing splash; send them to the
-        // feed. The feed's own auth/approved gate then bounces anyone not yet
-        // approved/verified to the right place. Guests (and crawlers) still get
-        // the CMS home page below.
+        // Logged-in users have no use for the marketing splash; send them to their
+        // profile home (/me), which hosts the feed. The profile's own
+        // auth/approved gate then bounces anyone not yet approved/verified to the
+        // right place. Guests (and crawlers) still get the CMS home page below.
         if (auth()->check()) {
-            return redirect()->route('feed');
+            return redirect()->route('me');
         }
 
         return $this->show('home');

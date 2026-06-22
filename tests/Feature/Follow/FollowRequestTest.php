@@ -265,10 +265,10 @@ class FollowRequestTest extends TestCase
             'status' => 'pending',
         ]);
 
-        $this->actingAs($recipient)->get('/feed')->assertSee('requestCount":1', false);
+        $this->actingAs($recipient)->get('/me')->assertSee('requestCount":1', false);
 
         $requester->forceFill(['is_disabled' => true])->save();
-        $this->actingAs($recipient)->get('/feed')->assertSee('requestCount":0', false);
+        $this->actingAs($recipient)->get('/me')->assertSee('requestCount":0', false);
     }
 
     public function test_request_from_a_disabled_requester_cannot_be_accepted(): void

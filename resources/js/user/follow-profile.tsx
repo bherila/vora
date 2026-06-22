@@ -1,8 +1,10 @@
-import { BookOpen, Images, MessageSquare, Star } from 'lucide-react';
+import { BookOpen, Images, MessageSquare, Newspaper, Star } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { FeedView } from '@/community/FeedView';
+import type { OnboardingSteps } from '@/community/OnboardingChecklist';
 import { PostCard } from '@/community/PostCard';
 import type { CommunityPost } from '@/community/types';
 import { Avatar } from '@/components/avatar';
@@ -42,7 +44,7 @@ interface ProfileData {
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
-type TabKey = 'media' | 'stories' | 'posts' | 'favorites';
+type TabKey = 'feed' | 'media' | 'stories' | 'posts' | 'favorites';
 interface FavoriteCard { type: string; id: number; label: string; subtitle: string; href: string; thumbnail_url: string | null; }
 
 /** Upload context for the owner's own profile: character privacy options + last interests. */
@@ -54,6 +56,10 @@ function getInitialProfile(): ProfileData | null {
 
 function getProfileMedia(): ProfileMediaData {
   return readInitialData<{ profileMedia?: ProfileMediaData }>().profileMedia ?? { characters: [], last_interest_ids: [] };
+}
+
+function getFeedOnboarding(): OnboardingSteps | null {
+  return readInitialData<{ feedOnboarding?: OnboardingSteps | null }>().feedOnboarding ?? null;
 }
 
 /** Fetch a profile content listing for the active identity/tab; refetch on change. */
@@ -204,7 +210,10 @@ function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
   );
 }
 
-const TABS: Array<{ key: TabKey; label: string; icon: typeof Images }> = [
+interface TabDef { key: TabKey; label: string; icon: typeof Images }
+
+const FEED_TAB: TabDef = { key: 'feed', label: 'Feed', icon: Newspaper };
+const TABS: TabDef[] = [
   { key: 'media', label: 'Media', icon: Images },
   { key: 'stories', label: 'Stories', icon: BookOpen },
   { key: 'posts', label: 'Posts', icon: MessageSquare },
@@ -214,11 +223,13 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof Images }> = [
 function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
   const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
+  const [feedOnboarding] = useState<OnboardingSteps | null>(getFeedOnboarding);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   // null = the main user identity; a number = one of their characters.
   const [identity, setIdentity] = useState<number | null>(null);
-  const [tab, setTab] = useState<TabKey>('media');
+  // The owner's home defaults to their Feed; visitors land on Media.
+  const [tab, setTab] = useState<TabKey>(() => (getInitialProfile()?.is_self ? 'feed' : 'media'));
   const [editOpen, setEditOpen] = useState(false);
   const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
@@ -259,10 +270,13 @@ function FollowProfilePage() {
 
   if (!profile) return <div className="mx-auto max-w-4xl px-4 py-8">Loading profile...</div>;
   const hasActiveRequest = profile.follow_request !== null && !profile.follow_request.can_retry;
-  // Favorites belong to the user, not a character, so the tab only applies to the
-  // main identity. Switching to a character while on Favorites falls back to Media.
-  const tabs = identity === null ? TABS : TABS.filter((t) => t.key !== 'favorites');
-  const activeTab: TabKey = tabs.some((t) => t.key === tab) ? tab : 'media';
+  // Feed (your home timeline) and Favorites belong to the user, not a character,
+  // so they only apply to the main identity. Feed is owner-only. Switching to a
+  // character while on one of those falls back to the first available tab.
+  const tabs: TabDef[] = identity !== null
+    ? TABS.filter((t) => t.key !== 'favorites')
+    : (profile.is_self ? [FEED_TAB, ...TABS] : TABS);
+  const activeTab: TabKey = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? 'media');
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -352,10 +366,11 @@ function FollowProfilePage() {
             {tabs.map(({ key, label, icon: Icon }) => (
               <Button key={key} type="button" size="sm" variant={activeTab === key ? 'default' : 'outline'} aria-pressed={activeTab === key} onClick={() => setTab(key)}>
                 <Icon className="h-4 w-4" /> {label}
-                {counts && <span className="ml-1 text-xs tabular-nums opacity-70">{counts[key]}</span>}
+                {counts && typeof counts[key] === 'number' && <span className="ml-1 text-xs tabular-nums opacity-70">{counts[key]}</span>}
               </Button>
             ))}
           </div>
+          {activeTab === 'feed' && profile.is_self && identity === null && <FeedView onboarding={feedOnboarding} />}
           {activeTab === 'media' && (profile.is_self
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
             : <VisitorMediaTab userId={userId} identity={identity} />)}

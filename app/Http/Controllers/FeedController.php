@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ModerationStatus;
-use App\Models\FollowRequest;
-use App\Models\InterestRating;
 use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
@@ -14,54 +12,17 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 
 /**
  * The viewer's reverse-chronological timeline: their own posts plus posts from
  * the accounts they follow, gated by each post's audience and (for other
  * people's posts) admin review. Keyset-paginated so the feed can grow without
- * the offset drift of page numbers.
+ * the offset drift of page numbers. Rendered as the Feed tab on the profile
+ * home (/me); this controller now serves only the JSON timeline.
  */
 class FeedController extends Controller
 {
     public function __construct(private readonly MediaResponseService $mediaResponder) {}
-
-    public function page(Request $request): View
-    {
-        $viewer = $request->user();
-
-        return view('feed', ['initialData' => [
-            'feed' => $this->payload($request),
-            'onboarding' => $viewer instanceof User ? $this->onboarding($viewer) : null,
-        ]]);
-    }
-
-    /**
-     * First-run checklist state for the feed header. Returns null once every step
-     * is complete so the checklist disappears for established users. Each flag is
-     * a single existence check, kept cheap because the feed page already does the
-     * heavier timeline query.
-     *
-     * @return array<string, bool>|null
-     */
-    private function onboarding(User $viewer): ?array
-    {
-        $steps = [
-            'has_avatar' => $viewer->profile_picture_media_id !== null,
-            'has_interests' => InterestRating::query()
-                ->where('user_id', $viewer->id)
-                ->whereNull('character_id')
-                ->where('level', '>', 0)
-                ->exists(),
-            'is_following' => FollowRequest::query()
-                ->where('requester_id', $viewer->id)
-                ->where('status', 'accepted')
-                ->exists(),
-            'has_posted' => Post::query()->where('user_id', $viewer->id)->exists(),
-        ];
-
-        return in_array(false, $steps, true) ? $steps : null;
-    }
 
     public function index(Request $request): JsonResponse
     {

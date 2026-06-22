@@ -126,10 +126,10 @@ class CoAuthorTest extends TestCase
 
         // The navbar bootstrap JSON escapes quotes (JSON_HEX_QUOT), so match the
         // escaped key form (" for ").
-        $this->actingAs($invitee)->get('/feed')->assertSee('requestCount":1', false);
+        $this->actingAs($invitee)->get('/me')->assertSee('requestCount":1', false);
 
         $owner->forceFill(['deactivated_at' => now()])->save();
-        $this->actingAs($invitee)->get('/feed')->assertSee('requestCount":0', false);
+        $this->actingAs($invitee)->get('/me')->assertSee('requestCount":0', false);
     }
 
     public function test_owner_cannot_be_removed_and_non_owner_cannot_invite(): void
