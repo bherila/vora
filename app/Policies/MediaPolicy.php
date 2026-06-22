@@ -59,4 +59,13 @@ class MediaPolicy
 
         return $media->user_id === $user->id;
     }
+
+    public function update(User $user, Media $media): bool
+    {
+        if ($media->trashed()) {
+            return false;
+        }
+
+        return $media->user_id === $user->id;
+    }
 }

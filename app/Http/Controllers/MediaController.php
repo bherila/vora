@@ -13,6 +13,7 @@ use App\Http\Requests\Media\InitMultipartMediaUploadRequest;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Http\Requests\Media\PresignMultipartMediaPartsRequest;
 use App\Http\Requests\Media\StoreMediaRequest;
+use App\Http\Requests\Media\UpdateMediaRequest;
 use App\Models\Character;
 use App\Models\Favorite;
 use App\Models\Media;
@@ -360,6 +361,66 @@ class MediaController extends Controller
         $this->media->softDelete($media);
 
         return response()->json(['success' => true, 'message' => 'Media deleted.']);
+    }
+
+    /**
+     * Edit a single gallery item (title, privacy, character). Character media
+     * inherits the character's privacy, so privacy fields are ignored while a
+     * character is attached — detach first to set privacy directly.
+     */
+    public function update(UpdateMediaRequest $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('update', $media);
+
+        if (! $media->isGalleryMedia()) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        $user = $request->user();
+        $privacyBefore = $media->privacySnapshot();
+
+        if ($request->has('title')) {
+            $title = $request->input('title');
+            $media->title = is_string($title) && trim($title) !== '' ? trim($title) : null;
+        }
+
+        if ($request->has('character_id')) {
+            $character = $request->character();
+            if ($character instanceof Character) {
+                $media->character_id = $character->id;
+                $media->audience = $character->audience;
+                $media->discoverable = $character->discoverable;
+                $media->save();
+                $media->syncAudienceMembers($this->characterAudienceUserIds($character));
+            } else {
+                $media->character_id = null;
+                $media->save();
+            }
+        } elseif ($request->has('audience')) {
+            if ($media->character_id !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Character media inherits character privacy. Detach the character to set privacy directly.',
+                ], 422);
+            }
+            $media->audience = $request->audience();
+            $media->discoverable = $request->discoverable();
+            $media->save();
+            $media->syncAudienceMembers($media->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
+        } else {
+            $media->save();
+        }
+
+        $this->auditor->record($media, $user, $privacyBefore, $media->privacySnapshot(), $request);
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->responder->item(
+                $media->fresh(['character:id,display_name', 'interests']),
+                resolveHls: false,
+                includeOriginalVideoUrl: true,
+            ),
+        ]);
     }
 
     public function bulkUpdate(BulkUpdateMediaRequest $request): JsonResponse
