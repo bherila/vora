@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+  @include('partials.create-tabs')
   <div id="user-media"></div>
 @endsection
 
