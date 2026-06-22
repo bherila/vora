@@ -354,6 +354,24 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.url', 'https://r2.example/view');
     }
 
+    public function test_owner_sees_under_review_flag_until_approved(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $pending = Media::factory()->for($owner)->create(['moderation_status' => ModerationStatus::Pending]);
+        $approved = Media::factory()->for($owner)->approved()->create();
+
+        // The owner is told their item isn't visible yet — but never the decision.
+        $this->actingAs($owner)->getJson("/api/media/{$pending->id}")
+            ->assertOk()
+            ->assertJsonPath('data.under_review', true)
+            ->assertJsonMissingPath('data.moderation_status');
+
+        $this->actingAs($owner)->getJson("/api/media/{$approved->id}")
+            ->assertOk()
+            ->assertJsonPath('data.under_review', false);
+    }
+
     public function test_admin_video_endpoint_exposes_original_signed_url_for_other_users_video(): void
     {
         $this->fakeStorage();

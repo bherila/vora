@@ -48,6 +48,11 @@ function MediaViewPage() {
         </div>
       )}
 
+      {owner?.is_self && item.under_review && (
+        <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">
+          Only you can see this — it’s awaiting review before others can.
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
         <div className="flex items-center gap-3">

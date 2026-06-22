@@ -132,6 +132,7 @@ export function OwnerMediaManager({ userId, identity, characters, lastInterestId
           renderActions={(item) => (
             <div className="flex flex-wrap items-center gap-2">
               <PrivacyBadge audience={item.audience} discoverable={item.discoverable} />
+              {item.under_review && <Badge variant="outline" className="text-amber-600">In review</Badge>}
               {item.video?.status === 'processing' && <Badge variant="outline">Processing…</Badge>}
               <Button type="button" size="sm" variant="outline" onClick={() => openEdit(item)}>
                 Edit
