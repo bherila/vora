@@ -33,7 +33,7 @@ export function PrivacyBadge({ audience, discoverable = false, className }: Priv
           className={`inline-flex items-center gap-1 rounded-full bg-background/80 p-1.5 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground ${className ?? ''}`}
           aria-label={`Privacy: ${copy.label}`}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-4 w-4" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 text-sm">

@@ -1,5 +1,5 @@
 import { BookOpen, Images, MessageSquare, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StoryGrid } from '@/explore/StoryGrid';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
@@ -76,11 +77,60 @@ function characterQuery(identity: number | null): string {
   return identity === null ? '' : `?character_id=${identity}`;
 }
 
+/** A grid of pulsing placeholders shown while a tab's content loads. */
+function GridSkeleton({ itemClassName = 'aspect-video' }: { itemClassName?: string }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-busy="true">
+      <span className="sr-only">Loading…</span>
+      {Array.from({ length: 6 }).map((_, index) => (
+        <Skeleton key={index} className={`w-full ${itemClassName}`} />
+      ))}
+    </div>
+  );
+}
+
+/** Stacked placeholders for list-shaped tabs (posts). */
+function ListSkeleton() {
+  return (
+    <div className="space-y-3" role="status" aria-busy="true">
+      <span className="sr-only">Loading…</span>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Skeleton key={index} className="h-24 w-full" />
+      ))}
+    </div>
+  );
+}
+
+/** A friendly, centered empty state with an icon and optional call to action. */
+function TabEmpty({ icon: Icon, title, action }: { icon: typeof Images; title: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-12 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <p className="max-w-sm text-sm text-muted-foreground">{title}</p>
+      {action}
+    </div>
+  );
+}
+
+function TabError({ message }: { message: string }) {
+  return <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
+}
+
 function MediaTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
   const { items, loading, error } = useProfileList<MediaItem>(`/api/users/${userId}/media${characterQuery(identity)}`);
-  if (loading) return <p className="text-sm text-muted-foreground">Loading media…</p>;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">No media here yet.</p>;
+  if (loading) return <GridSkeleton />;
+  if (error) return <TabError message={error} />;
+  if (items.length === 0) {
+    return (
+      <TabEmpty
+        icon={Images}
+        title={isSelf ? 'You haven’t added media to this profile yet.' : 'No media to show.'}
+        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/media">Upload media</a></Button> : undefined}
+      />
+    );
+  }
   // Only the owner sees the per-item privacy indicator, so an item's audience is
   // never disclosed to other viewers.
   if (isSelf) {
@@ -89,27 +139,52 @@ function MediaTab({ userId, identity, isSelf }: { userId: number; identity: numb
   return <MediaGrid items={items} />;
 }
 
-function StoriesTab({ userId, identity }: { userId: number; identity: number | null }) {
+function StoriesTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
   const { items, loading, error } = useProfileList<StoryDiscoveryItem>(`/api/users/${userId}/stories${characterQuery(identity)}`);
-  if (loading) return <p className="text-sm text-muted-foreground">Loading stories…</p>;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">No stories here yet.</p>;
+  if (loading) return <GridSkeleton />;
+  if (error) return <TabError message={error} />;
+  if (items.length === 0) {
+    return (
+      <TabEmpty
+        icon={BookOpen}
+        title={isSelf ? 'You haven’t published stories here yet.' : 'No stories to show.'}
+        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/stories">Write a story</a></Button> : undefined}
+      />
+    );
+  }
   return <StoryGrid items={items} />;
 }
 
-function PostsTab({ userId, identity }: { userId: number; identity: number | null }) {
+function PostsTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
   const { items, loading, error } = useProfileList<CommunityPost>(`/api/users/${userId}/posts${characterQuery(identity)}`);
-  if (loading) return <p className="text-sm text-muted-foreground">Loading posts…</p>;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">No posts here yet.</p>;
+  if (loading) return <ListSkeleton />;
+  if (error) return <TabError message={error} />;
+  if (items.length === 0) {
+    return (
+      <TabEmpty
+        icon={MessageSquare}
+        title={isSelf ? 'You haven’t posted anything here yet.' : 'No posts to show.'}
+        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/feed">Go to your feed</a></Button> : undefined}
+      />
+    );
+  }
   return <div className="space-y-4">{items.map((post) => <PostCard key={post.id} post={post} />)}</div>;
 }
 
-function FavoritesTab({ userId }: { userId: number }) {
+function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
   const { items, loading, error } = useProfileList<FavoriteCard>(`/api/users/${userId}/favorites`);
-  if (loading) return <p className="text-sm text-muted-foreground">Loading favorites…</p>;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">No favorites to show.</p>;
+  if (loading) return <GridSkeleton itemClassName="h-20" />;
+  if (error) return <TabError message={error} />;
+  if (items.length === 0) {
+    return (
+      <TabEmpty
+        icon={Star}
+        title={isSelf
+          ? 'Tap Save on any media, story, post, or profile to keep it here.'
+          : 'No favorites to show.'}
+      />
+    );
+  }
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
@@ -270,9 +345,9 @@ function FollowProfilePage() {
             ))}
           </div>
           {activeTab === 'media' && <MediaTab userId={userId} identity={identity} isSelf={profile.is_self} />}
-          {activeTab === 'stories' && <StoriesTab userId={userId} identity={identity} />}
-          {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} />}
-          {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} />}
+          {activeTab === 'stories' && <StoriesTab userId={userId} identity={identity} isSelf={profile.is_self} />}
+          {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
+          {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
         </div>
       )}
       {editable && (
