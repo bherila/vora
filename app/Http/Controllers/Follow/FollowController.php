@@ -124,15 +124,34 @@ class FollowController extends Controller
                 ->whereExists(fn ($sub) => FollowGraph::constrainOwnerFollowsViewer($sub, 'users.id', $current->id));
         }
 
-        $users = $query->with('profilePicture')->orderBy('display_name')->get();
+        $users = $query->with(['profilePicture', 'interestRatings' => function ($q): void {
+            $q->whereNull('character_id')->where('level', '>', 0);
+        }])->get();
+
+        $viewerInterestIds = $current instanceof User
+            ? InterestRating::query()
+                ->where('user_id', $current->id)
+                ->whereNull('character_id')
+                ->where('level', '>', 0)
+                ->pluck('interest_id')
+                ->map(fn ($id): int => (int) $id)
+                ->all()
+            : [];
+        $viewerInterestCount = count($viewerInterestIds);
 
         // Restricted profiles still appear in the directory so they remain
         // findable for a follow request, but their details are withheld from
         // viewers their audience tier doesn't admit.
         $canView = $current instanceof User ? $this->gate->canViewMany($current, $users) : [];
 
-        return $users->map(function (User $user) use ($canView): array {
+        return $users->map(function (User $user) use ($canView, $viewerInterestIds, $viewerInterestCount): array {
             $visible = $canView[$user->id] ?? false;
+            $matchingInterestCount = $viewerInterestCount > 0
+                ? $user->interestRatings->pluck('interest_id')->intersect($viewerInterestIds)->count()
+                : 0;
+            $interestMatchScore = $viewerInterestCount > 0
+                ? (int) round(($matchingInterestCount / $viewerInterestCount) * 100)
+                : 0;
 
             return [
                 'id' => $user->id,
@@ -141,8 +160,14 @@ class FollowController extends Controller
                 'restricted' => ! $visible,
                 'user_type' => $visible ? $user->user_type : null,
                 'gender' => $visible ? $user->gender : null,
+                'matching_interests_count' => $matchingInterestCount,
+                'interest_match_score' => $interestMatchScore,
             ];
-        });
+        })->sortBy([
+            ['interest_match_score', 'desc'],
+            ['matching_interests_count', 'desc'],
+            ['display_name', 'asc'],
+        ])->values();
     }
 
     public function profile(Request $request, User $user): JsonResponse
