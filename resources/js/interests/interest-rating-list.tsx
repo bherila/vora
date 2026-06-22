@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { buildInterestTree, flattenInterestTree, getDepthPaddingClass } from '@/interests/tree';
 
@@ -50,29 +49,25 @@ export function InterestRatingList({ interests, onSave, onClear }: InterestRatin
   const saveRating = async (id: number): Promise<void> => {
     const nextRating = ratings[id] ?? 0;
     const serverRating = interests.find((interest) => interest.id === id)?.rating ?? null;
-    if (serverRating === nextRating) {
+    // A 0 and "no rating" are treated as the same thing: there is no separate
+    // Clear action, so sliding back to 0 removes the rating instead of saving it.
+    if ((serverRating ?? 0) === nextRating) {
       dirty.current.delete(id);
       return;
     }
 
     setSaving((current) => ({ ...current, [id]: true }));
     try {
-      await onSave(id, nextRating);
+      if (nextRating === 0) {
+        await onClear(id);
+      } else {
+        await onSave(id, nextRating);
+      }
       // Clear dirty only after a successful save, so a failed save stays pending
       // and the next blur retries it instead of silently dropping the value.
       dirty.current.delete(id);
     } catch {
       // Leave the row dirty so the unsaved value is preserved for retry.
-    } finally {
-      setSaving((current) => ({ ...current, [id]: false }));
-    }
-  };
-
-  const clearRating = async (id: number): Promise<void> => {
-    dirty.current.delete(id);
-    setSaving((current) => ({ ...current, [id]: true }));
-    try {
-      await onClear(id);
     } finally {
       setSaving((current) => ({ ...current, [id]: false }));
     }
@@ -119,19 +114,6 @@ export function InterestRatingList({ interests, onSave, onClear }: InterestRatin
                 className="w-40"
               />
               <span className="w-8 text-sm tabular-nums text-muted-foreground">{rowRating}</span>
-              {interest.rating !== null && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  // Keep focus on the slider so its blur-save does not race this click.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => void clearRating(interest.id)}
-                  disabled={saving[interest.id]}
-                >
-                  Clear
-                </Button>
-              )}
             </div>
           </div>
         );

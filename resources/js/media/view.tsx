@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
@@ -12,27 +11,26 @@ function getInitialMedia(): MediaItem | null {
 
 function MediaViewPage() {
   const [item] = useState<MediaItem | null>(getInitialMedia);
+
+  if (!item) {
+    return <div className="mx-auto max-w-3xl px-4 py-8"><p className="text-muted-foreground">This media is unavailable.</p></div>;
+  }
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      {!item ? (
-        <p className="text-muted-foreground">This media is unavailable.</p>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>{item.title || item.original_filename}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="overflow-hidden rounded-md bg-muted">
-              <MediaPlayer item={item} className="max-h-[70vh] w-full object-contain" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {item.type} · {formatBytes(item.size_bytes)}
-            </p>
-            {item.interests.length > 0 && (
-              <p className="text-sm text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
-            )}
-          </CardContent>
-        </Card>
+    // A wide container plus a viewport-sized stage so the media uses the space
+    // available on large screens and portrait phones alike. The stage is a fixed
+    // fraction of the viewport height; object-contain scales the photo/video up
+    // or down to fill it while preserving the original aspect ratio.
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-6">
+      <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
+      <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
+        <MediaPlayer item={item} className="mx-auto h-full w-full object-contain" />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {item.type} · {formatBytes(item.size_bytes)}
+      </p>
+      {item.interests.length > 0 && (
+        <p className="text-sm text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
       )}
     </div>
   );
