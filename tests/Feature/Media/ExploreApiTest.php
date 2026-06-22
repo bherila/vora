@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Media;
 
+use App\Models\Favorite;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\Media;
@@ -20,6 +21,27 @@ class ExploreApiTest extends TestCase
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
         });
+    }
+
+    public function test_explore_media_carries_the_viewers_favorited_flag(): void
+    {
+        $this->fakeStorage();
+        $other = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $saved = Media::factory()->for($other)->approved()->create(['title' => 'Saved']);
+        $notSaved = Media::factory()->for($other)->approved()->create(['title' => 'Not saved']);
+
+        Favorite::query()->create([
+            'user_id' => $viewer->id,
+            'favoritable_type' => $saved->getMorphClass(),
+            'favoritable_id' => $saved->id,
+        ]);
+
+        $data = collect($this->actingAs($viewer)->getJson('/api/explore')->assertOk()->json('data'));
+
+        $this->assertTrue($data->firstWhere('id', $saved->id)['favorited']);
+        $this->assertFalse($data->firstWhere('id', $notSaved->id)['favorited']);
     }
 
     public function test_explore_lists_only_approved_visible_media(): void

@@ -10,6 +10,7 @@ use App\Models\InterestRating;
 use App\Models\Media;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Support\MediaFilter;
 use App\Support\PaginationMeta;
@@ -33,6 +34,7 @@ class ExploreController extends Controller
 {
     public function __construct(
         private readonly MediaResponseService $responder,
+        private readonly FavoriteService $favorites,
     ) {}
 
     /**
@@ -113,7 +115,11 @@ class ExploreController extends Controller
             ->applyTo($query)
             ->paginate((int) config('media.page_size', 24));
 
-        return $this->responder->page($paginator, includeOriginalVideoUrls: false);
+        return $this->favorites->annotateListing(
+            $this->responder->page($paginator, includeOriginalVideoUrls: false),
+            $request->user(),
+            'media',
+        );
     }
 
     /**
@@ -150,12 +156,12 @@ class ExploreController extends Controller
 
         $paginator = $query->paginate((int) config('media.page_size', 24));
 
-        return [
+        return $this->favorites->annotateListing([
             'data' => collect($paginator->items())
                 ->map(fn (Story $story): array => StoryPresenter::discoverableView($story))
                 ->values()
                 ->all(),
             'meta' => PaginationMeta::from($paginator),
-        ];
+        ], $request->user(), 'story');
     }
 }
