@@ -2,7 +2,7 @@ import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export interface OnboardingSteps {
   has_avatar: boolean;
@@ -49,14 +49,16 @@ export function OnboardingChecklist({ steps }: OnboardingChecklistProps) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+      <CardHeader>
         <div>
           <CardTitle>Get started</CardTitle>
           <p className="text-sm text-muted-foreground">{done} of {STEPS.length} done — finish setting up your profile.</p>
         </div>
-        <Button type="button" size="sm" variant="ghost" onClick={dismiss} aria-label="Dismiss checklist">
-          <X className="h-4 w-4" />
-        </Button>
+        <CardAction>
+          <Button type="button" size="icon-sm" variant="ghost" onClick={dismiss} aria-label="Dismiss checklist">
+            <X className="h-4 w-4" />
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent>
         <ul className="space-y-2">
