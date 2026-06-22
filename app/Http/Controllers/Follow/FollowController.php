@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Follow;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Models\Character;
+use App\Models\Favorite;
 use App\Models\FollowRequest;
 use App\Models\FollowRequestAuditLog;
 use App\Models\InterestRating;
@@ -171,6 +172,12 @@ class FollowController extends Controller
 
         $incoming = FollowRequest::query()->where('requester_id', $user->id)->where('recipient_id', $current->id)->where('status', 'accepted')->exists();
 
+        $viewerFavorited = ! $isSelf && Favorite::query()
+            ->where('user_id', $current->id)
+            ->where('favoritable_type', $user->getMorphClass())
+            ->where('favoritable_id', $user->id)
+            ->exists();
+
         return $base + [
             'restricted' => false,
             'user_type' => $user->user_type,
@@ -178,6 +185,7 @@ class FollowController extends Controller
             'mutual_interests' => $mutualInterests,
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
             'characters' => $this->charactersStrip($user),
+            'viewer_favorited' => $viewerFavorited,
         ];
     }
 
