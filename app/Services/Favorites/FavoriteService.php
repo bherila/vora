@@ -4,6 +4,7 @@ namespace App\Services\Favorites;
 
 use App\Enums\Audience;
 use App\Models\Character;
+use App\Models\Favorite;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
@@ -93,6 +94,51 @@ class FavoriteService
             ->map(fn (Model $item): array => $this->present($item, $viewer))
             ->values()
             ->all();
+    }
+
+    /**
+     * Of the given ids for one favoritable type, the subset the viewer has
+     * favorited — one query, so a listing can be annotated with a `favorited`
+     * flag without an N+1.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function favoritedIdsFor(?User $viewer, string $type, array $ids): array
+    {
+        $class = self::TYPES[$type] ?? null;
+        if (! $viewer instanceof User || $class === null || $ids === []) {
+            return [];
+        }
+
+        return Favorite::query()
+            ->where('user_id', $viewer->id)
+            ->where('favoritable_type', (new $class)->getMorphClass())
+            ->whereIn('favoritable_id', $ids)
+            ->pluck('favoritable_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Add a `favorited` flag to each row of a `{data, meta}` listing payload,
+     * matched by row id. Rows must carry an integer `id`.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function annotateListing(array $payload, ?User $viewer, string $type): array
+    {
+        $rows = $payload['data'] ?? [];
+        $ids = array_map(fn (array $row): int => (int) $row['id'], $rows);
+        $favorited = array_flip($this->favoritedIdsFor($viewer, $type, $ids));
+
+        $payload['data'] = array_map(
+            fn (array $row): array => $row + ['favorited' => isset($favorited[(int) $row['id']])],
+            $rows,
+        );
+
+        return $payload;
     }
 
     /**

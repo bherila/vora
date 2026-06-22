@@ -112,4 +112,6 @@ export interface StoryDiscoveryItem {
   interests: InterestTag[];
   node_count: number | null;
   published_at: string | null;
+  /** Whether the current viewer has saved this story (present on listings). */
+  favorited?: boolean;
 }

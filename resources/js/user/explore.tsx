@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { FavoriteButton } from '@/components/favorite-button';
 import { InterestPicker } from '@/components/interest-picker';
 import { Button } from '@/components/ui/button';
 import { StoryGrid } from '@/explore/StoryGrid';
@@ -121,9 +122,15 @@ function ExplorePage() {
       ) : activeListing.items.length === 0 ? (
         <p className="text-muted-foreground">Nothing to explore yet. Check back soon.</p>
       ) : tab === 'media' ? (
-        <MediaGrid items={mediaListing.items} />
+        <MediaGrid
+          items={mediaListing.items}
+          renderActions={(item) => <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited ?? false} />}
+        />
       ) : (
-        <StoryGrid items={storyListing.items} />
+        <StoryGrid
+          items={storyListing.items}
+          renderActions={(story) => <FavoriteButton type="story" id={story.id} initialFavorited={story.favorited ?? false} />}
+        />
       )}
       {activeListing.hasMore && (
         <div ref={sentinelRef} className="mt-6 flex justify-center">
