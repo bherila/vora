@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\ExploreController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\FeedController;
 use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\InterestController;
@@ -185,12 +186,18 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);
     });
 
+    // Saved favorites (polymorphic). Toggling is on the current user; the listing
+    // is per-profile and privacy-intersected in the controller.
+    Route::post('/api/favorites', [FavoriteController::class, 'store']);
+    Route::delete('/api/favorites', [FavoriteController::class, 'destroy']);
+
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);
         Route::get('/follow-requests/count', [FollowController::class, 'count']);
         Route::get('/follow-requests', [FollowController::class, 'inbox']);
         Route::post('/follow-requests/{followRequest}/accept', [FollowController::class, 'accept']);
         Route::post('/follow-requests/{followRequest}/decline', [FollowController::class, 'decline']);
+        Route::get('/{user}/favorites', [FavoriteController::class, 'index']);
         Route::get('/{user}', [FollowController::class, 'profile']);
         Route::post('/{user}/follow-requests', [FollowController::class, 'requestFollow']);
     });
