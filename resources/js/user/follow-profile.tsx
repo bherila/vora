@@ -1,4 +1,4 @@
-import { BookOpen, Images, MessageSquare, Newspaper, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { BookOpen, Home, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
@@ -161,13 +161,9 @@ function StoriesTab({ userId, identity, isSelf }: { userId: number; identity: nu
   if (loading) return <GridSkeleton />;
   if (error) return <TabError message={error} />;
   if (items.length === 0) {
-    return (
-      <TabEmpty
-        icon={BookOpen}
-        title={isSelf ? 'You haven’t published stories here yet.' : 'No stories to show.'}
-        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/stories">Write a story</a></Button> : undefined}
-      />
-    );
+    // For the owner this tab only renders on a character identity (the main
+    // identity uses the manager), so the empty state is character-scoped.
+    return <TabEmpty icon={BookOpen} title={isSelf ? 'No stories involve this character yet.' : 'No stories to show.'} />;
   }
   return <StoryGrid items={items} />;
 }
@@ -227,7 +223,7 @@ function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
 
 interface TabDef { key: TabKey; label: string; icon: typeof Images }
 
-const FEED_TAB: TabDef = { key: 'feed', label: 'Feed', icon: Newspaper };
+const FEED_TAB: TabDef = { key: 'feed', label: 'Home', icon: Home };
 const TABS: TabDef[] = [
   { key: 'media', label: 'Media', icon: Images },
   { key: 'stories', label: 'Stories', icon: BookOpen },
@@ -443,9 +439,9 @@ function FollowProfilePage() {
           {activeTab === 'media' && (profile.is_self
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
             : <VisitorMediaTab userId={userId} identity={identity} />)}
-          {activeTab === 'stories' && (profile.is_self
+          {activeTab === 'stories' && (profile.is_self && identity === null
             ? <OwnerStoriesManager currentUserId={userId} />
-            : <StoriesTab userId={userId} identity={identity} isSelf={false} />)}
+            : <StoriesTab userId={userId} identity={identity} isSelf={profile.is_self} />)}
           {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
         </div>
