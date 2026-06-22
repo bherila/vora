@@ -57,7 +57,7 @@
       ] : null;
       $__accountMenu = $__isAuthenticated ? [
         'label' => $__currentUser->display_name ?: $__currentUser->name,
-        'avatarUrl' => \App\Support\UserPresenter::avatarUrl($__currentUser, app(\App\Services\Media\MediaResponseService::class)),
+        'avatarUrl' => \App\Support\UserPresenter::avatarUrl($__currentUser, app(\App\Services\Media\MediaResponseService::class), $__currentUser),
         'items' => [
           ['type' => 'link', 'label' => 'View profile', 'href' => route('me', [], false)],
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],

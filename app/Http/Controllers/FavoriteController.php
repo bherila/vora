@@ -43,7 +43,7 @@ class FavoriteController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => ['favorited' => true, 'favorite' => $this->favorites->present($item)],
+            'data' => ['favorited' => true, 'favorite' => $this->favorites->present($item, $user)],
         ], 201);
     }
 

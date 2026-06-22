@@ -90,17 +90,19 @@ class FavoriteService
             ->map(fn ($favorite): ?Model => $favorite->favoritable)
             ->filter()
             ->filter(fn (Model $item): bool => $this->canViewerSee($viewer, $item))
-            ->map(fn (Model $item): array => $this->present($item))
+            ->map(fn (Model $item): array => $this->present($item, $viewer))
             ->values()
             ->all();
     }
 
     /**
-     * A uniform card for any favoritable item.
+     * A uniform card for any favoritable item. The optional viewer lets avatar
+     * thumbnails honour moderation: an unreviewed profile picture is shown only
+     * to its owner, matching {@see UserPresenter::pictureUrl}.
      *
      * @return array<string, mixed>
      */
-    public function present(Model $item): array
+    public function present(Model $item, ?User $viewer = null): array
     {
         return match (true) {
             $item instanceof Media => [
@@ -133,7 +135,7 @@ class FavoriteService
                 'label' => $item->display_name ?: $item->name,
                 'subtitle' => 'Profile',
                 'href' => "/users/{$item->id}",
-                'thumbnail_url' => UserPresenter::avatarUrl($item, $this->responder),
+                'thumbnail_url' => UserPresenter::avatarUrl($item, $this->responder, $viewer),
             ],
             $item instanceof Character => [
                 'type' => 'character',
@@ -141,7 +143,7 @@ class FavoriteService
                 'label' => $item->display_name,
                 'subtitle' => 'Character',
                 'href' => "/users/{$item->user_id}",
-                'thumbnail_url' => $this->mediaThumb($item->profilePicture),
+                'thumbnail_url' => UserPresenter::pictureUrl($item->profilePicture, $this->responder, $viewer),
             ],
             default => [
                 'type' => 'unknown',

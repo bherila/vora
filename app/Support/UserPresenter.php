@@ -22,7 +22,7 @@ class UserPresenter
     /**
      * @return array<string, mixed>|null
      */
-    public static function identity(?User $user, ?MediaResponseService $responder = null): ?array
+    public static function identity(?User $user, ?MediaResponseService $responder = null, ?User $viewer = null): ?array
     {
         if ($user === null) {
             return null;
@@ -31,7 +31,7 @@ class UserPresenter
         return [
             'id' => $user->id,
             'display_name' => $user->display_name ?? $user->name,
-            'avatar_url' => self::avatarUrl($user, $responder),
+            'avatar_url' => self::avatarUrl($user, $responder, $viewer),
         ];
     }
 
@@ -41,14 +41,30 @@ class UserPresenter
      * small thumbnail and falls back to the full image (profile pictures are
      * always photos, so the full URL is signed too).
      */
-    public static function avatarUrl(?User $user, ?MediaResponseService $responder): ?string
+    public static function avatarUrl(?User $user, ?MediaResponseService $responder, ?User $viewer = null): ?string
     {
-        if ($user === null || $responder === null) {
+        if ($user === null) {
             return null;
         }
 
-        $picture = $user->profilePicture;
-        if (! $picture instanceof Media) {
+        return self::pictureUrl($user->profilePicture, $responder, $viewer);
+    }
+
+    /**
+     * The signed thumbnail URL for any profile picture (user or character),
+     * applying the same moderation gate: a picture that is not yet approved is
+     * shown only to its owner. Everyone else gets null (the UI falls back to
+     * initials) until an admin approves it — so unreviewed images never reach
+     * other viewers. Pass the current viewer to let owners preview their own
+     * pending upload; omit it (default) for the safe, approved-only behaviour.
+     */
+    public static function pictureUrl(?Media $picture, ?MediaResponseService $responder, ?User $viewer = null): ?string
+    {
+        if (! $picture instanceof Media || $responder === null) {
+            return null;
+        }
+
+        if (! $picture->isApprovedContent() && $picture->user_id !== $viewer?->id) {
             return null;
         }
 
