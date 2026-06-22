@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 
+import { FavoriteButton } from '@/components/favorite-button';
 import { Markdown } from '@/components/Markdown';
 import { readInitialData } from '@/initialData';
 
@@ -22,7 +24,15 @@ function StoryReaderPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-6 px-4 py-10">
       <header className="space-y-2">
-        <h1 className="text-3xl font-bold">{story.title}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h1 className="text-3xl font-bold">{story.title}</h1>
+          <div className="flex items-center gap-3">
+            {typeof story.favorite_count === 'number' && story.favorite_count > 0 && (
+              <span className="text-sm text-muted-foreground">{story.favorite_count} {story.favorite_count === 1 ? 'save' : 'saves'}</span>
+            )}
+            {story.favorited !== undefined && <FavoriteButton type="story" id={story.id} initialFavorited={story.favorited} />}
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground">
           {story.type === 'cyoa' ? 'Choose your own adventure' : 'Story'}
           {authorNames && <> · by {authorNames}</>}
@@ -44,6 +54,7 @@ function StoryReaderPage() {
       </header>
 
       {story.type === 'cyoa' ? <CyoaPlayer story={story} /> : <Markdown source={story.body} />}
+      <Toaster position="top-right" richColors closeButton />
     </article>
   );
 }

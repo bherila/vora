@@ -51,6 +51,25 @@ class FavoriteTest extends TestCase
             ->assertJsonPath('data.0.id', $media->id);
     }
 
+    public function test_media_view_reports_an_aggregate_favorite_count(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $alice = User::factory()->approved()->create();
+        $bob = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create(['title' => 'Popular']);
+
+        $this->actingAs($alice)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+        $this->actingAs($bob)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+
+        // A third viewer who has not saved it sees the aggregate count, not their own state.
+        $this->actingAs($owner)->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.favorite_count', 2)
+            ->assertJsonPath('data.favorited', false);
+    }
+
     public function test_cannot_favorite_media_you_cannot_see(): void
     {
         $this->fakeStorage();
