@@ -237,6 +237,7 @@ function normalizeNumberList(value: unknown): number[] {
 function UserSettingsPage() {
   const initialData = getInitialData();
 
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'account'>('profile');
   const [accountName, setAccountName] = useState(initialData.name);
   const [profileDisplayName, setProfileDisplayName] = useState(initialData.display_name);
   const [accountBirthDate] = useState(initialData.birth_date);
@@ -621,9 +622,19 @@ function UserSettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-bold">Settings</h1>
 
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Settings sections">
+        <Button type="button" size="sm" variant={settingsTab === 'profile' ? 'default' : 'outline'} aria-pressed={settingsTab === 'profile'} onClick={() => setSettingsTab('profile')}>
+          Profile
+        </Button>
+        <Button type="button" size="sm" variant={settingsTab === 'account' ? 'default' : 'outline'} aria-pressed={settingsTab === 'account'} onClick={() => setSettingsTab('account')}>
+          Account &amp; security
+        </Button>
+      </div>
+
+      {settingsTab === 'profile' && (
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">My Profile</h2>
         <Card>
@@ -798,7 +809,9 @@ function UserSettingsPage() {
           </>
         )}
       </section>
+      )}
 
+      {settingsTab === 'account' && (
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">Account Settings</h2>
         <Card>
@@ -1026,6 +1039,7 @@ function UserSettingsPage() {
           </CardContent>
         </Card>
       </section>
+      )}
       <Toaster position="top-right" richColors closeButton />
     </div>
   );
