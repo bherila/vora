@@ -34,7 +34,7 @@ class PostPresenter
             'body' => $post->body,
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
-            'author' => self::author($post->user, $mediaResponder),
+            'author' => self::author($post->user, $mediaResponder, $viewer),
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
@@ -84,9 +84,9 @@ class PostPresenter
     /**
      * @return array<string, mixed>|null
      */
-    private static function author(?User $user, ?MediaResponseService $mediaResponder): ?array
+    private static function author(?User $user, ?MediaResponseService $mediaResponder, ?User $viewer = null): ?array
     {
-        return UserPresenter::identity($user, $mediaResponder);
+        return UserPresenter::identity($user, $mediaResponder, $viewer);
     }
 
     /**
@@ -109,13 +109,15 @@ class PostPresenter
         }
 
         $avatar = $character->profilePicture;
+        // An unreviewed persona avatar is shown only to its owner, matching the
+        // user-avatar moderation gate in UserPresenter::pictureUrl.
+        $showAvatar = $avatar instanceof Media && $mediaResponder !== null
+            && ($avatar->isApprovedContent() || $avatar->user_id === $viewer?->id);
 
         return [
             'id' => $character->id,
             'display_name' => $character->display_name,
-            'avatar' => ($avatar instanceof Media && $mediaResponder !== null)
-                ? $mediaResponder->item($avatar, resolveHls: false)
-                : null,
+            'avatar' => $showAvatar ? $mediaResponder->item($avatar, resolveHls: false) : null,
         ];
     }
 

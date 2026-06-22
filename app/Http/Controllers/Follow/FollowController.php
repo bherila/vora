@@ -9,7 +9,6 @@ use App\Models\Favorite;
 use App\Models\FollowRequest;
 use App\Models\FollowRequestAuditLog;
 use App\Models\InterestRating;
-use App\Models\Media;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
@@ -131,13 +130,13 @@ class FollowController extends Controller
         // viewers their audience tier doesn't admit.
         $canView = $current instanceof User ? $this->gate->canViewMany($current, $users) : [];
 
-        return $users->map(function (User $user) use ($canView): array {
+        return $users->map(function (User $user) use ($canView, $current): array {
             $visible = $canView[$user->id] ?? false;
 
             return [
                 'id' => $user->id,
                 'display_name' => $user->display_name ?: $user->name,
-                'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder),
+                'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $current),
                 'restricted' => ! $visible,
                 'user_type' => $visible ? $user->user_type : null,
                 'gender' => $visible ? $user->gender : null,
@@ -173,7 +172,7 @@ class FollowController extends Controller
             'id' => $user->id,
             'is_self' => $isSelf,
             'display_name' => $user->display_name ?: $user->name,
-            'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder),
+            'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $current),
             'follow_request' => $this->followRequestPayload($followRequest),
         ];
 
@@ -213,7 +212,7 @@ class FollowController extends Controller
             'gender' => $user->gender,
             'mutual_interests' => $mutualInterests,
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
-            'characters' => $this->charactersStrip($user),
+            'characters' => $this->charactersStrip($user, $current),
             'viewer_favorited' => $viewerFavorited,
         ];
     }
@@ -226,26 +225,17 @@ class FollowController extends Controller
      *
      * @return list<array<string, mixed>>
      */
-    private function charactersStrip(User $user): array
+    private function charactersStrip(User $user, ?User $viewer): array
     {
         return $user->characters()
             ->with('profilePicture')
             ->orderBy('display_name')
             ->get()
-            ->map(function (Character $character): array {
-                $picture = $character->profilePicture;
-                $avatar = null;
-                if ($picture instanceof Media) {
-                    $payload = $this->mediaResponder->item($picture, resolveHls: false);
-                    $avatar = $payload['thumbnail_url'] ?? $payload['url'] ?? null;
-                }
-
-                return [
-                    'id' => $character->id,
-                    'display_name' => $character->display_name,
-                    'avatar_url' => $avatar,
-                ];
-            })
+            ->map(fn (Character $character): array => [
+                'id' => $character->id,
+                'display_name' => $character->display_name,
+                'avatar_url' => UserPresenter::pictureUrl($character->profilePicture, $this->mediaResponder, $viewer),
+            ])
             ->all();
     }
 
