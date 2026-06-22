@@ -1,20 +1,22 @@
-import { type FormEvent, useState } from 'react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
 import { AudienceField } from '@/community/AudienceField';
+import { Avatar } from '@/components/avatar';
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
-import { ProtectedImage } from '@/components/protected-image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { CharacterInterestsEditor } from '@/interests/character-interests-editor';
-import { type Audience,AUDIENCE_WITH_SPECIFIC_OPTIONS } from '@/lib/audience';
+import { type Audience, AUDIENCE_WITH_SPECIFIC_OPTIONS } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
@@ -46,11 +48,6 @@ interface CharacterFormState {
   user_type_other: string;
   preferred_user_types: string[];
   preferred_genders: string[];
-}
-
-interface CharacterListResponse {
-  success: boolean;
-  data: CharacterRecord[];
 }
 
 interface CharacterResponse {
@@ -114,44 +111,73 @@ function audienceLabel(audience: Audience, selectedCount: number): string {
 
 function CharactersPage() {
   const [characters, setCharacters] = useState<CharacterRecord[]>(() => readInitialData<{ characters?: CharacterRecord[] }>().characters ?? []);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  // The character being edited, or null when creating a new one.
+  const [editing, setEditing] = useState<CharacterRecord | null>(null);
   const [form, setForm] = useState<CharacterFormState>(blankForm());
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [loading] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [uploadingId, setUploadingId] = useState<number | null>(null);
 
-
-  const resetForm = () => {
-    setEditingId(null);
-    setForm(blankForm());
+  const updateForm = (patch: Partial<CharacterFormState>): void => {
+    setForm((current) => ({ ...current, ...patch }));
+    setDirty(true);
   };
 
-  const upsertCharacter = (character: CharacterRecord) => {
+  const upsertCharacter = (character: CharacterRecord): void => {
     setCharacters((current) => {
       const exists = current.some((item) => item.id === character.id);
       return exists ? current.map((item) => item.id === character.id ? character : item) : [character, ...current];
     });
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const openCreate = (): void => {
+    setEditing(null);
+    setForm(blankForm());
+    setDirty(false);
+    setError('');
+    setDialogOpen(true);
+  };
 
+  const openEdit = (character: CharacterRecord): void => {
+    setEditing(character);
+    setForm(formFromCharacter(character));
+    setDirty(false);
+    setError('');
+    setDialogOpen(true);
+  };
+
+  const handleOpenChange = (open: boolean): void => {
+    if (open) {
+      setDialogOpen(true);
+      return;
+    }
+    if (dirty && !window.confirm('Discard your unsaved changes to this character?')) {
+      return;
+    }
+    setDialogOpen(false);
+  };
+
+  const validate = (): boolean => {
     if (!form.display_name.trim()) {
       setError('Character display name is required.');
-      return;
+      return false;
     }
-
     if (form.gender === 'other' && !form.gender_other.trim()) {
       setError('Please specify the character gender when choosing Other.');
-      return;
+      return false;
     }
-
     if (form.user_type === 'other' && !form.user_type_other.trim()) {
       setError('Please specify the character type when choosing Other.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const save = async (addAnother: boolean): Promise<void> => {
+    if (!validate()) return;
 
     setSaving(true);
     setError('');
@@ -171,12 +197,18 @@ function CharactersPage() {
     };
 
     try {
-      const response = editingId === null
+      const response = editing === null
         ? await fetchWrapper.post('/api/characters', payload) as CharacterResponse
-        : await fetchWrapper.patch(`/api/characters/${editingId}`, payload) as CharacterResponse;
+        : await fetchWrapper.patch(`/api/characters/${editing.id}`, payload) as CharacterResponse;
       upsertCharacter(response.data);
-      setMessage(editingId === null ? 'Character created.' : 'Character updated.');
-      resetForm();
+      setMessage(editing === null ? 'Character created.' : 'Character updated.');
+      setDirty(false);
+      if (addAnother) {
+        setEditing(null);
+        setForm(blankForm());
+      } else {
+        setDialogOpen(false);
+      }
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to save character.');
     } finally {
@@ -184,15 +216,13 @@ function CharactersPage() {
     }
   };
 
-  const handleDelete = async (character: CharacterRecord) => {
+  const handleDelete = async (character: CharacterRecord): Promise<void> => {
     if (!window.confirm(`Delete ${character.display_name}? Art ownership stays with your user account.`)) {
       return;
     }
-
     try {
       await fetchWrapper.delete(`/api/characters/${character.id}`);
       setCharacters((current) => current.filter((item) => item.id !== character.id));
-      if (editingId === character.id) resetForm();
       setMessage('Character deleted.');
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to delete character.');
@@ -219,6 +249,7 @@ function CharactersPage() {
       await putToSignedUrl(created.upload_url, file, created.upload_headers, () => {});
       const completed = await fetchWrapper.post(`/api/characters/${character.id}/profile-picture/${created.data.id}/complete`, {}) as CharacterResponse;
       upsertCharacter(completed.data);
+      setEditing(completed.data);
       setMessage(`${character.display_name}'s profile picture uploaded and waiting for admin review.`);
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to upload character profile picture.');
@@ -228,122 +259,119 @@ function CharactersPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Characters</h1>
-        <p className="max-w-3xl text-muted-foreground">
-          Characters are optional fictional personas you can prepare for art attribution. Your logged-in user profile is still the default profile when no character is selected.
-        </p>
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">Characters</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Optional fictional personas for art attribution. Your logged-in user profile stays the default when no character is selected.
+          </p>
+        </div>
+        <Button type="button" onClick={openCreate}><Plus className="h-4 w-4" /> Add character</Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>How characters work</CardTitle>
-          <CardDescription>Use characters only if they fit how you organize your art.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>Each character can have a separate display name, gender, type, discovery preferences, and profile picture. This keeps persona details separate from your real account settings.</p>
-          <p>By default a character inherits your profile interests. Choose “Set custom interests” on a character to override them; switching back to inherit clears the character's overrides.</p>
-          <p>Follow requests are still between users only. Following a user follows that account and all of its characters for now; character-specific follows may be added later.</p>
-          <p>To change your own default user profile, use Account → Settings. To change a fictional persona, edit it here.</p>
-        </CardContent>
-      </Card>
-
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && !dialogOpen && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Your characters</h2>
-          {loading && <p className="text-sm text-muted-foreground">Loading characters…</p>}
-          {!loading && characters.length === 0 && (
-            <Card><CardContent className="py-6 text-sm text-muted-foreground">You have not added any characters. That is completely fine—characters are optional.</CardContent></Card>
-          )}
+      {characters.length === 0 ? (
+        <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No characters yet — they’re optional. Add one when a persona helps you organize your art.</CardContent></Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {characters.map((character) => (
-            <Card key={character.id}>
-              <CardHeader>
-                <CardTitle>{character.display_name}</CardTitle>
-                <CardDescription>{character.description || 'No description yet.'}</CardDescription>
+            <Card key={character.id} className="flex flex-col">
+              <CardHeader className="flex-row items-center gap-3 space-y-0">
+                <Avatar name={character.display_name} src={character.profile_picture?.thumbnail_url ?? character.profile_picture?.url} sizeClassName="h-12 w-12" />
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-base">{character.display_name}</CardTitle>
+                  <CardDescription className="truncate">{audienceLabel(character.audience, character.audience_user_ids.length)}</CardDescription>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {character.profile_picture?.url && (
-                  <ProtectedImage src={character.profile_picture.url} alt="" className="h-24 w-24 rounded-full object-cover" />
-                )}
-                <div className="text-sm text-muted-foreground">
-                  <p>Gender: {character.gender === 'other' ? character.gender_other : character.gender || 'Not set'}</p>
-                  <p>Type: {character.user_type === 'other' ? character.user_type_other : character.user_type || 'Not set'}</p>
-                  <p>Visible to: {audienceLabel(character.audience, character.audience_user_ids.length)}</p>
-                  <p>Discovery preferences: {[...(character.preferred_user_types ?? []), ...(character.preferred_genders ?? [])].join(', ') || 'Not set'}</p>
-                </div>
-                <CharacterInterestsEditor
-                  characterId={character.id}
-                  initialInherit={character.inherit_interests}
-                  onInheritChange={(inherit) => setCharacters((current) => current.map((item) => item.id === character.id ? { ...item, inherit_interests: inherit } : item))}
-                />
-                <div className="space-y-2">
-                  <Label htmlFor={`character-picture-${character.id}`}>Character profile picture</Label>
-                  <Input id={`character-picture-${character.id}`} type="file" accept="image/*" disabled={uploadingId === character.id} onChange={(event) => void handleProfilePicture(character, event.target.files?.[0] ?? null)} />
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="secondary" onClick={() => { setEditingId(character.id); setForm(formFromCharacter(character)); }}>Edit character</Button>
-                  <Button type="button" variant="destructive" onClick={() => void handleDelete(character)}>Delete</Button>
+              <CardContent className="flex flex-1 flex-col gap-3">
+                <p className="line-clamp-3 text-sm text-muted-foreground">{character.description || 'No description yet.'}</p>
+                <div className="mt-auto flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => openEdit(character)}><Pencil className="h-4 w-4" /> Edit</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleDelete(character)} aria-label={`Delete ${character.display_name}`}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               </CardContent>
             </Card>
           ))}
-        </section>
+        </div>
+      )}
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">{editingId === null ? 'Add character' : 'Edit character'}</h2>
-          <Card>
-            <CardHeader>
-              <CardTitle>{editingId === null ? 'New fictional persona' : 'Character profile'}</CardTitle>
-              <CardDescription>This does not change your real user account profile.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-                <div className="space-y-1">
-                  <Label htmlFor="character-display-name">Character display name</Label>
-                  <Input id="character-display-name" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} required />
+      <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing === null ? 'Add character' : `Edit ${editing.display_name}`}</DialogTitle>
+            <DialogDescription>This does not change your real user account profile.</DialogDescription>
+          </DialogHeader>
+
+          {error && dialogOpen && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(false); }}>
+            <div className="space-y-1">
+              <Label htmlFor="character-display-name">Display name</Label>
+              <Input id="character-display-name" value={form.display_name} onChange={(event) => updateForm({ display_name: event.target.value })} required />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="character-description">Description</Label>
+              <Textarea id="character-description" value={form.description} onChange={(event) => updateForm({ description: event.target.value })} />
+            </div>
+            <AudienceField
+              audience={form.audience}
+              onAudienceChange={(audience) => updateForm({ audience })}
+              selectedUserIds={form.audience_user_ids}
+              onSelectedUserIdsChange={(ids) => updateForm({ audience_user_ids: ids })}
+              disabled={saving}
+              label="Who can see this character?"
+              specificRelationship="mutuals"
+            />
+            <ProfileOptionButtonGroup legend="Gender" name="character-gender" options={GENDER_OPTIONS} value={form.gender} onChange={(value) => updateForm({ gender: value })} />
+            {form.gender === 'other' && (
+              <div className="space-y-1">
+                <Label htmlFor="character-gender-other">Other gender</Label>
+                <Input id="character-gender-other" value={form.gender_other} onChange={(event) => updateForm({ gender_other: event.target.value })} required />
+              </div>
+            )}
+            <ProfileOptionButtonGroup legend="Type" name="character-user-type" options={USER_TYPE_OPTIONS} value={form.user_type} onChange={(value) => updateForm({ user_type: value })} />
+            {form.user_type === 'other' && (
+              <div className="space-y-1">
+                <Label htmlFor="character-user-type-other">Other type</Label>
+                <Input id="character-user-type-other" value={form.user_type_other} onChange={(event) => updateForm({ user_type_other: event.target.value })} required />
+              </div>
+            )}
+            <ProfileOptionCheckboxGroup legend="User types to see" description="Optional discovery preferences for this character." name="character-user-types" options={USER_TYPE_OPTIONS} values={form.preferred_user_types} onChange={(values) => updateForm({ preferred_user_types: values })} />
+            <ProfileOptionCheckboxGroup legend="Genders to see" description="Optional discovery preferences for this character." name="character-genders" options={GENDER_OPTIONS} values={form.preferred_genders} onChange={(values) => updateForm({ preferred_genders: values })} />
+
+            {/* Picture + interests need a saved character (they hit per-character
+                endpoints), so they appear once the character exists. */}
+            {editing !== null ? (
+              <div className="space-y-4 border-t border-border pt-4">
+                <div className="flex items-center gap-3">
+                  <Avatar name={editing.display_name} src={editing.profile_picture?.thumbnail_url ?? editing.profile_picture?.url} sizeClassName="h-14 w-14" />
+                  <div className="space-y-1">
+                    <Label htmlFor={`character-picture-${editing.id}`}>Profile picture</Label>
+                    <Input id={`character-picture-${editing.id}`} type="file" accept="image/*" disabled={uploadingId === editing.id} onChange={(event) => void handleProfilePicture(editing, event.target.files?.[0] ?? null)} />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="character-description">Description</Label>
-                  <Textarea id="character-description" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-                </div>
-                <AudienceField
-                  audience={form.audience}
-                  onAudienceChange={(audience) => setForm({ ...form, audience })}
-                  selectedUserIds={form.audience_user_ids}
-                  onSelectedUserIdsChange={(ids) => setForm({ ...form, audience_user_ids: ids })}
-                  disabled={saving}
-                  label="Who can see this character?"
-                  specificRelationship="mutuals"
+                <CharacterInterestsEditor
+                  characterId={editing.id}
+                  initialInherit={editing.inherit_interests}
+                  onInheritChange={(inherit) => { setCharacters((current) => current.map((item) => item.id === editing.id ? { ...item, inherit_interests: inherit } : item)); setEditing((current) => current ? { ...current, inherit_interests: inherit } : current); }}
                 />
-                <ProfileOptionButtonGroup legend="Character gender" name="character-gender" options={GENDER_OPTIONS} value={form.gender} onChange={(value) => setForm({ ...form, gender: value })} />
-                {form.gender === 'other' && (
-                  <div className="space-y-1">
-                    <Label htmlFor="character-gender-other">Other character gender</Label>
-                    <Input id="character-gender-other" value={form.gender_other} onChange={(event) => setForm({ ...form, gender_other: event.target.value })} required />
-                  </div>
-                )}
-                <ProfileOptionButtonGroup legend="Character type" name="character-user-type" options={USER_TYPE_OPTIONS} value={form.user_type} onChange={(value) => setForm({ ...form, user_type: value })} />
-                {form.user_type === 'other' && (
-                  <div className="space-y-1">
-                    <Label htmlFor="character-user-type-other">Other character type</Label>
-                    <Input id="character-user-type-other" value={form.user_type_other} onChange={(event) => setForm({ ...form, user_type_other: event.target.value })} required />
-                  </div>
-                )}
-                <ProfileOptionCheckboxGroup legend="Character user types to see" description="Optional discovery preferences for this character." name="character-user-types" options={USER_TYPE_OPTIONS} values={form.preferred_user_types} onChange={(values) => setForm({ ...form, preferred_user_types: values })} />
-                <ProfileOptionCheckboxGroup legend="Character genders to see" description="Optional discovery preferences for this character." name="character-genders" options={GENDER_OPTIONS} values={form.preferred_genders} onChange={(values) => setForm({ ...form, preferred_genders: values })} />
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save character'}</Button>
-                  {editingId !== null && <Button type="button" variant="secondary" onClick={resetForm}>Cancel</Button>}
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </section>
-      </div>
+              </div>
+            ) : (
+              <p className="border-t border-border pt-4 text-sm text-muted-foreground">Save the character to add a profile picture and custom interests.</p>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={saving}>Cancel</Button>
+              {editing === null && <Button type="button" variant="outline" disabled={saving} onClick={() => void save(true)}>Save & add another</Button>}
+              <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save character'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Toaster position="top-right" richColors closeButton />
     </div>
   );
