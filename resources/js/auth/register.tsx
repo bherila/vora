@@ -114,7 +114,7 @@ function RegisterPage() {
       } else if (response.redirect) {
         window.location.href = response.redirect;
       } else if (response.success) {
-        window.location.href = '/dashboard';
+        window.location.href = '/feed';
       } else {
         setError(response.message || 'Registration failed. Please try again.');
       }

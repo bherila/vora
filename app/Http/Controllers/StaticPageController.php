@@ -5,13 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\StaticPage;
 use App\Support\DefaultStaticPages;
 use App\Support\StaticPageRenderer;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class StaticPageController extends Controller
 {
-    public function home(): View
+    public function home(): View|RedirectResponse
     {
+        // Logged-in users have no use for the marketing splash; send them to the
+        // feed. The feed's own auth/approved gate then bounces anyone not yet
+        // approved/verified to the right place. Guests (and crawlers) still get
+        // the CMS home page below.
+        if (auth()->check()) {
+            return redirect()->route('feed');
+        }
+
         return $this->show('home');
     }
 

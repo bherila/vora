@@ -29,24 +29,22 @@ class NavbarHydrationTest extends TestCase
     {
         $user = User::factory()->approved()->create(['display_name' => 'Nova Vega']);
 
-        $payload = $this->initialData($this->actingAs($user)->get('/dashboard')->assertOk()->getContent());
+        $payload = $this->initialData($this->actingAs($user)->get('/feed')->assertOk()->getContent());
 
         $navbar = $payload['navbar'];
 
         $this->assertTrue($navbar['authenticated']);
         $this->assertSame([
-            'Home',
-            'Dashboard',
             'Feed',
+            'Explore',
             'Media',
             'Characters',
             'Stories',
-            'Explore',
-            'Users',
+            'People',
             'Requests',
         ], array_column($navbar['navItems'], 'label'));
-        $this->assertSame('/users/follow-requests', $navbar['navItems'][8]['href']);
-        $this->assertSame(0, $navbar['navItems'][8]['badge']);
+        $this->assertSame('/users/follow-requests', $navbar['navItems'][6]['href']);
+        $this->assertSame(0, $navbar['navItems'][6]['badge']);
         // The account menu now identifies the signed-in user (name + avatar)
         // rather than a generic "Account" label.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
@@ -59,7 +57,7 @@ class NavbarHydrationTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
 
-        $payload = $this->initialData($this->actingAs($admin)->get('/dashboard')->assertOk()->getContent());
+        $payload = $this->initialData($this->actingAs($admin)->get('/feed')->assertOk()->getContent());
 
         $navbar = $payload['navbar'];
 

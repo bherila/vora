@@ -145,7 +145,10 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'approved'])->group(function () {
-    Route::get('/dashboard', fn () => view('dashboard'))->name('dashboard');
+    // The dashboard was a link grid that only duplicated the nav. Keep the named
+    // route as a redirect so old bookmarks and any route('dashboard') callers
+    // land on the feed (the new home for logged-in users).
+    Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
     Route::get('/characters', [CharacterController::class, 'page'])->name('characters');
 
