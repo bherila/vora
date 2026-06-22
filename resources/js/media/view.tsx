@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
+import { ReportButton } from '@/components/report-button';
 import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
@@ -54,6 +55,7 @@ function MediaViewPage() {
             <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'save' : 'saves'}</span>
           )}
           {item.favorited !== undefined && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+          {item.can_report && <ReportButton type="media" id={item.id} />}
         </div>
       </div>
       <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">

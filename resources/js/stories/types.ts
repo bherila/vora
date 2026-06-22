@@ -104,6 +104,8 @@ export interface StoryReader {
   favorited?: boolean;
   /** How many users have saved this story. */
   favorite_count?: number;
+  /** Whether the current viewer may report this story (not the author). */
+  can_report?: boolean;
 }
 
 export interface StoryDiscoveryItem {
