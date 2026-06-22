@@ -18,7 +18,7 @@ permissions:
 jobs:
   changes:
     name: Detect changes
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vora-ci]
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -64,18 +64,14 @@ jobs:
     name: Changed-area checks
     needs: changes
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vora-ci]
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite, bcmath, intl, gd, exif, iconv
-          coverage: none
+      - name: Verify PHP
+        run: php --version
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -133,7 +129,7 @@ jobs:
     name: CI result
     needs: [changes, test]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vora-ci]
     steps:
       - name: Check result
         run: |
