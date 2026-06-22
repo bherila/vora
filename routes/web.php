@@ -249,6 +249,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
             ->name('media.hls');
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
         Route::get('/{media}', [MediaController::class, 'show']);
+        Route::patch('/{media}', [MediaController::class, 'update']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);
     });
 
