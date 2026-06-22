@@ -26,6 +26,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\PostReactionController;
+use App\Http\Controllers\ProfileContentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\StaticPageController;
@@ -198,6 +199,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/follow-requests/{followRequest}/accept', [FollowController::class, 'accept']);
         Route::post('/follow-requests/{followRequest}/decline', [FollowController::class, 'decline']);
         Route::get('/{user}/favorites', [FavoriteController::class, 'index']);
+        Route::get('/{user}/media', [ProfileContentController::class, 'media']);
+        Route::get('/{user}/stories', [ProfileContentController::class, 'stories']);
+        Route::get('/{user}/posts', [ProfileContentController::class, 'posts']);
         Route::get('/{user}', [FollowController::class, 'profile']);
         Route::post('/{user}/follow-requests', [FollowController::class, 'requestFollow']);
     });

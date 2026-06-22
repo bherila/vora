@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Follow;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Story\AuthorshipInviteController;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\FollowRequestAuditLog;
 use App\Models\InterestRating;
+use App\Models\Media;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
@@ -120,10 +122,13 @@ class FollowController extends Controller
     {
         $followRequest = FollowRequest::query()->where('requester_id', $current->id)->where('recipient_id', $user->id)->first();
 
+        $isSelf = $current->id === $user->id;
+
         // Always present, even on a restricted profile, so the viewer can still
         // send / track a follow request.
         $base = [
             'id' => $user->id,
+            'is_self' => $isSelf,
             'display_name' => $user->display_name ?: $user->name,
             'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder),
             'follow_request' => $this->followRequestPayload($followRequest),
@@ -136,6 +141,7 @@ class FollowController extends Controller
                 'gender' => null,
                 'mutual_interests' => [],
                 'can_follow_back' => false,
+                'characters' => [],
             ];
         }
 
@@ -158,7 +164,39 @@ class FollowController extends Controller
             'gender' => $user->gender,
             'mutual_interests' => $mutualInterests,
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
+            'characters' => $this->charactersStrip($user),
         ];
+    }
+
+    /**
+     * The profile's characters, for the identity strip across the top of the
+     * profile-as-container view. A character a viewer cannot see by audience is
+     * still listed here as an identity to switch to; its *content* tabs run the
+     * same per-item privacy filter, so nothing is exposed by listing the name.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function charactersStrip(User $user): array
+    {
+        return $user->characters()
+            ->with('profilePicture')
+            ->orderBy('display_name')
+            ->get()
+            ->map(function (Character $character): array {
+                $picture = $character->profilePicture;
+                $avatar = null;
+                if ($picture instanceof Media) {
+                    $payload = $this->mediaResponder->item($picture, resolveHls: false);
+                    $avatar = $payload['thumbnail_url'] ?? $payload['url'] ?? null;
+                }
+
+                return [
+                    'id' => $character->id,
+                    'display_name' => $character->display_name,
+                    'avatar_url' => $avatar,
+                ];
+            })
+            ->all();
     }
 
     public function requestFollow(Request $request, User $user): JsonResponse
