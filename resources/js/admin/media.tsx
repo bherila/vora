@@ -154,6 +154,12 @@ function AdminMediaPage() {
                     <dt>Audience</dt>
                     <dd>{item.audience}{item.discoverable ? '' : ' · link-only'}</dd>
                   </div>
+                  {item.duplicate_of_media_id !== null && (
+                    <div className="flex justify-between text-amber-600">
+                      <dt>Possible duplicate</dt>
+                      <dd>of media #{item.duplicate_of_media_id}</dd>
+                    </div>
+                  )}
                 </dl>
                 {item.interests.length > 0 && (
                   <p className="text-xs text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>

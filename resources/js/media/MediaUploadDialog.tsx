@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
-import { generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
+import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import {
   type CompletedMultipartPart,
@@ -246,7 +246,10 @@ export function MediaUploadDialog({
         }
         setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
         setProgress(0);
-        const { thumbnail, perceptualHash } = await buildDerivatives(selectedFile, type);
+        const [{ thumbnail, perceptualHash }, fileHash] = await Promise.all([
+          buildDerivatives(selectedFile, type),
+          computeFileHash(selectedFile),
+        ]);
 
         const sessionKey = multipartSessionKey(selectedFile);
         const existingSession = readMultipartSession(sessionKey);
@@ -259,6 +262,7 @@ export function MediaUploadDialog({
           interest_ids: uploadInterestIds,
           has_thumbnail: thumbnail !== null,
           perceptual_hash: perceptualHash,
+          file_hash: fileHash,
           ...(selectedCharacterId === null ? {
             audience,
             audience_user_ids: audience === 'specific' ? audienceUserIds : [],

@@ -84,6 +84,9 @@ export interface AdminMediaItem extends MediaItem {
   moderated_at: string | null;
   moderated_by_user_id: number | null;
   download_url: string | null;
+  /** Admin-only dedup signals. */
+  file_hash: string | null;
+  duplicate_of_media_id: number | null;
   user: { id: number; name: string | null; email: string | null };
 }
 

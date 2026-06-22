@@ -46,6 +46,9 @@ class Media extends Model
         'reviewed_thumbnail_key',
         'thumbnail_key',
         'multipart_upload_id',
+        // Dedup plumbing is internal; only the admin presenter exposes it.
+        'file_hash',
+        'duplicate_of_media_id',
     ];
 
     /**
@@ -68,6 +71,8 @@ class Media extends Model
         'original_filename',
         'mime_type',
         'perceptual_hash',
+        'file_hash',
+        'duplicate_of_media_id',
         'size_bytes',
         'title',
         'upload_status',
@@ -113,6 +118,16 @@ class Media extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The earlier item this one was flagged as a likely duplicate of, if any.
+     *
+     * @return BelongsTo<Media, $this>
+     */
+    public function duplicateOf(): BelongsTo
+    {
+        return $this->belongsTo(Media::class, 'duplicate_of_media_id');
     }
 
     /**

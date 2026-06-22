@@ -28,7 +28,10 @@ class HlsService
     /** Lifetime of presigned segment URLs handed to the browser. */
     private const SEGMENT_URL_TTL_MINUTES = 30;
 
-    public function __construct(private readonly FileStorageService $storage) {}
+    public function __construct(
+        private readonly FileStorageService $storage,
+        private readonly MediaDuplicateService $duplicates,
+    ) {}
 
     private function disk(): string
     {
@@ -61,6 +64,13 @@ class HlsService
             $video->hls_content_id = $contentId;
         }
         $video->saveQuietly();
+
+        if ($contentId !== null) {
+            // The transcoder's content id is a content-aware hash: flag this video
+            // as a likely duplicate of an earlier one the owner uploaded that
+            // resolved to the same content (e.g. a re-encode of the same clip).
+            $this->duplicates->flagContentDuplicate($video);
+        }
 
         return $contentId !== null;
     }

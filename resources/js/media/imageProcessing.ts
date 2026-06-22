@@ -32,6 +32,32 @@ export interface PhotoDerivatives {
 }
 
 /**
+ * Upper bound on the file size we hash exactly in the browser. SHA-256 here
+ * needs the whole file in memory (the Web Crypto digest can't stream), so very
+ * large videos skip the exact hash and fall back to the transcoder's content id
+ * for duplicate detection.
+ */
+const MAX_EXACT_HASH_BYTES = 512 * 1024 * 1024;
+
+/**
+ * Compute a SHA-256 of the file's bytes as a lowercase hex string, used to
+ * reject byte-identical re-uploads. Returns null when the browser lacks Web
+ * Crypto, the file is too large to hash in memory, or hashing fails — callers
+ * treat a null hash as "no exact-duplicate check available" and upload anyway.
+ */
+export async function computeFileHash(file: File): Promise<string | null> {
+  if (file.size > MAX_EXACT_HASH_BYTES || typeof crypto === 'undefined' || crypto.subtle === undefined) {
+    return null;
+  }
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether the browser supports the APIs this module needs. Callers should treat
  * derivative generation as best-effort and upload without a thumbnail when this
  * is false (older Safari lacks OffscreenCanvas.convertToBlob).
