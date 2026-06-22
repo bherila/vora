@@ -12,6 +12,7 @@ use App\Http\Requests\Story\UpdateStoryRequest;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Services\Story\StoryService;
 use App\Support\StoryPresenter;
@@ -27,6 +28,7 @@ class StoryController extends Controller
     public function __construct(
         private readonly StoryService $stories,
         private readonly PrivacyAuditor $auditor,
+        private readonly FavoriteService $favorites,
     ) {}
 
     /**
@@ -52,8 +54,14 @@ class StoryController extends Controller
         $story = Story::query()->where('ulid', $ulid)->firstOrFail();
         Gate::authorize('view', $story);
 
+        $viewer = request()->user();
+
         return view('stories.show', ['initialData' => [
-            'storyReader' => StoryPresenter::readerView($this->stories->loadForPresentation($story)),
+            'storyReader' => StoryPresenter::readerView($this->stories->loadForPresentation($story)) + [
+                'favorite_count' => $this->favorites->countFor($story),
+                'favorited' => $viewer instanceof User
+                    && $this->favorites->favoritedIdsFor($viewer, 'story', [$story->id]) !== [],
+            ],
         ]]);
     }
 

@@ -97,6 +97,19 @@ class FavoriteService
     }
 
     /**
+     * How many users have favorited this item. An aggregate count only — it
+     * names no one — so it is safe to show to anyone who can already see the
+     * item.
+     */
+    public function countFor(Model $item): int
+    {
+        return Favorite::query()
+            ->where('favoritable_type', $item->getMorphClass())
+            ->where('favoritable_id', $item->getKey())
+            ->count();
+    }
+
+    /**
      * Of the given ids for one favoritable type, the subset the viewer has
      * favorited — one query, so a listing can be annotated with a `favorited`
      * flag without an N+1.

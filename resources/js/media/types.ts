@@ -56,6 +56,8 @@ export interface MediaItem {
   created_at: string | null;
   /** Present only on the single-media view: whether the current viewer saved it. */
   favorited?: boolean;
+  /** Present on the single-media view: how many users have saved this item. */
+  favorite_count?: number;
 }
 
 /** Selected media-type filter for a listing. 'all' applies no type constraint. */

@@ -26,7 +26,12 @@ function MediaViewPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
-        {item.favorited !== undefined && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+        <div className="flex items-center gap-3">
+          {typeof item.favorite_count === 'number' && item.favorite_count > 0 && (
+            <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'save' : 'saves'}</span>
+          )}
+          {item.favorited !== undefined && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+        </div>
       </div>
       <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
         <MediaPlayer item={item} className="mx-auto h-full w-full object-contain" />

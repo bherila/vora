@@ -20,6 +20,7 @@ use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
 use App\Policies\MediaPolicy;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Media\HlsService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
@@ -41,6 +42,7 @@ class MediaController extends Controller
         private readonly HlsService $hls,
         private readonly MediaResponseService $responder,
         private readonly PrivacyAuditor $auditor,
+        private readonly FavoriteService $favorites,
     ) {}
 
     /**
@@ -335,6 +337,7 @@ class MediaController extends Controller
             ->where('favoritable_type', $media->getMorphClass())
             ->where('favoritable_id', $media->id)
             ->exists();
+        $payload['favorite_count'] = $this->favorites->countFor($media);
 
         return $payload;
     }

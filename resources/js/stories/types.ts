@@ -100,6 +100,10 @@ export interface StoryReader {
   nodes: Array<StoryNode & { id: number }>;
   choices: Array<StoryChoice & { from_node_id: number; to_node_id: number | null }>;
   published_at: string | null;
+  /** Whether the current viewer has saved this story. */
+  favorited?: boolean;
+  /** How many users have saved this story. */
+  favorite_count?: number;
 }
 
 export interface StoryDiscoveryItem {
