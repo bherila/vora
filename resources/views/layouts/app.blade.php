@@ -48,6 +48,7 @@
           ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
           ['type' => 'link', 'label' => 'Interests', 'href' => route('admin.interests', [], false)],
           ['type' => 'link', 'label' => 'Media review', 'href' => route('admin.media', [], false)],
+          ['type' => 'link', 'label' => 'Abuse reports', 'href' => route('admin.reports', [], false)],
           ['type' => 'link', 'label' => 'Story review', 'href' => route('admin.stories', [], false)],
           ['type' => 'link', 'label' => 'Posts review', 'href' => route('admin.posts', [], false)],
           ['type' => 'link', 'label' => 'Deleted content', 'href' => route('admin.deleted-content', [], false)],
