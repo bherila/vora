@@ -34,9 +34,9 @@
         $__isAuthenticated ? null : ['label' => 'Home', 'href' => route('home', [], false)],
         $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
-        $__isAuthenticated ? ['label' => 'Media', 'href' => route('media', [], false)] : null,
-        $__isAuthenticated ? ['label' => 'Characters', 'href' => route('characters', [], false)] : null,
-        $__isAuthenticated ? ['label' => 'Stories', 'href' => route('stories', [], false)] : null,
+        // Media, Characters, and Stories are consolidated into one "Create" entry;
+        // the create-tabs partial provides the sub-navigation between them.
+        $__isAuthenticated ? ['label' => 'Create', 'href' => route('media', [], false)] : null,
         $__isAuthenticated ? ['label' => 'People', 'href' => route('users.directory', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Requests', 'href' => route('users.follow-requests', [], false), 'badge' => $__requestCount] : null,
       ]));
