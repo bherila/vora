@@ -26,7 +26,7 @@ class PostCommentController extends Controller
 
     public function index(Request $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        $this->authorizeOr404('view', $post);
 
         $viewer = $request->user();
 
@@ -51,7 +51,8 @@ class PostCommentController extends Controller
 
     public function store(CommentRequest $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        // Visibility of $post is authorized in CommentRequest::authorize(), before
+        // validation, so a hidden post 404s rather than leaking via a 422.
 
         /** @var User $user */
         $user = $request->user();
@@ -87,7 +88,7 @@ class PostCommentController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
-        Gate::authorize('delete', $comment);
+        $this->authorizeOr404('delete', $comment);
 
         $comment->delete();
 

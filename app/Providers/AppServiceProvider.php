@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\Character;
 use App\Models\Media;
+use App\Models\Post;
+use App\Models\PostComment;
 use App\Models\StaticPage;
 use App\Models\Story;
 use App\Models\User;
@@ -58,6 +60,14 @@ class AppServiceProvider extends ServiceProvider
         // Laravel's ModelNotFoundException message naming the model and id, which
         // re-opens the existence oracle the MediaPolicy closes.
         Route::bind('media', fn (string $value): Media => Media::find($value) ?? abort(404, 'Not found.'));
+
+        // Same generic 404 for Story/Post/Comment numeric routes. Their controllers
+        // normalise the hidden case to abort(404) via authorizeOr404(), so a missing
+        // row must answer identically — otherwise Laravel's implicit binding names the
+        // model and id, re-opening the existence oracle the policies close.
+        Route::bind('story', fn (string $value): Story => Story::find($value) ?? abort(404, 'Not found.'));
+        Route::bind('post', fn (string $value): Post => Post::find($value) ?? abort(404, 'Not found.'));
+        Route::bind('comment', fn (string $value): PostComment => PostComment::find($value) ?? abort(404, 'Not found.'));
 
         // Stable aliases for polymorphic story "involves" tags, so the database
         // stores short type keys instead of fully-qualified class names.

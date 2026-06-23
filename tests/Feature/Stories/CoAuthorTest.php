@@ -65,7 +65,7 @@ class CoAuthorTest extends TestCase
         $story = Story::factory()->for($owner)->create();
         $story->authors()->create(['user_id' => $invitee->id, 'role' => 'co_author', 'status' => 'pending']);
 
-        $this->actingAs($invitee)->patchJson("/api/stories/{$story->id}", ['title' => 'Nope'])->assertForbidden();
+        $this->actingAs($invitee)->patchJson("/api/stories/{$story->id}", ['title' => 'Nope'])->assertNotFound();
     }
 
     public function test_declining_removes_the_invite(): void

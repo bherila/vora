@@ -64,8 +64,8 @@ class StoryTest extends TestCase
         $other = User::factory()->approved()->create();
         $story = Story::factory()->for($owner)->create();
 
-        $this->actingAs($other)->getJson("/api/stories/{$story->id}")->assertForbidden();
-        $this->actingAs($other)->patchJson("/api/stories/{$story->id}", ['title' => 'Hijack'])->assertForbidden();
+        $this->actingAs($other)->getJson("/api/stories/{$story->id}")->assertNotFound();
+        $this->actingAs($other)->patchJson("/api/stories/{$story->id}", ['title' => 'Hijack'])->assertNotFound();
     }
 
     public function test_reader_endpoint_requires_published_and_approved_for_non_authors(): void
@@ -74,10 +74,10 @@ class StoryTest extends TestCase
         $reader = User::factory()->approved()->create();
 
         $draft = Story::factory()->for($owner)->create();
-        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$draft->ulid}")->assertForbidden();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$draft->ulid}")->assertNotFound();
 
         $publishedUnreviewed = Story::factory()->for($owner)->published()->create();
-        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$publishedUnreviewed->ulid}")->assertForbidden();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$publishedUnreviewed->ulid}")->assertNotFound();
 
         $readable = Story::factory()->for($owner)->readable()->create(['body' => 'Once upon a time']);
         $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$readable->ulid}")
@@ -110,7 +110,7 @@ class StoryTest extends TestCase
         $story = Story::factory()->for($owner)->create();
         $story->authors()->create(['user_id' => $coAuthor->id, 'role' => 'co_author', 'status' => 'accepted', 'responded_at' => now()]);
 
-        $this->actingAs($coAuthor)->deleteJson("/api/stories/{$story->id}")->assertForbidden();
+        $this->actingAs($coAuthor)->deleteJson("/api/stories/{$story->id}")->assertNotFound();
         $this->actingAs($owner)->deleteJson("/api/stories/{$story->id}")->assertOk();
         $this->assertSoftDeleted('stories', ['id' => $story->id]);
         $this->actingAs($owner)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertNotFound();
@@ -129,7 +129,7 @@ class StoryTest extends TestCase
 
         $this->assertSame('pending', $story->refresh()->moderation_status->value);
         // No longer reader-visible until re-approved.
-        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertNotFound();
     }
 
     public function test_cyoa_graph_save_returns_an_approved_story_to_review(): void
@@ -228,7 +228,7 @@ class StoryTest extends TestCase
         $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk();
 
         $owner->forceFill(['is_disabled' => true])->save();
-        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertNotFound();
     }
 
     public function test_story_from_ban_hidden_owner_is_hidden_on_direct_reads(): void
@@ -241,7 +241,7 @@ class StoryTest extends TestCase
 
         // Ban + hide content: the direct ULID read path must respect isActive().
         $owner->forceFill(['banned_at' => now(), 'ban_hides_content' => true])->save();
-        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertForbidden();
+        $this->actingAs($reader)->getJson("/api/stories/by-ulid/{$story->ulid}")->assertNotFound();
 
         // Ban that keeps content visible (memorialized) does not hide the story.
         $owner->forceFill(['ban_hides_content' => false])->save();
@@ -318,5 +318,33 @@ class StoryTest extends TestCase
 
         $titles = collect($this->actingAs($user)->getJson('/api/stories')->assertOk()->json('data'))->pluck('title');
         $this->assertContains('A Draft', $titles->all());
+    }
+
+    public function test_hidden_and_missing_story_ids_are_indistinguishable(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create(); // private draft, not visible to $other
+
+        // A hidden-but-existing story and a never-existed id must answer with the
+        // same 404 body, so a sequential id scan can't tell real ids from fake ones.
+        $hidden = $this->actingAs($other)->getJson("/api/stories/{$story->id}")->assertNotFound();
+        $missing = $this->actingAs($other)->getJson('/api/stories/999999')->assertNotFound();
+
+        $this->assertSame('Not found.', $hidden->json('message'));
+        $this->assertSame($missing->json('message'), $hidden->json('message'));
+    }
+
+    public function test_invalid_update_by_non_author_still_404s_not_422(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+
+        // Authorization precedes validation: a non-author sending an invalid payload
+        // to an existing story must 404 (not 422), matching a missing story id, so a
+        // validation error can't be used as an existence oracle.
+        $this->actingAs($other)->patchJson("/api/stories/{$story->id}", ['status' => 'bogus'])->assertNotFound();
+        $this->actingAs($other)->patchJson('/api/stories/999999', ['status' => 'bogus'])->assertNotFound();
     }
 }

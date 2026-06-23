@@ -7,7 +7,6 @@ use App\Models\Post;
 use App\Models\User;
 use App\Notifications\PostReactedTo;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * Add/remove a reaction on a post. Gated by the post's view policy, so a viewer
@@ -17,7 +16,8 @@ class PostReactionController extends Controller
 {
     public function store(ReactionRequest $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        // Visibility of $post is authorized in ReactionRequest::authorize(), before
+        // validation, so a hidden post 404s rather than leaking via a 422.
 
         /** @var User $user */
         $user = $request->user();
@@ -39,7 +39,7 @@ class PostReactionController extends Controller
 
     public function destroy(ReactionRequest $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        // Visibility of $post is authorized in ReactionRequest::authorize().
 
         /** @var User $user */
         $user = $request->user();

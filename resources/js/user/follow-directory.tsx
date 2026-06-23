@@ -14,8 +14,9 @@ interface DirectoryUser {
   restricted: boolean;
   user_type: string | null;
   gender: string | null;
-  matching_interests_count: number;
-  interest_match_score: number;
+  // Null for restricted profiles, whose interest overlap is hidden from the viewer.
+  matching_interests_count: number | null;
+  interest_match_score: number | null;
 }
 
 function FollowDirectoryPage() {
@@ -52,8 +53,10 @@ function FollowDirectoryPage() {
                   <CardDescription className="mt-1 flex flex-wrap gap-2">
                     {user.user_type && <Badge variant="outline">{user.user_type}</Badge>}
                     {user.gender && <Badge variant="outline">{user.gender}</Badge>}
-                    <Badge variant="outline">{user.interest_match_score}% interest match</Badge>
-                    {user.matching_interests_count > 0 && <Badge variant="outline">{user.matching_interests_count} shared</Badge>}
+                    {user.interest_match_score !== null && <Badge variant="outline">{user.interest_match_score}% interest match</Badge>}
+                    {user.matching_interests_count !== null && user.matching_interests_count > 0 && (
+                      <Badge variant="outline">{user.matching_interests_count} shared</Badge>
+                    )}
                     {user.restricted && <Badge variant="outline">Private</Badge>}
                   </CardDescription>
                 </div>

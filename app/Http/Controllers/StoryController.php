@@ -21,7 +21,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -54,8 +53,8 @@ class StoryController extends Controller
      */
     public function readerPage(string $ulid): View
     {
-        $story = Story::query()->where('ulid', $ulid)->firstOrFail();
-        Gate::authorize('view', $story);
+        $story = Story::query()->where('ulid', $ulid)->first();
+        $this->authorizeOr404('view', $story);
 
         $viewer = request()->user();
 
@@ -144,7 +143,7 @@ class StoryController extends Controller
      */
     public function show(Story $story): JsonResponse
     {
-        Gate::authorize('update', $story);
+        $this->authorizeOr404('update', $story);
 
         $user = request()->user();
 
@@ -153,8 +152,8 @@ class StoryController extends Controller
 
     public function update(UpdateStoryRequest $request, Story $story): JsonResponse
     {
-        Gate::authorize('update', $story);
-
+        // 'update' on $story is authorized in UpdateStoryRequest::authorize(), before
+        // validation, so a non-author 404s rather than leaking the story via a 422.
         $data = $request->validated();
         $privacyBefore = $story->privacySnapshot();
 
@@ -216,7 +215,7 @@ class StoryController extends Controller
 
     public function destroy(Story $story): JsonResponse
     {
-        Gate::authorize('delete', $story);
+        $this->authorizeOr404('delete', $story);
 
         $story->delete();
 
@@ -228,8 +227,8 @@ class StoryController extends Controller
      */
     public function saveGraph(SaveStoryGraphRequest $request, Story $story): JsonResponse
     {
-        Gate::authorize('update', $story);
-
+        // 'update' on $story is authorized in SaveStoryGraphRequest::authorize(),
+        // before validation, so a non-author 404s rather than leaking via a 422.
         if ($story->type !== StoryType::Cyoa) {
             return response()->json(['success' => false, 'message' => 'This story is not a choose-your-own-adventure.'], 422);
         }
@@ -253,8 +252,8 @@ class StoryController extends Controller
      */
     public function showByUlid(string $ulid): JsonResponse
     {
-        $story = Story::query()->where('ulid', $ulid)->firstOrFail();
-        Gate::authorize('view', $story);
+        $story = Story::query()->where('ulid', $ulid)->first();
+        $this->authorizeOr404('view', $story);
 
         return response()->json([
             'success' => true,

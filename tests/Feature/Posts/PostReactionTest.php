@@ -55,7 +55,20 @@ class PostReactionTest extends TestCase
         $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
 
         // The viewer does not follow the author, so the post is not visible.
-        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertForbidden();
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertNotFound();
+        $this->assertSame(0, PostReaction::query()->count());
+    }
+
+    public function test_invalid_reaction_on_a_hidden_post_still_404s_not_422(): void
+    {
+        // Authorization precedes validation: an invalid reaction type on a post the
+        // viewer cannot see must 404 (not 422), matching a missing post id.
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
+
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions", ['type' => 'bogus'])->assertNotFound();
+        $this->actingAs($viewer)->postJson('/api/posts/999999/reactions', ['type' => 'bogus'])->assertNotFound();
         $this->assertSame(0, PostReaction::query()->count());
     }
 

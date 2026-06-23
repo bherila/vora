@@ -10,7 +10,6 @@ use App\Services\Post\PostService;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class PostController extends Controller
@@ -91,8 +90,8 @@ class PostController extends Controller
      */
     private function findByUlidPayload(Request $request, string $ulid): array
     {
-        $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->firstOrFail();
-        Gate::authorize('view', $post);
+        $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->first();
+        $this->authorizeOr404('view', $post);
 
         $post->load(['user.profilePicture', 'character.profilePicture', 'attachments.attachable']);
 
@@ -101,7 +100,7 @@ class PostController extends Controller
 
     public function destroy(Request $request, Post $post): JsonResponse
     {
-        Gate::authorize('delete', $post);
+        $this->authorizeOr404('delete', $post);
 
         $post->delete();
 

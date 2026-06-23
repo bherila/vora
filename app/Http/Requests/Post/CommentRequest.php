@@ -9,8 +9,17 @@ class CommentRequest extends FormRequest
     public function authorize(): bool
     {
         $user = $this->user();
+        if ($user === null || ! $user->isApproved() || ! $user->canLogin()) {
+            return false;
+        }
 
-        return $user !== null && $user->isApproved() && $user->canLogin();
+        // Authorize the target post here, before validation runs, so a viewer who
+        // cannot see an existing post gets the same generic 404 as a missing post
+        // (the {post} route binding already 404s missing rows) rather than a 422
+        // that would reveal the post exists.
+        abort_unless($user->can('view', $this->route('post')), 404, 'Not found.');
+
+        return true;
     }
 
     /**
