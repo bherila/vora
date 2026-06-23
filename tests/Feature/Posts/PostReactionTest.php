@@ -55,7 +55,7 @@ class PostReactionTest extends TestCase
         $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
 
         // The viewer does not follow the author, so the post is not visible.
-        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertForbidden();
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertNotFound();
         $this->assertSame(0, PostReaction::query()->count());
     }
 

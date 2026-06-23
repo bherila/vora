@@ -37,7 +37,7 @@ class PostCommentTest extends TestCase
         $viewer = User::factory()->approved()->create();
         $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
 
-        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/comments", ['body' => 'Hi'])->assertForbidden();
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/comments", ['body' => 'Hi'])->assertNotFound();
         $this->assertSame(0, PostComment::query()->count());
     }
 
@@ -72,7 +72,7 @@ class PostCommentTest extends TestCase
         $url = fn (PostComment $c): string => "/api/posts/{$post->id}/comments/{$c->id}";
         $make = fn (): PostComment => PostComment::factory()->for($post)->for($commenter)->create();
 
-        $this->actingAs($stranger)->deleteJson($url($c = $make()))->assertForbidden();
+        $this->actingAs($stranger)->deleteJson($url($c = $make()))->assertNotFound();
         $this->actingAs($commenter)->deleteJson($url($c))->assertOk(); // author
         $this->actingAs($owner)->deleteJson($url($make()))->assertOk(); // post owner
         $this->actingAs($admin)->deleteJson($url($make()))->assertOk(); // admin

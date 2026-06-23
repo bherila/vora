@@ -7,7 +7,6 @@ use App\Models\Post;
 use App\Models\User;
 use App\Notifications\PostReactedTo;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * Add/remove a reaction on a post. Gated by the post's view policy, so a viewer
@@ -17,7 +16,7 @@ class PostReactionController extends Controller
 {
     public function store(ReactionRequest $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        $this->authorizeOr404('view', $post);
 
         /** @var User $user */
         $user = $request->user();
@@ -39,7 +38,7 @@ class PostReactionController extends Controller
 
     public function destroy(ReactionRequest $request, Post $post): JsonResponse
     {
-        Gate::authorize('view', $post);
+        $this->authorizeOr404('view', $post);
 
         /** @var User $user */
         $user = $request->user();

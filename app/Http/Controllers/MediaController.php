@@ -19,7 +19,6 @@ use App\Models\Favorite;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
-use App\Policies\MediaPolicy;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\HlsService;
 use App\Services\Media\MediaDuplicateService;
@@ -33,7 +32,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class MediaController extends Controller
@@ -554,21 +552,6 @@ class MediaController extends Controller
         $this->auditPlayback($request, $media, 'hls_segment_redirect', $path);
 
         return redirect()->away($url, 302);
-    }
-
-    /**
-     * Authorize a media action, answering 404 (not 403) when the viewer may not
-     * act on the row. This keeps "exists but isn't yours / isn't approved /
-     * is private" indistinguishable from "doesn't exist", so numeric ids and
-     * ulids can't be used as an existence oracle. Admins satisfy the policy via
-     * {@see MediaPolicy::before()}, so their visibility is unchanged.
-     */
-    private function authorizeOr404(string $ability, Media $media): void
-    {
-        // Same generic body as a missing-row 404 (see the {media} route binding in
-        // AppServiceProvider) so the response can't be diffed to tell "hidden" from
-        // "does not exist".
-        abort_unless(Gate::allows($ability, $media), 404, 'Not found.');
     }
 
     /**

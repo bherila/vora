@@ -77,6 +77,22 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame('/admin/users', $navbar['adminMenu']['items'][0]['href']);
     }
 
+    public function test_admin_menu_is_withheld_from_an_admin_who_cannot_log_in(): void
+    {
+        // is_admin set, but the account is not yet approved — every admin route is
+        // blocked by the admin-only gate, so the layout must not surface the Admin
+        // menu or open-report count to it either.
+        $pendingAdmin = User::factory()->admin()->pendingApproval()->create();
+
+        // /pending-approval sits behind `auth` only (no approval gate), so it renders
+        // the layout for an account the admin routes themselves block — the exact
+        // surface where the bare isAdmin() flag would leak the Admin menu.
+        $payload = $this->initialData($this->actingAs($pendingAdmin)->get('/pending-approval')->assertOk()->getContent());
+
+        $this->assertFalse($payload['navbar']['isAdmin']);
+        $this->assertNull($payload['navbar']['adminMenu']);
+    }
+
     /**
      * @return array<string, mixed>
      */

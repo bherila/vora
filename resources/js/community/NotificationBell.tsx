@@ -47,6 +47,8 @@ function labelFor(notification: NotificationItem): string {
       return `${actor} accepted a co-author invite.`;
     case 'favorite':
       return `${actor} saved your ${notification.data.item_type ?? 'content'}.`;
+    case 'abuse_report':
+      return 'A new abuse report was filed.';
     default:
       return 'New notification.';
   }
