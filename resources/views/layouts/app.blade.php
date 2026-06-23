@@ -20,7 +20,11 @@
     @php
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
-      $__isAdmin = $__isAuthenticated && $__currentUser->isAdmin();
+      // Use the same gate the admin routes enforce (admin flag PLUS approved and
+      // able to log in), not the bare isAdmin() flag — otherwise a pending or
+      // disabled admin would still receive the Admin menu and open-report count
+      // here even though every admin route blocks them.
+      $__isAdmin = \Illuminate\Support\Facades\Gate::allows('admin-only');
       // Mirror the follow-request inbox filter (requester still active) so the
       // badge never counts requests the inbox hides.
       $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->whereHas('requester', fn ($q) => $q->active())->count() : 0;

@@ -6,6 +6,7 @@ use App\Enums\MediaType;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
+use App\Services\Media\AdminMediaResponseService;
 use App\Services\Media\MediaDuplicateService;
 use App\Services\Media\PdqImageService;
 use App\Support\PerceptualHash;
@@ -290,6 +291,48 @@ class MediaDedupTest extends TestCase
 
         $this->assertNull($older->fresh()->duplicate_of_media_id);
         $this->assertSame($older->id, $newer->fresh()->duplicate_of_media_id);
+    }
+
+    public function test_admin_page_reflects_a_duplicate_flagged_on_another_row_during_resolution(): void
+    {
+        // Resolving one photo's PDQ hash can flag a *different* photo in the same
+        // admin page as its duplicate. That sibling row is already loaded in the
+        // paginator, so its in-memory copy must be reconciled before serialization
+        // or the response omits the freshly set flag.
+        config(['filesystems.disks.hls.bucket' => 'hls-test']);
+        $user = User::factory()->approved()->create();
+
+        // Older photo has no hash yet; its worker mapping has just landed. The newer
+        // photo's hash resolved in an earlier request. Newest-first ordering means
+        // the newer (already-resolved) row is serialized before the older one runs.
+        $older = Media::factory()->for($user)->approved()->create([
+            'type' => MediaType::Photo,
+            'upload_status' => 'ready',
+        ]);
+        $newer = Media::factory()->for($user)->approved()->create([
+            'type' => MediaType::Photo,
+            'pdq_hash' => str_repeat('0', 64),
+            'upload_status' => 'ready',
+        ]);
+
+        $mapping = json_encode(['pdqHash' => str_repeat('0', 63).'1', 'quality' => 100]); // distance 1
+        $this->mock(FileStorageService::class, function (MockInterface $mock) use ($older, $mapping): void {
+            $mock->shouldReceive('get')
+                ->with('hls', 'image-mappings/'.$older->playbackObjectKey().'.json')
+                ->andReturn($mapping);
+            $mock->shouldReceive('get')->andReturn(null);
+            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/view');
+            $mock->shouldReceive('getSignedDownloadUrl')->andReturn('https://r2.example/download');
+        });
+
+        $paginator = Media::query()->where('user_id', $user->id)->orderByDesc('id')->paginate(20);
+        $page = app(AdminMediaResponseService::class)->page($paginator);
+
+        $rows = collect($page['data'])->keyBy('id');
+        // The newer row was flagged as a duplicate of the older one while the older
+        // row resolved — the response must show that, not the stale null.
+        $this->assertSame($older->id, $rows[$newer->id]['duplicate_of_media_id']);
+        $this->assertNull($rows[$older->id]['duplicate_of_media_id']);
     }
 
     public function test_video_sharing_a_content_id_is_flagged(): void

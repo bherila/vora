@@ -60,10 +60,25 @@ class PostApiTest extends TestCase
         $viewer = User::factory()->approved()->create();
         $post = Post::factory()->for($owner)->approved()->audience(Audience::Followers)->create();
 
-        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
 
         $this->follow($viewer, $owner);
         $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk();
+    }
+
+    public function test_hidden_and_missing_post_ulids_are_indistinguishable(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->audience(Audience::Followers)->create();
+
+        // A hidden-but-existing post and a never-existed ulid must answer with the
+        // same 404 body, so the reader endpoint can't be used as an existence oracle.
+        $hidden = $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
+        $missing = $this->actingAs($viewer)->getJson('/api/posts/by-ulid/00000000000000000000000000')->assertNotFound();
+
+        $this->assertSame('Not found.', $hidden->json('message'));
+        $this->assertSame($missing->json('message'), $hidden->json('message'));
     }
 
     public function test_rejected_post_is_hidden_from_non_owner(): void
@@ -73,7 +88,7 @@ class PostApiTest extends TestCase
         $viewer = User::factory()->approved()->create();
         $post = Post::factory()->for($owner)->rejected()->create(['audience' => Audience::Everyone]);
 
-        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk();
     }
 
@@ -83,7 +98,7 @@ class PostApiTest extends TestCase
         $other = User::factory()->approved()->create();
         $post = Post::factory()->for($owner)->create();
 
-        $this->actingAs($other)->deleteJson("/api/posts/{$post->id}")->assertForbidden();
+        $this->actingAs($other)->deleteJson("/api/posts/{$post->id}")->assertNotFound();
         $this->actingAs($owner)->deleteJson("/api/posts/{$post->id}")->assertOk();
         $this->assertSame(0, Post::query()->count());
         $this->assertSoftDeleted('posts', ['id' => $post->id]);

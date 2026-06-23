@@ -62,7 +62,7 @@ class AdminPostModerationTest extends TestCase
             'notes' => 'take down',
         ])->assertOk();
 
-        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertForbidden();
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
         $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk();
     }
 

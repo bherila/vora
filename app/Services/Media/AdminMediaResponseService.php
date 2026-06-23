@@ -87,8 +87,31 @@ class AdminMediaResponseService
      */
     public function page(LengthAwarePaginator $paginator, bool $resolveHls = false, bool $downloadAll = false): array
     {
-        $data = collect($paginator->items())
-            ->map(fn (Media $media): array => $this->item($media, $resolveHls, $downloadAll))
+        $items = collect($paginator->items());
+
+        // Build every item's extras first. This triggers PDQ resolution, which can
+        // flag a *different* row in this same page as a near-duplicate (the
+        // older/newer pair in MediaDuplicateService::flagPdqDuplicate writes to the
+        // freshly fetched candidate, not the instance the paginator holds). Doing it
+        // in one pass means a row already serialized would miss a flag set while a
+        // later row resolved — so capture extras now and reconcile before presenting.
+        $extras = $items
+            ->mapWithKeys(fn (Media $media): array => [$media->id => $this->extras($media, $resolveHls, $downloadAll)])
+            ->all();
+
+        // Reload duplicate_of_media_id from the database in one query and copy it back
+        // onto the loaded instances, so a flag set on another page row during
+        // resolution above is reflected instead of the stale in-memory null.
+        $duplicateIds = Media::query()
+            ->whereKey($items->pluck('id'))
+            ->pluck('duplicate_of_media_id', 'id');
+        $items->each(fn (Media $media) => $media->setAttribute(
+            'duplicate_of_media_id',
+            $duplicateIds->get($media->id),
+        ));
+
+        $data = $items
+            ->map(fn (Media $media): array => MediaPresenter::adminView($media, $extras[$media->id]))
             ->values()
             ->all();
 
