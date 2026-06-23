@@ -9,8 +9,16 @@ class SaveStoryGraphRequest extends FormRequest
     public function authorize(): bool
     {
         $user = $this->user();
+        if ($user === null || ! $user->isApproved() || ! $user->canLogin()) {
+            return false;
+        }
 
-        return $user !== null && $user->isApproved() && $user->canLogin();
+        // Authorize the target story before validation, so a non-author saving a
+        // graph onto an existing story gets the same generic 404 as a missing story
+        // rather than a 422 that would reveal the story exists.
+        abort_unless($user->can('update', $this->route('story')), 404, 'Not found.');
+
+        return true;
     }
 
     /**

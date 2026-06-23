@@ -51,7 +51,8 @@ class PostCommentController extends Controller
 
     public function store(CommentRequest $request, Post $post): JsonResponse
     {
-        $this->authorizeOr404('view', $post);
+        // Visibility of $post is authorized in CommentRequest::authorize(), before
+        // validation, so a hidden post 404s rather than leaking via a 422.
 
         /** @var User $user */
         $user = $request->user();

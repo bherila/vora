@@ -152,8 +152,8 @@ class StoryController extends Controller
 
     public function update(UpdateStoryRequest $request, Story $story): JsonResponse
     {
-        $this->authorizeOr404('update', $story);
-
+        // 'update' on $story is authorized in UpdateStoryRequest::authorize(), before
+        // validation, so a non-author 404s rather than leaking the story via a 422.
         $data = $request->validated();
         $privacyBefore = $story->privacySnapshot();
 
@@ -227,8 +227,8 @@ class StoryController extends Controller
      */
     public function saveGraph(SaveStoryGraphRequest $request, Story $story): JsonResponse
     {
-        $this->authorizeOr404('update', $story);
-
+        // 'update' on $story is authorized in SaveStoryGraphRequest::authorize(),
+        // before validation, so a non-author 404s rather than leaking via a 422.
         if ($story->type !== StoryType::Cyoa) {
             return response()->json(['success' => false, 'message' => 'This story is not a choose-your-own-adventure.'], 422);
         }

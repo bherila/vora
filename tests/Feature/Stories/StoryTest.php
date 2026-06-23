@@ -334,4 +334,17 @@ class StoryTest extends TestCase
         $this->assertSame('Not found.', $hidden->json('message'));
         $this->assertSame($missing->json('message'), $hidden->json('message'));
     }
+
+    public function test_invalid_update_by_non_author_still_404s_not_422(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->create();
+
+        // Authorization precedes validation: a non-author sending an invalid payload
+        // to an existing story must 404 (not 422), matching a missing story id, so a
+        // validation error can't be used as an existence oracle.
+        $this->actingAs($other)->patchJson("/api/stories/{$story->id}", ['status' => 'bogus'])->assertNotFound();
+        $this->actingAs($other)->patchJson('/api/stories/999999', ['status' => 'bogus'])->assertNotFound();
+    }
 }

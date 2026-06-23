@@ -16,7 +16,8 @@ class PostReactionController extends Controller
 {
     public function store(ReactionRequest $request, Post $post): JsonResponse
     {
-        $this->authorizeOr404('view', $post);
+        // Visibility of $post is authorized in ReactionRequest::authorize(), before
+        // validation, so a hidden post 404s rather than leaking via a 422.
 
         /** @var User $user */
         $user = $request->user();
@@ -38,7 +39,7 @@ class PostReactionController extends Controller
 
     public function destroy(ReactionRequest $request, Post $post): JsonResponse
     {
-        $this->authorizeOr404('view', $post);
+        // Visibility of $post is authorized in ReactionRequest::authorize().
 
         /** @var User $user */
         $user = $request->user();

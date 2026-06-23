@@ -41,6 +41,19 @@ class PostCommentTest extends TestCase
         $this->assertSame(0, PostComment::query()->count());
     }
 
+    public function test_invalid_comment_on_a_hidden_post_still_404s_not_422(): void
+    {
+        // Authorization runs before validation: an invalid (empty) body posted to a
+        // post the viewer cannot see must 404, not 422 — a 422 would reveal the post
+        // exists, distinguishing it from a missing id (which the route binding 404s).
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
+
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/comments", [])->assertNotFound();
+        $this->actingAs($viewer)->postJson('/api/posts/999999/comments', [])->assertNotFound();
+    }
+
     public function test_non_authors_only_see_approved_comments(): void
     {
         $author = User::factory()->approved()->create();

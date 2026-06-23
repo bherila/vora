@@ -11,8 +11,16 @@ class ReactionRequest extends FormRequest
     public function authorize(): bool
     {
         $user = $this->user();
+        if ($user === null || ! $user->isApproved() || ! $user->canLogin()) {
+            return false;
+        }
 
-        return $user !== null && $user->isApproved() && $user->canLogin();
+        // Authorize the target post before validation, so reacting to a post the
+        // viewer cannot see returns the same generic 404 as a missing post instead
+        // of a 422 (e.g. an invalid reaction type) that would reveal it exists.
+        abort_unless($user->can('view', $this->route('post')), 404, 'Not found.');
+
+        return true;
     }
 
     /**
