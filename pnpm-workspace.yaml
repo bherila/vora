@@ -1,5 +1,8 @@
 overrides:
   glob: ">=10.5.0"
+  # Force the patched js-yaml into jest's deep istanbul coverage chain
+  # (@istanbuljs/load-nyc-config pins js-yaml 3.x; GHSA-h67p-54hq-rp68).
+  js-yaml@<4.1.2: ">=4.1.2"
 allowBuilds:
   unrs-resolver: true
 # bwh-auth is a first-party package; skip the release-age supply-chain gate so a
