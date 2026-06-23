@@ -187,12 +187,14 @@ class FollowController extends Controller
 
         return $users->map(function (User $user) use ($canView, $current, $viewerInterestIds, $viewerInterestCount): array {
             $visible = $canView[$user->id] ?? false;
-            $matchingInterestCount = $viewerInterestCount > 0
-                ? $user->interestRatings->pluck('interest_id')->intersect($viewerInterestIds)->count()
-                : 0;
-            $interestMatchScore = $viewerInterestCount > 0
-                ? (int) round(($matchingInterestCount / $viewerInterestCount) * 100)
-                : 0;
+            $matchingInterestCount = $visible
+                ? ($viewerInterestCount > 0
+                    ? $user->interestRatings->pluck('interest_id')->intersect($viewerInterestIds)->count()
+                    : 0)
+                : null;
+            $interestMatchScore = $matchingInterestCount !== null
+                ? ($viewerInterestCount > 0 ? (int) round(($matchingInterestCount / $viewerInterestCount) * 100) : 0)
+                : null;
 
             return [
                 'id' => $user->id,

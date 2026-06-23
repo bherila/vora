@@ -5,6 +5,8 @@ namespace Tests\Feature\Follow;
 use App\Enums\Audience;
 use App\Models\AudienceMember;
 use App\Models\FollowRequest;
+use App\Models\Interest;
+use App\Models\InterestRating;
 use App\Models\User;
 use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -117,6 +119,34 @@ class ProfilePrivacyTest extends TestCase
         $found = $row($data);
         $this->assertFalse($found['restricted']);
         $this->assertSame('human', $found['user_type']);
+    }
+
+    public function test_directory_masks_restricted_profile_interest_match_data_and_sorting(): void
+    {
+        $owner = $this->withProfileAudience(Audience::Followers);
+        $owner->update(['display_name' => 'Z Restricted']);
+        $visible = $this->withProfileAudience(Audience::Everyone);
+        $visible->update(['display_name' => 'A Visible']);
+        $viewer = User::factory()->approved()->create();
+        $shared = Interest::query()->create(['name' => 'Shared']);
+
+        InterestRating::query()->create(['user_id' => $viewer->id, 'interest_id' => $shared->id, 'level' => 5]);
+        InterestRating::query()->create(['user_id' => $owner->id, 'interest_id' => $shared->id, 'level' => 5]);
+
+        $data = $this->actingAs($viewer)->getJson('/api/users')->assertOk()->json('data');
+        $restrictedRow = collect($data)->firstWhere('id', $owner->id);
+        $visibleRow = collect($data)->firstWhere('id', $visible->id);
+
+        $this->assertNotNull($restrictedRow, 'a restricted profile still appears in the directory');
+        $this->assertTrue($restrictedRow['restricted']);
+        $this->assertNull($restrictedRow['matching_interests_count']);
+        $this->assertNull($restrictedRow['interest_match_score']);
+        $this->assertNotNull($visibleRow, 'a visible profile still appears in the directory');
+        $this->assertLessThan(
+            array_search($owner->id, collect($data)->pluck('id')->all(), true),
+            array_search($visible->id, collect($data)->pluck('id')->all(), true),
+            'restricted profiles must not be promoted by hidden interest matches',
+        );
     }
 
     public function test_purging_a_user_prunes_their_profile_allowlist(): void
