@@ -119,6 +119,7 @@ class MediaController extends Controller
             discoverable: $discoverable,
             characterId: $character?->id,
             fileHash: $fileHash,
+            expectedSizeBytes: $request->validated('size') !== null ? (int) $request->validated('size') : null,
         );
 
         $media = $result['media'];
