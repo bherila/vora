@@ -397,7 +397,7 @@ class MediaApiTest extends TestCase
                 ->andReturn('upload-123');
             $mock->shouldReceive('getSignedMultipartUploadPartUrl')
                 ->once()
-                ->with('s3', 'uploads/0/video.mp4', 'upload-123', 1, 30)
+                ->with('s3', 'uploads/0/video.mp4', 'upload-123', 1, 1024, 30)
                 ->andReturn(['url' => 'https://r2.example/part/1', 'headers' => []]);
             $mock->shouldReceive('completeMultipartUpload')
                 ->once()
@@ -426,6 +426,7 @@ class MediaApiTest extends TestCase
         $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/parts", [
             'upload_id' => 'upload-123',
             'part_numbers' => [1],
+            'part_sizes' => [1 => 1024],
         ])->assertOk()
             ->assertJsonPath('data.0.part_number', 1)
             ->assertJsonPath('data.0.url', 'https://r2.example/part/1');
@@ -469,6 +470,7 @@ class MediaApiTest extends TestCase
         $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/parts", [
             'upload_id' => 'upload-123',
             'part_numbers' => [2],
+            'part_sizes' => [2 => 1024],
         ])->assertNotFound();
     }
 

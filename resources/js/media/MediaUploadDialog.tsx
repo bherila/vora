@@ -19,6 +19,7 @@ import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, support
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import {
   type CompletedMultipartPart,
+  type MultipartPartToSign,
   type MultipartUploadSession,
   putToSignedUrl,
   readMultipartSession,
@@ -285,10 +286,11 @@ export function MediaUploadDialog({
             session,
             signal: abortController.signal,
             onProgress: (fraction) => setProgress(fraction * 100),
-            presignParts: async (partNumbers) => {
+            presignParts: async (parts: MultipartPartToSign[]) => {
               const response = (await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/parts`, {
                 upload_id: session.uploadId,
-                part_numbers: partNumbers,
+                part_numbers: parts.map((part) => part.partNumber),
+                part_sizes: Object.fromEntries(parts.map((part) => [part.partNumber, part.sizeBytes])),
               })) as PresignMultipartPartsResponse;
 
               return response.data;

@@ -158,6 +158,8 @@ class MediaUploadService
                 $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->thumbnail_key);
             }
 
+            $this->abortActiveMultipartUpload($media);
+
             $media->forceDelete();
 
             return false;
@@ -178,6 +180,8 @@ class MediaUploadService
                 $media->thumbnail_key = null;
             }
         }
+
+        $this->abortActiveMultipartUpload($media);
 
         $media->size_bytes = $size;
         $media->upload_status = 'ready';
@@ -245,30 +249,40 @@ class MediaUploadService
 
     /**
      * @param  list<int>  $partNumbers
+     * @param  array<int, int>  $partSizes
      * @return list<array{part_number: int, url: string, headers: array<string, string>}>|null
      */
-    public function signedMultipartPartUrls(Media $media, string $uploadId, array $partNumbers): ?array
+    public function signedMultipartPartUrls(Media $media, string $uploadId, array $partNumbers, array $partSizes): ?array
     {
         if ($media->multipart_upload_id !== $uploadId || $media->isReady()) {
             return null;
         }
 
+        // Part-number ceiling: bound by the server-tracked count derived from the
+        // client's declared size (tighter than, and supersedes, the per-type max).
+        // Per-part size: must be present and within the session's part size so a
+        // signed URL can't be reused to push an oversized part.
         $maxPartNumber = $media->multipart_max_part_number;
-        if ($maxPartNumber === null || collect($partNumbers)->contains(fn (int $partNumber): bool => $partNumber > $maxPartNumber)) {
+        $partSizeBytes = $media->multipart_part_size_bytes ?? $this->multipartPartSizeBytes();
+        $uniquePartNumbers = collect($partNumbers)->unique()->sort()->values();
+
+        if ($maxPartNumber === null || $uniquePartNumbers->contains(fn (int $partNumber): bool => $partNumber > $maxPartNumber
+            || ! isset($partSizes[$partNumber])
+            || $partSizes[$partNumber] < 1
+            || $partSizes[$partNumber] > $partSizeBytes)) {
             return null;
         }
 
         $ttl = (int) config('media.multipart.url_ttl', 30);
 
-        return collect($partNumbers)
-            ->unique()
-            ->sort()
-            ->map(function (int $partNumber) use ($media, $uploadId, $ttl): array {
+        return $uniquePartNumbers
+            ->map(function (int $partNumber) use ($media, $uploadId, $partSizes, $ttl): array {
                 $signed = $this->storage->getSignedMultipartUploadPartUrl(
                     $media->disk,
                     $media->object_key,
                     $uploadId,
                     $partNumber,
+                    $partSizes[$partNumber],
                     $ttl,
                 );
 
@@ -326,6 +340,15 @@ class MediaUploadService
         }
 
         return true;
+    }
+
+    private function abortActiveMultipartUpload(Media $media): void
+    {
+        if ($media->multipart_upload_id === null) {
+            return;
+        }
+
+        $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
     }
 
     private function buildObjectKey(User $user, string $ulid, string $filename, string $mimeType): string
