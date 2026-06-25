@@ -272,12 +272,12 @@ class MediaController extends Controller
     }
 
     /**
-     * Show a single item by id. The uploader and admins get video originals;
-     * other authorized viewers only get the HLS playback surface.
+     * Show a single item by id. Numeric ids are only for the uploader's
+     * management surface (admins bypass via policy); shareable access uses ULIDs.
      */
     public function show(Request $request, Media $media): JsonResponse
     {
-        $this->authorizeOr404('view', $media);
+        $this->authorizeOr404('viewById', $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);

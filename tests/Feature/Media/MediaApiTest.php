@@ -330,7 +330,7 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.video.status', 'processing');
     }
 
-    public function test_other_user_video_by_id_does_not_expose_original_signed_url(): void
+    public function test_other_user_cannot_view_approved_media_by_id(): void
     {
         $this->fakeStorage();
         $owner = User::factory()->approved()->create();
@@ -338,9 +338,7 @@ class MediaApiTest extends TestCase
         $video = Media::factory()->for($owner)->video()->approved()->create();
 
         $this->actingAs($viewer)->getJson("/api/media/{$video->id}")
-            ->assertOk()
-            ->assertJsonPath('data.url', null)
-            ->assertJsonPath('data.video.status', 'processing');
+            ->assertNotFound();
     }
 
     public function test_owner_video_endpoint_still_includes_original_signed_url(): void
@@ -480,8 +478,12 @@ class MediaApiTest extends TestCase
         // Visible before the owner is disabled...
         $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertOk();
 
-        // ...and hidden on every path once the owner is admin-disabled, matching
-        // the deactivated/deleted treatment (and StoryPolicy).
+        // The numeric-id route is never a public sharing surface.
+        $this->actingAs($viewer)->getJson("/api/media/{$approved->id}")->assertNotFound();
+
+        // ...and the shareable ULID route is hidden once the owner is
+        // admin-disabled, matching the deactivated/deleted treatment
+        // (and StoryPolicy).
         $owner->forceFill(['is_disabled' => true])->save();
 
         $this->actingAs($viewer)->getJson("/api/media/by-ulid/{$approved->ulid}")->assertNotFound();
