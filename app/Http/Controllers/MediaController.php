@@ -196,6 +196,7 @@ class MediaController extends Controller
             $media,
             (string) $request->validated('upload_id'),
             $request->partNumbers(),
+            $request->partSizes(),
         );
 
         if ($parts === null) {

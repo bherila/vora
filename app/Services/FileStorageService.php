@@ -87,7 +87,7 @@ class FileStorageService
     /**
      * @return array{url: string, headers: array<string, string>}
      */
-    public function getSignedMultipartUploadPartUrl(string $disk, string $key, string $uploadId, int $partNumber, int $ttlMinutes = 30): array
+    public function getSignedMultipartUploadPartUrl(string $disk, string $key, string $uploadId, int $partNumber, int $contentLength, int $ttlMinutes = 30): array
     {
         $client = $this->s3Client($disk);
         $command = $client->getCommand('UploadPart', [
@@ -95,6 +95,7 @@ class FileStorageService
             'Key' => $key,
             'UploadId' => $uploadId,
             'PartNumber' => $partNumber,
+            'ContentLength' => $contentLength,
         ]);
 
         $signedRequest = $client->createPresignedRequest($command, now()->addMinutes($ttlMinutes));

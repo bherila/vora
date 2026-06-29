@@ -22,6 +22,8 @@ class PresignMultipartMediaPartsRequest extends FormRequest
             'upload_id' => ['required', 'string', 'max:1024'],
             'part_numbers' => ['required', 'array', 'min:1', 'max:1000'],
             'part_numbers.*' => ['required', 'integer', 'min:1', 'max:'.$maxParts, 'distinct'],
+            'part_sizes' => ['required', 'array', 'min:1', 'max:1000'],
+            'part_sizes.*' => ['required', 'integer', 'min:1'],
         ];
     }
 
@@ -31,5 +33,18 @@ class PresignMultipartMediaPartsRequest extends FormRequest
     public function partNumbers(): array
     {
         return array_values(array_map('intval', $this->validated('part_numbers')));
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function partSizes(): array
+    {
+        $sizes = [];
+        foreach ($this->validated('part_sizes') as $partNumber => $sizeBytes) {
+            $sizes[(int) $partNumber] = (int) $sizeBytes;
+        }
+
+        return $sizes;
     }
 }

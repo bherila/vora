@@ -180,6 +180,56 @@ class MediaServicesTest extends TestCase
         $this->assertNull($fresh->moderated_by_user_id);
     }
 
+    public function test_complete_upload_aborts_active_multipart_session_before_marking_ready(): void
+    {
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldReceive('fileExists')->with('s3', 'uploads/0/video.mp4')->andReturn(true);
+            $mock->shouldReceive('getFileSize')->with('s3', 'uploads/0/video.mp4')->andReturn(1024);
+            $mock->shouldReceive('abortMultipartUpload')->once()->with('s3', 'uploads/0/video.mp4', 'upload-123')->andReturn(true);
+        });
+
+        $media = Media::factory()->video()->pendingUpload()->create([
+            'disk' => 's3',
+            'object_key' => 'uploads/0/video.mp4',
+            'multipart_upload_id' => 'upload-123',
+            'multipart_part_size_bytes' => 16 * 1024 * 1024,
+            'multipart_initiated_at' => now(),
+        ]);
+
+        $this->assertTrue(app(MediaUploadService::class)->completeUpload($media));
+
+        $fresh = $media->fresh();
+        $this->assertSame('ready', $fresh->upload_status);
+        $this->assertNull($fresh->multipart_upload_id);
+    }
+
+    public function test_multipart_presign_rejects_parts_beyond_media_size_limit(): void
+    {
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldNotReceive('getSignedMultipartUploadPartUrl');
+        });
+
+        $media = Media::factory()->video()->pendingUpload()->create([
+            'multipart_upload_id' => 'upload-123',
+            'multipart_part_size_bytes' => 16 * 1024 * 1024,
+            'multipart_max_part_number' => 2,
+            'multipart_initiated_at' => now(),
+        ]);
+
+        $service = app(MediaUploadService::class);
+
+        // A part number beyond the server-tracked max is rejected.
+        $this->assertNull($service->signedMultipartPartUrls($media, 'upload-123', [3], [3 => 1024]));
+
+        // A part whose declared size exceeds the session part size is rejected.
+        $this->assertNull($service->signedMultipartPartUrls(
+            $media,
+            'upload-123',
+            [1],
+            [1 => 16 * 1024 * 1024 + 1],
+        ));
+    }
+
     public function test_complete_upload_is_idempotent_and_keeps_review_when_already_ready(): void
     {
         Storage::fake('photos');
