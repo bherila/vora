@@ -414,12 +414,14 @@ class MediaApiTest extends TestCase
             'disk' => 's3',
             'object_key' => 'uploads/0/video.mp4',
             'mime_type' => 'video/mp4',
+            'multipart_expected_size_bytes' => 1024,
         ]);
 
         $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/init")
             ->assertOk()
             ->assertJsonPath('data.upload_id', 'upload-123')
-            ->assertJsonPath('data.part_size_bytes', 16 * 1024 * 1024);
+            ->assertJsonPath('data.part_size_bytes', 16 * 1024 * 1024)
+            ->assertJsonPath('data.max_part_number', 1);
 
         $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/parts", [
             'upload_id' => 'upload-123',
@@ -440,6 +442,34 @@ class MediaApiTest extends TestCase
         $this->assertSame('ready', $fresh->upload_status);
         $this->assertNull($fresh->multipart_upload_id);
         $this->assertSame(1024, $fresh->size_bytes);
+    }
+
+    public function test_multipart_part_presign_rejects_parts_beyond_declared_size(): void
+    {
+        $this->mock(FileStorageService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('createMultipartUpload')
+                ->once()
+                ->with('s3', 'uploads/0/video.mp4', 'video/mp4')
+                ->andReturn('upload-123');
+            $mock->shouldNotReceive('getSignedMultipartUploadPartUrl');
+        });
+
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->video()->pendingUpload()->create([
+            'disk' => 's3',
+            'object_key' => 'uploads/0/video.mp4',
+            'mime_type' => 'video/mp4',
+            'multipart_expected_size_bytes' => 1024,
+        ]);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/init")
+            ->assertOk()
+            ->assertJsonPath('data.max_part_number', 1);
+
+        $this->actingAs($user)->postJson("/api/media/{$media->id}/multipart/parts", [
+            'upload_id' => 'upload-123',
+            'part_numbers' => [2],
+        ])->assertNotFound();
     }
 
     public function test_multipart_upload_can_be_aborted(): void
