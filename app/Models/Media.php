@@ -46,6 +46,10 @@ class Media extends Model
         'reviewed_thumbnail_key',
         'thumbnail_key',
         'multipart_upload_id',
+        'multipart_part_size_bytes',
+        'multipart_expected_size_bytes',
+        'multipart_max_part_number',
+        'multipart_initiated_at',
         // Dedup plumbing is internal; only the admin presenter exposes it.
         'file_hash',
         'duplicate_of_media_id',
@@ -80,6 +84,8 @@ class Media extends Model
         'upload_status',
         'multipart_upload_id',
         'multipart_part_size_bytes',
+        'multipart_expected_size_bytes',
+        'multipart_max_part_number',
         'multipart_initiated_at',
         'audience',
         'discoverable',
@@ -101,6 +107,8 @@ class Media extends Model
             'pdq_checked_at' => 'datetime',
             'size_bytes' => 'integer',
             'multipart_part_size_bytes' => 'integer',
+            'multipart_expected_size_bytes' => 'integer',
+            'multipart_max_part_number' => 'integer',
             'multipart_initiated_at' => 'datetime',
             'character_id' => 'integer',
         ];

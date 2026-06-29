@@ -13,7 +13,9 @@ return new class extends Migration
             $table->string('reviewed_thumbnail_key')->nullable()->after('thumbnail_key');
             $table->string('multipart_upload_id')->nullable()->after('upload_status');
             $table->unsignedBigInteger('multipart_part_size_bytes')->nullable()->after('multipart_upload_id');
-            $table->timestamp('multipart_initiated_at')->nullable()->after('multipart_part_size_bytes');
+            $table->unsignedBigInteger('multipart_expected_size_bytes')->nullable()->after('multipart_part_size_bytes');
+            $table->unsignedInteger('multipart_max_part_number')->nullable()->after('multipart_expected_size_bytes');
+            $table->timestamp('multipart_initiated_at')->nullable()->after('multipart_max_part_number');
         });
     }
 
@@ -25,6 +27,8 @@ return new class extends Migration
                 'reviewed_thumbnail_key',
                 'multipart_upload_id',
                 'multipart_part_size_bytes',
+                'multipart_expected_size_bytes',
+                'multipart_max_part_number',
                 'multipart_initiated_at',
             ]);
         });

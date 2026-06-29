@@ -68,6 +68,7 @@ class MediaUploadService
         bool $discoverable = true,
         ?int $characterId = null,
         ?string $fileHash = null,
+        ?int $expectedSizeBytes = null,
     ): array {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -88,6 +89,7 @@ class MediaUploadService
             'file_hash' => $fileHash,
             'title' => $title,
             'upload_status' => 'pending',
+            'multipart_expected_size_bytes' => $expectedSizeBytes,
             'audience' => $audience,
             'discoverable' => $discoverable,
         ]);
@@ -181,6 +183,8 @@ class MediaUploadService
         $media->upload_status = 'ready';
         $media->multipart_upload_id = null;
         $media->multipart_part_size_bytes = null;
+        $media->multipart_expected_size_bytes = null;
+        $media->multipart_max_part_number = null;
         $media->multipart_initiated_at = null;
         $media->reviewed_object_key = null;
         $media->reviewed_thumbnail_key = null;
@@ -198,29 +202,43 @@ class MediaUploadService
     }
 
     /**
-     * @return array{upload_id: string, part_size_bytes: int, expires_in_minutes: int}|null
+     * @return array{upload_id: string, part_size_bytes: int, max_part_number: int, expires_in_minutes: int}|null
      */
     public function initMultipartUpload(Media $media): ?array
     {
-        if ($media->isReady()) {
+        if ($media->isReady() || $media->multipart_expected_size_bytes === null) {
             return null;
         }
 
         if ($media->multipart_upload_id !== null) {
-            $this->abortMultipartUpload($media, $media->multipart_upload_id);
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
+            $media->multipart_upload_id = null;
+            $media->multipart_part_size_bytes = null;
+            $media->multipart_max_part_number = null;
+            $media->multipart_initiated_at = null;
+            $media->save();
         }
 
         $uploadId = $this->storage->createMultipartUpload($media->disk, $media->object_key, $media->mime_type);
         $partSize = $this->multipartPartSizeBytes();
+        $maxPartNumber = (int) ceil($media->multipart_expected_size_bytes / $partSize);
+
+        if ($maxPartNumber < 1 || $maxPartNumber > (int) config('media.multipart.max_parts', 10000)) {
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $uploadId);
+
+            return null;
+        }
 
         $media->multipart_upload_id = $uploadId;
         $media->multipart_part_size_bytes = $partSize;
+        $media->multipart_max_part_number = $maxPartNumber;
         $media->multipart_initiated_at = now();
         $media->save();
 
         return [
             'upload_id' => $uploadId,
             'part_size_bytes' => $partSize,
+            'max_part_number' => $maxPartNumber,
             'expires_in_minutes' => (int) config('media.multipart.url_ttl', 30),
         ];
     }
@@ -232,6 +250,11 @@ class MediaUploadService
     public function signedMultipartPartUrls(Media $media, string $uploadId, array $partNumbers): ?array
     {
         if ($media->multipart_upload_id !== $uploadId || $media->isReady()) {
+            return null;
+        }
+
+        $maxPartNumber = $media->multipart_max_part_number;
+        if ($maxPartNumber === null || collect($partNumbers)->contains(fn (int $partNumber): bool => $partNumber > $maxPartNumber)) {
             return null;
         }
 
@@ -268,10 +291,17 @@ class MediaUploadService
             return false;
         }
 
+        $maxPartNumber = $media->multipart_max_part_number;
+        if ($maxPartNumber === null || collect($parts)->contains(fn (array $part): bool => $part['part_number'] > $maxPartNumber)) {
+            return false;
+        }
+
         $this->storage->completeMultipartUpload($media->disk, $media->object_key, $uploadId, $parts);
         $media->refresh();
         $media->multipart_upload_id = null;
         $media->multipart_part_size_bytes = null;
+        $media->multipart_expected_size_bytes = null;
+        $media->multipart_max_part_number = null;
         $media->multipart_initiated_at = null;
         $media->save();
 
@@ -289,6 +319,8 @@ class MediaUploadService
         } finally {
             $media->multipart_upload_id = null;
             $media->multipart_part_size_bytes = null;
+            $media->multipart_expected_size_bytes = null;
+            $media->multipart_max_part_number = null;
             $media->multipart_initiated_at = null;
             $media->save();
         }
