@@ -40,6 +40,15 @@ class MediaService
      */
     public function softDelete(Media $media): void
     {
+        if ($media->multipart_upload_id !== null) {
+            $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
+            $media->forceFill([
+                'multipart_upload_id' => null,
+                'multipart_part_size_bytes' => null,
+                'multipart_initiated_at' => null,
+            ])->save();
+        }
+
         if (! $media->trashed()) {
             $media->delete();
         }
