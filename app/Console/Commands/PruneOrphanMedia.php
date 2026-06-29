@@ -38,7 +38,7 @@ class PruneOrphanMedia extends Command
         $cutoff = now()->subHours($hours);
         $thumbnailDisk = (string) config('media.thumbnail_disk');
 
-        $stale = Media::query()
+        $stale = Media::withTrashed()
             ->where('upload_status', 'pending')
             ->where('created_at', '<', $cutoff)
             ->get();

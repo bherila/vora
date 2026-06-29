@@ -20,6 +20,30 @@ class MediaServicesTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_soft_delete_aborts_pending_multipart_upload(): void
+    {
+        $media = Media::factory()->pendingUpload()->create([
+            'disk' => 'photos',
+            'multipart_upload_id' => 'upload-123',
+            'multipart_part_size_bytes' => 16 * 1024 * 1024,
+            'multipart_initiated_at' => now(),
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock) use ($media): void {
+            $mock->shouldReceive('abortMultipartUpload')
+                ->once()
+                ->with('photos', $media->object_key, 'upload-123');
+        });
+
+        app(MediaService::class)->softDelete($media);
+
+        $fresh = Media::withTrashed()->findOrFail($media->id);
+        $this->assertTrue($fresh->trashed());
+        $this->assertNull($fresh->multipart_upload_id);
+        $this->assertNull($fresh->multipart_part_size_bytes);
+        $this->assertNull($fresh->multipart_initiated_at);
+    }
+
     public function test_create_pending_upload_persists_record_and_interests(): void
     {
         $this->mock(FileStorageService::class, function ($mock): void {
