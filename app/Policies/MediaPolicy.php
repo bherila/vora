@@ -42,6 +42,20 @@ class MediaPolicy
         return $media->isApprovedContent() && $media->isViewableBy($user);
     }
 
+    /**
+     * Numeric-id lookups are an owner/admin management surface. Public sharing
+     * must use the unguessable ULID route so sequential ids cannot enumerate
+     * other users' media.
+     */
+    public function viewById(User $user, Media $media): bool
+    {
+        if ($media->trashed()) {
+            return false;
+        }
+
+        return $media->user_id === $user->id;
+    }
+
     public function complete(User $user, Media $media): bool
     {
         if ($media->trashed()) {
