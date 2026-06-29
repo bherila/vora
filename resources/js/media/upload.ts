@@ -18,6 +18,11 @@ interface SignedPart {
   headers: Record<string, string>;
 }
 
+export interface MultipartPartToSign {
+  partNumber: number;
+  sizeBytes: number;
+}
+
 export interface CompletedMultipartPart {
   part_number: number;
   etag: string;
@@ -34,7 +39,7 @@ export interface MultipartUploadSession {
 interface UploadMultipartFileOptions {
   sessionKey: string;
   session: MultipartUploadSession;
-  presignParts: (partNumbers: number[]) => Promise<SignedPart[]>;
+  presignParts: (parts: MultipartPartToSign[]) => Promise<SignedPart[]>;
   complete: (parts: CompletedMultipartPart[]) => Promise<void>;
   abort: () => Promise<void>;
   onProgress: (fraction: number) => void;
@@ -115,7 +120,7 @@ export async function uploadMultipartFile(file: File, options: UploadMultipartFi
       const end = Math.min(start + options.session.partSizeBytes, file.size);
       const blob = file.slice(start, end);
       const signedPart = await withRetries(async () => {
-        const [part] = await options.presignParts([partNumber]);
+        const [part] = await options.presignParts([{ partNumber, sizeBytes: blob.size }]);
         if (!part) {
           throw new Error('Upload part could not be signed.');
         }
@@ -167,6 +172,10 @@ function putBlobToSignedUrl(
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url, true);
     for (const [name, value] of Object.entries(headers)) {
+      if (name.toLowerCase() === 'content-length') {
+        continue;
+      }
+
       xhr.setRequestHeader(name, value);
     }
 
