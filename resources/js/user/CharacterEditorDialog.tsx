@@ -118,12 +118,12 @@ function LinkedSeparateField({ personaName, value, onChange, disabled }: LinkedS
     {
       linked: true,
       title: 'Linked',
-      copy: `People visiting ${personaName} can see she's yours, and anyone who follows you will also see ${personaName}'s followers-only posts.`,
+      copy: `People visiting ${personaName} can see this persona is yours, and anyone who follows you will also see ${personaName}'s followers-only posts.`,
     },
     {
       linked: false,
       title: 'Separate',
-      copy: `Nobody can tell ${personaName} is yours. She builds her own following from scratch.`,
+      copy: `Nobody can tell ${personaName} is yours. ${personaName} builds a following from scratch.`,
     },
   ];
 

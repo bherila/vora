@@ -385,11 +385,10 @@ exists" rule applied to the persona explainer below. Now that #102 has landed,
 the end-state wording is true and the control copy can be upgraded.
 
 *End state (now accurate — #102 merged):*
-> **Linked** — People visiting Kira can see she's yours, and anyone who follows
+> **Linked** — People visiting Kira can see this persona is yours, and anyone who follows
 > you will also see Kira's followers-only posts.
 >
-> **Separate** — Nobody can tell Kira is yours. She builds her own following from
-> scratch.
+> **Separate** — Nobody can tell Kira is yours. Kira builds a following from scratch.
 
 *Shipped in #101, before persona follows existed:*
 > **Linked** — People visiting Kira can see this persona is yours.
