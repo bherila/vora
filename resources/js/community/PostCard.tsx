@@ -235,7 +235,9 @@ export function PostCard({ post: initialPost, expanded = false, readOnly = false
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!readOnly && post.can_report && <ReportButton type="post" id={post.id} variant="ghost" />}
-            {!readOnly && <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>}
+            {!readOnly && (
+              <a className="text-sm underline underline-offset-4" href={`/p/${encodeURIComponent(post.ulid)}`}>Open</a>
+            )}
           </div>
         </div>
       </CardHeader>

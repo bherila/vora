@@ -332,7 +332,7 @@ export function FollowProfilePage() {
 
   useEffect(() => {
     if (viewAs && previewIdentity.current !== activeIdentityId) {
-      window.location.assign(`/me?view_as=${viewAs.mode}`);
+      window.location.assign(`/me${profileQuery(null, viewAs)}`);
     }
   }, [activeIdentityId, viewAs]);
 
