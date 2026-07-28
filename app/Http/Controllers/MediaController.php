@@ -32,6 +32,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class MediaController extends Controller
@@ -382,48 +383,50 @@ class MediaController extends Controller
         $user = $request->user();
         $privacyBefore = $media->privacySnapshot();
 
-        if ($request->has('title')) {
-            $title = $request->input('title');
-            $media->title = is_string($title) && trim($title) !== '' ? trim($title) : null;
-        }
+        return DB::transaction(function () use ($request, $media, $user, $privacyBefore): JsonResponse {
+            if ($request->has('title')) {
+                $title = $request->input('title');
+                $media->title = is_string($title) && trim($title) !== '' ? trim($title) : null;
+            }
 
-        if ($request->has('character_id')) {
-            $character = $request->character();
-            if ($character instanceof Character) {
-                $media->character_id = $character->id;
-                $media->audience = $character->audience;
-                $media->discoverable = $character->discoverable;
+            if ($request->has('character_id')) {
+                $character = $request->character();
+                if ($character instanceof Character) {
+                    $media->character_id = $character->id;
+                    $media->audience = $character->audience;
+                    $media->discoverable = $character->discoverable;
+                    $media->save();
+                    $media->syncAudienceMembers($this->characterAudienceUserIds($character));
+                } else {
+                    $media->character_id = null;
+                    $media->save();
+                }
+            } elseif ($request->has('audience')) {
+                if ($media->character_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Character media inherits character privacy. Detach the character to set privacy directly.',
+                    ], 422);
+                }
+                $media->audience = $request->audience();
+                $media->discoverable = $request->discoverable();
                 $media->save();
-                $media->syncAudienceMembers($this->characterAudienceUserIds($character));
+                $media->syncAudienceMembers($media->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
             } else {
-                $media->character_id = null;
                 $media->save();
             }
-        } elseif ($request->has('audience')) {
-            if ($media->character_id !== null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Character media inherits character privacy. Detach the character to set privacy directly.',
-                ], 422);
-            }
-            $media->audience = $request->audience();
-            $media->discoverable = $request->discoverable();
-            $media->save();
-            $media->syncAudienceMembers($media->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
-        } else {
-            $media->save();
-        }
 
-        $this->auditor->record($media, $user, $privacyBefore, $media->privacySnapshot(), $request);
+            $this->auditor->record($media, $user, $privacyBefore, $media->privacySnapshot(), $request);
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->responder->item(
-                $media->fresh(['character:id,display_name', 'interests']),
-                resolveHls: false,
-                includeOriginalVideoUrl: true,
-            ),
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $this->responder->item(
+                    $media->fresh(['character:id,display_name', 'interests']),
+                    resolveHls: false,
+                    includeOriginalVideoUrl: true,
+                ),
+            ]);
+        });
     }
 
     public function bulkUpdate(BulkUpdateMediaRequest $request): JsonResponse
@@ -444,27 +447,36 @@ class MediaController extends Controller
         $character = $request->character();
         $characterAudienceUserIds = $character instanceof Character ? $this->characterAudienceUserIds($character) : [];
 
-        foreach ($media as $item) {
-            $privacyBefore = $item->privacySnapshot();
+        DB::transaction(function () use (
+            $media,
+            $action,
+            $character,
+            $characterAudienceUserIds,
+            $request,
+            $user,
+        ): void {
+            foreach ($media as $item) {
+                $privacyBefore = $item->privacySnapshot();
 
-            if ($action === BulkUpdateMediaRequest::ACTION_ASSIGN_CHARACTER && $character instanceof Character) {
-                $item->character_id = $character->id;
-                $item->audience = $character->audience;
-                $item->discoverable = $character->discoverable;
-                $item->save();
-                $item->syncAudienceMembers($characterAudienceUserIds);
-                $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
-            } elseif ($action === BulkUpdateMediaRequest::ACTION_CLEAR_CHARACTER) {
-                $item->character_id = null;
-                $item->save();
-            } elseif ($action === BulkUpdateMediaRequest::ACTION_SET_PRIVACY) {
-                $item->audience = $request->audience();
-                $item->discoverable = $request->discoverable();
-                $item->save();
-                $item->syncAudienceMembers($item->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
-                $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
+                if ($action === BulkUpdateMediaRequest::ACTION_ASSIGN_CHARACTER && $character instanceof Character) {
+                    $item->character_id = $character->id;
+                    $item->audience = $character->audience;
+                    $item->discoverable = $character->discoverable;
+                    $item->save();
+                    $item->syncAudienceMembers($characterAudienceUserIds);
+                    $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
+                } elseif ($action === BulkUpdateMediaRequest::ACTION_CLEAR_CHARACTER) {
+                    $item->character_id = null;
+                    $item->save();
+                } elseif ($action === BulkUpdateMediaRequest::ACTION_SET_PRIVACY) {
+                    $item->audience = $request->audience();
+                    $item->discoverable = $request->discoverable();
+                    $item->save();
+                    $item->syncAudienceMembers($item->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []);
+                    $this->auditor->record($item, $user, $privacyBefore, $item->privacySnapshot(), $request);
+                }
             }
-        }
+        });
 
         $fresh = Media::query()
             ->whereIn('id', $request->mediaIds())

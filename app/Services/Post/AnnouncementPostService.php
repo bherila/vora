@@ -11,7 +11,6 @@ use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostAttachment;
 use App\Models\Story;
-use App\Models\StoryAuthor;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -31,61 +30,64 @@ class AnnouncementPostService
             return;
         }
 
-        $attachment = $this->announcementAttachmentFor($content);
-        if ($attachment !== null) {
-            $post = Post::withTrashed()->find($attachment->post_id);
-            if ($post !== null && ! $post->trashed()) {
-                $this->copyPrivacy($post, $content);
+        $post = DB::transaction(function () use ($content): ?Post {
+            // Serialize approval/publication races on the content itself, then
+            // recheck attachments only after acquiring that lock.
+            $locked = $content::withTrashed()
+                ->whereKey($content->getKey())
+                ->lockForUpdate()
+                ->first() ?? $content;
+
+            $attachment = $this->announcementAttachmentFor($locked);
+            if ($attachment !== null) {
+                $existing = Post::withTrashed()->lockForUpdate()->find($attachment->post_id);
+                if ($existing !== null && ! $existing->trashed()) {
+                    if ($this->isReadyToAnnounce($locked)) {
+                        $this->copyPrivacy($existing, $locked);
+                    } else {
+                        $this->hide($existing);
+                    }
+                }
+
+                return null;
             }
 
-            return;
-        }
-
-        // A user already shared this item manually. That is its one feed
-        // announcement; approving it must not add a duplicate post.
-        if ($this->anyAttachmentFor($content) !== null) {
-            return;
-        }
-
-        if (! $this->isReadyToAnnounce($content)) {
-            return;
-        }
-
-        $post = DB::transaction(function () use ($content): ?Post {
-            // Recheck inside the write transaction so repeated approvals remain
-            // idempotent.
-            if ($this->anyAttachmentFor($content) !== null) {
+            // A user already shared this item manually. That is its one feed
+            // announcement; approving it must not add a duplicate post.
+            if ($this->anyAttachmentFor($locked) !== null || ! $this->isReadyToAnnounce($locked)) {
                 return null;
             }
 
             $post = new Post([
-                'user_id' => $content->user_id,
-                'character_id' => $this->characterId($content),
+                'user_id' => $locked->user_id,
+                'character_id' => $this->characterId($locked),
                 'ulid' => (string) Str::ulid(),
-                'body' => $content instanceof Media ? 'Shared new media.' : 'Published a new story.',
-                'audience' => $content->audience,
-                'discoverable' => (bool) $content->discoverable,
+                'body' => $locked instanceof Media ? 'Shared new media.' : 'Published a new story.',
+                'audience' => $locked->audience,
+                'discoverable' => (bool) $locked->discoverable,
                 'is_announcement' => true,
             ]);
             $post->moderation_status = ModerationStatus::Approved;
             $post->save();
             $post->attachments()->create([
-                'attachable_type' => $content->getMorphClass(),
-                'attachable_id' => $content->getKey(),
+                'attachable_type' => $locked->getMorphClass(),
+                'attachable_id' => $locked->getKey(),
             ]);
-            $this->copyPrivacy($post, $content);
+            $this->copyPrivacy($post, $locked);
 
             return $post;
         });
 
         if ($post !== null) {
-            NotifyFollowersOfPost::dispatch($post);
+            NotifyFollowersOfPost::dispatch($post)->afterCommit();
         }
     }
 
     private function isReadyToAnnounce(Media|Story $content): bool
     {
-        if (! (bool) $content->announce_on_approval || ! $content->isApprovedContent()) {
+        if ($content->trashed()
+            || ! (bool) $content->announce_on_approval
+            || ! $content->isApprovedContent()) {
             return false;
         }
 
@@ -102,6 +104,7 @@ class AnnouncementPostService
             'audience' => $content->audience,
             'discoverable' => (bool) $content->discoverable,
             'character_id' => $this->characterId($content),
+            'moderation_status' => ModerationStatus::Approved,
         ])->save();
 
         $post->syncAudienceMembers(
@@ -117,13 +120,17 @@ class AnnouncementPostService
             return $content->character_id !== null ? (int) $content->character_id : null;
         }
 
-        $characterId = $content->authors()
-            ->where('user_id', $content->user_id)
-            ->where('role', StoryAuthor::ROLE_OWNER)
-            ->where('status', StoryAuthor::STATUS_ACCEPTED)
-            ->value('character_id');
+        // Story privacy has no persona context in HasPrivacyPolicy. A persona
+        // byline here would apply Followers/Mutuals to a different follow scope
+        // than the attached story, so stories announce as their owning account.
+        return null;
+    }
 
-        return $characterId !== null ? (int) $characterId : null;
+    private function hide(Post $post): void
+    {
+        if (! $post->isPendingReview()) {
+            $post->forceFill(['moderation_status' => ModerationStatus::Pending])->save();
+        }
     }
 
     private function announcementAttachmentFor(Media|Story $content): ?PostAttachment

@@ -4,6 +4,7 @@ namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
 use App\Enums\StoryStatus;
+use App\Jobs\NotifyFollowersOfPost;
 use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
@@ -11,6 +12,8 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class AnnouncementPostTest extends TestCase
@@ -57,7 +60,25 @@ class AnnouncementPostTest extends TestCase
         $this->assertSame(0, Post::query()->count());
     }
 
-    public function test_published_story_is_announced_on_approval_with_its_owner_persona(): void
+    public function test_pending_media_cannot_be_manually_attached_to_suppress_its_later_announcement(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $media = Media::factory()->for($owner)->create(['announce_on_approval' => true]);
+
+        $this->actingAs($owner)->postJson('/api/posts', [
+            'body' => 'Share before review',
+            'attachments' => [['type' => 'media', 'id' => $media->id]],
+        ])->assertUnprocessable();
+
+        $media->approve($admin);
+
+        $post = Post::query()->sole();
+        $this->assertTrue($post->is_announcement);
+        $this->assertSame($media->id, $post->attachments()->sole()->attachable_id);
+    }
+
+    public function test_story_announcement_uses_the_storys_account_scoped_privacy_identity(): void
     {
         $owner = User::factory()->approved()->create();
         $admin = User::factory()->admin()->create();
@@ -70,11 +91,46 @@ class AnnouncementPostTest extends TestCase
         $story->approve($admin);
 
         $post = Post::query()->sole();
-        $this->assertSame($character->id, $post->character_id);
+        $this->assertNull($post->character_id);
         $this->assertTrue($post->attachments()
             ->where('attachable_type', $story->getMorphClass())
             ->where('attachable_id', $story->id)
             ->exists());
+    }
+
+    public function test_story_announcement_matches_account_follower_and_mutual_privacy_exactly(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $accountFollower = User::factory()->approved()->create();
+        $personaFollower = User::factory()->approved()->create();
+        $mutual = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create(['is_linked' => false]);
+
+        $this->follow($accountFollower, $owner);
+        $this->follow($personaFollower, $owner, $persona);
+        $this->follow($mutual, $owner);
+        $this->follow($owner, $mutual);
+
+        foreach ([Audience::Followers, Audience::Mutuals] as $audience) {
+            $story = Story::factory()->for($owner)->published()->audience($audience)->create([
+                'announce_on_approval' => true,
+            ]);
+            $story->authors()->where('user_id', $owner->id)->update(['character_id' => $persona->id]);
+            $story->approve($admin);
+            $post = Post::query()->where('is_announcement', true)->latest('id')->firstOrFail();
+
+            foreach ([$accountFollower, $personaFollower, $mutual] as $viewer) {
+                $this->assertSame(
+                    $story->isViewableBy($viewer),
+                    $post->isViewableBy($viewer),
+                    "Announcement privacy diverged for {$audience->value}.",
+                );
+            }
+
+            $this->assertNull($post->character_id);
+        }
     }
 
     public function test_story_is_not_announced_until_both_published_and_approved_and_never_duplicates(): void
@@ -118,11 +174,84 @@ class AnnouncementPostTest extends TestCase
         $this->assertSame([$replacement->id], $post->audienceMembers()->pluck('user_id')->all());
     }
 
+    public function test_story_announcement_waits_for_final_specific_people_allowlist_before_dispatch(): void
+    {
+        Queue::fake();
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $allowed = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->audience(Audience::SpecificPeople)->create([
+            'announce_on_approval' => true,
+        ]);
+        $story->approve($admin);
+
+        DB::transaction(function () use ($story, $allowed): void {
+            $story->update(['status' => StoryStatus::Published, 'published_at' => now()]);
+            $story->syncAudienceMembers([$allowed->id]);
+
+            $this->assertSame([$allowed->id], Post::query()->sole()->audienceMembers()->pluck('user_id')->all());
+        });
+
+        Queue::assertPushed(
+            NotifyFollowersOfPost::class,
+            fn ($job): bool => $job->afterCommit === true,
+        );
+        $this->assertSame([$allowed->id], Post::query()->sole()->audienceMembers()->pluck('user_id')->all());
+    }
+
+    public function test_announcement_privacy_propagation_rolls_back_as_one_aggregate(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $allowed = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->audience(Audience::SpecificPeople)->create([
+            'announce_on_approval' => true,
+            'discoverable' => false,
+        ]);
+        $media->syncAudienceMembers([$allowed->id]);
+        $media->approve($admin);
+
+        try {
+            DB::transaction(function () use ($media): void {
+                $media->update(['audience' => Audience::Everyone, 'discoverable' => true]);
+                $media->syncAudienceMembers([]);
+                throw new \RuntimeException('rollback');
+            });
+        } catch (\RuntimeException) {
+            // Expected: both content and announcement privacy must roll back.
+        }
+
+        $post = Post::query()->sole()->refresh();
+        $this->assertSame(Audience::SpecificPeople, $post->audience);
+        $this->assertFalse($post->discoverable);
+        $this->assertSame([$allowed->id], $post->audienceMembers()->pluck('user_id')->all());
+    }
+
+    public function test_unavailable_content_hides_its_announcement_and_restore_does_not_redispatch(): void
+    {
+        Queue::fake();
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
+        $story->approve($admin);
+
+        Queue::assertPushed(NotifyFollowersOfPost::class, 1);
+        $post = Post::query()->sole();
+        $this->assertTrue($post->isApprovedContent());
+
+        $story->update(['status' => StoryStatus::Draft]);
+        $this->assertTrue($post->refresh()->isPendingReview());
+
+        $story->update(['status' => StoryStatus::Published]);
+        $this->assertTrue($post->refresh()->isApprovedContent());
+        Queue::assertPushed(NotifyFollowersOfPost::class, 1);
+    }
+
     public function test_manual_post_is_clamped_to_its_most_restrictive_attachment(): void
     {
         $owner = User::factory()->approved()->create();
         $allowed = User::factory()->approved()->create();
-        $media = Media::factory()->for($owner)->audience(Audience::SpecificPeople)->create([
+        $media = Media::factory()->for($owner)->approved()->audience(Audience::SpecificPeople)->create([
             'discoverable' => false,
         ]);
         $media->syncAudienceMembers([$allowed->id]);
@@ -152,7 +281,7 @@ class AnnouncementPostTest extends TestCase
             'status' => FollowRequest::STATUS_ACCEPTED,
             'responded_at' => now(),
         ]);
-        $media = Media::factory()->for($owner)->audience(Audience::SpecificPeople)->create();
+        $media = Media::factory()->for($owner)->approved()->audience(Audience::SpecificPeople)->create();
         $media->syncAudienceMembers([$follower->id, $formerFollower->id]);
 
         $this->actingAs($owner)->postJson('/api/posts', [
@@ -184,5 +313,16 @@ class AnnouncementPostTest extends TestCase
         $second->delete();
         $this->assertNotNull($secondPost->fresh());
         $this->assertSame(1, $secondPost->attachments()->count());
+    }
+
+    private function follow(User $requester, User $recipient, ?Character $persona = null): void
+    {
+        FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'recipient_character_id' => $persona?->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
     }
 }

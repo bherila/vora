@@ -18,4 +18,14 @@ class ContentAnnouncementObserver
     {
         $this->announcements->synchronize($content);
     }
+
+    public function deleted(Media|Story $content): void
+    {
+        $this->announcements->synchronize($content);
+    }
+
+    public function restored(Media|Story $content): void
+    {
+        $this->announcements->synchronize($content);
+    }
 }

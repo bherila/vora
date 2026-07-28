@@ -10,10 +10,8 @@ use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\StaticPage;
 use App\Models\Story;
-use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Observers\ContentAnnouncementObserver;
-use App\Observers\StoryAuthorAnnouncementObserver;
 use App\Policies\CharacterPolicy;
 use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
@@ -54,7 +52,6 @@ class AppServiceProvider extends ServiceProvider
         });
         Media::observe(ContentAnnouncementObserver::class);
         Story::observe(ContentAnnouncementObserver::class);
-        StoryAuthor::observe(StoryAuthorAnnouncementObserver::class);
 
         // Admin gate — admin flag plus the full login access model (approved and not
         // disabled). Used by admin routes and the package's audit-log endpoints
