@@ -216,7 +216,7 @@ class FavoriteService
                 'id' => $item->id,
                 'label' => $item->display_name,
                 'subtitle' => 'Character',
-                'href' => "/users/{$item->user_id}",
+                'href' => "/c/{$item->ulid}",
                 'thumbnail_url' => UserPresenter::pictureUrl($item->profilePicture, $this->responder, $viewer),
             ],
             default => [

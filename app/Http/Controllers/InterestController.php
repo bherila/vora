@@ -12,6 +12,7 @@ use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InterestController extends Controller
 {
@@ -133,6 +134,12 @@ class InterestController extends Controller
 
         DB::transaction(function () use ($character, $inherit): void {
             $lockedCharacter = Character::query()->lockForUpdate()->findOrFail($character->id);
+
+            if ($inherit && ! $lockedCharacter->is_linked) {
+                throw ValidationException::withMessages([
+                    'inherit' => 'Separate personas use their own interests.',
+                ]);
+            }
 
             if ($inherit) {
                 $lockedCharacter->interestRatings()->delete();

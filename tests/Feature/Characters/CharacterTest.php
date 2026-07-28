@@ -427,6 +427,9 @@ class CharacterTest extends TestCase
             'is_linked' => false,
             'inherit_interests' => true,
         ]);
+
+        $this->assertFalse($character->inherit_interests);
+
         InterestRating::query()->create([
             'user_id' => $user->id,
             'character_id' => null,
@@ -435,10 +438,33 @@ class CharacterTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => false])
-            ->assertOk()
-            ->assertJsonPath('data.inherit_interests', false);
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => true])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('inherit');
 
+        $this->assertDatabaseMissing('interest_ratings', [
+            'character_id' => $character->id,
+        ]);
+    }
+
+    public function test_switching_a_linked_character_to_separate_clears_its_interest_fingerprint(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Identifying Interest']);
+        $character = Character::factory()->for($user)->create([
+            'is_linked' => true,
+            'inherit_interests' => false,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 7,
+        ]);
+
+        $character->update(['is_linked' => false]);
+
+        $this->assertFalse($character->refresh()->inherit_interests);
         $this->assertDatabaseMissing('interest_ratings', [
             'character_id' => $character->id,
         ]);

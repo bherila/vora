@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Stories;
 
+use App\Models\Character;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,5 +50,34 @@ class AdminStoryTest extends TestCase
         $this->actingAs($owner)->getJson("/api/stories/{$story->id}")
             ->assertOk()
             ->assertJsonMissingPath('data.moderation_status');
+    }
+
+    public function test_admin_payload_retains_the_owner_behind_a_separate_persona(): void
+    {
+        $admin = User::factory()->approved()->create(['is_admin' => true]);
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $story = Story::factory()->for($owner)->published()->create();
+        $story->authors()->where('user_id', $owner->id)->update(['character_id' => $persona->id]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $persona->id]);
+        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $owner->id]);
+
+        $response = $this->actingAs($admin)->getJson('/api/admin/stories')
+            ->assertOk()
+            ->assertJsonPath('data.0.owner.id', $owner->id)
+            ->assertJsonPath('data.0.owner.display_name', 'Private Human Identity')
+            ->assertJsonPath('data.0.authors.0.user_id', $owner->id)
+            ->assertJsonPath('data.0.authors.0.character_id', $persona->id);
+
+        $involvements = collect($response->json('data.0.involves'));
+        $this->assertTrue($involvements->contains(
+            fn (array $item): bool => $item['type'] === 'character' && $item['id'] === $persona->id,
+        ));
+        $this->assertTrue($involvements->contains(
+            fn (array $item): bool => $item['type'] === 'user' && $item['id'] === $owner->id,
+        ));
     }
 }

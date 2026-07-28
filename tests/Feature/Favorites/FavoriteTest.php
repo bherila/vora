@@ -215,7 +215,8 @@ class FavoriteTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $character->id)
-            ->assertJsonPath('data.0.type', 'character');
+            ->assertJsonPath('data.0.type', 'character')
+            ->assertJsonPath('data.0.href', "/c/{$character->ulid}");
     }
 
     public function test_characters_of_unapproved_or_inactive_owners_remain_hidden(): void
