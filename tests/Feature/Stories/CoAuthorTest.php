@@ -68,6 +68,111 @@ class CoAuthorTest extends TestCase
         $this->actingAs($invitee)->patchJson("/api/stories/{$story->id}", ['title' => 'Nope'])->assertNotFound();
     }
 
+    public function test_each_author_can_select_one_of_their_own_characters(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $ownerCharacter = Character::factory()->for($owner)->create(['display_name' => 'Owner Persona']);
+        $coAuthorCharacter = Character::factory()->for($coAuthor)->create(['display_name' => 'Co-author Persona']);
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create([
+            'user_id' => $coAuthor->id,
+            'role' => StoryAuthor::ROLE_CO_AUTHOR,
+            'status' => StoryAuthor::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->patchJson("/api/stories/{$story->id}/authors/{$owner->id}", ['character_id' => $ownerCharacter->id])
+            ->assertOk()
+            ->assertJsonPath('data.0.character_id', $ownerCharacter->id)
+            ->assertJsonPath('data.0.display_name', 'Owner Persona');
+
+        $this->actingAs($coAuthor)
+            ->patchJson("/api/stories/{$story->id}/authors/{$coAuthor->id}", ['character_id' => $coAuthorCharacter->id])
+            ->assertOk();
+
+        $this->assertDatabaseHas('story_authors', [
+            'story_id' => $story->id,
+            'user_id' => $owner->id,
+            'character_id' => $ownerCharacter->id,
+        ]);
+        $this->assertDatabaseHas('story_authors', [
+            'story_id' => $story->id,
+            'user_id' => $coAuthor->id,
+            'character_id' => $coAuthorCharacter->id,
+        ]);
+    }
+
+    public function test_author_cannot_select_another_users_character(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $foreignCharacter = Character::factory()->for($owner)->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create([
+            'user_id' => $coAuthor->id,
+            'role' => StoryAuthor::ROLE_CO_AUTHOR,
+            'status' => StoryAuthor::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($coAuthor)
+            ->patchJson("/api/stories/{$story->id}/authors/{$coAuthor->id}", ['character_id' => $foreignCharacter->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('character_id');
+
+        $this->assertDatabaseHas('story_authors', [
+            'story_id' => $story->id,
+            'user_id' => $coAuthor->id,
+            'character_id' => null,
+        ]);
+    }
+
+    public function test_author_cannot_choose_another_co_authors_identity(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $coAuthor = User::factory()->approved()->create();
+        $coAuthorCharacter = Character::factory()->for($coAuthor)->create();
+        $story = Story::factory()->for($owner)->create();
+        $story->authors()->create([
+            'user_id' => $coAuthor->id,
+            'role' => StoryAuthor::ROLE_CO_AUTHOR,
+            'status' => StoryAuthor::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->patchJson("/api/stories/{$story->id}/authors/{$coAuthor->id}", ['character_id' => $coAuthorCharacter->id])
+            ->assertForbidden();
+    }
+
+    public function test_non_author_cannot_probe_story_through_identity_selection(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $strangerCharacter = Character::factory()->for($stranger)->create();
+        $story = Story::factory()->for($owner)->create();
+
+        $this->actingAs($stranger)
+            ->patchJson("/api/stories/{$story->id}/authors/{$stranger->id}", ['character_id' => $strangerCharacter->id])
+            ->assertNotFound();
+    }
+
+    public function test_deleting_selected_character_cascades_its_authorship_row(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+        $story = Story::factory()->for($owner)->create();
+        $author = $story->authors()->where('user_id', $owner->id)->firstOrFail();
+        $author->update(['character_id' => $character->id]);
+
+        $character->forceDelete();
+
+        $this->assertDatabaseMissing('story_authors', ['id' => $author->id]);
+        $this->assertDatabaseHas('stories', ['id' => $story->id]);
+    }
+
     public function test_declining_removes_the_invite(): void
     {
         $owner = User::factory()->approved()->create();

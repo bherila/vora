@@ -31,6 +31,7 @@ class StoryAuthor extends Model
     protected $fillable = [
         'story_id',
         'user_id',
+        'character_id',
         'invited_by_user_id',
         'role',
         'status',
@@ -43,6 +44,7 @@ class StoryAuthor extends Model
     protected function casts(): array
     {
         return [
+            'character_id' => 'integer',
             'responded_at' => 'datetime',
         ];
     }
@@ -91,6 +93,16 @@ class StoryAuthor extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The persona this author publishes the story as, or null for themselves.
+     *
+     * @return BelongsTo<Character, $this>
+     */
+    public function character(): BelongsTo
+    {
+        return $this->belongsTo(Character::class);
     }
 
     /**

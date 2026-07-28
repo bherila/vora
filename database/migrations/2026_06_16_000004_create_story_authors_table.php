@@ -16,6 +16,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('story_id')->constrained('stories')->cascadeOnDelete();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('character_id')->nullable()->constrained('characters')->cascadeOnDelete();
             $table->foreignId('invited_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             // owner | co_author
             $table->string('role', 20)->default('co_author');

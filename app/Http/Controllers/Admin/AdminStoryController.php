@@ -35,7 +35,7 @@ class AdminStoryController extends Controller
         $status = $request->query('status');
 
         $paginator = Story::query()
-            ->with(['user', 'interests', 'involvements.involvable', 'authors.user'])
+            ->with(['user', 'interests', 'involvements.involvable', 'authors.user', 'authors.character'])
             ->withCount('nodes')
             ->when(in_array($status, ModerationStatus::values(), true), function (Builder $q) use ($status): void {
                 $q->where('moderation_status', $status);

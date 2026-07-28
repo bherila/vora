@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
@@ -41,6 +42,26 @@ class CharacterTest extends TestCase
             $mock->shouldReceive('getFileSize')->andReturn(2048);
             $mock->shouldReceive('deleteFile')->andReturn(true);
         });
+    }
+
+    public function test_characters_receive_a_unique_ulid_and_default_to_linked(): void
+    {
+        $owner = User::factory()->approved()->create();
+
+        $character = Character::query()->create([
+            'user_id' => $owner->id,
+            'display_name' => 'Nova',
+        ]);
+
+        $this->assertTrue(Str::isUlid($character->ulid));
+        $this->assertTrue($character->is_linked);
+
+        $this->expectException(QueryException::class);
+        Character::query()->create([
+            'user_id' => $owner->id,
+            'ulid' => $character->ulid,
+            'display_name' => 'Duplicate',
+        ]);
     }
 
     public function test_characters_are_optional_and_user_scoped(): void
@@ -79,6 +100,7 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.gender_other', 'nonbinary')
             ->assertJsonPath('data.user_type', 'furry')
             ->assertJsonPath('data.inherit_interests', true)
+            ->assertJsonPath('data.is_linked', true)
             ->json('data.id');
 
         $this->patchJson("/api/characters/{$created}", [
@@ -96,7 +118,8 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.gender_other', null)
             ->assertJsonPath('data.user_type', 'other')
             ->assertJsonPath('data.user_type_other', 'construct')
-            ->assertJsonPath('data.preferred_user_types', []);
+            ->assertJsonPath('data.preferred_user_types', [])
+            ->assertJsonPath('data.is_linked', true);
     }
 
     public function test_specific_character_with_empty_allowlist_is_owner_only(): void
@@ -330,6 +353,114 @@ class CharacterTest extends TestCase
 
         $this->assertDatabaseMissing('interest_ratings', [
             'character_id' => $character->id,
+        ]);
+    }
+
+    public function test_linked_character_copies_owner_ratings_when_switching_to_specific(): void
+    {
+        $user = User::factory()->approved()->create();
+        $animals = Interest::query()->create(['name' => 'Animals']);
+        $art = Interest::query()->create(['name' => 'Art']);
+        $character = Character::factory()->for($user)->create([
+            'is_linked' => true,
+            'inherit_interests' => true,
+        ]);
+
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => null,
+            'interest_id' => $animals->id,
+            'level' => 5,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => null,
+            'interest_id' => $art->id,
+            'level' => -3,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => false])
+            ->assertOk()
+            ->assertJsonPath('data.inherit_interests', false);
+
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $user->id,
+            'character_id' => $character->id,
+            'interest_id' => $animals->id,
+            'level' => 5,
+        ]);
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $user->id,
+            'character_id' => $character->id,
+            'interest_id' => $art->id,
+            'level' => -3,
+        ]);
+    }
+
+    public function test_separate_character_starts_with_no_owner_interest_fingerprint(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Rare Interest']);
+        $character = Character::factory()->for($user)->create([
+            'is_linked' => false,
+            'inherit_interests' => true,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => null,
+            'interest_id' => $interest->id,
+            'level' => 7,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => false])
+            ->assertOk()
+            ->assertJsonPath('data.inherit_interests', false);
+
+        $this->assertDatabaseMissing('interest_ratings', [
+            'character_id' => $character->id,
+        ]);
+    }
+
+    public function test_first_explicit_linked_character_rating_seeds_then_overrides_owner_ratings(): void
+    {
+        $user = User::factory()->approved()->create();
+        $animals = Interest::query()->create(['name' => 'Animals']);
+        $art = Interest::query()->create(['name' => 'Art']);
+        $character = Character::factory()->for($user)->create([
+            'is_linked' => true,
+            'inherit_interests' => true,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => null,
+            'interest_id' => $animals->id,
+            'level' => 5,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $user->id,
+            'character_id' => null,
+            'interest_id' => $art->id,
+            'level' => 3,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/interests/ratings', [
+                'character_id' => $character->id,
+                'ratings' => [['interest_id' => $animals->id, 'level' => -2]],
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('interest_ratings', [
+            'character_id' => $character->id,
+            'interest_id' => $animals->id,
+            'level' => -2,
+        ]);
+        $this->assertDatabaseHas('interest_ratings', [
+            'character_id' => $character->id,
+            'interest_id' => $art->id,
+            'level' => 3,
         ]);
     }
 

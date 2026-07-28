@@ -6,6 +6,7 @@ use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<Character>
@@ -17,6 +18,7 @@ class CharacterFactory extends Factory
     public function definition(): array
     {
         return [
+            'ulid' => (string) Str::ulid(),
             'user_id' => User::factory(),
             'display_name' => fake()->name(),
             'description' => fake()->optional()->sentence(),
@@ -27,6 +29,7 @@ class CharacterFactory extends Factory
             'preferred_user_types' => ['human', 'furry', 'other'],
             'preferred_genders' => ['male', 'female', 'other'],
             'inherit_interests' => true,
+            'is_linked' => true,
         ];
     }
 

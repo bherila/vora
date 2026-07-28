@@ -148,7 +148,7 @@ class ExploreController extends Controller
             ->discoverable()
             ->moderationStatus(ModerationStatus::Approved)
             ->whereHas('user', fn ($q) => $q->active())
-            ->with(['user', 'interests', 'authors.user'])
+            ->with(['user', 'interests', 'authors.user', 'authors.character'])
             ->withCount('nodes')
             ->withAnyInterest($interestIds)
             ->latest('published_at')

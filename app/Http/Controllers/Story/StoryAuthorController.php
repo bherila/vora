@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Story;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Story\InviteCoAuthorRequest;
+use App\Http\Requests\Story\UpdateStoryAuthorIdentityRequest;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
@@ -61,6 +62,26 @@ class StoryAuthorController extends Controller
     }
 
     /**
+     * Select how the current author is credited on this story.
+     */
+    public function update(UpdateStoryAuthorIdentityRequest $request, Story $story, User $user): JsonResponse
+    {
+        $author = $story->authors()
+            ->where('user_id', $user->id)
+            ->where('status', StoryAuthor::STATUS_ACCEPTED)
+            ->first();
+
+        if (! $author instanceof StoryAuthor) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+
+        $author->character_id = $request->validated('character_id');
+        $author->save();
+
+        return response()->json(['success' => true, 'data' => $this->authorsPayload($story->refresh())]);
+    }
+
+    /**
      * Remove a co-author. The owner may remove any co-author; a co-author may
      * remove themselves (leave). The owner cannot be removed.
      */
@@ -105,10 +126,12 @@ class StoryAuthorController extends Controller
      */
     private function authorsPayload(Story $story): array
     {
-        return $story->authors()->with('user')->get()->map(fn (StoryAuthor $author): array => [
+        return $story->authors()->with(['user', 'character'])->get()->map(fn (StoryAuthor $author): array => [
             'id' => $author->id,
             'user_id' => $author->user_id,
-            'display_name' => $author->user?->display_name ?: $author->user?->name,
+            'character_id' => $author->character_id,
+            'display_name' => $author->character?->display_name
+                ?: ($author->user?->display_name ?: $author->user?->name),
             'role' => $author->role,
             'status' => $author->status,
             'is_owner' => $author->isOwner(),

@@ -233,7 +233,9 @@ class StoryPresenter
         return [
             'id' => $author->id,
             'user_id' => $author->user_id,
-            'display_name' => $author->user?->display_name ?: $author->user?->name,
+            'character_id' => $author->character_id,
+            'display_name' => $author->character?->display_name
+                ?: ($author->user?->display_name ?: $author->user?->name),
             'role' => $author->role,
             'status' => $author->status,
             'is_owner' => $author->isOwner(),

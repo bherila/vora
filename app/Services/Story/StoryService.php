@@ -28,6 +28,7 @@ class StoryService
             'interests',
             'involvements.involvable',
             'authors.user',
+            'authors.character',
             'nodes',
             'choices',
         ]);

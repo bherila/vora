@@ -11,6 +11,7 @@ use App\Models\InterestRating;
 use App\Models\InterestRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InterestController extends Controller
 {
@@ -79,33 +80,43 @@ class InterestController extends Controller
         $user = $request->user();
         $validated = $request->validated();
         $characterId = $validated['character_id'] ?? null;
-        $hasExplicit = false;
+        $hasExplicit = collect($validated['ratings'])
+            ->contains(fn (array $rating): bool => $rating['level'] !== null);
 
-        foreach ($validated['ratings'] as $rating) {
-            $interestId = (int) $rating['interest_id'];
+        DB::transaction(function () use ($user, $validated, $characterId, $hasExplicit): void {
+            $character = $characterId !== null
+                ? Character::query()->lockForUpdate()->findOrFail($characterId)
+                : null;
 
-            if ($rating['level'] === null) {
-                InterestRating::query()
-                    ->where('user_id', $user->id)
-                    ->where('character_id', $characterId)
-                    ->where('interest_id', $interestId)
-                    ->delete();
-
-                continue;
+            if ($character instanceof Character && $hasExplicit && $character->inherit_interests) {
+                $this->seedSpecificInterests($character);
             }
 
-            $hasExplicit = true;
-            InterestRating::query()->updateOrCreate(
-                ['user_id' => $user->id, 'character_id' => $characterId, 'interest_id' => $interestId],
-                ['level' => (int) $rating['level']],
-            );
-        }
+            foreach ($validated['ratings'] as $rating) {
+                $interestId = (int) $rating['interest_id'];
 
-        // Persisting an explicit rating means the character is overriding, not
-        // inheriting, the owner's profile interests.
-        if ($characterId !== null && $hasExplicit) {
-            Character::query()->whereKey($characterId)->update(['inherit_interests' => false]);
-        }
+                if ($rating['level'] === null) {
+                    InterestRating::query()
+                        ->where('user_id', $user->id)
+                        ->where('character_id', $characterId)
+                        ->where('interest_id', $interestId)
+                        ->delete();
+
+                    continue;
+                }
+
+                InterestRating::query()->updateOrCreate(
+                    ['user_id' => $user->id, 'character_id' => $characterId, 'interest_id' => $interestId],
+                    ['level' => (int) $rating['level']],
+                );
+            }
+
+            // Persisting an explicit rating means the character is overriding,
+            // not inheriting, the owner's profile interests.
+            if ($character instanceof Character && $hasExplicit) {
+                $character->update(['inherit_interests' => false]);
+            }
+        });
 
         return response()->json(['success' => true]);
     }
@@ -120,12 +131,18 @@ class InterestController extends Controller
         $character = Character::query()->findOrFail($validated['character_id']);
         $inherit = (bool) $validated['inherit'];
 
-        $character->inherit_interests = $inherit;
-        $character->save();
+        DB::transaction(function () use ($character, $inherit): void {
+            $lockedCharacter = Character::query()->lockForUpdate()->findOrFail($character->id);
 
-        if ($inherit) {
-            $character->interestRatings()->delete();
-        }
+            if ($inherit) {
+                $lockedCharacter->interestRatings()->delete();
+            } elseif ($lockedCharacter->inherit_interests) {
+                $this->seedSpecificInterests($lockedCharacter);
+            }
+
+            $lockedCharacter->inherit_interests = $inherit;
+            $lockedCharacter->save();
+        });
 
         return response()->json([
             'success' => true,
@@ -156,5 +173,38 @@ class InterestController extends Controller
                 'created_at' => $interestRequest->created_at?->toIso8601String(),
             ],
         ]);
+    }
+
+    /**
+     * Seed the first specific-interest set. Linked personas copy the owner's
+     * current rows as an editable starting point; Separate personas deliberately
+     * start empty so they do not expose the owner's interest fingerprint.
+     */
+    private function seedSpecificInterests(Character $character): void
+    {
+        $character->interestRatings()->delete();
+
+        if (! $character->is_linked) {
+            return;
+        }
+
+        $now = now();
+        $rows = InterestRating::query()
+            ->where('user_id', $character->user_id)
+            ->whereNull('character_id')
+            ->get(['interest_id', 'level'])
+            ->map(fn (InterestRating $rating): array => [
+                'user_id' => $character->user_id,
+                'character_id' => $character->id,
+                'interest_id' => $rating->interest_id,
+                'level' => $rating->level,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])
+            ->all();
+
+        if ($rows !== []) {
+            InterestRating::query()->insert($rows);
+        }
     }
 }
