@@ -20,7 +20,13 @@ class FollowRequest extends Model
     /** A follow the recipient turned down. */
     public const STATUS_DECLINED = 'declined';
 
-    protected $fillable = ['requester_id', 'recipient_id', 'status', 'responded_at'];
+    protected $fillable = [
+        'requester_id',
+        'recipient_id',
+        'recipient_character_id',
+        'status',
+        'responded_at',
+    ];
 
     protected function casts(): array
     {
@@ -37,6 +43,12 @@ class FollowRequest extends Model
     public function recipient(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recipient_id');
+    }
+
+    /** @return BelongsTo<Character, $this> */
+    public function recipientCharacter(): BelongsTo
+    {
+        return $this->belongsTo(Character::class, 'recipient_character_id');
     }
 
     /** @return HasMany<FollowRequestAuditLog, $this> */

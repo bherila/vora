@@ -27,7 +27,9 @@
       $__isAdmin = \Illuminate\Support\Facades\Gate::allows('admin-only');
       // Mirror the follow-request inbox filter (requester still active) so the
       // badge never counts requests the inbox hides.
-      $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->where('status', 'pending')->whereHas('requester', fn ($q) => $q->active())->count() : 0;
+      // Persona audience edges are auto-accepted and never belong in the human
+      // friendship inbox.
+      $__followRequestCount = $__isAuthenticated ? $__currentUser->receivedFollowRequests()->whereNull('recipient_character_id')->where('status', 'pending')->whereHas('requester', fn ($q) => $q->active())->count() : 0;
       // Mirror the invite-inbox filter (pendingForActiveOwner) so the badge count
       // never includes invites the inbox hides (owner since gone inactive).
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;

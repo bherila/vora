@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Enums\Audience;
 use App\Models\AudienceMember;
+use App\Models\Character;
 use App\Models\User;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Support\FollowGraph;
@@ -74,11 +75,12 @@ trait HasPrivacyPolicy
 
         $table = $this->getTable();
         $morph = $this->getMorphClass();
+        $characterColumn = $this->followCharacterColumn($table);
         if (method_exists($this, 'getDeletedAtColumn')) {
             $query->whereNull($table.'.'.$this->getDeletedAtColumn());
         }
 
-        return $query->where(function (Builder $q) use ($viewer, $table, $morph): void {
+        return $query->where(function (Builder $q) use ($viewer, $table, $morph, $characterColumn): void {
             // No authenticated viewer sees nothing — content is never served to
             // guests (mirrors isViewableBy(null) === false). This keeps the scope
             // safe to reuse on any future guest-facing listing.
@@ -97,18 +99,18 @@ trait HasPrivacyPolicy
             $q->orWhere($table.'.user_id', $viewerId);
 
             // Followers tier: viewer follows the owner.
-            $q->orWhere(function (Builder $f) use ($table, $viewerId): void {
+            $q->orWhere(function (Builder $f) use ($table, $viewerId, $characterColumn): void {
                 $f->where($table.'.audience', Audience::Followers->value)
-                    ->whereExists(function (QueryBuilder $sub) use ($table, $viewerId): void {
-                        FollowGraph::constrainViewerFollowsOwner($sub, $table.'.user_id', $viewerId);
+                    ->whereExists(function (QueryBuilder $sub) use ($table, $viewerId, $characterColumn): void {
+                        FollowGraph::constrainViewerFollowsOwner($sub, $table.'.user_id', $viewerId, $characterColumn);
                     });
             });
 
             // Mutuals tier: viewer follows the owner AND the owner follows back.
-            $q->orWhere(function (Builder $m) use ($table, $viewerId): void {
+            $q->orWhere(function (Builder $m) use ($table, $viewerId, $characterColumn): void {
                 $m->where($table.'.audience', Audience::Mutuals->value)
-                    ->whereExists(function (QueryBuilder $sub) use ($table, $viewerId): void {
-                        FollowGraph::constrainViewerFollowsOwner($sub, $table.'.user_id', $viewerId);
+                    ->whereExists(function (QueryBuilder $sub) use ($table, $viewerId, $characterColumn): void {
+                        FollowGraph::constrainViewerFollowsOwner($sub, $table.'.user_id', $viewerId, $characterColumn);
                     })
                     ->whereExists(function (QueryBuilder $sub) use ($table, $viewerId): void {
                         FollowGraph::constrainOwnerFollowsViewer($sub, $table.'.user_id', $viewerId);
@@ -170,8 +172,9 @@ trait HasPrivacyPolicy
 
         return match ($this->audience) {
             Audience::Everyone => true,
-            Audience::Followers => FollowGraph::follows($viewer->id, $this->user_id),
-            Audience::Mutuals => FollowGraph::mutual($viewer->id, $this->user_id),
+            Audience::Followers => FollowGraph::followsIdentity($viewer->id, $this->user_id, $this->followCharacterId()),
+            Audience::Mutuals => FollowGraph::followsIdentity($viewer->id, $this->user_id, $this->followCharacterId())
+                && FollowGraph::follows($this->user_id, $viewer->id),
             Audience::SpecificPeople => $this->audienceMembers()
                 ->where('user_id', $viewer->id)
                 ->exists(),
@@ -220,5 +223,33 @@ trait HasPrivacyPolicy
                 ? $this->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()
                 : [],
         ];
+    }
+
+    /**
+     * The identity column that scopes a follow edge for this model's query.
+     * Characters are their own identity; character-authored content carries a
+     * character_id; account-authored content and stories pass no persona context.
+     */
+    private function followCharacterColumn(string $table): ?string
+    {
+        if ($this instanceof Character) {
+            return $table.'.id';
+        }
+
+        return in_array('character_id', $this->getFillable(), true)
+            ? $table.'.character_id'
+            : null;
+    }
+
+    /**
+     * The concrete identity for the per-record follow decision.
+     */
+    private function followCharacterId(): ?int
+    {
+        $characterId = $this instanceof Character
+            ? $this->getKey()
+            : $this->getAttribute('character_id');
+
+        return $characterId !== null ? (int) $characterId : null;
     }
 }

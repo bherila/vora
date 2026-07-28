@@ -54,7 +54,12 @@ class FeedController extends Controller
             ->where(function (Builder $query) use ($viewerId): void {
                 $query->where('posts.user_id', $viewerId)
                     ->orWhereExists(function (QueryBuilder $sub) use ($viewerId): void {
-                        FollowGraph::constrainViewerFollowsOwner($sub, 'posts.user_id', (int) $viewerId);
+                        FollowGraph::constrainViewerFollowsOwner(
+                            $sub,
+                            'posts.user_id',
+                            (int) $viewerId,
+                            'posts.character_id',
+                        );
                     });
             })
             // The viewer always sees their own posts; everyone else's must have
