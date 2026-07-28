@@ -1,14 +1,14 @@
-import { BookOpen, Home, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { BookOpen, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
-import { FeedView } from '@/community/FeedView';
-import type { OnboardingSteps } from '@/community/OnboardingChecklist';
 import { PostCard } from '@/community/PostCard';
 import type { CommunityPost } from '@/community/types';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
+import { HelpHint } from '@/components/help-hint';
+import { ProtectedImage } from '@/components/protected-image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,8 @@ interface ProfileData {
   display_name: string;
   avatar_url?: string | null;
   restricted: boolean;
+  bio: string | null;
+  pronouns: string | null;
   user_type: string | null;
   gender: string | null;
   mutual_interests: Interest[];
@@ -46,8 +48,21 @@ interface ProfileData {
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
-type TabKey = 'feed' | 'media' | 'stories' | 'posts' | 'favorites';
+type TabKey = 'media' | 'stories' | 'posts' | 'favorites';
 interface FavoriteCard { type: string; id: number; label: string; subtitle: string; href: string; thumbnail_url: string | null; }
+
+/** One entry in the combined "Latest" strip (media, story, or post). */
+interface RecentItem {
+  type: 'media' | 'story' | 'post';
+  id: number;
+  title: string | null;
+  thumbnail_url: string | null;
+  href: string;
+  created_at: string | null;
+}
+
+/** Per-identity content totals for the identity rail (owner's /me only). */
+interface IdentityCounts { self: number; characters: Record<string, number>; }
 
 /** Upload context for the owner's own profile: character privacy options + last interests. */
 interface ProfileMediaData { characters: CharacterOption[]; last_interest_ids: number[]; }
@@ -60,15 +75,15 @@ function getProfileMedia(): ProfileMediaData {
   return readInitialData<{ profileMedia?: ProfileMediaData }>().profileMedia ?? { characters: [], last_interest_ids: [] };
 }
 
-function getFeedOnboarding(): OnboardingSteps | null {
-  return readInitialData<{ feedOnboarding?: OnboardingSteps | null }>().feedOnboarding ?? null;
-}
-
 function getProfileCharacters(): CharacterRecord[] {
   return readInitialData<{ profileCharacters?: CharacterRecord[] }>().profileCharacters ?? [];
 }
 
-/** Identity-strip chip data derived from a full character record. */
+function getIdentityCounts(): IdentityCounts | null {
+  return readInitialData<{ profileIdentityCounts?: IdentityCounts | null }>().profileIdentityCounts ?? null;
+}
+
+/** Identity-rail data derived from a full character record. */
 function characterRefFrom(record: CharacterRecord): CharacterRef {
   return {
     id: record.id,
@@ -147,6 +162,133 @@ function TabError({ message }: { message: string }) {
   return <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
 }
 
+/**
+ * The "Latest" showcase strip: the active identity's most recent media, stories,
+ * and posts in one horizontally scrolling row. Quiet by design — it disappears
+ * entirely (no header, no empty state) when there is nothing to show, and on
+ * load errors the tabs below remain the authoritative surface.
+ */
+function LatestStrip({ userId, identity }: { userId: number; identity: number | null }) {
+  const { items, loading, error } = useProfileList<RecentItem>(`/api/users/${userId}/recent-content${characterQuery(identity)}`);
+
+  if (loading) {
+    return (
+      <div className="flex gap-3 overflow-hidden" role="status" aria-busy="true">
+        <span className="sr-only">Loading latest content…</span>
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-28 w-28 shrink-0 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+  if (error || items.length === 0) return null;
+
+  return (
+    <section aria-label="Latest" className="space-y-2">
+      <h2 className="text-sm font-semibold text-muted-foreground">Latest</h2>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {items.map((item) => (
+          <a
+            key={`${item.type}-${item.id}`}
+            href={item.href}
+            className="group shrink-0 focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            {item.type === 'media' ? (
+              item.thumbnail_url ? (
+                <ProtectedImage
+                  src={item.thumbnail_url}
+                  alt={item.title ?? 'Media'}
+                  className="h-28 w-28 rounded-lg border border-border object-cover transition-opacity group-hover:opacity-90"
+                />
+              ) : (
+                <span className="flex h-28 w-28 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
+                  <Images className="h-6 w-6" aria-hidden="true" />
+                  <span className="sr-only">{item.title ?? 'Media'}</span>
+                </span>
+              )
+            ) : (
+              <span className="flex h-28 w-44 flex-col justify-between rounded-lg border border-border bg-muted/40 p-3 transition-colors group-hover:bg-muted">
+                <span className="line-clamp-3 text-xs text-foreground">{item.title || (item.type === 'story' ? 'Untitled story' : 'Post')}</span>
+                <span className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {item.type === 'story'
+                    ? <><BookOpen className="h-3 w-3" aria-hidden="true" /> Story</>
+                    : <><MessageSquare className="h-3 w-3" aria-hidden="true" /> Post</>}
+                </span>
+              </span>
+            )}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+interface IdentityRailProps {
+  profile: ProfileData;
+  identity: number | null;
+  counts: IdentityCounts | null;
+  onSelect: (identity: number | null) => void;
+  onCreate?: (() => void) | undefined;
+}
+
+/**
+ * The identity rail: an avatar tab per identity (the main profile plus each
+ * persona), with per-identity content totals on the owner's own page. Rendered
+ * only when at least one persona exists — a lone "You" tab explains nothing.
+ */
+function IdentityRail({ profile, identity, counts, onSelect, onCreate }: IdentityRailProps) {
+  const railItems: { key: string; id: number | null; name: string; avatar_url: string | null | undefined; count: number | undefined }[] = [
+    { key: 'self', id: null, name: profile.display_name, avatar_url: profile.avatar_url, count: counts?.self },
+    ...profile.characters.map((character) => ({
+      key: `c-${character.id}`,
+      id: character.id as number | null,
+      name: character.display_name,
+      avatar_url: character.avatar_url,
+      count: counts?.characters[String(character.id)],
+    })),
+  ];
+
+  return (
+    <nav aria-label="Identities" className="flex items-start gap-1 overflow-x-auto pb-1">
+      {railItems.map((item) => {
+        const active = identity === item.id;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            aria-pressed={active}
+            className={`flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-center ${active ? 'bg-muted' : 'hover:bg-muted/60'}`}
+          >
+            <Avatar
+              name={item.name}
+              src={item.avatar_url}
+              sizeClassName="h-12 w-12"
+              className={active ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : ''}
+            />
+            <span className="w-full truncate text-xs font-medium">{item.name}</span>
+            {typeof item.count === 'number' && (
+              <span className="text-[11px] tabular-nums leading-none text-muted-foreground">{item.count}</span>
+            )}
+          </button>
+        );
+      })}
+      {onCreate && (
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-center text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-border">
+            <Plus className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <span className="w-full truncate text-xs font-medium">New persona</span>
+        </button>
+      )}
+    </nav>
+  );
+}
+
 /** Read-only media grid for a profile that isn't the viewer's own. */
 function VisitorMediaTab({ userId, identity }: { userId: number; identity: number | null }) {
   const { items, loading, error } = useProfileList<MediaItem>(`/api/users/${userId}/media${characterQuery(identity)}`);
@@ -163,7 +305,7 @@ function StoriesTab({ userId, identity, isSelf }: { userId: number; identity: nu
   if (items.length === 0) {
     // For the owner this tab only renders on a character identity (the main
     // identity uses the manager), so the empty state is character-scoped.
-    return <TabEmpty icon={BookOpen} title={isSelf ? 'No stories involve this character yet.' : 'No stories to show.'} />;
+    return <TabEmpty icon={BookOpen} title={isSelf ? 'No stories written as this persona yet.' : 'No stories to show.'} />;
   }
   return <StoryGrid items={items} />;
 }
@@ -223,7 +365,6 @@ function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
 
 interface TabDef { key: TabKey; label: string; icon: typeof Images }
 
-const FEED_TAB: TabDef = { key: 'feed', label: 'Home', icon: Home };
 const TABS: TabDef[] = [
   { key: 'media', label: 'Media', icon: Images },
   { key: 'stories', label: 'Stories', icon: BookOpen },
@@ -231,19 +372,19 @@ const TABS: TabDef[] = [
   { key: 'favorites', label: 'Favorites', icon: Star },
 ];
 
-function FollowProfilePage() {
+export function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
   const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
-  const [feedOnboarding] = useState<OnboardingSteps | null>(getFeedOnboarding);
   const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
+  const [identityCounts] = useState<IdentityCounts | null>(getIdentityCounts);
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<CharacterRecord | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   // null = the main user identity; a number = one of their characters.
   const [identity, setIdentity] = useState<number | null>(null);
-  // The owner's home defaults to their Feed; visitors land on Media.
-  const [tab, setTab] = useState<TabKey>(() => (getInitialProfile()?.is_self ? 'feed' : 'media'));
+  // Everyone lands on the showcase: the profile's own work, media first.
+  const [tab, setTab] = useState<TabKey>('media');
   const [editOpen, setEditOpen] = useState(false);
   const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
@@ -282,7 +423,12 @@ function FollowProfilePage() {
     }
   };
 
-  // Keep the full character records (for the editor) and the identity strip in
+  const openCreateCharacter = (): void => {
+    setEditingCharacter(null);
+    setCharacterDialogOpen(true);
+  };
+
+  // Keep the full character records (for the editor) and the identity rail in
   // step after a create/update/delete.
   const handleCharacterSaved = (record: CharacterRecord): void => {
     setProfileCharacters((current) => current.some((c) => c.id === record.id)
@@ -310,13 +456,13 @@ function FollowProfilePage() {
 
   if (!profile) return <div className="mx-auto max-w-4xl px-4 py-8">Loading profile...</div>;
   const hasActiveRequest = profile.follow_request !== null && !profile.follow_request.can_retry;
-  // Feed (your home timeline) and Favorites belong to the user, not a character,
-  // so they only apply to the main identity. Feed is owner-only. Switching to a
-  // character while on one of those falls back to the first available tab.
-  const tabs: TabDef[] = identity !== null
-    ? TABS.filter((t) => t.key !== 'favorites')
-    : (profile.is_self ? [FEED_TAB, ...TABS] : TABS);
+  const hasPersonas = profile.characters.length > 0;
+  // Favorites belong to the user, not a character, so they only apply to the
+  // main identity. Switching to a character while on Favorites falls back to
+  // the first available tab.
+  const tabs: TabDef[] = identity !== null ? TABS.filter((t) => t.key !== 'favorites') : TABS;
   const activeTab: TabKey = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? 'media');
+  const activeCharacter = identity !== null ? profileCharacters.find((c) => c.id === identity) ?? null : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -330,11 +476,16 @@ function FollowProfilePage() {
             <div className="flex min-w-0 items-center gap-4">
               <Avatar name={profile.display_name} src={profile.avatar_url} sizeClassName="h-16 w-16" />
               <div className="min-w-0">
-                <CardTitle className="truncate">{profile.display_name}</CardTitle>
-                <CardDescription className="mt-1 flex flex-wrap gap-2">
-                  {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
-                  {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
-                </CardDescription>
+                <CardTitle className="truncate">
+                  {profile.display_name}
+                  {profile.pronouns && <span className="ml-2 text-sm font-normal text-muted-foreground">{profile.pronouns}</span>}
+                </CardTitle>
+                {(profile.user_type || profile.gender) && (
+                  <CardDescription className="mt-1 flex flex-wrap gap-2">
+                    {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
+                    {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
+                  </CardDescription>
+                )}
               </div>
             </div>
             {profile.is_self ? (
@@ -362,6 +513,7 @@ function FollowProfilePage() {
             </section>
           ) : (
             <>
+              {profile.bio && <p className="whitespace-pre-line text-sm">{profile.bio}</p>}
               <section>
                 <h2 className="font-semibold">{profile.is_self ? 'Your interests' : 'Mutual interests'}</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -371,55 +523,22 @@ function FollowProfilePage() {
                 </div>
               </section>
 
-              {/* Identity strip: the main user plus each character. */}
-              <section className="flex flex-wrap gap-2 border-t border-border pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIdentity(null)}
-                  aria-pressed={identity === null}
-                  className={`flex items-center gap-2 rounded-full border px-2 py-1 text-sm ${identity === null ? 'border-foreground bg-muted' : 'border-border hover:bg-muted'}`}
-                >
-                  <Avatar name={profile.display_name} src={profile.avatar_url} sizeClassName="h-6 w-6" />
-                  <span className="max-w-[8rem] truncate">{profile.display_name}</span>
-                </button>
-                {profile.characters.map((character) => (
-                  <button
-                    key={character.id}
-                    type="button"
-                    onClick={() => setIdentity(character.id)}
-                    aria-pressed={identity === character.id}
-                    className={`flex items-center gap-2 rounded-full border px-2 py-1 text-sm ${identity === character.id ? 'border-foreground bg-muted' : 'border-border hover:bg-muted'}`}
-                  >
-                    <Avatar name={character.display_name} src={character.avatar_url} sizeClassName="h-6 w-6" />
-                    <span className="max-w-[8rem] truncate">{character.display_name}</span>
-                  </button>
-                ))}
-                {profile.is_self && (
-                  <button
-                    type="button"
-                    onClick={() => { setEditingCharacter(null); setCharacterDialogOpen(true); }}
-                    className="flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
-                  >
-                    <Plus className="h-4 w-4" /> Add character
-                  </button>
-                )}
-              </section>
-
-              {/* Owner controls for the active character identity. */}
-              {profile.is_self && identity !== null && (() => {
-                const active = profileCharacters.find((c) => c.id === identity);
-                if (!active) return null;
-                return (
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => { setEditingCharacter(active); setCharacterDialogOpen(true); }}>
-                      <Pencil className="h-4 w-4" /> Edit character
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacter(active)}>
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </Button>
-                  </div>
-                );
-              })()}
+              {/* The single quiet entry point into personas for an owner who has
+                  none. Everything else persona-shaped is absent until then. */}
+              {profile.is_self && !hasPersonas && (
+                <div className="flex items-center gap-1">
+                  <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={openCreateCharacter}>
+                    <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
+                  </Button>
+                  <HelpHint label="Personas">
+                    <p>
+                      Personas are characters you create — for fiction, art, and role-play.
+                      Each has its own name, avatar, and gallery on your profile.
+                      Most people never need one.
+                    </p>
+                  </HelpHint>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -427,6 +546,31 @@ function FollowProfilePage() {
 
       {!profile.restricted && userId && (
         <div className="space-y-4">
+          {/* Identity rail — absent entirely until the first persona exists. */}
+          {hasPersonas && (
+            <IdentityRail
+              profile={profile}
+              identity={identity}
+              counts={profile.is_self ? identityCounts : null}
+              onSelect={setIdentity}
+              onCreate={profile.is_self ? openCreateCharacter : undefined}
+            />
+          )}
+
+          {/* Owner controls for the active persona. */}
+          {profile.is_self && activeCharacter && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => { setEditingCharacter(activeCharacter); setCharacterDialogOpen(true); }}>
+                <Pencil className="h-4 w-4" /> Edit persona
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacter(activeCharacter)}>
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            </div>
+          )}
+
+          {profile.is_self && <LatestStrip userId={userId} identity={identity} />}
+
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Profile content">
             {tabs.map(({ key, label, icon: Icon }) => (
               <Button key={key} type="button" size="sm" variant={activeTab === key ? 'default' : 'outline'} aria-pressed={activeTab === key} onClick={() => setTab(key)}>
@@ -435,7 +579,6 @@ function FollowProfilePage() {
               </Button>
             ))}
           </div>
-          {activeTab === 'feed' && profile.is_self && identity === null && <FeedView onboarding={feedOnboarding} />}
           {activeTab === 'media' && (profile.is_self
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
             : <VisitorMediaTab userId={userId} identity={identity} />)}
@@ -463,7 +606,14 @@ function FollowProfilePage() {
             </DialogHeader>
             <ProfileIdentityEditor
               editable={editable}
-              onSaved={(summary) => setProfile((current) => current ? { ...current, display_name: summary.display_name, user_type: summary.user_type, gender: summary.gender } : current)}
+              onSaved={(summary) => setProfile((current) => current ? {
+                ...current,
+                display_name: summary.display_name,
+                bio: summary.bio,
+                pronouns: summary.pronouns,
+                user_type: summary.user_type,
+                gender: summary.gender,
+              } : current)}
             />
           </DialogContent>
         </Dialog>

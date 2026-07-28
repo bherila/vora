@@ -15,9 +15,9 @@ use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Services\Profile\ProfileContentQueries;
 use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
-use App\Support\Onboarding;
 use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +30,7 @@ class FollowController extends Controller
     public function __construct(
         private readonly ProfileGate $gate,
         private readonly MediaResponseService $mediaResponder,
+        private readonly ProfileContentQueries $contentQueries,
     ) {}
 
     public function directory(Request $request): View
@@ -58,6 +59,7 @@ class FollowController extends Controller
     public function me(Request $request): View
     {
         $current = $request->user();
+        $characters = $current->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get();
 
         return view('user.follow-profile', [
             'initialData' => [
@@ -65,12 +67,13 @@ class FollowController extends Controller
                 'profileEditable' => $this->editablePayload($current),
                 'profileMedia' => $this->profileMediaPayload($current),
                 // Full editable character records for the owner's character editor.
-                'profileCharacters' => CharacterPresenter::list(
-                    $current->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get(),
-                    $this->mediaResponder,
-                ),
-                // First-run checklist for the home Feed tab; null once complete.
-                'feedOnboarding' => Onboarding::steps($current),
+                'profileCharacters' => CharacterPresenter::list($characters, $this->mediaResponder),
+                // Per-identity content totals for the identity rail. Personas are
+                // opt-in: with none, the rail is absent and the totals are skipped
+                // entirely rather than hydrated as an empty shell.
+                'profileIdentityCounts' => $characters->isEmpty()
+                    ? null
+                    : $this->contentQueries->identityTotals($current, $characters),
             ],
         ]);
     }

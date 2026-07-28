@@ -212,6 +212,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/follow-requests/{followRequest}/decline', [FollowController::class, 'decline']);
         Route::get('/{user}/favorites', [FavoriteController::class, 'index']);
         Route::get('/{user}/content-counts', [ProfileContentController::class, 'counts']);
+        Route::get('/{user}/recent-content', [ProfileContentController::class, 'recent']);
         Route::get('/{user}/media', [ProfileContentController::class, 'media']);
         Route::get('/{user}/stories', [ProfileContentController::class, 'stories']);
         Route::get('/{user}/posts', [ProfileContentController::class, 'posts']);

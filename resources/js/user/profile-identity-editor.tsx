@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
@@ -20,6 +21,8 @@ export interface ProfileEditable {
   name: string;
   email: string;
   display_name: string;
+  bio: string | null;
+  pronouns: string | null;
   gender: string | null;
   gender_other: string | null;
   user_type: string | null;
@@ -31,14 +34,22 @@ export interface ProfileEditable {
   can_manage_interests: boolean;
 }
 
+export interface ProfileSummary {
+  display_name: string;
+  bio: string | null;
+  pronouns: string | null;
+  user_type: string | null;
+  gender: string | null;
+}
+
 interface ProfileIdentityEditorProps {
   editable: ProfileEditable;
-  onSaved: (summary: { display_name: string; user_type: string | null; gender: string | null }) => void;
+  onSaved: (summary: ProfileSummary) => void;
 }
 
 interface AccountUpdateResponse {
   success: boolean;
-  data?: { display_name: string; user_type: string | null; gender: string | null };
+  data?: ProfileSummary;
   message?: string;
 }
 interface ProfilePictureUploadResponse { success: boolean; data: { id: number }; upload_url: string; upload_headers: Record<string, string> }
@@ -62,6 +73,8 @@ function selectionsToPayload(values: string[]): string[] | null {
  */
 export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEditorProps) {
   const [displayName, setDisplayName] = useState(editable.display_name);
+  const [bio, setBio] = useState(editable.bio ?? '');
+  const [pronouns, setPronouns] = useState(editable.pronouns ?? '');
   const [gender, setGender] = useState(normalizeProfileOptionValue(GENDER_OPTIONS, editable.gender));
   const [genderOther, setGenderOther] = useState(editable.gender_other ?? '');
   const [userType, setUserType] = useState(normalizeProfileOptionValue(USER_TYPE_OPTIONS, editable.user_type));
@@ -125,6 +138,8 @@ export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEdit
         name: editable.name,
         email: editable.email,
         display_name: displayName.trim(),
+        bio: blankToNull(bio),
+        pronouns: blankToNull(pronouns),
         gender: blankToNull(gender),
         gender_other: gender === 'other' ? blankToNull(genderOther) : null,
         user_type: blankToNull(userType),
@@ -137,6 +152,8 @@ export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEdit
       toast.success('Profile updated.');
       onSaved({
         display_name: response.data?.display_name ?? displayName.trim(),
+        bio: response.data ? response.data.bio : blankToNull(bio),
+        pronouns: response.data ? response.data.pronouns : blankToNull(pronouns),
         user_type: response.data?.user_type ?? blankToNull(userType),
         gender: response.data?.gender ?? blankToNull(gender),
       });
@@ -228,6 +245,14 @@ export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEdit
         <div className="space-y-1">
           <Label htmlFor="me-display-name">Display name</Label>
           <Input id="me-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="nickname" required />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="me-pronouns">Pronouns</Label>
+          <Input id="me-pronouns" value={pronouns} onChange={(event) => setPronouns(event.target.value)} placeholder="e.g. she/her" maxLength={40} autoComplete="off" />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="me-bio">Bio</Label>
+          <Textarea id="me-bio" value={bio} onChange={(event) => setBio(event.target.value)} rows={4} maxLength={1000} placeholder="A few lines about you — shown at the top of your profile." />
         </div>
         <ProfileOptionButtonGroup legend="User type" name="me-user-type" options={USER_TYPE_OPTIONS} value={userType} onChange={setUserType} />
         {userType === 'other' && (

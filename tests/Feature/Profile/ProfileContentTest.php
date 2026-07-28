@@ -6,6 +6,7 @@ use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
+use App\Models\Post;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
@@ -169,6 +170,60 @@ class ProfileContentTest extends TestCase
         $this->actingAs($owner)->getJson("/api/users/{$owner->id}/content-counts")
             ->assertOk()
             ->assertJsonPath('data.media', 2);
+    }
+
+    public function test_recent_content_mixes_types_newest_first_with_the_listings_gating(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // spacer so the viewer is not the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+
+        $media = Media::factory()->for($owner)->approved()->create(['created_at' => now()->subMinutes(3)]);
+        $story = Story::factory()->for($owner)->published()->approved()->create(['created_at' => now()->subMinutes(2)]);
+        $post = Post::factory()->for($owner)->approved()->create(['created_at' => now()->subMinute()]);
+        // Followers-only media must not surface to a non-follower.
+        Media::factory()->for($owner)->approved()->audience(Audience::Followers)->create(['created_at' => now()]);
+
+        $response = $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/recent-content")
+            ->assertOk()->assertJsonCount(3, 'data');
+
+        $this->assertSame(
+            [['post', $post->id], ['story', $story->id], ['media', $media->id]],
+            collect($response->json('data'))->map(fn (array $item): array => [$item['type'], $item['id']])->all(),
+        );
+
+        // Each entry links to its canonical page.
+        $this->assertSame("/p/{$post->ulid}", $response->json('data.0.href'));
+        $this->assertSame("/s/{$story->ulid}", $response->json('data.1.href'));
+        $this->assertSame("/m/{$media->ulid}", $response->json('data.2.href'));
+
+        // The owner additionally sees the followers-only item.
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/recent-content")
+            ->assertOk()->assertJsonCount(4, 'data');
+    }
+
+    public function test_recent_content_is_scoped_to_the_selected_identity(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        Media::factory()->for($owner)->approved()->create();
+        $characterMedia = Media::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
+
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/recent-content?character_id={$character->id}")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $characterMedia->id);
+    }
+
+    public function test_recent_content_requires_profile_visibility(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create(['profile_audience' => Audience::Followers]);
+        $viewer = User::factory()->approved()->create();
+
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/recent-content")->assertForbidden();
     }
 
     public function test_content_counts_are_scoped_to_the_selected_identity(): void
