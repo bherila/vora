@@ -60,6 +60,47 @@ jobs:
               - 'tests/**'
               - '.github/workflows/**'
 
+  migrations:
+    # Guards against editing a migration that has already run somewhere.
+    # Laravel records applied migrations by filename, so amending one in place
+    # is silently skipped on any database that already ran it — the amendment
+    # lands on fresh installs only. That is how production ended up without
+    # characters.ulid / is_linked while the deployed code required them.
+    # Add new migrations instead; use the override label for a deliberate
+    # amendment to a migration that has never been deployed.
+    name: Migration amendments
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Reject in-place edits to existing migrations
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'migration-amend-ok') }}
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch --quiet origin "$BASE_REF"
+          # Anything other than an Added file under database/migrations is an
+          # edit to a migration that may already be recorded as run.
+          touched=$(git diff --name-status --diff-filter=MRD \
+            "origin/${BASE_REF}...HEAD" -- database/migrations/ || true)
+          if [ -n "$touched" ]; then
+            echo "::error::This PR modifies migrations that already exist on ${BASE_REF}."
+            echo "$touched"
+            echo ""
+            echo "Laravel tracks applied migrations by filename, so an in-place edit is"
+            echo "SKIPPED on any database that already ran the original — including"
+            echo "production. Add a new migration instead."
+            echo ""
+            echo "If the migration has genuinely never been deployed anywhere, add the"
+            echo "'migration-amend-ok' label to this PR."
+            exit 1
+          fi
+          echo "No existing migrations were modified."
+
   test:
     name: Changed-area checks
     needs: changes
@@ -133,7 +174,7 @@ jobs:
 
   result:
     name: CI result
-    needs: [changes, test]
+    needs: [changes, test, migrations]
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -143,6 +184,9 @@ jobs:
             exit 1
           fi
           if [[ "${{ needs.test.result }}" == "failure" || "${{ needs.test.result }}" == "cancelled" ]]; then
+            exit 1
+          fi
+          if [[ "${{ needs.migrations.result }}" == "failure" || "${{ needs.migrations.result }}" == "cancelled" ]]; then
             exit 1
           fi
           echo "Required checks passed or no code paths changed."
