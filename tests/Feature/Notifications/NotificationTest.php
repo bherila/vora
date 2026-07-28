@@ -87,6 +87,23 @@ class NotificationTest extends TestCase
         $this->assertSame('Distinct Persona', $personaFollower->notifications()->first()->data['actor_name']);
     }
 
+    public function test_overlapping_account_and_linked_persona_edges_send_one_notification(): void
+    {
+        User::factory()->create();
+        $author = User::factory()->approved()->create();
+        $follower = User::factory()->approved()->create();
+        $persona = Character::factory()->for($author)->create(['is_linked' => true]);
+        $this->follow($follower, $author);
+        $this->follow($follower, $author, $persona);
+        $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create([
+            'character_id' => $persona->id,
+        ]);
+
+        (new NotifyFollowersOfPost($post))->handle();
+
+        $this->assertSame(1, $follower->notifications()->count());
+    }
+
     public function test_a_reaction_notifies_the_author_but_not_for_self(): void
     {
         $author = User::factory()->approved()->create();
