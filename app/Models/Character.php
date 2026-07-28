@@ -32,6 +32,11 @@ class Character extends Model
         // drop story "involves" tags, otherwise restore would not put the
         // character back exactly where it was.
         static::deleting(function (Character $character): void {
+            // A database cascade only runs on a force delete. Persona-scoped
+            // follows must also disappear on a soft delete; retaining them or
+            // nulling their scope would turn them into account-wide follows.
+            $character->recipientFollowRequests()->delete();
+
             if (! $character->isForceDeleting()) {
                 return;
             }
@@ -92,6 +97,12 @@ class Character extends Model
             'inherit_interests' => 'boolean',
             'profile_picture_media_id' => 'integer',
         ];
+    }
+
+    /** @return HasMany<FollowRequest, $this> */
+    public function recipientFollowRequests(): HasMany
+    {
+        return $this->hasMany(FollowRequest::class, 'recipient_character_id');
     }
 
     /**
