@@ -275,6 +275,49 @@ class PersonaProfileTest extends TestCase
         }
     }
 
+    public function test_persona_page_follow_contract_lists_only_privacy_safe_edge_identities(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $accountFollower = User::factory()->approved()->create();
+        $personaFollower = User::factory()->approved()->create(['display_name' => 'Persona Follower']);
+        $viewer = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+
+        FollowRequest::query()->create([
+            'requester_id' => $accountFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => null,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $personaFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $persona->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($viewer)->get("/c/{$persona->ulid}")
+            ->assertOk()
+            ->assertSee('"id":'.$persona->id, false)
+            ->assertDontSee('Private Human Identity');
+
+        $this->getJson("/api/characters/{$persona->id}/followers")
+            ->assertOk()
+            ->assertJsonPath('data.count', 1)
+            ->assertJsonPath('data.viewer_is_following', false)
+            ->assertJsonPath('data.followers.0.follower.id', $personaFollower->id)
+            ->assertJsonPath('data.followers.0.target.type', 'character')
+            ->assertJsonPath('data.followers.0.target.ulid', $persona->ulid)
+            ->assertJsonMissingPath('data.followers.0.target.owner_id')
+            ->assertJsonMissing(['display_name' => 'Private Human Identity']);
+    }
+
     private function fakeStorage(): void
     {
         $this->mock(FileStorageService::class, function (MockInterface $mock): void {
