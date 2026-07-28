@@ -16,10 +16,10 @@ class ReportController extends Controller
     public function __construct(private readonly FavoriteService $favorites) {}
 
     /**
-     * File an abuse report against a media item, story, or post. The reporter
-     * must be able to see the item (its own privacy decides that) and cannot
-     * report their own content. Re-reporting an item with an open report is a
-     * no-op, so the dialog can be submitted safely more than once.
+     * File an abuse report against content, a character, or a user profile. The
+     * reporter must be able to see the target (its own privacy decides that) and
+     * cannot report their own content or profiles. Re-reporting a target with an
+     * open report is a no-op, so the dialog can be submitted safely more than once.
      */
     public function store(StoreReportRequest $request): JsonResponse
     {

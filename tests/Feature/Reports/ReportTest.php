@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Enums\Audience;
 use App\Enums\ReportStatus;
+use App\Models\Character;
 use App\Models\Media;
 use App\Models\Report;
 use App\Models\User;
@@ -86,10 +88,110 @@ class ReportTest extends TestCase
         $reporter = User::factory()->approved()->create();
 
         $this->actingAs($reporter)->postJson('/api/reports', [
-            'type' => 'user',
+            'type' => 'unknown',
             'id' => 1,
             'reason' => 'spam',
         ])->assertStatus(422);
+    }
+
+    public function test_viewer_can_report_a_visible_user_profile(): void
+    {
+        User::factory()->create();
+        $target = User::factory()->approved()->create();
+        $reporter = User::factory()->approved()->create();
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'user',
+            'id' => $target->id,
+            'reason' => 'harassment',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('reports', [
+            'reporter_user_id' => $reporter->id,
+            'reportable_type' => $target->getMorphClass(),
+            'reportable_id' => $target->id,
+        ]);
+    }
+
+    public function test_viewer_cannot_report_a_user_profile_hidden_from_them(): void
+    {
+        User::factory()->create();
+        $target = User::factory()->approved()->create([
+            'profile_audience' => Audience::SpecificPeople,
+        ]);
+        $reporter = User::factory()->approved()->create();
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'user',
+            'id' => $target->id,
+            'reason' => 'spam',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('reports', 0);
+    }
+
+    public function test_allowlisted_viewer_can_report_a_specific_people_character(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $reporter = User::factory()->approved()->create();
+        $character = Character::factory()
+            ->for($owner)
+            ->audience(Audience::SpecificPeople)
+            ->create();
+        $character->syncAudienceMembers([$reporter->id]);
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'character',
+            'id' => $character->id,
+            'reason' => 'harassment',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('reports', [
+            'reporter_user_id' => $reporter->id,
+            'reportable_type' => $character->getMorphClass(),
+            'reportable_id' => $character->id,
+        ]);
+    }
+
+    public function test_viewer_cannot_report_a_character_hidden_from_them(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $reporter = User::factory()->approved()->create();
+        $character = Character::factory()
+            ->for($owner)
+            ->audience(Audience::SpecificPeople)
+            ->create();
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'character',
+            'id' => $character->id,
+            'reason' => 'spam',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('reports', 0);
+    }
+
+    public function test_viewer_cannot_report_their_own_profile_or_character(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        $this->actingAs($owner)->postJson('/api/reports', [
+            'type' => 'user',
+            'id' => $owner->id,
+            'reason' => 'spam',
+        ])->assertStatus(422);
+
+        $this->actingAs($owner)->postJson('/api/reports', [
+            'type' => 'character',
+            'id' => $character->id,
+            'reason' => 'spam',
+        ])->assertStatus(422);
+
+        $this->assertDatabaseCount('reports', 0);
     }
 
     public function test_filing_a_report_notifies_admins_only(): void

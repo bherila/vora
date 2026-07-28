@@ -3,6 +3,7 @@
 namespace Tests\Feature\Favorites;
 
 use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\User;
@@ -187,5 +188,53 @@ class FavoriteTest extends TestCase
 
         $this->actingAs($alice)->getJson("/api/users/{$alice->id}/favorites")
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.type', 'user');
+    }
+
+    public function test_allowlisted_viewer_can_favorite_a_specific_people_character(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $character = Character::factory()
+            ->for($owner)
+            ->audience(Audience::SpecificPeople)
+            ->create(['display_name' => 'Allowlisted Persona']);
+        $character->syncAudienceMembers([$viewer->id]);
+
+        $this->assertTrue($character->isViewableBy($viewer));
+        $this->assertFalse($character->isViewableBy($other));
+
+        $this->actingAs($viewer)
+            ->postJson('/api/favorites', ['type' => 'character', 'id' => $character->id])
+            ->assertCreated()
+            ->assertJsonPath('data.favorite.type', 'character');
+
+        $this->actingAs($viewer)
+            ->getJson("/api/users/{$viewer->id}/favorites")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $character->id)
+            ->assertJsonPath('data.0.type', 'character');
+    }
+
+    public function test_characters_of_unapproved_or_inactive_owners_remain_hidden(): void
+    {
+        User::factory()->create();
+        $viewer = User::factory()->approved()->create();
+        $pendingOwner = User::factory()->pendingApproval()->create();
+        $disabledOwner = User::factory()->approved()->disabled()->create();
+        $pendingCharacter = Character::factory()->for($pendingOwner)->create();
+        $disabledCharacter = Character::factory()->for($disabledOwner)->create();
+
+        $this->assertFalse($pendingCharacter->isViewableBy($viewer));
+        $this->assertFalse($disabledCharacter->isViewableBy($viewer));
+
+        $this->actingAs($viewer)
+            ->postJson('/api/favorites', ['type' => 'character', 'id' => $pendingCharacter->id])
+            ->assertForbidden();
+        $this->actingAs($viewer)
+            ->postJson('/api/favorites', ['type' => 'character', 'id' => $disabledCharacter->id])
+            ->assertForbidden();
     }
 }

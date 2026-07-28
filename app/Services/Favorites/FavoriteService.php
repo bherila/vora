@@ -2,7 +2,6 @@
 
 namespace App\Services\Favorites;
 
-use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\Favorite;
 use App\Models\Media;
@@ -11,7 +10,6 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
-use App\Support\FollowGraph;
 use App\Support\UserPresenter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
@@ -71,7 +69,7 @@ class FavoriteService
             $item instanceof Post,
             $item instanceof Story => Gate::forUser($viewer)->allows('view', $item),
             $item instanceof User => $this->canSeeUser($viewer, $item),
-            $item instanceof Character => $this->canSeeCharacter($viewer, $item),
+            $item instanceof Character => $item->isViewableBy($viewer),
             default => false,
         };
     }
@@ -248,26 +246,5 @@ class FavoriteService
         return $target->approved_at !== null
             && $target->isActive()
             && $this->profileGate->canView($viewer, $target);
-    }
-
-    private function canSeeCharacter(User $viewer, Character $character): bool
-    {
-        $owner = $character->user;
-        if ($owner === null || $owner->approved_at === null || ! $owner->isActive()) {
-            return false;
-        }
-
-        if ($viewer->id === $owner->id || $viewer->isAdmin()) {
-            return true;
-        }
-
-        // Characters carry their own audience but no allowlist table, so
-        // "specific people" resolves to owner-only for everyone else.
-        return match ($character->audience) {
-            Audience::Everyone => true,
-            Audience::Followers => FollowGraph::follows($viewer->id, $owner->id),
-            Audience::Mutuals => FollowGraph::mutual($viewer->id, $owner->id),
-            Audience::SpecificPeople => false,
-        };
     }
 }
