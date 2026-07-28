@@ -55,10 +55,14 @@ class ProfileGate
         $following = FollowRequest::query()
             ->where('requester_id', $viewer->id)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
+            // Human profiles only accept account-scoped edges.
+            ->whereNull('recipient_character_id')
             ->pluck('recipient_id')->flip();
         $followers = FollowRequest::query()
             ->where('recipient_id', $viewer->id)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
+            // The follow-back leg of a human mutual is account-scoped too.
+            ->whereNull('recipient_character_id')
             ->pluck('requester_id')->flip();
         $granted = AudienceMember::query()
             ->where('privacyable_type', (new User)->getMorphClass())

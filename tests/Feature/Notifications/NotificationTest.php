@@ -3,6 +3,8 @@
 namespace Tests\Feature\Notifications;
 
 use App\Enums\Audience;
+use App\Jobs\NotifyFollowersOfPost;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
@@ -14,11 +16,12 @@ class NotificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function follow(User $follower, User $followee): void
+    private function follow(User $follower, User $followee, ?Character $character = null): void
     {
         FollowRequest::query()->create([
             'requester_id' => $follower->id,
             'recipient_id' => $followee->id,
+            'recipient_character_id' => $character?->id,
             'status' => FollowRequest::STATUS_ACCEPTED,
             'responded_at' => now(),
         ]);
@@ -55,6 +58,33 @@ class NotificationTest extends TestCase
 
         $this->assertSame(1, $follower->notifications()->count(), 'only the viewable post notifies');
         $this->assertSame('new_post', $follower->notifications()->first()->data['type']);
+    }
+
+    public function test_separate_persona_post_only_notifies_that_personas_followers(): void
+    {
+        User::factory()->create();
+        $author = User::factory()->approved()->create();
+        $ownerFollower = User::factory()->approved()->create();
+        $personaFollower = User::factory()->approved()->create();
+        $otherPersonaFollower = User::factory()->approved()->create();
+        $persona = Character::factory()->for($author)->create([
+            'display_name' => 'Distinct Persona',
+            'is_linked' => false,
+        ]);
+        $otherPersona = Character::factory()->for($author)->create(['is_linked' => false]);
+        $this->follow($ownerFollower, $author);
+        $this->follow($personaFollower, $author, $persona);
+        $this->follow($otherPersonaFollower, $author, $otherPersona);
+        $post = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create([
+            'character_id' => $persona->id,
+        ]);
+
+        (new NotifyFollowersOfPost($post))->handle();
+
+        $this->assertSame(0, $ownerFollower->notifications()->count());
+        $this->assertSame(0, $otherPersonaFollower->notifications()->count());
+        $this->assertSame(1, $personaFollower->notifications()->count());
+        $this->assertSame('Distinct Persona', $personaFollower->notifications()->first()->data['actor_name']);
     }
 
     public function test_a_reaction_notifies_the_author_but_not_for_self(): void

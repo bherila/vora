@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Feed;
 
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\InterestRating;
@@ -69,6 +70,23 @@ class FeedOnboardingTest extends TestCase
         Post::factory()->for($user)->approved()->create();
 
         $this->assertNull($this->onboarding($user));
+    }
+
+    public function test_persona_only_follow_does_not_complete_human_following_step(): void
+    {
+        User::factory()->approved()->create();
+        $user = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $persona = Character::factory()->for($other)->create(['is_linked' => false]);
+        FollowRequest::query()->create([
+            'requester_id' => $user->id,
+            'recipient_id' => $other->id,
+            'recipient_character_id' => $persona->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->assertFalse($this->onboarding($user)['is_following']);
     }
 
     /**
