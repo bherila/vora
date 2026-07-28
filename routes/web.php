@@ -190,6 +190,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/', [CharacterController::class, 'store']);
         Route::patch('/{character}', [CharacterController::class, 'update']);
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
+        Route::get('/{character}/followers', [FollowController::class, 'characterFollowers']);
+        Route::post('/{character}/follow', [FollowController::class, 'followCharacter']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
         Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);

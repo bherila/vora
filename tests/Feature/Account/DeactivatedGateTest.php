@@ -67,6 +67,7 @@ class DeactivatedGateTest extends TestCase
             ['POST', '/api/characters'],
             ['PATCH', "/api/characters/{$character->id}"],
             ['DELETE', "/api/characters/{$character->id}"],
+            ['POST', "/api/characters/{$character->id}/follow"],
             ['POST', "/api/characters/{$character->id}/profile-picture"],
             ['POST', "/api/characters/{$character->id}/profile-picture/{$media->id}/complete"],
             ['DELETE', "/api/characters/{$character->id}/profile-picture"],
