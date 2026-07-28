@@ -123,6 +123,7 @@ class StoryController extends Controller
             'body' => $data['body'] ?? null,
             'audience' => $request->audience()->value,
             'discoverable' => $request->discoverable(),
+            'announce_on_approval' => true,
             'published_at' => $status === StoryStatus::Published ? now() : null,
         ]);
 

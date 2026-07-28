@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Models\Post;
 use App\Models\User;
@@ -46,12 +47,15 @@ class FeedController extends Controller
     {
         $viewer = $request->user();
         $viewerId = $viewer?->id;
+        // Keep following as the default until #104's post-moderation decision is
+        // settled. The explicit mixed scope is ready for controlled callers.
+        $scope = $request->query('scope') === 'mixed' ? 'mixed' : 'following';
 
         $posts = Post::query()
             // Membership: the viewer's own posts plus posts from accounts they
             // follow, expressed as a correlated subquery so the query stays
             // page-sized regardless of how many accounts the viewer follows.
-            ->where(function (Builder $query) use ($viewerId): void {
+            ->where(function (Builder $query) use ($viewerId, $scope): void {
                 $query->where('posts.user_id', $viewerId)
                     ->orWhereExists(function (QueryBuilder $sub) use ($viewerId): void {
                         FollowGraph::constrainViewerFollowsOwner(
@@ -61,6 +65,13 @@ class FeedController extends Controller
                             'posts.character_id',
                         );
                     });
+
+                if ($scope === 'mixed') {
+                    $query->orWhere(function (Builder $public): void {
+                        $public->where('posts.audience', Audience::Everyone->value)
+                            ->where('posts.discoverable', true);
+                    });
+                }
             })
             // The viewer always sees their own posts; everyone else's must have
             // passed review.
@@ -71,7 +82,7 @@ class FeedController extends Controller
             // Hide posts from accounts that have since deactivated, been
             // disabled, or deleted — the feed must not become a bypass for an
             // owner the per-record policies would now reject.
-            ->whereHas('user', fn (Builder $query) => $query->active())
+            ->whereHas('user', fn (Builder $query) => $query->active()->whereNotNull('approved_at'))
             ->viewableBy($viewer)
             ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
             ->withEngagementCounts($viewer)

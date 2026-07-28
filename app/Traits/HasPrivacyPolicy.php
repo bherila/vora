@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Enums\Audience;
+use App\Events\ContentPrivacySynced;
 use App\Models\AudienceMember;
 use App\Models\Character;
 use App\Models\User;
@@ -204,6 +205,8 @@ trait HasPrivacyPolicy
         foreach ($added as $userId) {
             $this->audienceMembers()->create(['user_id' => $userId]);
         }
+
+        ContentPrivacySynced::dispatch($this);
 
         return ['added' => $added, 'removed' => $removed];
     }

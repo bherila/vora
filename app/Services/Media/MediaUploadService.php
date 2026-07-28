@@ -69,6 +69,7 @@ class MediaUploadService
         ?int $characterId = null,
         ?string $fileHash = null,
         ?int $expectedSizeBytes = null,
+        bool $announceOnApproval = false,
     ): array {
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -92,6 +93,7 @@ class MediaUploadService
             'multipart_expected_size_bytes' => $expectedSizeBytes,
             'audience' => $audience,
             'discoverable' => $discoverable,
+            'announce_on_approval' => $announceOnApproval,
         ]);
         $media->save();
 

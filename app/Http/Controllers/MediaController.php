@@ -120,6 +120,7 @@ class MediaController extends Controller
             characterId: $character?->id,
             fileHash: $fileHash,
             expectedSizeBytes: $request->validated('size') !== null ? (int) $request->validated('size') : null,
+            announceOnApproval: $request->announce(),
         );
 
         $media = $result['media'];

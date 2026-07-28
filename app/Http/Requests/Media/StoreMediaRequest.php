@@ -47,7 +47,13 @@ class StoreMediaRequest extends FormRequest
             // Lowercase hex SHA-256 of the file bytes (64 chars), for exact-dup
             // detection. Null when the client could not hash (e.g. a huge video).
             'file_hash' => ['nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
+            'announce' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function announce(): bool
+    {
+        return (bool) $this->validated('announce', true);
     }
 
     /**
