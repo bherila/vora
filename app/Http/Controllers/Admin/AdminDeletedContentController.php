@@ -108,6 +108,7 @@ class AdminDeletedContentController extends Controller
                 'interests',
                 'involvements.involvable',
                 'authors.user' => fn ($query) => $query->withTrashed(),
+                'authors.character',
             ])
             ->withCount('nodes')
             ->latest('deleted_at')

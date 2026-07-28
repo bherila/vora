@@ -97,7 +97,7 @@ class StoryController extends Controller
                         $a->where('user_id', $user->id)->where('status', StoryAuthor::STATUS_ACCEPTED);
                     });
             })
-            ->with(['user', 'interests', 'involvements.involvable', 'authors.user'])
+            ->with(['user', 'interests', 'involvements.involvable', 'authors.user', 'authors.character'])
             ->withCount('nodes')
             ->latest()
             ->get();

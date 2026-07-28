@@ -229,6 +229,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::put('/{story}/graph', [StoryController::class, 'saveGraph']);
         Route::get('/{story}/authors', [StoryAuthorController::class, 'index']);
         Route::post('/{story}/authors', [StoryAuthorController::class, 'invite']);
+        Route::patch('/{story}/authors/{user}', [StoryAuthorController::class, 'update']);
         // withTrashed: a co-author who soft-deleted their account still has a
         // story_authors row the owner must be able to remove.
         Route::delete('/{story}/authors/{user}', [StoryAuthorController::class, 'destroy'])->withTrashed();

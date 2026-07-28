@@ -9,6 +9,7 @@ use App\Models\Character;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
+use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
@@ -75,7 +76,7 @@ class ProfileContentController extends Controller
         $character = $this->resolveCharacter($request, $user);
 
         $paginator = $this->storiesQuery($user, $viewer, $character)
-            ->with(['user', 'interests', 'authors.user'])
+            ->with(['user', 'interests', 'authors.user', 'authors.character'])
             ->withCount('nodes')
             ->latest('id')
             ->paginate((int) config('media.page_size', 24));
@@ -148,17 +149,18 @@ class ProfileContentController extends Controller
      */
     private function storiesQuery(User $user, User $viewer, ?Character $character): Builder
     {
-        $query = Story::query()->viewableBy($viewer);
-
-        if ($character instanceof Character) {
-            // Character tab: stories that involve this character (the polymorphic
-            // "involves" tag). The morph alias is 'character' (see morph map).
-            $query->whereHas('involvements', fn (Builder $q) => $q
-                ->where('involvable_type', 'character')
-                ->where('involvable_id', $character->id));
-        } else {
-            $query->where('user_id', $user->id);
-        }
+        $query = Story::query()
+            ->viewableBy($viewer)
+            ->whereHas('authors', function (Builder $authors) use ($user, $character): void {
+                $authors
+                    ->where('user_id', $user->id)
+                    ->where('status', StoryAuthor::STATUS_ACCEPTED)
+                    ->when(
+                        $character instanceof Character,
+                        fn (Builder $query): Builder => $query->where('character_id', $character?->id),
+                        fn (Builder $query): Builder => $query->whereNull('character_id'),
+                    );
+            });
 
         // Non-owners only ever see another profile's published, approved stories.
         if ($viewer->id !== $user->id && ! $viewer->isAdmin()) {

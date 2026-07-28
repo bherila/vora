@@ -24,8 +24,10 @@ class CharacterPresenter
 
         return [
             'id' => $character->id,
+            'ulid' => $character->ulid,
             'display_name' => $character->display_name,
             'description' => $character->description,
+            'is_linked' => $character->is_linked,
             'audience' => $character->audience->value,
             'audience_user_ids' => $character->audience === Audience::SpecificPeople
                 ? $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()

@@ -7,6 +7,7 @@ use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\Story;
+use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -107,6 +108,43 @@ class ProfileContentTest extends TestCase
 
         $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/stories")
             ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $published->id);
+    }
+
+    public function test_profile_stories_are_scoped_by_authorship_identity_not_involvement(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $otherAuthor = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        $authoredAsCharacter = Story::factory()->for($otherAuthor)->create();
+        $authoredAsCharacter->authors()->create([
+            'user_id' => $owner->id,
+            'character_id' => $character->id,
+            'role' => StoryAuthor::ROLE_CO_AUTHOR,
+            'status' => StoryAuthor::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $involvementOnly = Story::factory()->for($otherAuthor)->create();
+        $involvementOnly->involvements()->create([
+            'involvable_type' => 'character',
+            'involvable_id' => $character->id,
+        ]);
+
+        $mainIdentityStory = Story::factory()->for($owner)->create();
+
+        $this->actingAs($owner)
+            ->getJson("/api/users/{$owner->id}/stories?character_id={$character->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $authoredAsCharacter->id);
+
+        $this->actingAs($owner)
+            ->getJson("/api/users/{$owner->id}/stories")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $mainIdentityStory->id);
     }
 
     public function test_content_counts_match_listing_gating(): void

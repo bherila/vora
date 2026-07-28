@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Character extends Model
 {
@@ -20,6 +21,11 @@ class Character extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Character $character): void {
+            $character->ulid ??= (string) Str::ulid();
+            $character->is_linked ??= true;
+        });
+
         // Characters soft-delete for admin retention. Only a force delete should
         // drop story "involves" tags, otherwise restore would not put the
         // character back exactly where it was.
@@ -53,9 +59,11 @@ class Character extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'ulid',
         'user_id',
         'display_name',
         'description',
+        'is_linked',
         'audience',
         'discoverable',
         'gender',
@@ -76,6 +84,7 @@ class Character extends Model
         return [
             'audience' => Audience::class,
             'discoverable' => 'boolean',
+            'is_linked' => 'boolean',
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
             'inherit_interests' => 'boolean',
