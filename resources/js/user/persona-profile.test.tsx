@@ -58,6 +58,11 @@ function setInitialData(data: Record<string, unknown>): void {
   if (el) el.textContent = JSON.stringify(data);
 }
 
+async function waitForMountRequests(): Promise<void> {
+  await screen.findByRole('button', { name: 'Media 0' });
+  await screen.findByRole('button', { name: /^\d+ followers?$/ });
+}
+
 describe('PersonaProfilePage (/c/{ulid})', () => {
   beforeEach(() => {
     mockGet.mockImplementation((url: string) => Promise.resolve(
@@ -72,7 +77,8 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     setInitialData(personaData());
     render(<PersonaProfilePage />);
 
-    expect(await screen.findByRole('button', { name: '0 followers' })).toBeInTheDocument();
+    await waitForMountRequests();
+    expect(screen.getByRole('button', { name: '0 followers' })).toBeInTheDocument();
     expect(screen.getByText('Kira')).toBeInTheDocument();
     expect(screen.getByText('A wandering star-cartographer.')).toBeInTheDocument();
     const ownerLink = screen.getByRole('link', { name: 'Ben' });
@@ -86,7 +92,8 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     setInitialData(personaData({ is_linked: false, owner: null }));
     render(<PersonaProfilePage />);
 
-    expect(await screen.findByRole('button', { name: '0 followers' })).toBeInTheDocument();
+    await waitForMountRequests();
+    expect(screen.getByRole('button', { name: '0 followers' })).toBeInTheDocument();
     expect(screen.getByText('Kira')).toBeInTheDocument();
     expect(screen.queryByText(/a persona of/i)).toBeNull();
     expect(screen.queryByRole('link', { name: 'Ben' })).toBeNull();
@@ -96,7 +103,8 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     setInitialData(personaData({ is_owner: true, can_report: false, owner: { display_name: 'Ben', href: '/me' } }));
     render(<PersonaProfilePage />);
 
-    expect(await screen.findByRole('button', { name: '0 followers' })).toBeInTheDocument();
+    await waitForMountRequests();
+    expect(screen.getByRole('button', { name: '0 followers' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /manage on your profile/i })).toHaveAttribute('href', '/me');
     expect(screen.queryByRole('button', { name: /report/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
@@ -128,8 +136,8 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     setInitialData(personaData({ is_linked: false, owner: null }));
     render(<PersonaProfilePage />);
 
-    const followersButton = await screen.findByRole('button', { name: /2 followers/i });
-    fireEvent.click(followersButton);
+    await waitForMountRequests();
+    fireEvent.click(screen.getByRole('button', { name: '2 followers' }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Alice' })).toHaveAttribute('href', '/users/11');
@@ -152,8 +160,8 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     setInitialData(personaData({ is_linked: false, owner: null }));
     render(<PersonaProfilePage />);
 
-    const followButton = await screen.findByRole('button', { name: 'Follow Kira' });
-    fireEvent.click(followButton);
+    await waitForMountRequests();
+    fireEvent.click(screen.getByRole('button', { name: 'Follow Kira' }));
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/api/characters/9/follow', {}));
     expect(await screen.findByRole('button', { name: 'Following Kira' })).toBeDisabled();
