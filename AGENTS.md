@@ -15,7 +15,7 @@ Never run `npm`, `npm ci`, or `npx` in this repo.
 
 ## Project shape
 
-- **Stack**: Laravel 12 on PHP ^8.2, React 19 + TypeScript, Vite, Tailwind CSS v4.
+- **Stack**: Laravel 13 on PHP ^8.3, React 19 + TypeScript, Vite, Tailwind CSS v4.
 - **UI primitives**: shadcn-style local components built on Base UI, not Radix UI.
 - **Package manager**: pnpm — never use npm or npx directly.
 - **Database**: SQLite only in development and tests (in-memory for tests).
