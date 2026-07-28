@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
- * An abuse report filed by a viewer against a piece of content (media, story, or
- * post). Reviewed by admins, who act on the item or the owning account. The
+ * An abuse report filed by a viewer against content, a character, or a user
+ * profile. Reviewed by admins, who act on the target or the owning account. The
  * reportable is polymorphic; visibility was enforced at file time.
  */
 class Report extends Model

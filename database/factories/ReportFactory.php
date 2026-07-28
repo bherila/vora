@@ -29,7 +29,7 @@ class ReportFactory extends Factory
     }
 
     /**
-     * Point the report at an existing reportable model (media, story, or post).
+     * Point the report at an existing reportable model.
      */
     public function targeting(object $reportable): static
     {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ReportStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminActOnReportRequest;
+use App\Models\Character;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Report;
@@ -21,15 +22,16 @@ use Illuminate\View\View;
 class AdminReportController extends Controller
 {
     /**
-     * Map of report-type aliases to their model class and single-item view URL
-     * prefix. Reportables are always one of these three.
+     * Map of report-type aliases to their model classes.
      *
-     * @var array<string, array{class: class-string<Model>, prefix: string}>
+     * @var array<string, class-string<Model>>
      */
     private const TYPES = [
-        'media' => ['class' => Media::class, 'prefix' => '/m/'],
-        'story' => ['class' => Story::class, 'prefix' => '/s/'],
-        'post' => ['class' => Post::class, 'prefix' => '/p/'],
+        'media' => Media::class,
+        'story' => Story::class,
+        'post' => Post::class,
+        'character' => Character::class,
+        'user' => User::class,
     ];
 
     /**
@@ -86,6 +88,13 @@ class AdminReportController extends Controller
 
         $item = $this->resolveReportable($report);
         $owner = $item instanceof Model ? $this->ownerOf($item) : null;
+
+        // A user report targets the profile/account itself, not a deletable
+        // content row. Account-scoped actions below are the reviewed paths for
+        // suspending or placing that user on legal hold.
+        if ($action === 'delete_item' && $item instanceof User) {
+            return response()->json(['success' => false, 'message' => 'Use an account action for a reported user.'], 422);
+        }
 
         // Guard account-scoped actions: never the acting admin or the primary
         // admin account.
@@ -193,7 +202,7 @@ class AdminReportController extends Controller
     private function resolveReportable(Report $report): ?Model
     {
         $alias = $this->aliasFor($report->reportable_type);
-        $class = self::TYPES[$alias]['class'] ?? null;
+        $class = self::TYPES[$alias] ?? null;
         if ($class === null) {
             return null;
         }
@@ -203,12 +212,16 @@ class AdminReportController extends Controller
             $query->withTrashed();
         }
 
-        return $query->with('user')->find($report->reportable_id);
+        if ($class !== User::class) {
+            $query->with('user');
+        }
+
+        return $query->find($report->reportable_id);
     }
 
     private function removeItem(?Model $item): void
     {
-        if ($item instanceof Model && ! $this->isTrashed($item) && method_exists($item, 'delete')) {
+        if ($item instanceof Model && ! $item instanceof User && ! $this->isTrashed($item) && method_exists($item, 'delete')) {
             $item->delete();
         }
     }
@@ -252,15 +265,19 @@ class AdminReportController extends Controller
 
     private function ownerOf(Model $item): ?User
     {
-        $owner = $item->getAttribute('user') ?? ($item->user ?? null);
+        if ($item instanceof User) {
+            return $item;
+        }
+
+        $owner = $item->getAttribute('user');
 
         return $owner instanceof User ? $owner : null;
     }
 
     private function aliasFor(string $morphClass): string
     {
-        foreach (self::TYPES as $alias => $config) {
-            if ((new $config['class'])->getMorphClass() === $morphClass || $config['class'] === $morphClass) {
+        foreach (self::TYPES as $alias => $class) {
+            if ((new $class)->getMorphClass() === $morphClass || $class === $morphClass) {
                 return $alias;
             }
         }
@@ -279,13 +296,31 @@ class AdminReportController extends Controller
         if ($item instanceof Post) {
             return Str::limit((string) $item->body, 80) ?: 'Post';
         }
+        if ($item instanceof Character) {
+            return $item->display_name;
+        }
+        if ($item instanceof User) {
+            return $item->display_name ?: $item->name;
+        }
 
         return 'Reported item';
     }
 
     private function hrefFor(string $alias, Model $item): ?string
     {
-        $prefix = self::TYPES[$alias]['prefix'] ?? null;
+        if ($item instanceof User) {
+            return "/users/{$item->id}";
+        }
+        if ($item instanceof Character) {
+            return "/users/{$item->user_id}";
+        }
+
+        $prefix = match ($alias) {
+            'media' => '/m/',
+            'story' => '/s/',
+            'post' => '/p/',
+            default => null,
+        };
         $ulid = $item->getAttribute('ulid');
 
         return $prefix !== null && $ulid !== null ? $prefix.$ulid : null;
