@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Navigation;
 
+use App\Models\StaticPage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -16,7 +17,17 @@ class LandingRedirectTest extends TestCase
 
     public function test_guest_sees_the_marketing_home(): void
     {
-        $this->get('/')->assertOk();
+        StaticPage::query()->create([
+            'slug' => 'home',
+            'title' => 'Public welcome',
+            'body_markdown' => 'Guest-only marketing copy.',
+            'is_published' => true,
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Public welcome')
+            ->assertSee('Guest-only marketing copy.');
     }
 
     public function test_signed_in_user_is_sent_from_home_to_feed(): void
