@@ -37,7 +37,33 @@ class FollowController extends Controller
     {
         return view('user.follow-directory', ['initialData' => [
             'followDirectory' => $this->usersPayload($request),
+            'followDirectoryPersonas' => $this->directoryPersonasPayload($request),
         ]]);
+    }
+
+    /**
+     * Discoverable personas for the People directory: strictly Everyone-audience,
+     * discovery-opted personas of active, approved owners — `discoverable = false`
+     * means direct-link-only, so those never appear here. Unlike restricted user
+     * profiles (listed name-only so a follow request stays possible), restricted
+     * personas are omitted entirely: there is no persona follow request to send,
+     * so listing them would expose a name for nothing. No interest matching:
+     * affinity scoring finds real people, not fictional characters — and matching
+     * an inheriting persona would carry the owner's interest fingerprint.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function directoryPersonasPayload(Request $request): array
+    {
+        return Character::query()
+            ->discoverable()
+            ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
+            ->with('profilePicture')
+            ->orderBy('display_name')
+            ->get()
+            ->map(fn (Character $character): array => CharacterPresenter::publicCard($character, $this->mediaResponder, $request->user()))
+            ->values()
+            ->all();
     }
 
     public function profilePage(Request $request, User $user): View

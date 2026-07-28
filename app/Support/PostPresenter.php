@@ -34,7 +34,15 @@ class PostPresenter
             'body' => $post->body,
             'audience' => $post->audience->value,
             'discoverable' => $post->discoverable,
-            'author' => self::author($post->user, $mediaResponder, $viewer),
+            // Byline inversion (D10): a post published as a persona is presented
+            // by the persona alone — the human author is omitted from the
+            // payload entirely, not merely left unrendered, so a Separate
+            // persona's post can never resolve to its owner client-side.
+            // Ownership and moderation remain user-level (post.user_id);
+            // adminView() restores the author for the review queues.
+            'author' => $post->character_id === null
+                ? self::author($post->user, $mediaResponder, $viewer)
+                : null,
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'reaction_count' => self::reactionCount($post),
@@ -53,7 +61,12 @@ class PostPresenter
      */
     public static function adminView(Post $post, User $viewer, ?MediaResponseService $mediaResponder = null): array
     {
-        return self::view($post, $viewer, $mediaResponder) + [
+        return [
+            // Moderation must resolve to a human, so the review payload always
+            // carries the account author — including for persona posts, where
+            // the public view() deliberately omits it.
+            'author' => self::author($post->user, $mediaResponder, $viewer),
+        ] + self::view($post, $viewer, $mediaResponder) + [
             'moderation_status' => $post->moderation_status->value,
             'moderation_notes' => $post->moderation_notes,
             'moderated_at' => $post->moderated_at?->toIso8601String(),
@@ -92,7 +105,8 @@ class PostPresenter
     }
 
     /**
-     * The persona a post is published as, surfaced alongside the user author.
+     * The persona a post is published as — the post's sole byline identity
+     * (the human author is omitted from view() for persona posts).
      * Ownership and moderation remain user-level.
      *
      * The avatar is serialized via {@see MediaResponseService} (a signed,
@@ -106,8 +120,22 @@ class PostPresenter
     private static function asCharacter(Post $post, ?User $viewer, ?MediaResponseService $mediaResponder): ?array
     {
         $character = $post->character;
-        if ($character === null || ! self::canSee($character, $viewer)) {
+        if ($character === null) {
             return null;
+        }
+
+        // Audience-fail fallback: a viewer the character's own audience does
+        // not admit still gets the persona *name*, but nothing else — no
+        // avatar and no ulid, so the byline renders the name unlinked. Falling
+        // back to the human author here would leak exactly what the byline
+        // inversion hides (and what the viewer was just denied).
+        if (! self::canSee($character, $viewer)) {
+            return [
+                'id' => $character->id,
+                'display_name' => $character->display_name,
+                'ulid' => null,
+                'avatar' => null,
+            ];
         }
 
         $avatar = $character->profilePicture;
@@ -119,6 +147,7 @@ class PostPresenter
         return [
             'id' => $character->id,
             'display_name' => $character->display_name,
+            'ulid' => $character->ulid,
             'avatar' => $showAvatar ? $mediaResponder->item($avatar, resolveHls: false) : null,
         ];
     }

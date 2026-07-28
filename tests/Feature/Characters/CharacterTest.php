@@ -122,6 +122,27 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.is_linked', true);
     }
 
+    public function test_owner_can_switch_a_persona_between_linked_and_separate(): void
+    {
+        $user = User::factory()->approved()->create();
+        $character = Character::factory()->for($user)->create(['is_linked' => true]);
+
+        $this->actingAs($user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'display_name' => $character->display_name,
+                'is_linked' => false,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.is_linked', false);
+        $this->assertFalse($character->refresh()->is_linked);
+
+        // Omitting the field leaves the choice untouched.
+        $this->patchJson("/api/characters/{$character->id}", [
+            'display_name' => $character->display_name,
+        ])->assertOk()->assertJsonPath('data.is_linked', false);
+        $this->assertFalse($character->refresh()->is_linked);
+    }
+
     public function test_specific_character_with_empty_allowlist_is_owner_only(): void
     {
         $owner = User::factory()->approved()->create();

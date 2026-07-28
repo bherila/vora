@@ -131,6 +131,33 @@ class StoryPresenter
     }
 
     /**
+     * Discovery row for a persona's own page. Same shape as
+     * {@see self::discoverableView()}, scrubbed of anything that resolves the
+     * persona to the human behind it: raw author user ids are dropped, and when
+     * the story belongs to the persona's owner (i.e. it was authored *as* this
+     * persona) the owner byline is presented as the persona itself. A Separate
+     * persona's stories tab must never carry the owner's identity.
+     *
+     * @return array<string, mixed>
+     */
+    public static function personaView(Story $story, Character $character): array
+    {
+        $view = self::discoverableView($story);
+
+        $view['authors'] = array_map(function (array $author): array {
+            unset($author['user_id'], $author['character_id']);
+
+            return $author;
+        }, $view['authors']);
+
+        if ((int) $story->user_id === (int) $character->user_id) {
+            $view['owner'] = ['id' => null, 'display_name' => $character->display_name];
+        }
+
+        return $view;
+    }
+
+    /**
      * Admin review payload — includes the internal moderation fields.
      *
      * @return array<string, mixed>

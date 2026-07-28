@@ -113,8 +113,10 @@ export interface StoryDiscoveryItem {
   ulid: string;
   title: string;
   type: StoryType;
-  owner: { id: number; display_name: string } | null;
-  authors: StoryAuthorRef[];
+  /** On a persona page an owner-as-persona byline has no user id. */
+  owner: { id: number | null; display_name: string } | null;
+  /** Persona-page rows omit user_id (never resolve a persona to its owner). */
+  authors: Array<Omit<StoryAuthorRef, 'user_id'> & { user_id?: number }>;
   interests: InterestTag[];
   node_count: number | null;
   published_at: string | null;

@@ -191,9 +191,12 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
 export function PostCard({ post: initialPost, expanded = false }: PostCardProps) {
   const [post, setPost] = useState(initialPost);
   const [showComments, setShowComments] = useState(expanded);
-  const authorLabel = post.as_character
-    ? `${post.as_character.display_name} via ${post.author?.display_name ?? 'Unknown'}`
-    : post.author?.display_name ?? 'Unknown';
+  // A persona post is bylined by the persona alone — the human never appears.
+  // When the viewer fails the persona's audience the server sends the persona
+  // name with no ulid, so the byline renders the name unlinked rather than
+  // falling back to the human author.
+  const authorLabel = post.as_character?.display_name ?? post.author?.display_name ?? 'Unknown';
+  const personaHref = post.as_character?.ulid ? `/c/${post.as_character.ulid}` : null;
   const avatarName = post.as_character?.display_name ?? post.author?.display_name ?? 'Unknown';
   const avatarSrc = post.as_character
     ? post.as_character.avatar?.thumbnail_url ?? post.as_character.avatar?.url ?? null
@@ -221,7 +224,11 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
           <div className="flex min-w-0 items-center gap-3">
             <Avatar name={avatarName} src={avatarSrc} sizeClassName="h-9 w-9" />
             <div className="min-w-0">
-              <p className="font-medium">{authorLabel}</p>
+              <p className="font-medium">
+                {personaHref
+                  ? <a href={personaHref} className="hover:underline">{authorLabel}</a>
+                  : authorLabel}
+              </p>
               <p className="text-xs text-muted-foreground">{formatDate(post.created_at)}</p>
             </div>
           </div>

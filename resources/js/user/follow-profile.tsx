@@ -1,10 +1,8 @@
 import { BookOpen, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
-import { PostCard } from '@/community/PostCard';
-import type { CommunityPost } from '@/community/types';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
@@ -15,17 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StoryGrid } from '@/explore/StoryGrid';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
-import { MediaGrid } from '@/media/MediaGrid';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
-import type { MediaItem } from '@/media/types';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
-import type { StoryDiscoveryItem } from '@/stories/types';
 import { CharacterEditorDialog,type CharacterRecord } from '@/user/CharacterEditorDialog';
 import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
+import { GridSkeleton, MediaListTab, PostsListTab, StoriesListTab, TabEmpty, TabError, useProfileList } from '@/user/profile-tabs';
 
 interface Interest { id: number; name: string; }
 interface CharacterRef { id: number; display_name: string; avatar_url?: string | null; }
@@ -92,74 +87,8 @@ function characterRefFrom(record: CharacterRecord): CharacterRef {
   };
 }
 
-/** Fetch a profile content listing for the active identity/tab; refetch on change. */
-function useProfileList<T>(endpoint: string | null): { items: T[]; loading: boolean; error: string } {
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!endpoint) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError('');
-    fetchWrapper.get(endpoint)
-      .then((response) => { if (active) setItems(((response as { data?: T[] }).data) ?? []); })
-      .catch(() => { if (active) setError('Could not load this content.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [endpoint]);
-
-  return { items, loading, error };
-}
-
 function characterQuery(identity: number | null): string {
   return identity === null ? '' : `?character_id=${identity}`;
-}
-
-/** A grid of pulsing placeholders shown while a tab's content loads. */
-function GridSkeleton({ itemClassName = 'aspect-video' }: { itemClassName?: string }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-busy="true">
-      <span className="sr-only">Loading…</span>
-      {Array.from({ length: 6 }).map((_, index) => (
-        <Skeleton key={index} className={`w-full ${itemClassName}`} />
-      ))}
-    </div>
-  );
-}
-
-/** Stacked placeholders for list-shaped tabs (posts). */
-function ListSkeleton() {
-  return (
-    <div className="space-y-3" role="status" aria-busy="true">
-      <span className="sr-only">Loading…</span>
-      {Array.from({ length: 3 }).map((_, index) => (
-        <Skeleton key={index} className="h-24 w-full" />
-      ))}
-    </div>
-  );
-}
-
-/** A friendly, centered empty state with an icon and optional call to action. */
-function TabEmpty({ icon: Icon, title, action }: { icon: typeof Images; title: string; action?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-12 text-center">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <p className="max-w-sm text-sm text-muted-foreground">{title}</p>
-      {action}
-    </div>
-  );
-}
-
-function TabError({ message }: { message: string }) {
-  return <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">{message}</p>;
 }
 
 /**
@@ -287,43 +216,6 @@ function IdentityRail({ profile, identity, counts, onSelect, onCreate }: Identit
       )}
     </nav>
   );
-}
-
-/** Read-only media grid for a profile that isn't the viewer's own. */
-function VisitorMediaTab({ userId, identity }: { userId: number; identity: number | null }) {
-  const { items, loading, error } = useProfileList<MediaItem>(`/api/users/${userId}/media${characterQuery(identity)}`);
-  if (loading) return <GridSkeleton />;
-  if (error) return <TabError message={error} />;
-  if (items.length === 0) return <TabEmpty icon={Images} title="No media to show." />;
-  return <MediaGrid items={items} />;
-}
-
-function StoriesTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
-  const { items, loading, error } = useProfileList<StoryDiscoveryItem>(`/api/users/${userId}/stories${characterQuery(identity)}`);
-  if (loading) return <GridSkeleton />;
-  if (error) return <TabError message={error} />;
-  if (items.length === 0) {
-    // For the owner this tab only renders on a character identity (the main
-    // identity uses the manager), so the empty state is character-scoped.
-    return <TabEmpty icon={BookOpen} title={isSelf ? 'No stories written as this persona yet.' : 'No stories to show.'} />;
-  }
-  return <StoryGrid items={items} />;
-}
-
-function PostsTab({ userId, identity, isSelf }: { userId: number; identity: number | null; isSelf: boolean }) {
-  const { items, loading, error } = useProfileList<CommunityPost>(`/api/users/${userId}/posts${characterQuery(identity)}`);
-  if (loading) return <ListSkeleton />;
-  if (error) return <TabError message={error} />;
-  if (items.length === 0) {
-    return (
-      <TabEmpty
-        icon={MessageSquare}
-        title={isSelf ? 'You haven’t posted anything here yet.' : 'No posts to show.'}
-        action={isSelf ? <Button size="sm" variant="outline" asChild><a href="/feed">Go to your feed</a></Button> : undefined}
-      />
-    );
-  }
-  return <div className="space-y-4">{items.map((post) => <PostCard key={post.id} post={post} />)}</div>;
 }
 
 function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
@@ -530,10 +422,13 @@ export function FollowProfilePage() {
                   <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={openCreateCharacter}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
                   </Button>
+                  {/* Staged copy (#101): now that /c/{ulid} exists this may claim
+                      "its own page". It must NOT claim followers until persona
+                      follows ship (#102). */}
                   <HelpHint label="Personas">
                     <p>
                       Personas are characters you create — for fiction, art, and role-play.
-                      Each has its own name, avatar, and gallery on your profile.
+                      Each gets its own page and its own media, separate from your profile.
                       Most people never need one.
                     </p>
                   </HelpHint>
@@ -581,11 +476,25 @@ export function FollowProfilePage() {
           </div>
           {activeTab === 'media' && (profile.is_self
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
-            : <VisitorMediaTab userId={userId} identity={identity} />)}
+            : <MediaListTab endpoint={`/api/users/${userId}/media${characterQuery(identity)}`} emptyTitle="No media to show." />)}
           {activeTab === 'stories' && (profile.is_self && identity === null
             ? <OwnerStoriesManager currentUserId={userId} />
-            : <StoriesTab userId={userId} identity={identity} isSelf={profile.is_self} />)}
-          {activeTab === 'posts' && <PostsTab userId={userId} identity={identity} isSelf={profile.is_self} />}
+            : (
+              <StoriesListTab
+                endpoint={`/api/users/${userId}/stories${characterQuery(identity)}`}
+                // For the owner this tab only renders on a character identity (the
+                // main identity uses the manager), so the empty state is
+                // persona-scoped.
+                emptyTitle={profile.is_self ? 'No stories written as this persona yet.' : 'No stories to show.'}
+              />
+            ))}
+          {activeTab === 'posts' && (
+            <PostsListTab
+              endpoint={`/api/users/${userId}/posts${characterQuery(identity)}`}
+              emptyTitle={profile.is_self ? 'You haven’t posted anything here yet.' : 'No posts to show.'}
+              emptyAction={profile.is_self ? <Button size="sm" variant="outline" asChild><a href="/feed">Go to your feed</a></Button> : undefined}
+            />
+          )}
           {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
         </div>
       )}

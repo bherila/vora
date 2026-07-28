@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 
-export type ReportableType = 'media' | 'story' | 'post';
+export type ReportableType = 'media' | 'story' | 'post' | 'character' | 'user';
 
 /**
  * Reasons mirror the App\Enums\ReportReason cases (keep in sync). Ordered by
