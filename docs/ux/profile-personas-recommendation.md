@@ -310,10 +310,29 @@ pre-moderated; posts are auto-approved. Announcing at upload creates an Approved
 post wrapping a Pending attachment that `PostPresenter::canSee()` hides —
 followers see an empty shell until an admin approves.
 
-The post inherits the item's `audience`, `discoverable`, `character_id`, **and its
-`SpecificPeople` allowlist** (`syncAudienceMembers`) — omitting the allowlist
-makes the post visible to nobody. Deleting the post never deletes the item.
-Re-publishing does not re-announce.
+**An announcement post has no privacy of its own.** It carries the item's
+`audience`, `discoverable`, and `SpecificPeople` allowlist — omitting the
+allowlist would make the post visible to nobody — and an observer propagates any
+later change to the item, so the two can never diverge.
+
+Implemented as **copy-and-propagate**, not a nullable `posts.audience` resolved at
+read time. The literal form is the truer single source of truth, but
+`scopeViewableBy()` is a correlated subquery on the hot, keyset-paginated feed
+path, and `PostAttachment` is polymorphic — a null audience would mean branching
+on `attachable_type` to join `media` or `stories`, then a second polymorphic hop
+to reach the item's `audience_members` for the `SpecificPeople` tier, duplicating
+the audience rule per attachable table. Copying gives the identical guarantee and
+leaves the feed query untouched.
+
+**The general invariant: a post may never be broader than its most restrictive
+attachment.** Enforce the clamp at write for *all* posts, not just announcements.
+A manual public post attaching a followers-only photo currently renders as an
+empty shell, because `PostPresenter::canSee()` nulls the attachment out.
+Announcements are simply the degenerate case where the post has no opinion of its
+own.
+
+Deleting the post never deletes the item, and vice versa. Re-publishing does not
+re-announce — guard on an existing attachment for that item.
 
 ⚠️ **Stories cannot carry `character_id`** (gap 12). Either add a real authorship
 column or exclude stories from auto-posting in v1.
@@ -475,14 +494,12 @@ Phase 1.
 
 1. **Persona interests** — own, or inherited? `inherit_interests` exists, but a
    Separate persona inheriting the owner's signature is a correlation vector.
-2. **Audience narrowing after an announcement** — narrow the post, delete it, or
-   leave it? Phase 5 cannot ship without an answer.
-3. **Story authorship** (gap 12) — add `stories.character_id`, show
+2. **Story authorship** (gap 12) — add `stories.character_id`, show
    involvement-tagged stories including other authors', or exclude stories from
    persona pages?
-4. **Persona follow lifecycle** — auto-accept or pending? There is no per-persona
+3. **Persona follow lifecycle** — auto-accept or pending? There is no per-persona
    `profile_audience` equivalent, and the request notification copy needs framing.
-5. **Linked meta vs owner profile audience** — "a persona of @ben" on a public
+4. **Linked meta vs owner profile audience** — "a persona of @ben" on a public
    persona page reveals Ben to viewers who fail *his* profile gate. Probably
    acceptable for Linked, but it should be a decision.
 
