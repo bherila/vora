@@ -28,9 +28,11 @@ class PostFeedTest extends TestCase
     /**
      * @return list<string> the ulids in the viewer's feed
      */
-    private function feedUlids(User $viewer): array
+    private function feedUlids(User $viewer, ?string $scope = null): array
     {
-        return collect($this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data'))
+        $url = '/api/feed'.($scope === null ? '' : '?scope='.$scope);
+
+        return collect($this->actingAs($viewer)->getJson($url)->assertOk()->json('data'))
             ->pluck('ulid')->all();
     }
 
@@ -51,6 +53,30 @@ class PostFeedTest extends TestCase
 
         $this->assertEqualsCanonicalizing([$own->ulid, $followedPost->ulid], $ulids);
         $this->assertNotContains($unfollowedPost->ulid, $ulids);
+    }
+
+    public function test_mixed_scope_adds_only_reviewed_discoverable_everyone_posts_from_active_accounts(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $inactive = User::factory()->approved()->create();
+        $inactive->forceFill(['deactivated_at' => now()])->save();
+
+        $public = Post::factory()->for($stranger)->approved()->create();
+        $unlisted = Post::factory()->for($stranger)->approved()->unlisted()->create();
+        $restricted = Post::factory()->for($stranger)->approved()->audience(Audience::Followers)->create();
+        $pending = Post::factory()->for($stranger)->create();
+        $inactivePost = Post::factory()->for($inactive)->approved()->create();
+
+        $this->assertNotContains($public->ulid, $this->feedUlids($viewer), 'following remains the safe default');
+
+        $ulids = $this->feedUlids($viewer, 'mixed');
+
+        $this->assertContains($public->ulid, $ulids);
+        $this->assertNotContains($unlisted->ulid, $ulids);
+        $this->assertNotContains($restricted->ulid, $ulids);
+        $this->assertNotContains($pending->ulid, $ulids);
+        $this->assertNotContains($inactivePost->ulid, $ulids);
     }
 
     public function test_feed_applies_the_audience_tier_of_followed_posts(): void

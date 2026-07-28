@@ -3,6 +3,7 @@
 namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
+use App\Jobs\NotifyFollowersOfPost;
 use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Interest;
@@ -11,6 +12,8 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class PostAttachmentTest extends TestCase
@@ -47,7 +50,7 @@ class PostAttachmentTest extends TestCase
     public function test_user_can_attach_their_own_media_and_an_interest(): void
     {
         $user = User::factory()->approved()->create();
-        $media = Media::factory()->for($user)->create();
+        $media = Media::factory()->for($user)->approved()->create();
         $interest = Interest::query()->create(['name' => 'Hiking']);
 
         $response = $this->actingAs($user)->postJson('/api/posts', [
@@ -203,6 +206,88 @@ class PostAttachmentTest extends TestCase
             'body' => 'My avatar',
             'attachments' => [['type' => 'media', 'id' => $avatar->id]],
         ])->assertStatus(422)->assertJsonValidationErrorFor('attachments.0.id');
+    }
+
+    public function test_account_post_rejects_relationship_tier_media_owned_by_a_separate_persona(): void
+    {
+        $user = User::factory()->approved()->create();
+        $separate = Character::factory()->for($user)->create(['is_linked' => false]);
+
+        foreach ([Audience::Followers, Audience::Mutuals] as $audience) {
+            $media = Media::factory()->for($user)->approved()->audience($audience)->create([
+                'character_id' => $separate->id,
+            ]);
+
+            $this->actingAs($user)->postJson('/api/posts', [
+                'body' => 'Cross-identity attachment',
+                'audience' => Audience::Everyone->value,
+                'attachments' => [['type' => 'media', 'id' => $media->id]],
+            ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+        }
+
+        $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_persona_post_rejects_another_personas_relationship_tier_media(): void
+    {
+        $user = User::factory()->approved()->create();
+        $persona = Character::factory()->for($user)->create(['is_linked' => false]);
+        $otherPersona = Character::factory()->for($user)->create(['is_linked' => false]);
+
+        foreach ([Audience::Followers, Audience::Mutuals] as $audience) {
+            $media = Media::factory()->for($user)->approved()->audience($audience)->create([
+                'character_id' => $otherPersona->id,
+            ]);
+
+            $this->actingAs($user)->postJson('/api/posts', [
+                'body' => 'Cross-identity attachment',
+                'audience' => Audience::Everyone->value,
+                'character_id' => $persona->id,
+                'attachments' => [['type' => 'media', 'id' => $media->id]],
+            ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+        }
+
+        $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_pending_media_and_unavailable_stories_cannot_be_manually_attached(): void
+    {
+        $user = User::factory()->approved()->create();
+        $pendingMedia = Media::factory()->for($user)->create();
+        $pendingStory = Story::factory()->for($user)->published()->create();
+        $draftStory = Story::factory()->for($user)->approved()->create();
+
+        foreach ([
+            ['type' => 'media', 'id' => $pendingMedia->id],
+            ['type' => 'story', 'id' => $pendingStory->id],
+            ['type' => 'story', 'id' => $draftStory->id],
+        ] as $attachment) {
+            $this->actingAs($user)->postJson('/api/posts', [
+                'body' => 'Unavailable attachment',
+                'attachments' => [$attachment],
+            ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments.0.id');
+        }
+
+        $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_manual_post_notification_is_dispatched_only_after_the_aggregate_commits(): void
+    {
+        Queue::fake();
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->approved()->create();
+
+        DB::transaction(function () use ($user, $media): void {
+            $this->actingAs($user)->postJson('/api/posts', [
+                'body' => 'Atomic post',
+                'attachments' => [['type' => 'media', 'id' => $media->id]],
+            ])->assertCreated();
+        });
+
+        Queue::assertPushed(
+            NotifyFollowersOfPost::class,
+            fn ($job): bool => $job->afterCommit === true,
+        );
     }
 
     public function test_draft_story_attachment_is_hidden_from_other_viewers(): void

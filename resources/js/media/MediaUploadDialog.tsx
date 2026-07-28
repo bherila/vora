@@ -184,6 +184,7 @@ export function MediaUploadDialog({
   const [audience, setAudience] = useState<Audience>('everyone');
   const [audienceUserIds, setAudienceUserIds] = useState<number[]>([]);
   const [discoverable, setDiscoverable] = useState(true);
+  const [announce, setAnnounce] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(lastInterestIds);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -214,6 +215,7 @@ export function MediaUploadDialog({
     setAudience('everyone');
     setAudienceUserIds([]);
     setDiscoverable(true);
+    setAnnounce(true);
     setUploadInterestIds(lastInterestIds);
     setProgress(0);
   };
@@ -264,6 +266,7 @@ export function MediaUploadDialog({
           has_thumbnail: thumbnail !== null,
           perceptual_hash: perceptualHash,
           file_hash: fileHash,
+          announce,
           ...(selectedCharacterId === null ? {
             audience,
             audience_user_ids: audience === 'specific' ? audienceUserIds : [],
@@ -426,6 +429,16 @@ export function MediaUploadDialog({
             <span className="text-sm">Interests</span>
             <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={announce}
+              onChange={(event) => setAnnounce(event.target.checked)}
+              disabled={uploading}
+              className="mt-0.5"
+            />
+            <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
+          </label>
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={uploading}>
               {uploading ? 'Uploading…' : 'Upload'}

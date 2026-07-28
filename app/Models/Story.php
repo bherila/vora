@@ -49,6 +49,7 @@ class Story extends Model
         'body',
         'audience',
         'discoverable',
+        'announce_on_approval',
         'published_at',
     ];
 
@@ -62,6 +63,7 @@ class Story extends Model
             'status' => StoryStatus::class,
             'audience' => Audience::class,
             'discoverable' => 'boolean',
+            'announce_on_approval' => 'boolean',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
             'published_at' => 'datetime',

@@ -18,6 +18,7 @@ use App\Services\Privacy\PrivacyAuditor;
 use App\Support\CharacterPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class CharacterController extends Controller
 {
@@ -75,13 +76,15 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
-        $privacyBefore = $character->privacySnapshot();
-        $character->fill($this->payload($request))->save();
-        $this->syncCharacterAudience($request, $character);
-        $this->auditor->record($character, $user, $privacyBefore, $character->privacySnapshot(), $request);
-        $this->propagateCharacterPrivacy($character, $user, $request);
+        return DB::transaction(function () use ($request, $character, $user): JsonResponse {
+            $privacyBefore = $character->privacySnapshot();
+            $character->fill($this->payload($request))->save();
+            $this->syncCharacterAudience($request, $character);
+            $this->auditor->record($character, $user, $privacyBefore, $character->privacySnapshot(), $request);
+            $this->propagateCharacterPrivacy($character, $user, $request);
 
-        return response()->json(['success' => true, 'data' => $this->present($character->refresh()->load('audienceMembers'))]);
+            return response()->json(['success' => true, 'data' => $this->present($character->refresh()->load('audienceMembers'))]);
+        });
     }
 
     public function destroy(Character $character): JsonResponse

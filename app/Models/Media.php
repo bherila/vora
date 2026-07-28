@@ -89,6 +89,7 @@ class Media extends Model
         'multipart_initiated_at',
         'audience',
         'discoverable',
+        'announce_on_approval',
     ];
 
     /**
@@ -101,6 +102,7 @@ class Media extends Model
             'purpose' => MediaPurpose::class,
             'audience' => Audience::class,
             'discoverable' => 'boolean',
+            'announce_on_approval' => 'boolean',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
             'hls_checked_at' => 'datetime',
