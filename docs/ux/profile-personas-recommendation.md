@@ -384,11 +384,19 @@ did not exist when #101 shipped — the same "never promise more than currently
 exists" rule applied to the persona explainer below. Now that #102 has landed,
 the end-state wording is true and the control copy can be upgraded.
 
+⚠️ **Write this copy pronoun-free.** The wording below parameterises the persona
+name; it must not also assert a pronoun. An earlier draft read "…can see *she's*
+yours", which shipped and rendered as "People visiting **Marcus** can see
+**she's** yours" — and worse, "People visiting **this persona** can see she's
+yours" before a name is typed. Personas are the identity feature and carry their
+own `gender`; asserting she/her over a user's chosen identity is the wrong
+default. See #132.
+
 *End state (now accurate — #102 merged):*
-> **Linked** — People visiting Kira can see she's yours, and anyone who follows
-> you will also see Kira's followers-only posts.
+> **Linked** — People visiting {name} can see this persona is yours, and anyone
+> who follows you will also see {name}'s followers-only posts.
 >
-> **Separate** — Nobody can tell Kira is yours. She builds her own following from
+> **Separate** — Nobody can tell {name} is yours. {name} builds a following from
 > scratch.
 
 *Shipped in #101, before persona follows existed:*
