@@ -6,12 +6,14 @@ use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Http\Requests\Media\ListMediaRequest;
+use App\Models\Character;
 use App\Models\InterestRating;
 use App\Models\Media;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
+use App\Support\CharacterPresenter;
 use App\Support\MediaFilter;
 use App\Support\PaginationMeta;
 use App\Support\StoryPresenter;
@@ -55,6 +57,7 @@ class ExploreController extends Controller
             'explore' => [
                 'media' => $this->mediaPayload($request),
                 'stories' => $this->storiesPayload($request),
+                'personas' => $this->personasPayload($request),
                 'default_interest_ids' => $defaultInterestIds,
             ],
         ]]);
@@ -163,5 +166,57 @@ class ExploreController extends Controller
                 ->all(),
             'meta' => PaginationMeta::from($paginator),
         ], $request->user(), 'story');
+    }
+
+    /**
+     * List personas discoverable by the current viewer.
+     */
+    public function apiPersonas(ListMediaRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            ...$this->personasPayload($request),
+        ]);
+    }
+
+    /**
+     * Discoverable personas: strictly the Everyone audience, opted into
+     * discovery, with an active + approved owner — `discoverable = false`
+     * means the persona page is direct-link-only and never listed here. The
+     * interest filter matches only a persona's *own* ratings: an inheriting
+     * persona has no rows of its own, which is deliberate — matching through
+     * inheritance would surface the owner's interest fingerprint on a
+     * pseudonymous card.
+     *
+     * @return array<string, mixed>
+     */
+    private function personasPayload(ListMediaRequest $request): array
+    {
+        $interestIds = array_values(array_unique(array_map(
+            'intval',
+            (array) $request->input('interest_ids', []),
+        )));
+
+        $query = Character::query()
+            ->discoverable()
+            ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
+            ->with('profilePicture')
+            ->when($interestIds !== [], fn ($q) => $q->whereHas(
+                'interestRatings',
+                fn ($ratings) => $ratings->where('level', '>', 0)->whereIn('interest_id', $interestIds),
+            ))
+            ->latest()
+            ->latest('id');
+
+        $paginator = $query->paginate((int) config('media.page_size', 24));
+        $viewer = $request->user();
+
+        return $this->favorites->annotateListing([
+            'data' => collect($paginator->items())
+                ->map(fn (Character $character): array => CharacterPresenter::publicCard($character, $this->responder, $viewer))
+                ->values()
+                ->all(),
+            'meta' => PaginationMeta::from($paginator),
+        ], $viewer, 'character');
     }
 }

@@ -26,6 +26,8 @@ export interface PostAuthor {
 export interface CharacterRef {
   id: number;
   display_name: string;
+  /** Null when the viewer fails the persona's audience — render unlinked. */
+  ulid?: string | null;
   avatar?: MediaItem | null;
 }
 
@@ -35,6 +37,7 @@ export interface CommunityPost {
   body: string;
   audience: Audience;
   discoverable: boolean;
+  /** Null for persona posts: the human author never reaches the client. */
   author: PostAuthor | null;
   as_character: CharacterRef | null;
   attachments: PostAttachment[];
