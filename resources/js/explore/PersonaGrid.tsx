@@ -15,7 +15,6 @@ export interface PersonaDiscoveryItem {
   avatar_url: string | null;
   user_type: string | null;
   gender: string | null;
-  href: string;
   favorited?: boolean;
 }
 
@@ -46,7 +45,7 @@ export function PersonaGrid({ items, renderActions }: PersonaGridProps) {
           </CardHeader>
           <CardContent className="grid gap-2 text-sm">
             {persona.description && <p className="line-clamp-2 text-xs text-muted-foreground">{persona.description}</p>}
-            <a className="text-sm underline underline-offset-4" href={persona.href}>Visit</a>
+            <a className="text-sm underline underline-offset-4" href={`/c/${encodeURIComponent(persona.ulid)}`}>Visit</a>
             {renderActions?.(persona)}
           </CardContent>
         </Card>
