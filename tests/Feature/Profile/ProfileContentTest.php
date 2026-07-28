@@ -96,6 +96,46 @@ class ProfileContentTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_separate_persona_cannot_be_probed_through_owner_profile_content_urls(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create(['is_linked' => false]);
+
+        Media::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
+        Post::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
+        $story = Story::factory()->for($owner)->published()->approved()->create();
+        $story->authors()->where('user_id', $owner->id)->update(['character_id' => $character->id]);
+
+        foreach (['media', 'posts', 'stories', 'content-counts', 'recent-content'] as $endpoint) {
+            $this->actingAs($viewer)
+                ->getJson("/api/users/{$owner->id}/{$endpoint}?character_id={$character->id}")
+                ->assertNotFound()
+                ->assertJsonMissing(['message' => 'Profile unavailable.']);
+        }
+    }
+
+    public function test_owner_and_admin_retain_separate_persona_profile_content_access(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->approved()->create();
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create(['is_linked' => false]);
+        $media = Media::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
+
+        $this->actingAs($owner)
+            ->getJson("/api/users/{$owner->id}/media?character_id={$character->id}")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $media->id);
+
+        $this->actingAs($admin)
+            ->getJson("/api/users/{$owner->id}/media?character_id={$character->id}")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $media->id);
+    }
+
     public function test_profile_stories_lists_published_approved_stories_for_others(): void
     {
         $this->fakeStorage();

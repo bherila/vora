@@ -335,15 +335,21 @@ class FollowController extends Controller
 
     /**
      * The profile's characters, for the identity strip across the top of the
-     * profile-as-container view. A character a viewer cannot see by audience is
-     * still listed here as an identity to switch to; its *content* tabs run the
-     * same per-item privacy filter, so nothing is exposed by listing the name.
+     * profile-as-container view. Separate personas are omitted for everyone
+     * except their owner and admins: enumerating one here would reveal the
+     * persona-to-owner relationship even if every content item stayed hidden.
+     * Linked personas remain listed regardless of their audience because their
+     * owner association is intentionally public.
      *
      * @return list<array<string, mixed>>
      */
     private function charactersStrip(User $user, ?User $viewer): array
     {
         return $user->characters()
+            ->when(
+                ! $viewer instanceof User || ($viewer->id !== $user->id && ! $viewer->isAdmin()),
+                fn ($query) => $query->where('is_linked', true),
+            )
             ->with('profilePicture')
             ->orderBy('display_name')
             ->get()
