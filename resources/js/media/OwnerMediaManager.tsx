@@ -216,7 +216,7 @@ export function OwnerMediaManager({ userId, identity, characters, lastInterestId
         ) : <span />}
         <MediaUploadDialog
           characters={characters}
-          defaultCharacterId={identity}
+          {...(identity === null ? {} : { defaultCharacterId: identity })}
           lastInterestIds={lastInterestIds}
           onUploaded={listing.reload}
           triggerSize="sm"

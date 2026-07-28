@@ -39,6 +39,8 @@ export const storiesApi = {
   authors: (id: number) => fetchWrapper.get(`/api/stories/${id}/authors`).then((r) => (r as Envelope<StoryEditor['authors']>).data),
   invite: (id: number, userId: number) => fetchWrapper.post(`/api/stories/${id}/authors`, { user_id: userId }).then((r) => (r as Envelope<StoryEditor['authors']>).data),
   removeAuthor: (id: number, userId: number) => fetchWrapper.delete(`/api/stories/${id}/authors/${userId}`).then((r) => (r as Envelope<StoryEditor['authors']>).data),
+  updateAuthorIdentity: (id: number, userId: number, characterId: number | null) =>
+    fetchWrapper.patch(`/api/stories/${id}/authors/${userId}`, { character_id: characterId }).then((r) => (r as Envelope<StoryEditor['authors']>).data),
 };
 
 export type { InvolvementTag };

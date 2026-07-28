@@ -14,6 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWrapper } from '@/fetchWrapper';
+import {
+  removeIdentityOption,
+  switchActiveIdentity,
+  upsertIdentityOption,
+  useIdentityStore,
+} from '@/identity';
 import { readInitialData } from '@/initialData';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
@@ -266,15 +272,18 @@ const TABS: TabDef[] = [
 
 export function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
-  const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
+  const [profileMedia, setProfileMedia] = useState<ProfileMediaData>(getProfileMedia);
   const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
   const [identityCounts] = useState<IdentityCounts | null>(getIdentityCounts);
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<CharacterRecord | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  // null = the main user identity; a number = one of their characters.
-  const [identity, setIdentity] = useState<number | null>(null);
+  const { activeIdentityId } = useIdentityStore();
+  // Other people's profile rails are browsing state. On /me, the rail is the
+  // same persisted authorship state as the navbar and every create surface.
+  const [viewedIdentity, setViewedIdentity] = useState<number | null>(null);
+  const identity = profile?.is_self ? activeIdentityId : viewedIdentity;
   // Everyone lands on the showcase: the profile's own work, media first.
   const [tab, setTab] = useState<TabKey>('media');
   const [editOpen, setEditOpen] = useState(false);
@@ -332,15 +341,49 @@ export function FollowProfilePage() {
       const exists = current.characters.some((c) => c.id === record.id);
       return { ...current, characters: exists ? current.characters.map((c) => (c.id === record.id ? ref : c)) : [...current.characters, ref] };
     });
+    setProfileMedia((current) => {
+      const option: CharacterOption = {
+        id: record.id,
+        display_name: record.display_name,
+        audience: record.audience,
+        audience_user_ids: record.audience_user_ids,
+      };
+      const exists = current.characters.some((character) => character.id === record.id);
+      return {
+        ...current,
+        characters: exists
+          ? current.characters.map((character) => character.id === record.id ? option : character)
+          : [...current.characters, option],
+      };
+    });
+    if (profile) {
+      upsertIdentityOption({
+        id: record.id,
+        displayName: record.display_name,
+        avatarUrl: characterRefFrom(record).avatar_url ?? null,
+      }, {
+        id: null,
+        displayName: profile.display_name,
+        avatarUrl: profile.avatar_url ?? null,
+      });
+    }
   };
 
   const handleDeleteCharacter = async (record: CharacterRecord): Promise<void> => {
     if (!window.confirm(`Delete ${record.display_name}? Art ownership stays with your user account.`)) return;
     try {
       await fetchWrapper.delete(`/api/characters/${record.id}`);
+      if (activeIdentityId === record.id) {
+        await switchActiveIdentity(null);
+      }
+      removeIdentityOption(record.id);
       setProfileCharacters((current) => current.filter((c) => c.id !== record.id));
       setProfile((current) => current ? { ...current, characters: current.characters.filter((c) => c.id !== record.id) } : current);
-      if (identity === record.id) setIdentity(null);
+      setProfileMedia((current) => ({
+        ...current,
+        characters: current.characters.filter((character) => character.id !== record.id),
+      }));
+      if (viewedIdentity === record.id) setViewedIdentity(null);
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to delete character.');
     }
@@ -355,6 +398,14 @@ export function FollowProfilePage() {
   const tabs: TabDef[] = identity !== null ? TABS.filter((t) => t.key !== 'favorites') : TABS;
   const activeTab: TabKey = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? 'media');
   const activeCharacter = identity !== null ? profileCharacters.find((c) => c.id === identity) ?? null : null;
+  const handleIdentitySelect = (nextIdentity: number | null): void => {
+    if (!profile.is_self) {
+      setViewedIdentity(nextIdentity);
+      return;
+    }
+
+    switchActiveIdentity(nextIdentity).catch(() => setError('Unable to switch identity.'));
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -447,7 +498,7 @@ export function FollowProfilePage() {
               profile={profile}
               identity={identity}
               counts={profile.is_self ? identityCounts : null}
-              onSelect={setIdentity}
+              onSelect={handleIdentitySelect}
               onCreate={profile.is_self ? openCreateCharacter : undefined}
             />
           )}

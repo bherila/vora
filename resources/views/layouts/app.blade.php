@@ -20,6 +20,29 @@
     @php
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
+      $__mediaResponder = $__isAuthenticated ? app(\App\Services\Media\MediaResponseService::class) : null;
+      $__accountAvatarUrl = $__isAuthenticated
+        ? \App\Support\UserPresenter::avatarUrl($__currentUser, $__mediaResponder, $__currentUser)
+        : null;
+      $__characters = $__isAuthenticated
+        ? $__currentUser->characters()->with('profilePicture')->orderBy('display_name')->get()
+        : collect();
+      $__activeIdentityId = $__isAuthenticated
+        ? app(\App\Support\ActiveIdentity::class)->id(request(), $__currentUser)
+        : null;
+      // A persona-free account gets no switcher data at all. Once the user opts
+      // in, the human identity is the first choice followed by owned personas.
+      $__identities = $__characters->isEmpty()
+        ? []
+        : collect([[
+            'id' => null,
+            'displayName' => $__currentUser->display_name ?: $__currentUser->name,
+            'avatarUrl' => $__accountAvatarUrl,
+          ]])->concat($__characters->map(fn ($character) => [
+            'id' => $character->id,
+            'displayName' => $character->display_name,
+            'avatarUrl' => \App\Support\UserPresenter::pictureUrl($character->profilePicture, $__mediaResponder, $__currentUser),
+          ]))->values()->all();
       // Use the same gate the admin routes enforce (admin flag PLUS approved and
       // able to log in), not the bare isAdmin() flag — otherwise a pending or
       // disabled admin would still receive the Admin menu and open-report count
@@ -68,14 +91,15 @@
       ] : null;
       $__accountMenu = $__isAuthenticated ? [
         'label' => $__currentUser->display_name ?: $__currentUser->name,
-        'avatarUrl' => \App\Support\UserPresenter::avatarUrl($__currentUser, app(\App\Services\Media\MediaResponseService::class), $__currentUser),
+        'avatarUrl' => $__accountAvatarUrl,
         // The avatar + name link straight to the profile; the caret opens this menu.
         'profileHref' => route('me', [], false),
-        'items' => [
+        'items' => array_values(array_filter([
+          empty($__identities) ? null : ['type' => 'link', 'label' => 'Profile', 'href' => route('me', [], false)],
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
           ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],
-        ],
+        ])),
       ] : null;
       $__guestMenuItems = $__isAuthenticated ? [] : [
         ['label' => 'Log in', 'href' => route('login', [], false), 'variant' => 'link'],
@@ -90,6 +114,8 @@
         'adminMenu' => $__adminMenu,
         'accountMenu' => $__accountMenu,
         'guestMenuItems' => $__guestMenuItems,
+        'identities' => $__identities,
+        'activeIdentityId' => $__activeIdentityId,
       ]] + ($initialData ?? []);
     @endphp
     <script id="initial-data" type="application/json" @cspNonce>{!! json_encode($__payload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) !!}</script>
@@ -98,7 +124,7 @@
     <script @cspNonce>(_=>{let a})()</script>
   </head>
   <body class="min-h-screen flex flex-col">
-    <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A] h-14">
+    <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A]{{ empty($__identities) ? ' h-14' : '' }}">
       <div id="navbar"></div>
     </header>
 

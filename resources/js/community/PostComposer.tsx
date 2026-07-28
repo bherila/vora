@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { useIdentityStore } from '@/identity';
 import { type Audience } from '@/lib/audience';
 import type { MediaItem, PagedResponse } from '@/media/types';
 import type { StorySummary } from '@/stories/types';
@@ -58,6 +59,7 @@ function getErrorMessage(err: unknown): string {
 }
 
 export function PostComposer({ onCreated }: PostComposerProps) {
+  const { activeIdentityId, identities } = useIdentityStore();
   const [body, setBody] = useState('');
   const [audience, setAudience] = useState<Audience>('everyone');
   const [audienceUserIds, setAudienceUserIds] = useState<number[]>([]);
@@ -66,7 +68,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [stories, setStories] = useState<StorySummary[]>([]);
   const [interests, setInterests] = useState<InterestItem[]>([]);
-  const [characterId, setCharacterId] = useState<number | ''>('');
+  const [characterId, setCharacterId] = useState<number | ''>(() => activeIdentityId ?? '');
   const [attachmentType, setAttachmentType] = useState<AttachmentType>('character');
   const [attachmentId, setAttachmentId] = useState<number | ''>('');
   const [attachments, setAttachments] = useState<SelectableAttachment[]>([]);
@@ -79,12 +81,12 @@ export function PostComposer({ onCreated }: PostComposerProps) {
     const parts: string[] = [];
     if (audience !== 'everyone') parts.push(audience === 'specific' ? 'Specific people' : audience === 'followers' ? 'Followers' : 'Mutuals');
     if (characterId !== '') {
-      const persona = characters.find((character) => character.id === characterId);
-      if (persona) parts.push(`As ${persona.display_name}`);
+      const persona = identities.find((identity) => identity.id === characterId);
+      if (persona) parts.push(`As ${persona.displayName}`);
     }
     if (attachments.length > 0) parts.push(`${attachments.length} attachment${attachments.length === 1 ? '' : 's'}`);
     return parts.join(' · ');
-  }, [audience, characterId, characters, attachments.length]);
+  }, [audience, characterId, identities, attachments.length]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +110,10 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setCharacterId(activeIdentityId ?? '');
+  }, [activeIdentityId]);
 
   const attachmentOptions = useMemo((): SelectableAttachment[] => {
     switch (attachmentType) {
@@ -164,7 +170,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       setAudience('everyone');
       setAudienceUserIds([]);
       setDiscoverable(true);
-      setCharacterId('');
+      setCharacterId(activeIdentityId ?? '');
       setAttachments([]);
       setShowOptions(false);
       toast.success('Post published.');
@@ -218,8 +224,8 @@ export function PostComposer({ onCreated }: PostComposerProps) {
                 disabled={saving}
               >
                 <option value="">My user profile</option>
-                {characters.map((character) => (
-                  <option key={character.id} value={character.id}>{character.display_name}</option>
+                {identities.filter((identity) => identity.id !== null).map((identity) => (
+                  <option key={identity.id} value={identity.id ?? ''}>{identity.displayName}</option>
                 ))}
               </select>
               <label className="flex items-center gap-2 text-sm">
