@@ -150,11 +150,8 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'approved'])->group(function () {
-    // The profile (/me) is the home for logged-in users; the cross-author feed is
-    // a tab there. Keep the dashboard/feed names as redirects so old bookmarks,
-    // notification links, and any route('feed')/route('dashboard') callers land
-    // on the profile.
-    Route::get('/dashboard', fn () => redirect()->route('me'))->name('dashboard');
+    // The retired dashboard forwards old bookmarks and route callers to the feed.
+    Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', fn () => redirect()->route('me'))->name('feed');
     // Characters are created and managed on the profile (/me) now; keep the named
     // route as a redirect for old bookmarks.
