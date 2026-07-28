@@ -60,10 +60,6 @@ class Character extends Model
         // valid) is kept. No user-facing path changes user_id today; this guards
         // the invariant for future admin/import/maintenance paths.
         static::updated(function (Character $character): void {
-            if ($character->wasChanged('is_linked') && ! $character->is_linked) {
-                $character->interestRatings()->delete();
-            }
-
             if (! $character->wasChanged('user_id')) {
                 return;
             }

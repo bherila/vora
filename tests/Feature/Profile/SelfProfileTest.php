@@ -146,6 +146,11 @@ class SelfProfileTest extends TestCase
             ->assertJsonCount(1, 'data.characters')
             ->assertJsonPath('data.characters.0.display_name', 'Linked Persona')
             ->assertJsonMissing(['display_name' => 'Separate Persona']);
+
+        $pageData = $this->initialData(
+            $this->actingAs($viewer)->get("/users/{$owner->id}")->assertOk()->getContent(),
+        );
+        $this->assertSame(['Linked Persona'], array_column($pageData['followProfile']['characters'], 'display_name'));
     }
 
     public function test_owner_and_admin_retain_separate_personas_in_owner_profile_payloads(): void

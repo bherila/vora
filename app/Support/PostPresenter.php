@@ -162,7 +162,7 @@ class PostPresenter
         }
 
         return $post->attachments
-            ->map(fn (PostAttachment $attachment): ?array => self::attachment($attachment->attachable, $viewer))
+            ->map(fn (PostAttachment $attachment): ?array => self::attachment($post, $attachment->attachable, $viewer))
             ->filter()
             ->values()
             ->all();
@@ -171,11 +171,22 @@ class PostPresenter
     /**
      * @return array<string, mixed>|null
      */
-    private static function attachment(?Model $attachable, ?User $viewer): ?array
+    private static function attachment(Post $post, ?Model $attachable, ?User $viewer): ?array
     {
         // Null when the target was deleted out from under the attachment, or when
         // the intersection rule hides a privacy-controlled item from this viewer.
         if ($attachable === null || ! self::canSee($attachable, $viewer)) {
+            return null;
+        }
+
+        // A human-authored post naming its author's Separate persona reveals
+        // the persona-owner link. The same persona may name itself on its own
+        // post; owners and admins retain the full attachment for management.
+        if ($attachable instanceof Character
+            && ! $attachable->is_linked
+            && $attachable->user_id === $post->user_id
+            && $post->character_id !== $attachable->id
+            && ! self::ownerOrAdmin($post->user_id, $viewer)) {
             return null;
         }
 

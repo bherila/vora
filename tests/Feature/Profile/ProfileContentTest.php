@@ -108,12 +108,18 @@ class ProfileContentTest extends TestCase
         Post::factory()->for($owner)->approved()->create(['character_id' => $character->id]);
         $story = Story::factory()->for($owner)->published()->approved()->create();
         $story->authors()->where('user_id', $owner->id)->update(['character_id' => $character->id]);
+        config(['app.debug' => false]);
 
         foreach (['media', 'posts', 'stories', 'content-counts', 'recent-content'] as $endpoint) {
+            $missingResponse = $this->actingAs($viewer)
+                ->getJson("/api/users/{$owner->id}/{$endpoint}?character_id=".PHP_INT_MAX)
+                ->assertNotFound();
+
             $this->actingAs($viewer)
                 ->getJson("/api/users/{$owner->id}/{$endpoint}?character_id={$character->id}")
                 ->assertNotFound()
-                ->assertJsonMissing(['message' => 'Profile unavailable.']);
+                ->assertJsonMissing(['message' => 'Profile unavailable.'])
+                ->assertExactJson($missingResponse->json());
         }
     }
 

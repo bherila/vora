@@ -447,7 +447,7 @@ class CharacterTest extends TestCase
         ]);
     }
 
-    public function test_switching_a_linked_character_to_separate_clears_its_interest_fingerprint(): void
+    public function test_switching_a_linked_character_to_separate_preserves_explicit_persona_ratings(): void
     {
         $user = User::factory()->approved()->create();
         $interest = Interest::query()->create(['name' => 'Identifying Interest']);
@@ -465,8 +465,10 @@ class CharacterTest extends TestCase
         $character->update(['is_linked' => false]);
 
         $this->assertFalse($character->refresh()->inherit_interests);
-        $this->assertDatabaseMissing('interest_ratings', [
+        $this->assertDatabaseHas('interest_ratings', [
             'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 7,
         ]);
     }
 

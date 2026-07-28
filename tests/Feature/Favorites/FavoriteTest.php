@@ -219,6 +219,32 @@ class FavoriteTest extends TestCase
             ->assertJsonPath('data.0.href', "/c/{$character->ulid}");
     }
 
+    public function test_owner_favorites_do_not_correlate_a_separate_persona_to_other_viewers(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $separate = Character::factory()->for($owner)->create([
+            'display_name' => 'Private Persona',
+            'is_linked' => false,
+        ]);
+
+        $this->actingAs($owner)
+            ->postJson('/api/favorites', ['type' => 'character', 'id' => $separate->id])
+            ->assertCreated();
+
+        $this->actingAs($viewer)
+            ->getJson("/api/users/{$owner->id}/favorites")
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonMissing(['label' => 'Private Persona']);
+
+        $this->actingAs($owner)
+            ->getJson("/api/users/{$owner->id}/favorites")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $separate->id);
+    }
+
     public function test_characters_of_unapproved_or_inactive_owners_remain_hidden(): void
     {
         User::factory()->create();
