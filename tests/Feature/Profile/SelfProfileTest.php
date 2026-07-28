@@ -4,6 +4,8 @@ namespace Tests\Feature\Profile;
 
 use App\Models\Character;
 use App\Models\Favorite;
+use App\Models\Media;
+use App\Models\Post;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,6 +51,53 @@ class SelfProfileTest extends TestCase
 
         $this->assertSame('Owner biography.', $data['profileEditable']['bio']);
         $this->assertSame('she/her', $data['profileEditable']['pronouns']);
+    }
+
+    /**
+     * Personas are opt-in: a user who has never created one must see no persona
+     * affordances hydrated into /me — no identity counts, no character records —
+     * and /me no longer carries the feed onboarding checklist (it lives on /feed).
+     */
+    public function test_me_hydrates_no_persona_affordances_for_a_persona_free_user(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        $data = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
+
+        $this->assertSame([], $data['followProfile']['characters']);
+        $this->assertSame([], $data['profileCharacters']);
+        $this->assertNull($data['profileIdentityCounts']);
+        $this->assertArrayNotHasKey('feedOnboarding', $data);
+    }
+
+    public function test_me_hydrates_per_identity_content_totals_once_a_persona_exists(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $character = Character::factory()->for($user)->create();
+
+        Media::factory()->for($user)->approved()->create();
+        Media::factory()->for($user)->approved()->create(['character_id' => $character->id]);
+        Post::factory()->for($user)->approved()->create();
+
+        $data = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
+
+        $this->assertSame(2, $data['profileIdentityCounts']['self']); // media + post
+        $this->assertSame(1, $data['profileIdentityCounts']['characters'][(string) $character->id]);
+    }
+
+    /**
+     * Decode the hydrated initial-data JSON out of a rendered page.
+     *
+     * @return array<string, mixed>
+     */
+    private function initialData(string $html): array
+    {
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $html, $matches);
+        $this->assertArrayHasKey(1, $matches, 'initial-data script not found');
+
+        /** @var array<string, mixed> */
+        return json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
     }
 
     public function test_profile_payload_exposes_the_character_strip_and_viewer_favorite_state(): void

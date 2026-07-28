@@ -8,9 +8,12 @@ use App\Models\Post;
 use App\Models\User;
 
 /**
- * First-run checklist state shown on the home surface (the profile's Feed tab).
+ * First-run checklist state shown on the feed (/feed, the post-login landing).
  * Returns null once every step is complete so the checklist disappears for
  * established users. Each flag is a single existence check, kept cheap.
+ *
+ * Deliberately no persona step: personas are an opt-in layer most users never
+ * touch, so onboarding must not suggest one is expected.
  */
 class Onboarding
 {

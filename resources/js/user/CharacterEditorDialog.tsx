@@ -225,8 +225,8 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{current === null ? 'Add character' : `Edit ${current.display_name}`}</DialogTitle>
-          <DialogDescription>This does not change your real user account profile.</DialogDescription>
+          <DialogTitle>{current === null ? 'New persona' : `Edit ${current.display_name}`}</DialogTitle>
+          <DialogDescription>A persona is a character of yours — it does not change your real user account profile.</DialogDescription>
         </DialogHeader>
 
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
