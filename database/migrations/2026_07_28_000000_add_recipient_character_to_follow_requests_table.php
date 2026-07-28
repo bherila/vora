@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -31,6 +32,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Account-only schema cannot represent persona-scoped edges. Discard
+        // them deliberately before restoring its pairwise unique constraint.
+        DB::table('follow_requests')->whereNotNull('recipient_character_id')->delete();
+
         Schema::table('follow_requests', function (Blueprint $table): void {
             $table->dropUnique('follow_requests_unique_recipient_scope');
             $table->dropIndex('follow_requests_character_status_index');

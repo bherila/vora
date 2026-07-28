@@ -143,20 +143,30 @@ final class FollowGraph
             return;
         }
 
-        $query->where(function (QueryBuilder $identity) use ($characterColumn): void {
-            $identity
-                ->whereColumn('follow_requests.recipient_character_id', $characterColumn)
-                ->orWhere(function (QueryBuilder $account) use ($characterColumn): void {
-                    $account->whereNull('follow_requests.recipient_character_id')
-                        ->where(function (QueryBuilder $linked) use ($characterColumn): void {
-                            $linked->whereNull($characterColumn)
-                                ->orWhereExists(function (QueryBuilder $characters) use ($characterColumn): void {
-                                    $characters->selectRaw('1')
-                                        ->from('characters as followed_characters')
-                                        ->whereColumn('followed_characters.id', $characterColumn)
-                                        ->where('followed_characters.is_linked', true)
-                                        ->whereNull('followed_characters.deleted_at');
-                                });
+        $query->where(function (QueryBuilder $identity) use ($ownerColumn, $characterColumn): void {
+            // The human identity accepts only an account-scoped edge.
+            $identity->where(function (QueryBuilder $account) use ($characterColumn): void {
+                $account->whereNull($characterColumn)
+                    ->whereNull('follow_requests.recipient_character_id');
+            })->orWhereExists(
+                function (QueryBuilder $characters) use ($ownerColumn, $characterColumn): void {
+                    // A persona identity must still exist and belong to the
+                    // outer owner. This keeps the SQL form identical to
+                    // followsIdentity() across deletes and ownership changes.
+                    $characters->selectRaw('1')
+                        ->from('characters as followed_characters')
+                        ->whereColumn('followed_characters.id', $characterColumn)
+                        ->whereColumn('followed_characters.user_id', $ownerColumn)
+                        ->whereNull('followed_characters.deleted_at')
+                        ->where(function (QueryBuilder $edge): void {
+                            $edge->whereColumn(
+                                'follow_requests.recipient_character_id',
+                                'followed_characters.id',
+                            )->orWhere(function (QueryBuilder $linkedAccount): void {
+                                $linkedAccount
+                                    ->whereNull('follow_requests.recipient_character_id')
+                                    ->where('followed_characters.is_linked', true);
+                            });
                         });
                 });
         });

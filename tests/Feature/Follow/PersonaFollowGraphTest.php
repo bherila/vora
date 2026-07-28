@@ -11,6 +11,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PersonaFollowGraphTest extends TestCase
@@ -54,6 +55,17 @@ class PersonaFollowGraphTest extends TestCase
 
         $this->assertRuleParity($viewer, $owner, $posts, [$posts[2]->id]);
         $this->assertFalse(FollowGraph::follows($viewer->id, $owner->id));
+
+        FollowRequest::query()->delete();
+        FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $linked->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->assertRuleParity($viewer, $owner, $posts, [$posts[1]->id]);
     }
 
     public function test_nullable_scope_key_prevents_duplicate_account_and_persona_edges(): void
@@ -113,6 +125,75 @@ class PersonaFollowGraphTest extends TestCase
             'recipient_id' => $owner->id,
         ]);
         $this->assertFalse(FollowGraph::follows($viewer->id, $owner->id));
+    }
+
+    public function test_database_cascade_deletes_a_persona_edge_instead_of_nulling_its_scope(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+        $edge = FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $character->id,
+        ]);
+
+        DB::table('characters')->where('id', $character->id)->delete();
+
+        $this->assertDatabaseMissing('follow_requests', ['id' => $edge->id]);
+    }
+
+    public function test_reassigning_a_persona_discards_follow_edges_from_its_previous_owner(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $newOwner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+        $edge = FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $character->id,
+        ]);
+
+        $character->update(['user_id' => $newOwner->id]);
+
+        $this->assertDatabaseMissing('follow_requests', ['id' => $edge->id]);
+    }
+
+    public function test_correlated_rule_rejects_deleted_and_wrong_owner_character_contexts(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $otherOwner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $deleted = Character::factory()->for($owner)->create(['is_linked' => false]);
+        $wrongOwner = Character::factory()->for($otherOwner)->create(['is_linked' => false]);
+        $deletedPost = Post::factory()->for($owner)->approved()->create([
+            'character_id' => $deleted->id,
+        ]);
+        $wrongOwnerPost = Post::factory()->for($owner)->approved()->create([
+            'character_id' => $wrongOwner->id,
+        ]);
+        $deleted->delete();
+
+        FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $deleted->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $wrongOwner->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+        ]);
+
+        $this->assertRuleParity(
+            $viewer,
+            $owner,
+            collect([$deletedPost, $wrongOwnerPost]),
+            [],
+        );
     }
 
     /**

@@ -55,6 +55,10 @@ class Character extends Model
                 return;
             }
 
+            // Persona followers consented to this identity under its previous
+            // owner. A transfer must not carry those edges to another account.
+            $character->recipientFollowRequests()->delete();
+
             $service = app(StoryService::class);
             $storyIds = $character->storyInvolvements()->pluck('story_id')->unique();
             Story::query()->whereIn('id', $storyIds)->get()
