@@ -24,7 +24,7 @@ taxonomy, and user interest ratings.
 
 ## Tech Stack
 
-- **Backend**: Laravel 12 on PHP `^8.2`
+- **Backend**: Laravel 13 on PHP `^8.3`
 - **Frontend**: React 19 + TypeScript
 - **UI**: shadcn-style components using Base UI primitives
 - **Styling**: Tailwind CSS v4
