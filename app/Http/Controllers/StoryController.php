@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Services\Story\StoryService;
+use App\Support\ActiveIdentity;
 use App\Support\StoryPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,7 @@ class StoryController extends Controller
         private readonly StoryService $stories,
         private readonly PrivacyAuditor $auditor,
         private readonly FavoriteService $favorites,
+        private readonly ActiveIdentity $activeIdentity,
     ) {}
 
     /**
@@ -129,7 +131,11 @@ class StoryController extends Controller
                 'published_at' => $status === StoryStatus::Published ? now() : null,
             ]);
 
-            $this->stories->ensureOwnerAuthor($story, $user);
+            $this->stories->ensureOwnerAuthor(
+                $story,
+                $user,
+                $this->activeIdentity->id($request, $user),
+            );
             $this->stories->syncInterests($story, $request->interestIds());
             $this->stories->syncInvolvements($story, $this->involvementsInput($request->validated()));
 

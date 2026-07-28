@@ -1,6 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
+import Navbar from '@/components/navbar';
 import { fetchWrapper } from '@/fetchWrapper';
+import { hydrateIdentityStore } from '@/identity';
 
 import { FollowProfilePage } from './follow-profile';
 
@@ -26,13 +28,39 @@ jest.mock('@/fetchWrapper', () => ({
   },
 }));
 
+jest.mock('@/community/NotificationBell', () => ({ NotificationBell: () => null }));
 jest.mock('sonner', () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 
 // The tab bodies and dialogs are heavy, separately-tested trees; this suite is
 // about the page chrome (header, identity rail, persona affordances, tabs).
-jest.mock('@/media/OwnerMediaManager', () => ({ OwnerMediaManager: () => <div data-testid="owner-media-manager" /> }));
+jest.mock('@/media/OwnerMediaManager', () => ({
+  OwnerMediaManager: ({ identity }: { identity: number | null }) => (
+    <div data-testid="owner-media-manager" data-identity={identity ?? 'human'} />
+  ),
+}));
 jest.mock('@/stories/OwnerStoriesManager', () => ({ OwnerStoriesManager: () => null }));
-jest.mock('@/user/CharacterEditorDialog', () => ({ CharacterEditorDialog: () => null }));
+jest.mock('@/user/CharacterEditorDialog', () => ({
+  CharacterEditorDialog: ({
+    open,
+    onSaved,
+  }: {
+    open: boolean;
+    onSaved: (record: Record<string, unknown>) => void;
+  }) => open ? (
+    <button
+      type="button"
+      onClick={() => onSaved({
+        id: 23,
+        display_name: 'Nova',
+        profile_picture: null,
+        audience: 'everyone',
+        audience_user_ids: [],
+      })}
+    >
+      Save Nova
+    </button>
+  ) : null,
+}));
 jest.mock('@/user/profile-identity-editor', () => ({ ProfileIdentityEditor: () => null }));
 jest.mock('@/community/PostCard', () => ({ PostCard: () => null }));
 jest.mock('@/explore/StoryGrid', () => ({ StoryGrid: () => null }));
@@ -70,11 +98,25 @@ function setInitialData(data: Record<string, unknown>): void {
   document.body.innerHTML = '<script id="initial-data" type="application/json"></script>';
   const el = document.getElementById('initial-data');
   if (el) el.textContent = JSON.stringify(data);
+  const navbar = data.navbar as { identities?: []; activeIdentityId?: number | null } | undefined;
+  hydrateIdentityStore(navbar?.identities ?? [], navbar?.activeIdentityId ?? null);
 }
 
 describe('FollowProfilePage (/me)', () => {
+  beforeAll(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: jest.fn().mockReturnValue({
+        matches: false,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      }),
+    });
+  });
+
   beforeEach(() => {
-    (fetchWrapper.get as jest.Mock).mockClear();
+    jest.clearAllMocks();
+    window.confirm = jest.fn(() => true);
   });
 
   it('renders a persona-free owner with no persona affordances beyond the single quiet entry point', async () => {
@@ -119,5 +161,89 @@ describe('FollowProfilePage (/me)', () => {
     // The entry point moves into the rail; the quiet one disappears.
     expect(screen.getByRole('button', { name: /new persona/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create a persona' })).toBeNull();
+  });
+
+  it('keeps the navbar, profile rail, and upload listing on one live identity in both directions', async () => {
+    const characters = [
+      { id: 5, display_name: 'Kira', avatar_url: null },
+      { id: 6, display_name: 'Vex', avatar_url: null },
+    ];
+    setInitialData(ownerInitialData(
+      { characters },
+      {
+        navbar: {
+          identities: [
+            { id: null, displayName: 'Ben', avatarUrl: null },
+            { id: 5, displayName: 'Kira', avatarUrl: null },
+            { id: 6, displayName: 'Vex', avatarUrl: null },
+          ],
+          activeIdentityId: 5,
+        },
+      },
+    ));
+
+    render(<Navbar authenticated navItems={[]} adminMenu={null} accountMenu={null} guestMenuItems={[]} />);
+    render(<FollowProfilePage />);
+
+    const rail = await screen.findByRole('navigation', { name: 'Identities' });
+    expect(within(rail).getByRole('button', { name: 'Kira' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('owner-media-manager')).toHaveAttribute('data-identity', '5');
+
+    fireEvent.click(within(rail).getByRole('button', { name: 'Vex' }));
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: 6 }));
+    expect(await screen.findByRole('heading', { name: /Creating as Vex\./ })).toBeInTheDocument();
+    expect(screen.getByTestId('owner-media-manager')).toHaveAttribute('data-identity', '6');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Vex)' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Kira' }));
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: 5 }));
+    expect(within(rail).getByRole('button', { name: 'Kira' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('owner-media-manager')).toHaveAttribute('data-identity', '5');
+  });
+
+  it('adds a newly created persona to the live navbar options', async () => {
+    setInitialData(ownerInitialData({}, {
+      navbar: { identities: [], activeIdentityId: null },
+    }));
+    render(<Navbar authenticated navItems={[]} adminMenu={null} accountMenu={null} guestMenuItems={[]} />);
+    render(<FollowProfilePage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create a persona' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Nova' }));
+
+    expect(await screen.findByRole('button', { name: 'Switch identity (currently Ben)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Ben)' }));
+    expect(screen.getByRole('menuitemradio', { name: 'Nova' })).toBeInTheDocument();
+  });
+
+  it('deleting the active persona clears the server identity and removes its live option', async () => {
+    const characters = [
+      { id: 5, display_name: 'Kira', avatar_url: null },
+      { id: 6, display_name: 'Vex', avatar_url: null },
+    ];
+    setInitialData(ownerInitialData(
+      { characters },
+      {
+        navbar: {
+          identities: [
+            { id: null, displayName: 'Ben', avatarUrl: null },
+            { id: 5, displayName: 'Kira', avatarUrl: null },
+            { id: 6, displayName: 'Vex', avatarUrl: null },
+          ],
+          activeIdentityId: 5,
+        },
+      },
+    ));
+    render(<Navbar authenticated navItems={[]} adminMenu={null} accountMenu={null} guestMenuItems={[]} />);
+    render(<FollowProfilePage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/characters/5'));
+    expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: null });
+    expect(screen.queryByRole('heading', { name: /Creating as Kira\./ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Ben)' }));
+    expect(screen.queryByRole('menuitemradio', { name: 'Kira' })).toBeNull();
+    expect(screen.getByRole('menuitemradio', { name: 'Vex' })).toBeInTheDocument();
   });
 });

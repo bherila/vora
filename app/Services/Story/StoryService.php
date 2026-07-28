@@ -265,11 +265,12 @@ class StoryService
     /**
      * Ensure the creating user holds the owner authorship row.
      */
-    public function ensureOwnerAuthor(Story $story, User $owner): void
+    public function ensureOwnerAuthor(Story $story, User $owner, ?int $characterId = null): void
     {
         $story->authors()->updateOrCreate(
             ['user_id' => $owner->id],
             [
+                'character_id' => $characterId,
                 'role' => StoryAuthor::ROLE_OWNER,
                 'status' => StoryAuthor::STATUS_ACCEPTED,
                 'responded_at' => now(),

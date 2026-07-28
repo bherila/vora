@@ -26,6 +26,8 @@ export interface InvolvableOption {
 export interface StoryAuthorRef {
   id: number;
   user_id: number;
+  /** Present in author/editor payloads; Separate public bylines omit it. */
+  character_id?: number | null;
   display_name: string;
   role: 'owner' | 'co_author';
   status: AuthorStatus;
