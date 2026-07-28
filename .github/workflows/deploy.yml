@@ -114,4 +114,10 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=yes \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
-            "chmod 700 ~/laravel && cd ~/laravel && if [ -f .env ]; then chmod 600 .env; fi && umask 077 && /opt/cpanel/ea-php85/root/usr/bin/php artisan migrate --force --no-interaction && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:cache && chmod 600 bootstrap/cache/config.php && cd ~ && rm -rf public_html && rm -rf web && ln -s laravel/public public_html && ln -s laravel/public web"
+            "chmod 710 ~/laravel && cd ~/laravel && if [ -f .env ]; then chmod 600 .env; fi && umask 077 && /opt/cpanel/ea-php85/root/usr/bin/php artisan migrate --force --no-interaction && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:cache && chmod 600 bootstrap/cache/config.php && cd ~ && rm -rf public_html && rm -rf web && ln -s laravel/public public_html && ln -s laravel/public web"
+
+      - name: Verify production health
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 4 --retry-delay 3 --retry-all-errors --max-time 15 \
+            https://macrophile.me/up
