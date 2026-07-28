@@ -377,12 +377,24 @@ In the dropdown footer:
 > You'll see what Kira posts. To see everything Ben makes, follow Ben too.
 > *(second sentence only when Linked)*
 
-On the Linked / Separate control:
+On the Linked / Separate control.
+
+⚠️ **Also staged.** The end-state wording describes follower subsumption, which
+did not exist when #101 shipped — the same "never promise more than currently
+exists" rule applied to the persona explainer below. Now that #102 has landed,
+the end-state wording is true and the control copy can be upgraded.
+
+*End state (now accurate — #102 merged):*
 > **Linked** — People visiting Kira can see she's yours, and anyone who follows
 > you will also see Kira's followers-only posts.
 >
 > **Separate** — Nobody can tell Kira is yours. She builds her own following from
 > scratch.
+
+*Shipped in #101, before persona follows existed:*
+> **Linked** — People visiting Kira can see this persona is yours.
+>
+> **Separate** — Nothing on Kira's page shows it's yours.
 
 First-run persona explainer (the only persona copy a persona-free user sees).
 
