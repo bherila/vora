@@ -24,6 +24,9 @@ class UpsertCharacterRequest extends FormRequest
         return [
             'display_name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
+            // Linked/Separate: whether the persona page names its owner. Omitted
+            // means "leave as is" (create defaults to linked in the model).
+            'is_linked' => ['sometimes', 'boolean'],
             'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
             'gender_other' => ['required_if:gender,other', 'nullable', 'string', 'max:100'],
             'user_type' => ['nullable', 'string', Rule::in(['human', 'furry', 'other'])],

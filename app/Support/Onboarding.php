@@ -32,6 +32,9 @@ class Onboarding
             'is_following' => FollowRequest::query()
                 ->where('requester_id', $viewer->id)
                 ->where('status', 'accepted')
+                // Onboarding asks whether the human follows another human;
+                // opting into a persona's audience does not complete this step.
+                ->whereNull('recipient_character_id')
                 ->exists(),
             'has_posted' => Post::query()->where('user_id', $viewer->id)->exists(),
         ];

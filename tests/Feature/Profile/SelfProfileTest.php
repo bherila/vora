@@ -124,4 +124,53 @@ class SelfProfileTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.viewer_favorited', true);
     }
+
+    public function test_owner_profile_character_strip_does_not_enumerate_separate_personas_to_other_users(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        Character::factory()->for($owner)->create([
+            'display_name' => 'Linked Persona',
+            'is_linked' => true,
+        ]);
+        Character::factory()->for($owner)->create([
+            'display_name' => 'Separate Persona',
+            'is_linked' => false,
+        ]);
+
+        $this->actingAs($viewer)
+            ->getJson("/api/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.characters')
+            ->assertJsonPath('data.characters.0.display_name', 'Linked Persona')
+            ->assertJsonMissing(['display_name' => 'Separate Persona']);
+
+        $pageData = $this->initialData(
+            $this->actingAs($viewer)->get("/users/{$owner->id}")->assertOk()->getContent(),
+        );
+        $this->assertSame(['Linked Persona'], array_column($pageData['followProfile']['characters'], 'display_name'));
+    }
+
+    public function test_owner_and_admin_retain_separate_personas_in_owner_profile_payloads(): void
+    {
+        $this->fakeStorage();
+        $admin = User::factory()->admin()->approved()->create();
+        $owner = User::factory()->approved()->create();
+        Character::factory()->for($owner)->create([
+            'display_name' => 'Separate Persona',
+            'is_linked' => false,
+        ]);
+
+        $ownerData = $this->initialData(
+            $this->actingAs($owner)->get('/me')->assertOk()->getContent(),
+        );
+        $this->assertSame('Separate Persona', $ownerData['followProfile']['characters'][0]['display_name']);
+
+        $this->actingAs($admin)
+            ->getJson("/api/users/{$owner->id}")
+            ->assertOk()
+            ->assertJsonPath('data.characters.0.display_name', 'Separate Persona');
+    }
 }

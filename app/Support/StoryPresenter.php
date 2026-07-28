@@ -11,6 +11,7 @@ use App\Models\StoryInvolvement;
 use App\Models\StoryNode;
 use App\Models\User;
 use App\Traits\Moderatable;
+use Illuminate\Support\Collection;
 
 /**
  * Turns Story models into API payloads. Centralised so the author editor, the
@@ -84,6 +85,11 @@ class StoryPresenter
         $activeAuthors = $story->authors
             ->filter(fn (StoryAuthor $a): bool => $a->isAccepted() && self::isActiveUser($a->user));
         $activeUserIds = $activeAuthors->pluck('user_id')->map(fn ($id): int => (int) $id)->all();
+        $separateAuthorUserIds = $activeAuthors
+            ->filter(fn (StoryAuthor $author): bool => self::isSeparateAuthor($author))
+            ->pluck('user_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
 
         return [
             'id' => $story->id,
@@ -92,13 +98,18 @@ class StoryPresenter
             'type' => $story->type->value,
             'status' => $story->status->value,
             'body' => $story->body,
-            'owner' => self::userRef($story->user),
+            'owner' => self::publicOwnerRef($story, $activeAuthors),
             'authors' => $activeAuthors
-                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
+                ->map(fn (StoryAuthor $author): array => self::publicAuthorRef($author))
                 ->values()
                 ->all(),
             'interests' => self::interests($story),
-            'involves' => self::involvements($story, $activeUserIds),
+            'involves' => self::involvements(
+                $story,
+                allowedUserIds: $activeUserIds,
+                hiddenUserIds: $separateAuthorUserIds,
+                hideSeparateCharacters: true,
+            ),
             'nodes' => $story->isCyoa() ? self::nodes($story) : [],
             'choices' => $story->isCyoa() ? self::choices($story) : [],
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
@@ -113,21 +124,50 @@ class StoryPresenter
      */
     public static function discoverableView(Story $story): array
     {
+        $activeAuthors = $story->authors
+            ->filter(fn (StoryAuthor $author): bool => $author->isAccepted() && self::isActiveUser($author->user));
+
         return [
             'id' => $story->id,
             'ulid' => $story->ulid,
             'title' => $story->title,
             'type' => $story->type->value,
-            'owner' => self::userRef($story->user),
-            'authors' => $story->authors
-                ->filter(fn (StoryAuthor $author): bool => $author->isAccepted() && self::isActiveUser($author->user))
-                ->map(fn (StoryAuthor $author): array => self::authorRef($author))
+            'owner' => self::publicOwnerRef($story, $activeAuthors),
+            'authors' => $activeAuthors
+                ->map(fn (StoryAuthor $author): array => self::publicAuthorRef($author))
                 ->values()
                 ->all(),
             'interests' => self::interests($story),
             'node_count' => $story->isCyoa() ? ($story->nodes_count ?? $story->nodes()->count()) : null,
             'published_at' => $story->published_at?->format('Y-m-d H:i:s'),
         ];
+    }
+
+    /**
+     * Discovery row for a persona's own page. Same shape as
+     * {@see self::discoverableView()}, scrubbed of anything that resolves the
+     * persona to the human behind it: raw author user ids are dropped, and when
+     * the story belongs to the persona's owner (i.e. it was authored *as* this
+     * persona) the owner byline is presented as the persona itself. A Separate
+     * persona's stories tab must never carry the owner's identity.
+     *
+     * @return array<string, mixed>
+     */
+    public static function personaView(Story $story, Character $character): array
+    {
+        $view = self::discoverableView($story);
+
+        $view['authors'] = array_map(function (array $author): array {
+            unset($author['user_id'], $author['character_id']);
+
+            return $author;
+        }, $view['authors']);
+
+        if ((int) $story->user_id === (int) $character->user_id) {
+            $view['owner'] = ['id' => null, 'display_name' => $character->display_name];
+        }
+
+        return $view;
     }
 
     /**
@@ -177,18 +217,28 @@ class StoryPresenter
      * @param  list<int>|null  $allowedUserIds  when set, only involvements tied to
      *                                          these author user ids (directly or
      *                                          via a character they own) are kept
+     * @param  list<int>  $hiddenUserIds  user involvements whose identity must
+     *                                    not appear in a public persona payload
      * @return list<array<string, mixed>>
      */
-    private static function involvements(Story $story, ?array $allowedUserIds = null): array
-    {
+    private static function involvements(
+        Story $story,
+        ?array $allowedUserIds = null,
+        array $hiddenUserIds = [],
+        bool $hideSeparateCharacters = false,
+    ): array {
         return $story->involvements
-            ->map(function (StoryInvolvement $involvement) use ($allowedUserIds): ?array {
+            ->map(function (StoryInvolvement $involvement) use ($allowedUserIds, $hiddenUserIds, $hideSeparateCharacters): ?array {
                 $involvable = $involvement->involvable;
                 if ($involvable === null) {
                     return null;
                 }
 
                 if ($involvable instanceof Character) {
+                    if ($hideSeparateCharacters && ! $involvable->is_linked) {
+                        return null;
+                    }
+
                     if ($allowedUserIds !== null && ! in_array((int) $involvable->user_id, $allowedUserIds, true)) {
                         return null;
                     }
@@ -197,6 +247,10 @@ class StoryPresenter
                 }
 
                 if ($allowedUserIds !== null && ! in_array((int) $involvable->id, $allowedUserIds, true)) {
+                    return null;
+                }
+
+                if (in_array((int) $involvable->id, $hiddenUserIds, true)) {
                     return null;
                 }
 
@@ -240,6 +294,51 @@ class StoryPresenter
             'status' => $author->status,
             'is_owner' => $author->isOwner(),
         ];
+    }
+
+    /**
+     * Public authorship may name a Separate persona, but must not expose the
+     * user or character row that would join it back to the human account.
+     *
+     * @return array<string, mixed>
+     */
+    private static function publicAuthorRef(StoryAuthor $author): array
+    {
+        $reference = self::authorRef($author);
+
+        if (self::isSeparateAuthor($author)) {
+            unset($reference['user_id'], $reference['character_id']);
+        }
+
+        return $reference;
+    }
+
+    /**
+     * When the story owner publishes as a Separate persona, public surfaces use
+     * the persona byline instead of returning the owner account.
+     *
+     * @param  Collection<int, StoryAuthor>  $activeAuthors
+     * @return array<string, mixed>|null
+     */
+    private static function publicOwnerRef(Story $story, Collection $activeAuthors): ?array
+    {
+        $ownerAuthor = $activeAuthors->first(
+            fn (StoryAuthor $author): bool => $author->isOwner() && $author->user_id === $story->user_id,
+        );
+
+        if ($ownerAuthor instanceof StoryAuthor && self::isSeparateAuthor($ownerAuthor)) {
+            return [
+                'id' => null,
+                'display_name' => $ownerAuthor->character?->display_name,
+            ];
+        }
+
+        return self::userRef($story->user);
+    }
+
+    private static function isSeparateAuthor(StoryAuthor $author): bool
+    {
+        return $author->character instanceof Character && ! $author->character->is_linked;
     }
 
     /**

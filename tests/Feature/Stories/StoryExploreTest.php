@@ -3,6 +3,7 @@
 namespace Tests\Feature\Stories;
 
 use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Story;
 use App\Models\User;
@@ -68,5 +69,25 @@ class StoryExploreTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $visible->id);
+    }
+
+    public function test_explore_does_not_correlate_a_separate_persona_with_its_owner(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $story = Story::factory()->for($owner)->readable()->create();
+        $story->authors()->where('user_id', $owner->id)->update(['character_id' => $persona->id]);
+
+        $this->actingAs($viewer)->getJson('/api/explore/stories')
+            ->assertOk()
+            ->assertJsonPath('data.0.owner.id', null)
+            ->assertJsonPath('data.0.owner.display_name', 'Public Persona')
+            ->assertJsonPath('data.0.authors.0.display_name', 'Public Persona')
+            ->assertJsonMissingPath('data.0.authors.0.user_id')
+            ->assertJsonMissingPath('data.0.authors.0.character_id');
     }
 }

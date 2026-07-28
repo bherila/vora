@@ -2,10 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
 use App\Notifications\FollowedUserPosted;
+use App\Support\FollowGraph;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -39,9 +39,7 @@ class NotifyFollowersOfPost implements ShouldQueue
             return;
         }
 
-        $followerIds = FollowRequest::query()
-            ->where('recipient_id', $author->id)
-            ->where('status', FollowRequest::STATUS_ACCEPTED)
+        $followerIds = FollowGraph::followersOfIdentity($author->id, $this->post->character_id)
             ->where(function ($query): void {
                 $query
                     ->whereNull('responded_at')
@@ -55,6 +53,8 @@ class NotifyFollowersOfPost implements ShouldQueue
             ->where('notify_new_post', true)
             ->chunkById(200, function ($followers): void {
                 foreach ($followers as $follower) {
+                    // The edge query scopes membership; the full post gate still
+                    // enforces its audience and any future restrictions.
                     if ($this->post->isViewableBy($follower)) {
                         $follower->notify(new FollowedUserPosted($this->post));
                     }

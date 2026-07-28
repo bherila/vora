@@ -1,4 +1,4 @@
-import { BookOpen, Images } from 'lucide-react';
+import { BookOpen, Images, VenetianMask } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
@@ -6,7 +6,9 @@ import { Toaster } from 'sonner';
 import { FavoriteButton } from '@/components/favorite-button';
 import { InterestPicker } from '@/components/interest-picker';
 import { Button } from '@/components/ui/button';
+import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
 import { StoryGrid } from '@/explore/StoryGrid';
+import { usePersonaListing } from '@/explore/usePersonaListing';
 import { useStoryListing } from '@/explore/useStoryListing';
 import { readInitialData } from '@/initialData';
 import { MediaFilters } from '@/media/MediaFilters';
@@ -15,11 +17,12 @@ import type { MediaItem, MediaTypeFilter, PagedResponse } from '@/media/types';
 import { useMediaListing } from '@/media/useMediaListing';
 import type { StoryDiscoveryItem } from '@/stories/types';
 
-type ExploreTab = 'media' | 'stories';
+type ExploreTab = 'media' | 'stories' | 'personas';
 
 interface ExploreInitial {
   media?: PagedResponse<MediaItem>;
   stories?: PagedResponse<StoryDiscoveryItem>;
+  personas?: PagedResponse<PersonaDiscoveryItem>;
   default_interest_ids?: number[];
 }
 
@@ -45,7 +48,8 @@ function ExplorePage() {
   const [interestIds, setInterestIds] = useState<number[]>(() => initial?.default_interest_ids ?? []);
   const mediaListing = useMediaListing('/api/explore', { type: typeFilter, interestIds }, initial?.media);
   const storyListing = useStoryListing(interestIds, initial?.stories);
-  const activeListing = tab === 'media' ? mediaListing : storyListing;
+  const personaListing = usePersonaListing(interestIds, initial?.personas);
+  const activeListing = tab === 'media' ? mediaListing : tab === 'stories' ? storyListing : personaListing;
 
   const hasDefaults = defaultInterestIds.length > 0;
   const showingDefaults = hasDefaults && sameIds(interestIds, defaultInterestIds);
@@ -72,7 +76,7 @@ function ExplorePage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Explore</h1>
-        <p className="text-muted-foreground">Discover media and stories shared by the community.</p>
+        <p className="text-muted-foreground">Discover media, stories, and personas shared by the community.</p>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Explore content type">
@@ -81,6 +85,9 @@ function ExplorePage() {
         </Button>
         <Button type="button" size="sm" variant={tab === 'stories' ? 'default' : 'outline'} aria-pressed={tab === 'stories'} onClick={() => setTab('stories')}>
           <BookOpen className="h-4 w-4" /> Stories
+        </Button>
+        <Button type="button" size="sm" variant={tab === 'personas' ? 'default' : 'outline'} aria-pressed={tab === 'personas'} onClick={() => setTab('personas')}>
+          <VenetianMask className="h-4 w-4" /> Personas
         </Button>
       </div>
 
@@ -111,7 +118,7 @@ function ExplorePage() {
       ) : (
         <div className="mb-6 grid gap-1">
           <span className="text-sm text-muted-foreground">Filter by interest</span>
-          <InterestPicker value={interestIds} onChange={setInterestIds} disabled={storyListing.loading} />
+          <InterestPicker value={interestIds} onChange={setInterestIds} disabled={activeListing.loading} />
         </div>
       )}
 
@@ -126,10 +133,15 @@ function ExplorePage() {
           items={mediaListing.items}
           renderActions={(item) => <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited ?? false} />}
         />
-      ) : (
+      ) : tab === 'stories' ? (
         <StoryGrid
           items={storyListing.items}
           renderActions={(story) => <FavoriteButton type="story" id={story.id} initialFavorited={story.favorited ?? false} />}
+        />
+      ) : (
+        <PersonaGrid
+          items={personaListing.items}
+          renderActions={(persona) => <FavoriteButton type="character" id={persona.id} initialFavorited={persona.favorited ?? false} />}
         />
       )}
       {activeListing.hasMore && (

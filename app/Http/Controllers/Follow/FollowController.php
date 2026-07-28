@@ -37,7 +37,33 @@ class FollowController extends Controller
     {
         return view('user.follow-directory', ['initialData' => [
             'followDirectory' => $this->usersPayload($request),
+            'followDirectoryPersonas' => $this->directoryPersonasPayload($request),
         ]]);
+    }
+
+    /**
+     * Discoverable personas for the People directory: strictly Everyone-audience,
+     * discovery-opted personas of active, approved owners — `discoverable = false`
+     * means direct-link-only, so those never appear here. Unlike restricted user
+     * profiles (listed name-only so a follow request stays possible), restricted
+     * personas are omitted entirely: there is no persona follow request to send,
+     * so listing them would expose a name for nothing. No interest matching:
+     * affinity scoring finds real people, not fictional characters — and matching
+     * an inheriting persona would carry the owner's interest fingerprint.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function directoryPersonasPayload(Request $request): array
+    {
+        return Character::query()
+            ->discoverable()
+            ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
+            ->with('profilePicture')
+            ->orderBy('display_name')
+            ->get()
+            ->map(fn (Character $character): array => CharacterPresenter::publicCard($character, $this->mediaResponder, $request->user()))
+            ->values()
+            ->all();
     }
 
     public function profilePage(Request $request, User $user): View
@@ -236,7 +262,12 @@ class FollowController extends Controller
      */
     private function profilePayload(User $current, User $user): array
     {
-        $followRequest = FollowRequest::query()->where('requester_id', $current->id)->where('recipient_id', $user->id)->first();
+        // Human profile state must never be inferred from a persona-scoped edge.
+        $followRequest = FollowRequest::query()
+            ->where('requester_id', $current->id)
+            ->where('recipient_id', $user->id)
+            ->whereNull('recipient_character_id')
+            ->first();
 
         $isSelf = $current->id === $user->id;
 
@@ -274,7 +305,14 @@ class FollowController extends Controller
             ->map(fn (InterestRating $rating): array => ['id' => $rating->interest_id, 'name' => $rating->interest?->name])
             ->all();
 
-        $incoming = FollowRequest::query()->where('requester_id', $user->id)->where('recipient_id', $current->id)->where('status', 'accepted')->exists();
+        // Follow-back is a human friendship affordance. Persona audience edges
+        // are deliberately excluded from both directions.
+        $incoming = FollowRequest::query()
+            ->where('requester_id', $user->id)
+            ->where('recipient_id', $current->id)
+            ->whereNull('recipient_character_id')
+            ->where('status', FollowRequest::STATUS_ACCEPTED)
+            ->exists();
 
         $viewerFavorited = ! $isSelf && Favorite::query()
             ->where('user_id', $current->id)
@@ -297,15 +335,21 @@ class FollowController extends Controller
 
     /**
      * The profile's characters, for the identity strip across the top of the
-     * profile-as-container view. A character a viewer cannot see by audience is
-     * still listed here as an identity to switch to; its *content* tabs run the
-     * same per-item privacy filter, so nothing is exposed by listing the name.
+     * profile-as-container view. Separate personas are omitted for everyone
+     * except their owner and admins: enumerating one here would reveal the
+     * persona-to-owner relationship even if every content item stayed hidden.
+     * Linked personas remain listed regardless of their audience because their
+     * owner association is intentionally public.
      *
      * @return list<array<string, mixed>>
      */
     private function charactersStrip(User $user, ?User $viewer): array
     {
         return $user->characters()
+            ->when(
+                ! $viewer instanceof User || ($viewer->id !== $user->id && ! $viewer->isAdmin()),
+                fn ($query) => $query->where('is_linked', true),
+            )
             ->with('profilePicture')
             ->orderBy('display_name')
             ->get()
@@ -324,7 +368,17 @@ class FollowController extends Controller
             return response()->json(['success' => false, 'message' => 'You cannot follow this user.'], 422);
         }
 
-        $followRequest = FollowRequest::query()->firstOrNew(['requester_id' => $current->id, 'recipient_id' => $user->id]);
+        // A persona edge to this owner does not subsume the human request.
+        $followRequest = FollowRequest::query()
+            ->where('requester_id', $current->id)
+            ->where('recipient_id', $user->id)
+            ->whereNull('recipient_character_id')
+            ->first();
+        $followRequest ??= new FollowRequest([
+            'requester_id' => $current->id,
+            'recipient_id' => $user->id,
+        ]);
+
         if ($followRequest->exists && $followRequest->status === 'declined' && ! $this->declinedRequestCanBeRetried($followRequest)) {
             return response()->json(['success' => false, 'message' => 'You can request again 24 hours after the request was declined.'], 429);
         }
@@ -344,6 +398,106 @@ class FollowController extends Controller
         return response()->json(['success' => true, 'data' => ['status' => 'pending']]);
     }
 
+    /**
+     * Follow one visible persona as an audience edge. Unlike human friendship
+     * requests, persona follows are accepted immediately and never enter the
+     * recipient's request inbox.
+     */
+    public function followCharacter(Request $request, Character $character): JsonResponse
+    {
+        $current = $request->user();
+        $character->loadMissing(['user', 'profilePicture']);
+        $owner = $character->user;
+
+        if (! $current instanceof User || ! $owner instanceof User || ! $character->isViewableBy($current)) {
+            return response()->json(['success' => false, 'message' => 'Persona unavailable.'], 404);
+        }
+
+        if ($current->is($owner)) {
+            return response()->json(['success' => false, 'message' => 'You cannot follow your own persona.'], 422);
+        }
+
+        $followRequest = FollowRequest::query()->firstOrCreate(
+            [
+                'requester_id' => $current->id,
+                'recipient_id' => $owner->id,
+                'recipient_character_id' => $character->id,
+            ],
+            [
+                'status' => FollowRequest::STATUS_ACCEPTED,
+                'responded_at' => now(),
+            ],
+        );
+
+        if (! $followRequest->wasRecentlyCreated) {
+            return response()->json(['success' => false, 'message' => 'A persona follow already exists.'], 422);
+        }
+
+        $this->audit($followRequest, $current, 'followed');
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'status' => FollowRequest::STATUS_ACCEPTED,
+                'target' => $this->characterTargetPayload($character, $current),
+            ],
+        ], 201);
+    }
+
+    /**
+     * Followers of a visible persona, including account followers when the
+     * persona is Linked. FollowGraph owns that subsumption rule; this endpoint
+     * only renders the identity each returned edge actually targets.
+     */
+    public function characterFollowers(Request $request, Character $character): JsonResponse
+    {
+        $current = $request->user();
+        $character->loadMissing(['user', 'profilePicture']);
+        if (! $current instanceof User || ! $character->isViewableBy($current)) {
+            return response()->json(['success' => false, 'message' => 'Persona unavailable.'], 404);
+        }
+
+        $followers = FollowGraph::followersOfIdentity($character->user_id, $character->id)
+            ->with([
+                'requester:id,name,display_name,profile_audience,profile_picture_media_id',
+                'requester.profilePicture',
+                'recipient:id,name,display_name,profile_picture_media_id',
+                'recipient.profilePicture',
+                'recipientCharacter:id,ulid,display_name,profile_picture_media_id',
+                'recipientCharacter.profilePicture',
+            ])
+            ->whereHas('requester', fn ($query) => $query->active())
+            ->oldest('responded_at')
+            ->get();
+
+        $requesters = $followers->pluck('requester')->filter()->values();
+        $canView = $this->gate->canViewMany($current, $requesters);
+
+        return response()->json(['success' => true, 'data' => [
+            'count' => $followers->count(),
+            'viewer_is_following' => FollowGraph::followsIdentity(
+                $current->id,
+                $character->user_id,
+                $character->id,
+            ),
+            'followers' => $followers->map(function (FollowRequest $followRequest) use ($canView, $current): array {
+                $follower = $followRequest->requester;
+                $visible = $follower instanceof User && ($canView[$follower->id] ?? false);
+
+                return [
+                    'follower' => [
+                        'id' => $follower?->id,
+                        'display_name' => $follower?->display_name ?: $follower?->name,
+                        'avatar_url' => UserPresenter::avatarUrl($follower, $this->mediaResponder, $current),
+                        'restricted' => ! $visible,
+                    ],
+                    'target' => $this->edgeTargetPayload($followRequest, $current),
+                    'followed_at' => $followRequest->responded_at?->toIso8601String(),
+                ];
+            })->values(),
+        ]]);
+    }
+
     public function inbox(Request $request): JsonResponse
     {
         return response()->json(['success' => true, 'data' => $this->inboxPayload($request)]);
@@ -360,7 +514,11 @@ class FollowController extends Controller
         // User scope; active() covers deactivated + disabled.
         $requests = FollowRequest::query()->with(['requester:id,name,display_name,user_type,gender,profile_audience,profile_picture_media_id', 'requester.profilePicture'])
             ->whereHas('requester', fn ($q) => $q->active())
-            ->where('recipient_id', $current?->id)->where('status', 'pending')->latest()->get();
+            ->where('recipient_id', $current?->id)
+            ->whereNull('recipient_character_id')
+            ->where('status', FollowRequest::STATUS_PENDING)
+            ->latest()
+            ->get();
 
         // The inbox is another surface onto a requester's profile, so it honours
         // the same audience gate as the directory: details are withheld unless
@@ -391,7 +549,10 @@ class FollowController extends Controller
     {
         return response()->json(['success' => true, 'data' => ['count' => FollowRequest::query()
             ->whereHas('requester', fn ($q) => $q->active())
-            ->where('recipient_id', $request->user()?->id)->where('status', 'pending')->count()]]);
+            ->where('recipient_id', $request->user()?->id)
+            ->whereNull('recipient_character_id')
+            ->where('status', FollowRequest::STATUS_PENDING)
+            ->count()]]);
     }
 
     public function accept(Request $request, FollowRequest $followRequest): JsonResponse
@@ -407,7 +568,10 @@ class FollowController extends Controller
     private function decide(Request $request, FollowRequest $followRequest, string $status): JsonResponse
     {
         $current = $request->user();
-        if (! $current instanceof User || $followRequest->recipient_id !== $current->id || $followRequest->status !== 'pending') {
+        if (! $current instanceof User
+            || $followRequest->recipient_id !== $current->id
+            || $followRequest->recipient_character_id !== null
+            || $followRequest->status !== FollowRequest::STATUS_PENDING) {
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 
@@ -457,6 +621,46 @@ class FollowController extends Controller
         ];
     }
 
+    /**
+     * The public identity selected by a persona edge. Deliberately omits user_id
+     * so a Separate persona payload cannot disclose its owner.
+     *
+     * @return array{type: string, id: int, ulid: string, display_name: string, avatar_url: ?string}
+     */
+    private function characterTargetPayload(Character $character, ?User $viewer): array
+    {
+        return [
+            'type' => 'character',
+            'id' => $character->id,
+            'ulid' => $character->ulid,
+            'display_name' => $character->display_name,
+            'avatar_url' => UserPresenter::pictureUrl($character->profilePicture, $this->mediaResponder, $viewer),
+        ];
+    }
+
+    /**
+     * Render the identity explicitly selected by an edge. A character target
+     * never carries its owner id; an account edge is visibly an account edge.
+     *
+     * @return array<string, mixed>
+     */
+    private function edgeTargetPayload(FollowRequest $followRequest, ?User $viewer): array
+    {
+        $character = $followRequest->recipientCharacter;
+        if ($character instanceof Character) {
+            return $this->characterTargetPayload($character, $viewer);
+        }
+
+        $recipient = $followRequest->recipient;
+
+        return [
+            'type' => 'user',
+            'id' => $recipient?->id,
+            'display_name' => $recipient?->display_name ?: $recipient?->name,
+            'avatar_url' => UserPresenter::avatarUrl($recipient, $this->mediaResponder, $viewer),
+        ];
+    }
+
     private function audit(FollowRequest $followRequest, User $actor, string $action): void
     {
         FollowRequestAuditLog::query()->create([
@@ -465,6 +669,9 @@ class FollowController extends Controller
             'requester_id' => $followRequest->requester_id,
             'recipient_id' => $followRequest->recipient_id,
             'action' => $action,
+            'metadata' => $followRequest->recipient_character_id === null
+                ? null
+                : ['recipient_character_id' => $followRequest->recipient_character_id],
         ]);
     }
 }

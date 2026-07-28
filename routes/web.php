@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CharacterController;
+use App\Http\Controllers\CharacterProfileController;
 use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\FeedController;
@@ -172,6 +173,17 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
     Route::get('/api/explore', [ExploreController::class, 'apiIndex']);
     Route::get('/api/explore/stories', [ExploreController::class, 'apiStories']);
+    Route::get('/api/explore/personas', [ExploreController::class, 'apiPersonas']);
+
+    // A persona's public profile, resolved by ulid. Gated on the character's
+    // own audience — deliberately independent of the owner's profile gate.
+    Route::get('/c/{ulid}', [CharacterProfileController::class, 'page'])->name('characters.view');
+    Route::prefix('api/c/{ulid}')->group(function () {
+        Route::get('/counts', [CharacterProfileController::class, 'counts']);
+        Route::get('/media', [CharacterProfileController::class, 'media']);
+        Route::get('/stories', [CharacterProfileController::class, 'stories']);
+        Route::get('/posts', [CharacterProfileController::class, 'posts']);
+    });
 
     // Stories workspace + shareable single-story reader.
     Route::get('/stories', [StoryController::class, 'page'])->name('stories');
@@ -190,6 +202,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/', [CharacterController::class, 'store']);
         Route::patch('/{character}', [CharacterController::class, 'update']);
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
+        Route::get('/{character}/followers', [FollowController::class, 'characterFollowers']);
+        Route::post('/{character}/follow', [FollowController::class, 'followCharacter']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
         Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);
