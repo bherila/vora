@@ -509,14 +509,11 @@ export function FollowProfilePage() {
                   <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={openCreateCharacter}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
                   </Button>
-                  {/* Staged copy (#101): now that /c/{ulid} exists this may claim
-                      "its own page". It must NOT claim followers until persona
-                      follows ship (#102). */}
                   <HelpHint label="Personas">
                     <p>
                       Personas are characters you create — for fiction, art, and role-play.
-                      Each gets its own page and its own media, separate from your profile.
-                      Most people never need one.
+                      Each gets its own page, its own followers, and its own media. Your real
+                      profile stays separate. Most people never need one.
                     </p>
                   </HelpHint>
                 </div>

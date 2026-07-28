@@ -137,6 +137,11 @@ describe('FollowProfilePage (/me)', () => {
     expect(screen.getByRole('button', { name: 'Create a persona' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /persona/i })).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'View as' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Personas' }));
+    expect(await screen.findByText(
+      'Personas are characters you create — for fiction, art, and role-play. Each gets its own page, its own followers, and its own media. Your real profile stays separate. Most people never need one.',
+    )).toBeInTheDocument();
   });
 
   it('renders public preview through read-only visitor surfaces with the exact persistent copy', async () => {
