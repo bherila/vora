@@ -384,10 +384,21 @@ On the Linked / Separate control:
 > **Separate** — Nobody can tell Kira is yours. She builds her own following from
 > scratch.
 
-First-run persona explainer (the only persona copy a persona-free user sees):
+First-run persona explainer (the only persona copy a persona-free user sees).
+
+⚠️ **This copy is staged — it must never promise more than currently exists.**
+The wording below describes the end state, after persona pages (#101) and
+persona follows (#102) have shipped. Until then the explainer must claim only
+what is built, or it falls into exactly the trap this document raises for H1:
+help copy that is false on day one. **Upgrade it as each phase lands.**
+
+*End state (after #101 and #102):*
 > **Personas** are characters you create — for fiction, art, and role-play. Each
 > gets its own page, its own followers, and its own media. Your real profile
 > stays separate. Most people never need one.
+
+*Before persona pages and follows exist:* describe only the identity-and-content
+grouping that actually works, and drop the page/follower claims.
 
 **H3 — auto-posts.** Fires for everyone:
 > Share this to your followers' feeds. Unchecking keeps the upload private to your
