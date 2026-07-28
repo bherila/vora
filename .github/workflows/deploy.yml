@@ -7,10 +7,16 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, vora-ci]
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
 
       - name: Verify PHP
         run: php --version
@@ -23,6 +29,12 @@ jobs:
         with:
           version: 10
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
       - name: Build frontend and run tests
         run: |
           pnpm install --frozen-lockfile
@@ -33,13 +45,19 @@ jobs:
         run: vendor/bin/phpunit --configuration phpunit.xml
 
   deploy:
-    runs-on: [self-hosted, vora-ci]
+    runs-on: ubuntu-24.04-arm
     needs: test
     environment: prod
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
 
       - name: Verify PHP
         run: php --version
@@ -51,6 +69,12 @@ jobs:
         uses: pnpm/action-setup@v6
         with:
           version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
 
       - name: Build frontend
         run: |
