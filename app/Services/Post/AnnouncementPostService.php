@@ -7,10 +7,12 @@ use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
 use App\Enums\StoryStatus;
 use App\Jobs\NotifyFollowersOfPost;
+use App\Models\Character;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostAttachment;
 use App\Models\Story;
+use App\Models\StoryAuthor;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -42,7 +44,7 @@ class AnnouncementPostService
             if ($attachment !== null) {
                 $existing = Post::withTrashed()->lockForUpdate()->find($attachment->post_id);
                 if ($existing !== null && ! $existing->trashed()) {
-                    if ($this->isReadyToAnnounce($locked)) {
+                    if ($this->isPublishable($locked)) {
                         $this->copyPrivacy($existing, $locked);
                     } else {
                         $this->hide($existing);
@@ -54,7 +56,7 @@ class AnnouncementPostService
 
             // A user already shared this item manually. That is its one feed
             // announcement; approving it must not add a duplicate post.
-            if ($this->anyAttachmentFor($locked) !== null || ! $this->isReadyToAnnounce($locked)) {
+            if ($this->anyAttachmentFor($locked) !== null || ! $this->isPublishable($locked)) {
                 return null;
             }
 
@@ -83,7 +85,11 @@ class AnnouncementPostService
         }
     }
 
-    private function isReadyToAnnounce(Media|Story $content): bool
+    /**
+     * The common last-moment gate used by creation, synchronization, and queued
+     * notification fan-out.
+     */
+    public function isPublishable(Media|Story $content): bool
     {
         if ($content->trashed()
             || ! (bool) $content->announce_on_approval
@@ -95,17 +101,21 @@ class AnnouncementPostService
             return $content->purpose === MediaPurpose::Gallery && $content->isReady();
         }
 
-        return $content->status === StoryStatus::Published;
+        return $content->status === StoryStatus::Published
+            && ! $this->ownerUsesSeparatePersona($content);
     }
 
     private function copyPrivacy(Post $post, Media|Story $content): void
     {
-        $post->forceFill([
+        $attributes = [
             'audience' => $content->audience,
             'discoverable' => (bool) $content->discoverable,
             'character_id' => $this->characterId($content),
-            'moderation_status' => ModerationStatus::Approved,
-        ])->save();
+        ];
+        if (! $post->isRejected()) {
+            $attributes['moderation_status'] = ModerationStatus::Approved;
+        }
+        $post->forceFill($attributes)->save();
 
         $post->syncAudienceMembers(
             $content->audience === Audience::SpecificPeople
@@ -128,9 +138,36 @@ class AnnouncementPostService
 
     private function hide(Post $post): void
     {
-        if (! $post->isPendingReview()) {
+        if (! $post->isPendingReview() && ! $post->isRejected()) {
             $post->forceFill(['moderation_status' => ModerationStatus::Pending])->save();
         }
+    }
+
+    /**
+     * Story privacy is account-scoped, but a Separate owner persona deliberately
+     * hides that account in public presentation. Until posts can carry distinct
+     * byline and privacy identities, announcing it as the account would leak the
+     * private owner relationship.
+     */
+    private function ownerUsesSeparatePersona(Story $story): bool
+    {
+        $ownerAuthor = $story->authors()
+            ->where('user_id', $story->user_id)
+            ->where('role', StoryAuthor::ROLE_OWNER)
+            ->where('status', StoryAuthor::STATUS_ACCEPTED)
+            ->first();
+
+        if (! $ownerAuthor instanceof StoryAuthor) {
+            return true;
+        }
+
+        if ($ownerAuthor->character_id === null) {
+            return false;
+        }
+
+        $character = Character::withTrashed()->find($ownerAuthor->character_id);
+
+        return $character === null || ! $character->is_linked;
     }
 
     private function announcementAttachmentFor(Media|Story $content): ?PostAttachment

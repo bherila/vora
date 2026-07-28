@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Notifications;
 
+use App\Enums\ModerationStatus;
+use App\Enums\StoryStatus;
 use App\Jobs\NotifyFollowersOfPost;
 use App\Models\FollowRequest;
 use App\Models\Post;
+use App\Models\Story;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -64,6 +67,41 @@ class NotificationPreferencesTest extends TestCase
         $post = Post::factory()->for($author)->approved()->create();
 
         $author->forceFill(['deactivated_at' => now()])->save();
+
+        (new NotifyFollowersOfPost($post->refresh()))->handle();
+
+        $this->assertSame(0, $follower->notifications()->count());
+    }
+
+    public function test_queued_fan_out_skips_a_post_rejected_before_execution(): void
+    {
+        $author = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $follower = User::factory()->approved()->create();
+        $this->follow($follower, $author);
+        $post = Post::factory()->for($author)->approved()->create();
+        $post->reject($admin);
+
+        (new NotifyFollowersOfPost($post->refresh()))->handle();
+
+        $this->assertSame(0, $follower->notifications()->count());
+    }
+
+    public function test_queued_announcement_fan_out_rechecks_attached_content_readiness(): void
+    {
+        $author = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $follower = User::factory()->approved()->create();
+        $this->follow($follower, $author);
+        $story = Story::factory()->for($author)->published()->create(['announce_on_approval' => true]);
+        $story->approve($admin);
+        $post = Post::query()->sole();
+        $follower->notifications()->delete();
+
+        $story->update(['status' => StoryStatus::Draft]);
+        // Simulate a stale/racing post row: the worker must also inspect the
+        // announcement attachment, not rely solely on the copied post state.
+        $post->forceFill(['moderation_status' => ModerationStatus::Approved])->save();
 
         (new NotifyFollowersOfPost($post->refresh()))->handle();
 

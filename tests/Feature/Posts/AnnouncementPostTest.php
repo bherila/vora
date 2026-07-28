@@ -82,7 +82,7 @@ class AnnouncementPostTest extends TestCase
     {
         $owner = User::factory()->approved()->create();
         $admin = User::factory()->admin()->create();
-        $character = Character::factory()->for($owner)->create();
+        $character = Character::factory()->for($owner)->create(['is_linked' => true]);
         $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
         $story->authors()
             ->where('user_id', $owner->id)
@@ -98,6 +98,35 @@ class AnnouncementPostTest extends TestCase
             ->exists());
     }
 
+    public function test_separate_persona_story_is_not_announced_with_its_private_owner_as_byline(): void
+    {
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $admin = User::factory()->admin()->create();
+        $reader = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
+        $story->authors()->where('user_id', $owner->id)->firstOrFail()->update([
+            'character_id' => $persona->id,
+        ]);
+
+        $story->approve($admin);
+
+        $this->assertSame(0, Post::query()->count());
+        $this->actingAs($reader)
+            ->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', null)
+            ->assertJsonPath('data.owner.display_name', 'Public Persona')
+            ->assertJsonMissing(['display_name' => 'Private Human Identity']);
+        $this->actingAs($reader)
+            ->getJson('/api/feed')
+            ->assertOk()
+            ->assertJsonMissing(['display_name' => 'Private Human Identity']);
+    }
+
     public function test_story_announcement_matches_account_follower_and_mutual_privacy_exactly(): void
     {
         User::factory()->create();
@@ -106,7 +135,7 @@ class AnnouncementPostTest extends TestCase
         $accountFollower = User::factory()->approved()->create();
         $personaFollower = User::factory()->approved()->create();
         $mutual = User::factory()->approved()->create();
-        $persona = Character::factory()->for($owner)->create(['is_linked' => false]);
+        $persona = Character::factory()->for($owner)->create(['is_linked' => true]);
 
         $this->follow($accountFollower, $owner);
         $this->follow($personaFollower, $owner, $persona);
@@ -131,6 +160,27 @@ class AnnouncementPostTest extends TestCase
 
             $this->assertNull($post->character_id);
         }
+    }
+
+    public function test_changing_story_owner_identity_to_separate_hides_an_existing_announcement(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $linked = Character::factory()->for($owner)->create(['is_linked' => true]);
+        $separate = Character::factory()->for($owner)->create(['is_linked' => false]);
+        $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
+        $ownerAuthor = $story->authors()->where('user_id', $owner->id)->firstOrFail();
+
+        $story->approve($admin);
+        $post = Post::query()->sole();
+        $this->assertTrue($post->isApprovedContent());
+
+        $ownerAuthor->update(['character_id' => $separate->id]);
+        $this->assertTrue($post->refresh()->isPendingReview());
+
+        $ownerAuthor->update(['character_id' => $linked->id]);
+        $this->assertTrue($post->refresh()->isApprovedContent());
+        $this->assertNull($post->character_id);
     }
 
     public function test_story_is_not_announced_until_both_published_and_approved_and_never_duplicates(): void
@@ -245,6 +295,24 @@ class AnnouncementPostTest extends TestCase
         $story->update(['status' => StoryStatus::Published]);
         $this->assertTrue($post->refresh()->isApprovedContent());
         Queue::assertPushed(NotifyFollowersOfPost::class, 1);
+    }
+
+    public function test_admin_rejected_announcement_stays_rejected_through_owner_edits_and_restore(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
+        $story->approve($admin);
+        $post = Post::query()->sole();
+        $post->reject($admin);
+
+        $this->actingAs($owner)->patchJson("/api/stories/{$story->id}", [
+            'title' => 'Revised after announcement review',
+        ])->assertOk();
+        $this->assertTrue($post->refresh()->isRejected());
+
+        $story->approve($admin);
+        $this->assertTrue($post->refresh()->isRejected());
     }
 
     public function test_manual_post_is_clamped_to_its_most_restrictive_attachment(): void
