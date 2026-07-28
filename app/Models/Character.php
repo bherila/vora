@@ -16,7 +16,9 @@ use Illuminate\Support\Str;
 class Character extends Model
 {
     use HasFactory;
-    use HasPrivacyPolicy;
+    use HasPrivacyPolicy {
+        isViewableBy as private isViewableByAudience;
+    }
     use SoftDeletes;
 
     protected static function booted(): void
@@ -110,6 +112,21 @@ class Character extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Characters inherit their audience decision from the shared privacy policy,
+     * but an unapproved or inactive owner's personas are unavailable everywhere.
+     */
+    public function isViewableBy(?User $viewer): bool
+    {
+        $owner = $this->user;
+
+        if (! $owner instanceof User || ! $owner->isApproved() || ! $owner->isActive()) {
+            return false;
+        }
+
+        return $this->isViewableByAudience($viewer);
     }
 
     /**
