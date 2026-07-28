@@ -6,6 +6,7 @@ import { Markdown } from '@/components/Markdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useIdentityStore } from '@/identity';
 import { AUDIENCE_SELECT_OPTIONS } from '@/lib/audience';
 
 import { storiesApi } from './api';
@@ -39,6 +40,8 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const { identities } = useIdentityStore();
+  const [identitySaving, setIdentitySaving] = useState(false);
 
   const hydrate = (data: StoryEditor): void => {
     setStory(data);
@@ -122,7 +125,25 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
     storiesApi.get(storyId).then((data) => setStory((prev) => (prev ? { ...prev, involvable_options: data.involvable_options } : prev))).catch(() => undefined);
   };
 
+  const updateAuthorIdentity = async (value: string): Promise<void> => {
+    setIdentitySaving(true);
+    setError('');
+    try {
+      const authors = await storiesApi.updateAuthorIdentity(
+        storyId,
+        currentUserId,
+        value === '' ? null : Number(value),
+      );
+      onAuthorsChanged(authors);
+    } catch (e) {
+      setError(typeof e === 'string' ? e : 'Could not update your authoring identity.');
+    } finally {
+      setIdentitySaving(false);
+    }
+  };
+
   const isOwner = useMemo(() => story?.authors.some((a) => a.is_owner && a.user_id === currentUserId) ?? false, [story, currentUserId]);
+  const currentAuthor = story?.authors.find((author) => author.user_id === currentUserId) ?? null;
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading story…</p>;
   if (story === null) return <p className="text-sm text-destructive">{error || 'Story not found.'}</p>;
@@ -168,6 +189,22 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
 
         {/* Sidebar */}
         <div className="space-y-4">
+          {identities.length > 0 && currentAuthor && (
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="story-author-identity">Writing as</label>
+              <select
+                id="story-author-identity"
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={currentAuthor.character_id ?? ''}
+                onChange={(event) => void updateAuthorIdentity(event.target.value)}
+                disabled={identitySaving}
+              >
+                {identities.map((identity) => (
+                  <option key={identity.id ?? 'user'} value={identity.id ?? ''}>{identity.displayName}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid gap-2">
             <label className="text-sm font-medium" htmlFor="story-status">Status</label>
             <select id="story-status" className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value as 'draft' | 'published')}>

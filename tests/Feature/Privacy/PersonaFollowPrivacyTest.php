@@ -132,7 +132,9 @@ class PersonaFollowPrivacyTest extends TestCase
         $this->assertFalse($gate->canView($viewer, $mutualTarget));
         $this->assertFalse($gate->canViewMany($viewer, collect([$mutualTarget]))[$mutualTarget->id]);
 
-        session(['active_character_id' => $activeIdentity->id]);
+        $this->actingAs($viewer)
+            ->postJson('/api/identity', ['character_id' => $activeIdentity->id])
+            ->assertOk();
 
         $this->assertFalse($gate->canView($viewer, $owner));
         $this->assertFalse($gate->canViewMany($viewer, collect([$owner]))[$owner->id]);

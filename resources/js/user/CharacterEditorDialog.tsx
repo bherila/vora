@@ -111,21 +111,24 @@ interface LinkedSeparateFieldProps {
 
 /**
  * The Linked / Separate choice: one control, both consequences stated together
- * (H2 in the design doc's copy deck). The copy deliberately claims only what
- * is built today — persona follower subsumption is a later phase, so neither
- * option promises anything about followers yet.
+ * (H2 in the design doc's copy deck).
+ *
+ * The copy interpolates the persona's name and must stay pronoun-free: a
+ * persona has its own gender, and the name here is arbitrary (it falls back to
+ * "this persona" before one is typed). Asserting a pronoun misgenders every
+ * persona that does not use it — see #132.
  */
 function LinkedSeparateField({ personaName, value, onChange, disabled }: LinkedSeparateFieldProps) {
   const options = [
     {
       linked: true,
       title: 'Linked',
-      copy: `People visiting ${personaName} can see this persona is yours.`,
+      copy: `People visiting ${personaName} can see this persona is yours, and anyone who follows you will also see ${personaName}'s followers-only posts.`,
     },
     {
       linked: false,
       title: 'Separate',
-      copy: `Nothing on ${personaName}’s page shows it’s yours.`,
+      copy: `Nobody can tell ${personaName} is yours. ${personaName} builds a following from scratch.`,
     },
   ];
 

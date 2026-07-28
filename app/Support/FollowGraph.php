@@ -2,8 +2,10 @@
 
 namespace App\Support;
 
+use App\Enums\ViewAsMode;
 use App\Models\Character;
 use App\Models\FollowRequest;
+use App\Services\Privacy\ViewAsContext;
 use App\Traits\HasPrivacyPolicy;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -29,6 +31,13 @@ final class FollowGraph
      */
     public static function follows(int $followerId, int $followeeId): bool
     {
+        $simulation = self::simulation($followerId);
+        if ($simulation instanceof ViewAsContext) {
+            return $simulation->mode() === ViewAsMode::Follower
+                && $simulation->ownerId() === $followeeId
+                && $simulation->characterId() === null;
+        }
+
         return FollowRequest::query()
             ->where('requester_id', $followerId)
             ->where('recipient_id', $followeeId)
@@ -48,6 +57,28 @@ final class FollowGraph
         int $recipientId,
         ?int $recipientCharacterId,
     ): bool {
+        $simulation = self::simulation($followerId);
+        if ($simulation instanceof ViewAsContext) {
+            if ($simulation->mode() !== ViewAsMode::Follower
+                || $simulation->ownerId() !== $recipientId) {
+                return false;
+            }
+
+            if ($simulation->characterId() !== null) {
+                return $simulation->characterId() === $recipientCharacterId;
+            }
+
+            if ($recipientCharacterId === null) {
+                return true;
+            }
+
+            return Character::query()
+                ->whereKey($recipientCharacterId)
+                ->where('user_id', $recipientId)
+                ->where('is_linked', true)
+                ->exists();
+        }
+
         if ($recipientCharacterId === null) {
             return self::follows($followerId, $recipientId);
         }
@@ -132,6 +163,50 @@ final class FollowGraph
         int $viewerId,
         ?string $characterColumn = null,
     ): void {
+        $simulation = self::simulation($viewerId);
+        if ($simulation instanceof ViewAsContext) {
+            $query->fromRaw('(select 1) as simulated_view_as');
+
+            if ($simulation->mode() !== ViewAsMode::Follower) {
+                $query->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $query->where($ownerColumn, $simulation->ownerId());
+
+            if ($characterColumn === null) {
+                if ($simulation->characterId() !== null) {
+                    $query->whereRaw('1 = 0');
+                }
+
+                return;
+            }
+
+            if ($simulation->characterId() !== null) {
+                $query->where($characterColumn, $simulation->characterId());
+
+                return;
+            }
+
+            // A simulated account edge behaves exactly like a stored account
+            // edge: it admits the human identity and Linked personas, but never
+            // Separate personas.
+            $query->where(function (QueryBuilder $identity) use ($ownerColumn, $characterColumn): void {
+                $identity->whereNull($characterColumn)
+                    ->orWhereExists(function (QueryBuilder $characters) use ($ownerColumn, $characterColumn): void {
+                        $characters->selectRaw('1')
+                            ->from('characters as simulated_linked_characters')
+                            ->whereColumn('simulated_linked_characters.id', $characterColumn)
+                            ->whereColumn('simulated_linked_characters.user_id', $ownerColumn)
+                            ->whereNull('simulated_linked_characters.deleted_at')
+                            ->where('simulated_linked_characters.is_linked', true);
+                    });
+            });
+
+            return;
+        }
+
         $query->from('follow_requests')
             ->whereColumn('follow_requests.recipient_id', $ownerColumn)
             ->where('follow_requests.requester_id', $viewerId)
@@ -180,10 +255,29 @@ final class FollowGraph
      */
     public static function constrainOwnerFollowsViewer(QueryBuilder $query, string $ownerColumn, int $viewerId): void
     {
+        if (self::simulation($viewerId) instanceof ViewAsContext) {
+            // Follower preview is deliberately one-way, so it must never pass
+            // Mutuals through an implied reverse edge.
+            $query->fromRaw('(select 1) as simulated_view_as')->whereRaw('1 = 0');
+
+            return;
+        }
+
         $query->from('follow_requests')
             ->whereColumn('follow_requests.requester_id', $ownerColumn)
             ->where('follow_requests.recipient_id', $viewerId)
             ->whereNull('follow_requests.recipient_character_id')
             ->where('follow_requests.status', FollowRequest::STATUS_ACCEPTED);
+    }
+
+    private static function simulation(int $viewerId): ?ViewAsContext
+    {
+        if (! app()->bound(ViewAsContext::class)) {
+            return null;
+        }
+
+        $context = app(ViewAsContext::class);
+
+        return $context->isSimulatedViewer($viewerId) ? $context : null;
     }
 }

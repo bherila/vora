@@ -2,9 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Models\Media;
 use App\Models\Post;
+use App\Models\Story;
 use App\Models\User;
 use App\Notifications\FollowedUserPosted;
+use App\Services\Post\AnnouncementPostService;
 use App\Support\FollowGraph;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,20 +33,25 @@ class NotifyFollowersOfPost implements ShouldQueue
 
     public function handle(): void
     {
-        if ($this->post->trashed()) {
+        $post = Post::withTrashed()->find($this->post->id);
+        if (! $post instanceof Post || $post->trashed() || ! $post->isApprovedContent()) {
             return;
         }
 
-        $author = $this->post->user;
+        if ($post->is_announcement && ! $this->hasPublishableAnnouncementAttachment($post)) {
+            return;
+        }
+
+        $author = $post->user;
         if ($author === null || ! $author->isActive()) {
             return;
         }
 
-        $followerIds = FollowGraph::followersOfIdentity($author->id, $this->post->character_id)
-            ->where(function ($query): void {
+        $followerIds = FollowGraph::followersOfIdentity($author->id, $post->character_id)
+            ->where(function ($query) use ($post): void {
                 $query
                     ->whereNull('responded_at')
-                    ->orWhere('responded_at', '<=', $this->post->created_at);
+                    ->orWhere('responded_at', '<=', $post->created_at);
             })
             ->select('requester_id');
 
@@ -51,14 +59,24 @@ class NotifyFollowersOfPost implements ShouldQueue
             ->whereIn('id', $followerIds)
             ->active()
             ->where('notify_new_post', true)
-            ->chunkById(200, function ($followers): void {
+            ->chunkById(200, function ($followers) use ($post): void {
                 foreach ($followers as $follower) {
                     // The edge query scopes membership; the full post gate still
                     // enforces its audience and any future restrictions.
-                    if ($this->post->isViewableBy($follower)) {
-                        $follower->notify(new FollowedUserPosted($this->post));
+                    if ($post->isViewableBy($follower)) {
+                        $follower->notify(new FollowedUserPosted($post));
                     }
                 }
             });
+    }
+
+    private function hasPublishableAnnouncementAttachment(Post $post): bool
+    {
+        $content = $post->attachments()->with('attachable')->first()?->attachable;
+        if (! $content instanceof Media && ! $content instanceof Story) {
+            return false;
+        }
+
+        return resolve(AnnouncementPostService::class)->isPublishable($content);
     }
 }

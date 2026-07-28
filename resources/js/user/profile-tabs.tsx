@@ -87,29 +87,30 @@ interface ListTabProps {
   endpoint: string;
   emptyTitle: string;
   emptyAction?: ReactNode;
+  readOnly?: boolean;
 }
 
 /** Read-only media grid for a profile or persona page. */
-export function MediaListTab({ endpoint, emptyTitle }: ListTabProps) {
+export function MediaListTab({ endpoint, emptyTitle, readOnly = false }: ListTabProps) {
   const { items, loading, error } = useProfileList<MediaItem>(endpoint);
   if (loading) return <GridSkeleton />;
   if (error) return <TabError message={error} />;
   if (items.length === 0) return <TabEmpty icon={Images} title={emptyTitle} />;
-  return <MediaGrid items={items} />;
+  return <MediaGrid items={items} getHref={readOnly ? () => null : (item) => `/m/${item.ulid}`} />;
 }
 
-export function StoriesListTab({ endpoint, emptyTitle }: ListTabProps) {
+export function StoriesListTab({ endpoint, emptyTitle, readOnly = false }: ListTabProps) {
   const { items, loading, error } = useProfileList<StoryDiscoveryItem>(endpoint);
   if (loading) return <GridSkeleton />;
   if (error) return <TabError message={error} />;
   if (items.length === 0) return <TabEmpty icon={BookOpen} title={emptyTitle} />;
-  return <StoryGrid items={items} />;
+  return <StoryGrid items={items} getHref={readOnly ? () => null : (story) => `/s/${story.ulid}`} />;
 }
 
-export function PostsListTab({ endpoint, emptyTitle, emptyAction }: ListTabProps) {
+export function PostsListTab({ endpoint, emptyTitle, emptyAction, readOnly = false }: ListTabProps) {
   const { items, loading, error } = useProfileList<CommunityPost>(endpoint);
   if (loading) return <ListSkeleton />;
   if (error) return <TabError message={error} />;
   if (items.length === 0) return <TabEmpty icon={MessageSquare} title={emptyTitle} action={emptyAction} />;
-  return <div className="space-y-4">{items.map((post) => <PostCard key={post.id} post={post} />)}</div>;
+  return <div className="space-y-4">{items.map((post) => <PostCard key={post.id} post={post} readOnly={readOnly} />)}</div>;
 }

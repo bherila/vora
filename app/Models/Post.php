@@ -38,6 +38,7 @@ class Post extends Model
         'body',
         'audience',
         'discoverable',
+        'is_announcement',
     ];
 
     /**
@@ -48,6 +49,7 @@ class Post extends Model
         return [
             'audience' => Audience::class,
             'discoverable' => 'boolean',
+            'is_announcement' => 'boolean',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
         ];

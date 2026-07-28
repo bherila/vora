@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 
 import type { AccountMenu, GuestMenuItem, NavbarBrand, NavLink, NavMenu } from '@/components/navbar';
 import Navbar from '@/components/navbar';
+import { hydrateIdentityStore, type IdentityOption } from '@/identity';
 import { readInitialData } from '@/initialData';
 
 interface NavbarInitialData {
@@ -13,12 +14,15 @@ interface NavbarInitialData {
     adminMenu?: NavMenu | null;
     accountMenu?: AccountMenu | null;
     guestMenuItems?: GuestMenuItem[];
+    identities?: IdentityOption[];
+    activeIdentityId?: number | null;
   };
 }
 
 const mount = document.getElementById('navbar');
 if (mount) {
   const { navbar } = readInitialData<NavbarInitialData>();
+  hydrateIdentityStore(navbar?.identities ?? [], navbar?.activeIdentityId ?? null);
   createRoot(mount).render(
     <Navbar
       brand={navbar?.brand ?? { label: '', href: '/' }}

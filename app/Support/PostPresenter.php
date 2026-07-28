@@ -26,8 +26,12 @@ class PostPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function view(Post $post, ?User $viewer, ?MediaResponseService $mediaResponder = null): array
-    {
+    public static function view(
+        Post $post,
+        ?User $viewer,
+        ?MediaResponseService $mediaResponder = null,
+        bool $allowMutations = true,
+    ): array {
         return [
             'id' => $post->id,
             'ulid' => $post->ulid,
@@ -50,7 +54,7 @@ class PostPresenter
             'comment_count' => (int) ($post->comments_count ?? $post->comments()->count()),
             'created_at' => $post->created_at?->toIso8601String(),
             // Anyone signed in who isn't the author can report the post for abuse.
-            'can_report' => $viewer !== null && $post->user_id !== $viewer->id,
+            'can_report' => $allowMutations && $viewer !== null && $post->user_id !== $viewer->id,
         ];
     }
 

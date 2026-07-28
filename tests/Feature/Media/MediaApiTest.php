@@ -59,8 +59,25 @@ class MediaApiTest extends TestCase
             'user_id' => $user->id,
             'title' => 'Beach',
             'upload_status' => 'pending',
+            'announce_on_approval' => true,
         ]);
         $this->assertSame([$interest->id], $user->fresh()->last_media_interest_ids);
+    }
+
+    public function test_store_allows_the_default_announcement_to_be_disabled(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'quiet.jpg',
+            'content_type' => 'image/jpeg',
+            'audience' => 'everyone',
+            'announce' => false,
+        ])->assertCreated();
+
+        $this->assertFalse(Media::query()->sole()->announce_on_approval);
     }
 
     public function test_store_rejects_mime_not_allowed_for_type(): void

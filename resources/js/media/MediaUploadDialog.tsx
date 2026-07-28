@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { useActiveIdentityId } from '@/identity';
 import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import {
@@ -152,7 +153,7 @@ async function uploadThumbnailBestEffort(
 interface MediaUploadDialogProps {
   /** Characters the upload can be attached to (privacy is inherited from them). */
   characters: CharacterOption[];
-  /** Identity the dialog opens scoped to: a character id, or null for the user. */
+  /** Explicit profile identity; omit to use the navbar's active authoring identity. */
   defaultCharacterId?: number | null;
   /** Interests pre-selected from the user's last upload. */
   lastInterestIds: number[];
@@ -171,19 +172,22 @@ interface MediaUploadDialogProps {
  */
 export function MediaUploadDialog({
   characters,
-  defaultCharacterId = null,
+  defaultCharacterId,
   lastInterestIds,
   onUploaded,
   triggerLabel = 'Upload media',
   triggerSize = 'default',
   triggerVariant = 'default',
 }: MediaUploadDialogProps) {
+  const activeIdentityId = useActiveIdentityId();
+  const resolvedDefaultCharacterId = defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<PendingUpload[]>([]);
-  const [characterId, setCharacterId] = useState(defaultCharacterId === null ? '' : String(defaultCharacterId));
+  const [characterId, setCharacterId] = useState(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
   const [audience, setAudience] = useState<Audience>('everyone');
   const [audienceUserIds, setAudienceUserIds] = useState<number[]>([]);
   const [discoverable, setDiscoverable] = useState(true);
+  const [announce, setAnnounce] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(lastInterestIds);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -193,9 +197,9 @@ export function MediaUploadDialog({
   // Re-scope to the active identity each time the dialog opens.
   useEffect(() => {
     if (open) {
-      setCharacterId(defaultCharacterId === null ? '' : String(defaultCharacterId));
+      setCharacterId(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
     }
-  }, [open, defaultCharacterId]);
+  }, [open, resolvedDefaultCharacterId]);
 
   const handleFilesChange = (newFiles: File[]): void => {
     setPending((prev) => newFiles.map((file) => {
@@ -210,10 +214,11 @@ export function MediaUploadDialog({
 
   const resetForm = (): void => {
     setPending([]);
-    setCharacterId(defaultCharacterId === null ? '' : String(defaultCharacterId));
+    setCharacterId(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
     setAudience('everyone');
     setAudienceUserIds([]);
     setDiscoverable(true);
+    setAnnounce(true);
     setUploadInterestIds(lastInterestIds);
     setProgress(0);
   };
@@ -264,6 +269,7 @@ export function MediaUploadDialog({
           has_thumbnail: thumbnail !== null,
           perceptual_hash: perceptualHash,
           file_hash: fileHash,
+          announce,
           ...(selectedCharacterId === null ? {
             audience,
             audience_user_ids: audience === 'specific' ? audienceUserIds : [],
@@ -426,6 +432,16 @@ export function MediaUploadDialog({
             <span className="text-sm">Interests</span>
             <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={announce}
+              onChange={(event) => setAnnounce(event.target.checked)}
+              disabled={uploading}
+              className="mt-0.5"
+            />
+            <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
+          </label>
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={uploading}>
               {uploading ? 'Uploading…' : 'Upload'}

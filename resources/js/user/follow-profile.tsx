@@ -1,5 +1,5 @@
 import { BookOpen, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
@@ -14,13 +14,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWrapper } from '@/fetchWrapper';
+import {
+  removeIdentityOption,
+  switchActiveIdentity,
+  upsertIdentityOption,
+  useIdentityStore,
+} from '@/identity';
 import { readInitialData } from '@/initialData';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
-import { CharacterEditorDialog,type CharacterRecord } from '@/user/CharacterEditorDialog';
-import { type ProfileEditable,ProfileIdentityEditor } from '@/user/profile-identity-editor';
+import { CharacterEditorDialog, type CharacterRecord } from '@/user/CharacterEditorDialog';
+import { type PersonaProfileData, PersonaProfileView } from '@/user/persona-profile';
+import { type ProfileEditable, ProfileIdentityEditor } from '@/user/profile-identity-editor';
 import { GridSkeleton, MediaListTab, PostsListTab, StoriesListTab, TabEmpty, TabError, useProfileList } from '@/user/profile-tabs';
+import { type ProfileViewAs, ViewAsBanner, ViewAsControl } from '@/user/view-as-control';
 
 interface Interest { id: number; name: string; }
 interface CharacterRef { id: number; display_name: string; avatar_url?: string | null; }
@@ -78,6 +86,18 @@ function getIdentityCounts(): IdentityCounts | null {
   return readInitialData<{ profileIdentityCounts?: IdentityCounts | null }>().profileIdentityCounts ?? null;
 }
 
+function getProfileViewAs(): ProfileViewAs | null {
+  return readInitialData<{ profileViewAs?: ProfileViewAs | null }>().profileViewAs ?? null;
+}
+
+function getPersonaProfile(): PersonaProfileData | null {
+  return readInitialData<{ personaProfile?: PersonaProfileData | null }>().personaProfile ?? null;
+}
+
+function getHydratedActiveIdentity(): number | null {
+  return readInitialData<{ navbar?: { activeIdentityId?: number | null } }>().navbar?.activeIdentityId ?? null;
+}
+
 /** Identity-rail data derived from a full character record. */
 function characterRefFrom(record: CharacterRecord): CharacterRef {
   return {
@@ -87,8 +107,13 @@ function characterRefFrom(record: CharacterRecord): CharacterRef {
   };
 }
 
-function characterQuery(identity: number | null): string {
-  return identity === null ? '' : `?character_id=${identity}`;
+function profileQuery(identity: number | null, viewAs: ProfileViewAs | null = null): string {
+  const params = new URLSearchParams();
+  if (identity !== null) params.set('character_id', String(identity));
+  if (viewAs) params.set('view_as', viewAs.mode);
+
+  const query = params.toString();
+  return query === '' ? '' : `?${query}`;
 }
 
 /**
@@ -98,7 +123,7 @@ function characterQuery(identity: number | null): string {
  * load errors the tabs below remain the authoritative surface.
  */
 function LatestStrip({ userId, identity }: { userId: number; identity: number | null }) {
-  const { items, loading, error } = useProfileList<RecentItem>(`/api/users/${userId}/recent-content${characterQuery(identity)}`);
+  const { items, loading, error } = useProfileList<RecentItem>(`/api/users/${userId}/recent-content${profileQuery(identity)}`);
 
   if (loading) {
     return (
@@ -218,8 +243,8 @@ function IdentityRail({ profile, identity, counts, onSelect, onCreate }: Identit
   );
 }
 
-function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
-  const { items, loading, error } = useProfileList<FavoriteCard>(`/api/users/${userId}/favorites`);
+function FavoritesTab({ userId, isSelf, viewAs }: { userId: number; isSelf: boolean; viewAs: ProfileViewAs | null }) {
+  const { items, loading, error } = useProfileList<FavoriteCard>(`/api/users/${userId}/favorites${profileQuery(null, viewAs)}`);
   if (loading) return <GridSkeleton itemClassName="h-20" />;
   if (error) return <TabError message={error} />;
   if (items.length === 0) {
@@ -234,9 +259,9 @@ function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
   }
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => (
-        <a key={`${item.type}-${item.id}`} href={item.href} className="block">
-          <Card className="h-full transition-colors hover:bg-muted">
+      {items.map((item) => {
+        const card = (
+          <Card className={`h-full ${viewAs ? '' : 'transition-colors hover:bg-muted'}`}>
             <CardContent className="flex items-center gap-3 p-3">
               {item.thumbnail_url ? (
                 <img src={item.thumbnail_url} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
@@ -249,8 +274,12 @@ function FavoritesTab({ userId, isSelf }: { userId: number; isSelf: boolean }) {
               </span>
             </CardContent>
           </Card>
-        </a>
-      ))}
+        );
+
+        return viewAs
+          ? <div key={`${item.type}-${item.id}`}>{card}</div>
+          : <a key={`${item.type}-${item.id}`} href={item.href} className="block">{card}</a>;
+      })}
     </div>
   );
 }
@@ -266,15 +295,21 @@ const TABS: TabDef[] = [
 
 export function FollowProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(getInitialProfile);
-  const [profileMedia] = useState<ProfileMediaData>(getProfileMedia);
+  const [personaProfile] = useState<PersonaProfileData | null>(getPersonaProfile);
+  const [viewAs] = useState<ProfileViewAs | null>(getProfileViewAs);
+  const [profileMedia, setProfileMedia] = useState<ProfileMediaData>(getProfileMedia);
   const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
   const [identityCounts] = useState<IdentityCounts | null>(getIdentityCounts);
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<CharacterRecord | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  // null = the main user identity; a number = one of their characters.
-  const [identity, setIdentity] = useState<number | null>(null);
+  const { activeIdentityId } = useIdentityStore();
+  const previewIdentity = useRef(getHydratedActiveIdentity());
+  // Other people's profile rails are browsing state. On /me, the rail is the
+  // same persisted authorship state as the navbar and every create surface.
+  const [viewedIdentity, setViewedIdentity] = useState<number | null>(null);
+  const identity = profile?.is_self ? activeIdentityId : viewedIdentity;
   // Everyone lands on the showcase: the profile's own work, media first.
   const [tab, setTab] = useState<TabKey>('media');
   const [editOpen, setEditOpen] = useState(false);
@@ -289,15 +324,21 @@ export function FollowProfilePage() {
     if (!userId || restricted) { setCounts(null); return; }
     let active = true;
     setCounts(null);
-    fetchWrapper.get(`/api/users/${userId}/content-counts${characterQuery(identity)}`)
+    fetchWrapper.get(`/api/users/${userId}/content-counts${profileQuery(identity, viewAs)}`)
       .then((response) => { if (active) setCounts((response as { data: Record<TabKey, number> }).data); })
       .catch(() => { if (active) setCounts(null); });
     return () => { active = false; };
-  }, [userId, identity, restricted]);
+  }, [userId, identity, restricted, viewAs]);
+
+  useEffect(() => {
+    if (viewAs && previewIdentity.current !== activeIdentityId) {
+      window.location.assign(`/me${profileQuery(null, viewAs)}`);
+    }
+  }, [activeIdentityId, viewAs]);
 
   const loadProfile = () => {
     if (!userId) return;
-    fetchWrapper.get(`/api/users/${userId}`)
+    fetchWrapper.get(`/api/users/${userId}${profileQuery(null, viewAs)}`)
       .then((response) => setProfile((response as ProfileResponse).data))
       .catch(() => setError('Unable to load profile.'));
   };
@@ -332,21 +373,57 @@ export function FollowProfilePage() {
       const exists = current.characters.some((c) => c.id === record.id);
       return { ...current, characters: exists ? current.characters.map((c) => (c.id === record.id ? ref : c)) : [...current.characters, ref] };
     });
+    setProfileMedia((current) => {
+      const option: CharacterOption = {
+        id: record.id,
+        display_name: record.display_name,
+        audience: record.audience,
+        audience_user_ids: record.audience_user_ids,
+      };
+      const exists = current.characters.some((character) => character.id === record.id);
+      return {
+        ...current,
+        characters: exists
+          ? current.characters.map((character) => character.id === record.id ? option : character)
+          : [...current.characters, option],
+      };
+    });
+    if (profile) {
+      upsertIdentityOption({
+        id: record.id,
+        displayName: record.display_name,
+        avatarUrl: characterRefFrom(record).avatar_url ?? null,
+      }, {
+        id: null,
+        displayName: profile.display_name,
+        avatarUrl: profile.avatar_url ?? null,
+      });
+    }
   };
 
   const handleDeleteCharacter = async (record: CharacterRecord): Promise<void> => {
     if (!window.confirm(`Delete ${record.display_name}? Art ownership stays with your user account.`)) return;
     try {
       await fetchWrapper.delete(`/api/characters/${record.id}`);
+      if (activeIdentityId === record.id) {
+        await switchActiveIdentity(null);
+      }
+      removeIdentityOption(record.id);
       setProfileCharacters((current) => current.filter((c) => c.id !== record.id));
       setProfile((current) => current ? { ...current, characters: current.characters.filter((c) => c.id !== record.id) } : current);
-      if (identity === record.id) setIdentity(null);
+      setProfileMedia((current) => ({
+        ...current,
+        characters: current.characters.filter((character) => character.id !== record.id),
+      }));
+      if (viewedIdentity === record.id) setViewedIdentity(null);
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to delete character.');
     }
   };
 
+  if (personaProfile && viewAs) return <PersonaProfileView persona={personaProfile} viewAs={viewAs} />;
   if (!profile) return <div className="mx-auto max-w-4xl px-4 py-8">Loading profile...</div>;
+  const isPreview = viewAs !== null;
   const hasActiveRequest = profile.follow_request !== null && !profile.follow_request.can_retry;
   const hasPersonas = profile.characters.length > 0;
   // Favorites belong to the user, not a character, so they only apply to the
@@ -355,9 +432,18 @@ export function FollowProfilePage() {
   const tabs: TabDef[] = identity !== null ? TABS.filter((t) => t.key !== 'favorites') : TABS;
   const activeTab: TabKey = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key ?? 'media');
   const activeCharacter = identity !== null ? profileCharacters.find((c) => c.id === identity) ?? null : null;
+  const handleIdentitySelect = (nextIdentity: number | null): void => {
+    if (!profile.is_self) {
+      setViewedIdentity(nextIdentity);
+      return;
+    }
+
+    switchActiveIdentity(nextIdentity).catch(() => setError('Unable to switch identity.'));
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+      {viewAs && <ViewAsBanner viewAs={viewAs} />}
       {!profile.is_self && <a className="text-sm underline underline-offset-4" href="/users">← Browse people</a>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
@@ -384,8 +470,9 @@ export function FollowProfilePage() {
               <div className="flex gap-2">
                 {editable && <Button onClick={() => setEditOpen(true)}>Edit profile</Button>}
                 <Button variant="outline" asChild><a href="/user/settings">Account settings</a></Button>
+                <ViewAsControl />
               </div>
-            ) : (
+            ) : isPreview ? null : (
               <div className="flex items-center gap-2">
                 {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
                 {!hasActiveRequest ? (
@@ -422,14 +509,11 @@ export function FollowProfilePage() {
                   <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={openCreateCharacter}>
                     <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
                   </Button>
-                  {/* Staged copy (#101): now that /c/{ulid} exists this may claim
-                      "its own page". It must NOT claim followers until persona
-                      follows ship (#102). */}
                   <HelpHint label="Personas">
                     <p>
                       Personas are characters you create — for fiction, art, and role-play.
-                      Each gets its own page and its own media, separate from your profile.
-                      Most people never need one.
+                      Each gets its own page, its own followers, and its own media. Your real
+                      profile stays separate. Most people never need one.
                     </p>
                   </HelpHint>
                 </div>
@@ -447,8 +531,8 @@ export function FollowProfilePage() {
               profile={profile}
               identity={identity}
               counts={profile.is_self ? identityCounts : null}
-              onSelect={setIdentity}
-              onCreate={profile.is_self ? openCreateCharacter : undefined}
+              onSelect={handleIdentitySelect}
+              onCreate={profile.is_self && !isPreview ? openCreateCharacter : undefined}
             />
           )}
 
@@ -474,28 +558,38 @@ export function FollowProfilePage() {
               </Button>
             ))}
           </div>
-          {activeTab === 'media' && (profile.is_self
+          {activeTab === 'media' && (profile.is_self && !isPreview
             ? <OwnerMediaManager userId={userId} identity={identity} characters={profileMedia.characters} lastInterestIds={profileMedia.last_interest_ids} />
-            : <MediaListTab endpoint={`/api/users/${userId}/media${characterQuery(identity)}`} emptyTitle="No media to show." />)}
-          {activeTab === 'stories' && (profile.is_self && identity === null
+            : (
+              <MediaListTab
+                endpoint={`/api/users/${userId}/media${profileQuery(identity, viewAs)}`}
+                emptyTitle="No media to show."
+                readOnly={isPreview}
+              />
+            ))}
+          {activeTab === 'stories' && (profile.is_self && !isPreview && identity === null
             ? <OwnerStoriesManager currentUserId={userId} />
             : (
               <StoriesListTab
-                endpoint={`/api/users/${userId}/stories${characterQuery(identity)}`}
+                endpoint={`/api/users/${userId}/stories${profileQuery(identity, viewAs)}`}
                 // For the owner this tab only renders on a character identity (the
                 // main identity uses the manager), so the empty state is
                 // persona-scoped.
                 emptyTitle={profile.is_self ? 'No stories written as this persona yet.' : 'No stories to show.'}
+                readOnly={isPreview}
               />
             ))}
           {activeTab === 'posts' && (
             <PostsListTab
-              endpoint={`/api/users/${userId}/posts${characterQuery(identity)}`}
+              endpoint={`/api/users/${userId}/posts${profileQuery(identity, viewAs)}`}
               emptyTitle={profile.is_self ? 'You haven’t posted anything here yet.' : 'No posts to show.'}
               emptyAction={profile.is_self ? <Button size="sm" variant="outline" asChild><a href="/feed">Go to your feed</a></Button> : undefined}
+              readOnly={isPreview}
             />
           )}
-          {activeTab === 'favorites' && identity === null && <FavoritesTab userId={userId} isSelf={profile.is_self} />}
+          {activeTab === 'favorites' && identity === null && (
+            <FavoritesTab userId={userId} isSelf={profile.is_self} viewAs={viewAs} />
+          )}
         </div>
       )}
       {profile.is_self && (
@@ -527,7 +621,7 @@ export function FollowProfilePage() {
           </DialogContent>
         </Dialog>
       )}
-      <Toaster position="top-right" richColors closeButton />
+      {!isPreview && <Toaster position="top-right" richColors closeButton />}
     </div>
   );
 }

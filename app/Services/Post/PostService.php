@@ -4,6 +4,7 @@ namespace App\Services\Post;
 
 use App\Enums\Audience;
 use App\Enums\ModerationStatus;
+use App\Enums\StoryStatus;
 use App\Jobs\NotifyFollowersOfPost;
 use App\Models\Character;
 use App\Models\Interest;
@@ -12,8 +13,10 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Privacy\PrivacyAuditor;
+use App\Support\FollowGraph;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -56,38 +59,160 @@ class PostService
         Request $request,
         ?int $characterId = null,
     ): Post {
-        $resolved = $this->resolveAttachments($author, $attachments);
-        $character = $this->resolveCharacter($author, $characterId);
+        return DB::transaction(function () use (
+            $author,
+            $body,
+            $audience,
+            $discoverable,
+            $attachments,
+            $audienceUserIds,
+            $request,
+            $characterId,
+        ): Post {
+            $resolved = $this->resolveAttachments($author, $attachments);
+            $character = $this->resolveCharacter($author, $characterId);
+            $this->assertRelationshipIdentitiesMatch($character?->id, $resolved);
+            $privacy = $this->clampPrivacy(
+                $author,
+                $character?->id,
+                $audience,
+                $discoverable,
+                $audienceUserIds,
+                $resolved,
+            );
 
-        $post = $author->posts()->make([
-            'ulid' => (string) Str::ulid(),
-            'body' => $body,
-            'audience' => $audience->value,
-            'discoverable' => $discoverable,
-            'character_id' => $character?->id,
-        ]);
-        // Short posts publish immediately and are moderated reactively (an admin
-        // can reject/take one down), rather than sitting in a pre-publication
-        // queue that would make the feed dead on arrival. Heavier content
-        // (Media/Story) keeps pre-moderation. Set directly: the moderation column
-        // is intentionally not mass-assignable.
-        $post->moderation_status = ModerationStatus::Approved;
-        $post->save();
-
-        foreach ($resolved as $model) {
-            $post->attachments()->create([
-                'attachable_type' => $model->getMorphClass(),
-                'attachable_id' => $model->getKey(),
+            $post = $author->posts()->make([
+                'ulid' => (string) Str::ulid(),
+                'body' => $body,
+                'audience' => $privacy['audience']->value,
+                'discoverable' => $privacy['discoverable'],
+                'character_id' => $character?->id,
             ]);
+            // Short posts publish immediately and are moderated reactively (an
+            // admin can reject/take one down), rather than sitting in a
+            // pre-publication queue that would make the feed dead on arrival.
+            $post->moderation_status = ModerationStatus::Approved;
+            $post->save();
+
+            foreach ($resolved as $model) {
+                $post->attachments()->create([
+                    'attachable_type' => $model->getMorphClass(),
+                    'attachable_id' => $model->getKey(),
+                ]);
+            }
+
+            $post->syncAudienceMembers($privacy['member_ids']);
+            $this->auditor->recordCreation($post, $author, $post->privacySnapshot(), $request);
+
+            // Never expose a partially-created aggregate to a queue worker.
+            NotifyFollowersOfPost::dispatch($post)->afterCommit();
+
+            return $post;
+        });
+    }
+
+    /**
+     * A post is the intersection of its requested policy and every attached
+     * privacy policy. SpecificPeople is not ordered against relationship tiers:
+     * a grant can outlive the relationship that existed when it was selected.
+     * When either side is SpecificPeople, encode the exact write-time
+     * intersection as a SpecificPeople allowlist rather than assuming an order
+     * that could widen the post.
+     *
+     * @param  list<int>  $audienceUserIds
+     * @param  list<Model>  $attachments
+     * @return array{audience: Audience, discoverable: bool, member_ids: list<int>}
+     */
+    private function clampPrivacy(
+        User $author,
+        ?int $characterId,
+        Audience $audience,
+        bool $discoverable,
+        array $audienceUserIds,
+        array $attachments,
+    ): array {
+        $policies = [];
+        $specificLists = [];
+        if ($audience === Audience::SpecificPeople) {
+            $specificLists[] = array_values(array_unique(array_map('intval', $audienceUserIds)));
         }
 
-        $post->syncAudienceMembers($audience === Audience::SpecificPeople ? $audienceUserIds : []);
-        $this->auditor->recordCreation($post, $author, $post->privacySnapshot(), $request);
+        foreach ($attachments as $attachment) {
+            if (! $attachment instanceof Character
+                && ! $attachment instanceof Media
+                && ! $attachment instanceof Story) {
+                continue;
+            }
 
-        // Fan the new-post notification out off the request path.
-        NotifyFollowersOfPost::dispatch($post);
+            $discoverable = $discoverable && (bool) $attachment->discoverable;
+            $attachmentAudience = $attachment->audience;
+            $policies[] = $attachment;
+            if ($attachmentAudience === Audience::SpecificPeople) {
+                $specificLists[] = $attachment->audienceMembers()->pluck('user_id')->map('intval')->all();
+            } elseif ($this->audienceRank($attachmentAudience) > $this->audienceRank($audience)) {
+                $audience = $attachmentAudience;
+            }
+        }
 
-        return $post;
+        $memberIds = [];
+        if ($specificLists !== []) {
+            $memberIds = array_shift($specificLists);
+            foreach ($specificLists as $list) {
+                $memberIds = array_values(array_intersect($memberIds, $list));
+            }
+
+            $candidates = User::query()->whereIn('id', $memberIds)->get()->keyBy('id');
+            $memberIds = array_values(array_filter(
+                $memberIds,
+                function (int $id) use ($candidates, $author, $characterId, $audience, $policies): bool {
+                    $candidate = $candidates->get($id);
+                    if (! $candidate instanceof User
+                        || ! $this->requestedPolicyAllows($audience, $author, $candidate, $characterId)) {
+                        return false;
+                    }
+
+                    return collect($policies)->every(
+                        fn (Character|Media|Story $attachment): bool => $attachment->isViewableBy($candidate),
+                    );
+                },
+            ));
+            $audience = Audience::SpecificPeople;
+        }
+
+        sort($memberIds);
+
+        return [
+            'audience' => $audience,
+            'discoverable' => $discoverable,
+            'member_ids' => $audience === Audience::SpecificPeople ? $memberIds : [],
+        ];
+    }
+
+    private function requestedPolicyAllows(
+        Audience $audience,
+        User $author,
+        User $candidate,
+        ?int $characterId,
+    ): bool {
+        return match ($audience) {
+            Audience::Everyone => true,
+            Audience::Followers => FollowGraph::followsIdentity($candidate->id, $author->id, $characterId),
+            Audience::Mutuals => FollowGraph::followsIdentity($candidate->id, $author->id, $characterId)
+                && FollowGraph::follows($author->id, $candidate->id),
+            // Membership in the requested allowlist was already applied when
+            // the candidate set was built.
+            Audience::SpecificPeople => true,
+        };
+    }
+
+    private function audienceRank(Audience $audience): int
+    {
+        return match ($audience) {
+            Audience::Everyone => 0,
+            Audience::Followers => 1,
+            Audience::Mutuals => 2,
+            Audience::SpecificPeople => 3,
+        };
     }
 
     /**
@@ -136,7 +261,7 @@ class PostService
             }
             $seen[$key] = true;
 
-            $model = $class::query()->find($id);
+            $model = $class::query()->lockForUpdate()->find($id);
             if ($model === null) {
                 throw ValidationException::withMessages(["attachments.$i.id" => 'That attachment does not exist.']);
             }
@@ -155,9 +280,59 @@ class PostService
                 ]);
             }
 
+            if ($model instanceof Media && (! $model->isReady() || ! $model->isApprovedContent())) {
+                throw ValidationException::withMessages([
+                    "attachments.$i.id" => 'Media must finish review before it can be attached.',
+                ]);
+            }
+
+            if ($model instanceof Story
+                && ($model->status !== StoryStatus::Published || ! $model->isApprovedContent())) {
+                throw ValidationException::withMessages([
+                    "attachments.$i.id" => 'Stories must be published and approved before they can be attached.',
+                ]);
+            }
+
             $resolved[] = $model;
         }
 
         return $resolved;
+    }
+
+    /**
+     * Relationship tiers are defined against one effective identity. Mapping a
+     * persona-scoped Followers/Mutuals policy onto another persona or the human
+     * account silently changes who can see the attachment, so reject instead.
+     *
+     * @param  list<Model>  $attachments
+     */
+    private function assertRelationshipIdentitiesMatch(?int $postCharacterId, array $attachments): void
+    {
+        foreach ($attachments as $attachment) {
+            if (! $attachment instanceof Character
+                && ! $attachment instanceof Media
+                && ! $attachment instanceof Story) {
+                continue;
+            }
+
+            if (! in_array($attachment->audience, [Audience::Followers, Audience::Mutuals], true)) {
+                continue;
+            }
+
+            $attachmentCharacterId = match (true) {
+                $attachment instanceof Character => (int) $attachment->id,
+                $attachment instanceof Media => $attachment->character_id !== null
+                    ? (int) $attachment->character_id
+                    : null,
+                // Story privacy is account-scoped.
+                default => null,
+            };
+
+            if ($attachmentCharacterId !== $postCharacterId) {
+                throw ValidationException::withMessages([
+                    'attachments' => 'Relationship-restricted content can only be attached by the same identity.',
+                ]);
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Character;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -45,14 +46,25 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame('/me', $navbar['navItems'][1]['href']);
         $this->assertSame('/users/follow-requests', $navbar['navItems'][4]['href']);
         $this->assertSame(0, $navbar['navItems'][4]['badge']);
-        // The account menu now identifies the signed-in user (name + avatar)
-        // rather than a generic "Account" label. The avatar + name link to /me;
-        // "View profile" is dropped from the menu as redundant.
+        // Persona-free users retain the existing direct avatar/profile link and
+        // the exact pre-switcher account menu.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
         $this->assertNull($navbar['accountMenu']['avatarUrl']);
         $this->assertSame('/me', $navbar['accountMenu']['profileHref']);
         $this->assertSame(['Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
         $this->assertSame([], $navbar['guestMenuItems']);
+    }
+
+    public function test_persona_user_account_menu_keeps_an_explicit_profile_link(): void
+    {
+        $user = User::factory()->approved()->create();
+        Character::factory()->for($user)->create();
+
+        $payload = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
+        $items = $payload['navbar']['accountMenu']['items'];
+
+        $this->assertSame(['Profile', 'Settings', 'Invites', 'Log out'], array_column($items, 'label'));
+        $this->assertSame('/me', $items[0]['href']);
     }
 
     public function test_admin_navbar_menu_is_hydrated_from_blade(): void
