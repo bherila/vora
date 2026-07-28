@@ -19,6 +19,7 @@ use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
 use App\Services\Auth\VoraAuthUserPolicy;
 use App\Services\Post\AnnouncementPostService;
+use App\Services\Privacy\ViewAsContext;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
@@ -40,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // App-specific auth policy consumed by the bherila/auth-laravel package.
         $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
+        $this->app->scoped(ViewAsContext::class);
     }
 
     /**

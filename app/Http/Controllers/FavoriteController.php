@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\ContentFavorited;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\ProfileGate;
+use App\Services\Privacy\ViewAsContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -16,6 +17,7 @@ class FavoriteController extends Controller
     public function __construct(
         private readonly FavoriteService $favorites,
         private readonly ProfileGate $profileGate,
+        private readonly ViewAsContext $viewAs,
     ) {}
 
     /**
@@ -86,7 +88,7 @@ class FavoriteController extends Controller
      */
     public function index(Request $request, User $user): JsonResponse
     {
-        $viewer = $request->user();
+        $viewer = $this->viewAs->viewerFor($request, $user);
 
         if (! $viewer instanceof User || ! $this->profileGate->canView($viewer, $user)) {
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 403);
