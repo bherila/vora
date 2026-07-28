@@ -275,6 +275,37 @@ class StoryTest extends TestCase
         $this->assertNotContains('Collab', $involveNames->all());
     }
 
+    public function test_reader_payload_does_not_correlate_a_separate_persona_with_its_owner(): void
+    {
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $reader = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $story = Story::factory()->for($owner)->readable()->create();
+        $story->authors()->where('user_id', $owner->id)->update(['character_id' => $persona->id]);
+        $story->involvements()->create(['involvable_type' => 'character', 'involvable_id' => $persona->id]);
+        $story->involvements()->create(['involvable_type' => 'user', 'involvable_id' => $owner->id]);
+
+        $response = $this->actingAs($reader)
+            ->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', null)
+            ->assertJsonPath('data.owner.display_name', 'Public Persona')
+            ->assertJsonPath('data.authors.0.display_name', 'Public Persona')
+            ->assertJsonMissingPath('data.authors.0.user_id')
+            ->assertJsonMissingPath('data.authors.0.character_id');
+
+        $involvements = collect($response->json('data.involves'));
+        $this->assertFalse($involvements->contains(
+            fn (array $item): bool => $item['type'] === 'character' && $item['id'] === $persona->id,
+        ));
+        $this->assertFalse($involvements->contains(
+            fn (array $item): bool => $item['type'] === 'user' && $item['id'] === $owner->id,
+        ));
+    }
+
     public function test_library_lists_owned_and_co_authored_stories(): void
     {
         $owner = User::factory()->approved()->create();

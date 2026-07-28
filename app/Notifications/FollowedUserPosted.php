@@ -34,11 +34,12 @@ class FollowedUserPosted extends Notification implements ShouldQueue
     public function toArray(object $notifiable): array
     {
         $author = $this->post->user;
+        $character = $this->post->character;
 
         return [
             'type' => 'new_post',
             'actor_id' => $this->post->user_id,
-            'actor_name' => $author?->display_name ?: $author?->name,
+            'actor_name' => $character?->display_name ?: ($author?->display_name ?: $author?->name),
             'post_id' => $this->post->id,
             'post_ulid' => $this->post->ulid,
             'url' => '/p/'.$this->post->ulid,

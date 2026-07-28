@@ -5,6 +5,7 @@ import { Avatar } from '@/components/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
 import { readInitialData } from '@/initialData';
 
 interface DirectoryUser {
@@ -21,6 +22,9 @@ interface DirectoryUser {
 
 function FollowDirectoryPage() {
   const [users] = useState<DirectoryUser[]>(() => readInitialData<{ followDirectory?: DirectoryUser[] }>().followDirectory ?? []);
+  const [personas] = useState<PersonaDiscoveryItem[]>(
+    () => readInitialData<{ followDirectoryPersonas?: PersonaDiscoveryItem[] }>().followDirectoryPersonas ?? [],
+  );
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -29,18 +33,24 @@ function FollowDirectoryPage() {
     return users.filter((user) => user.display_name.toLowerCase().includes(term));
   }, [users, query]);
 
+  const filteredPersonas = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return personas;
+    return personas.filter((persona) => persona.display_name.toLowerCase().includes(term));
+  }, [personas, query]);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-bold">Browse users</h1>
-        <p className="text-sm text-muted-foreground">View profiles and request to follow users.</p>
+        <h1 className="text-2xl font-bold">Browse people</h1>
+        <p className="text-sm text-muted-foreground">View profiles, request to follow people, and discover their personas.</p>
       </div>
       <Input
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search by name"
-        aria-label="Search users by name"
+        aria-label="Search people and personas by name"
       />
       <div className="grid gap-4 md:grid-cols-2">
         {filtered.map((user) => (
@@ -83,6 +93,19 @@ function FollowDirectoryPage() {
           </Card>
         )}
       </div>
+
+      {/* Personas stand apart from people: following the work, not the person.
+          Only personas opted into discovery are listed here — the cards never
+          reference the human behind them. */}
+      {filteredPersonas.length > 0 && (
+        <section aria-label="Personas" className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Personas</h2>
+            <p className="text-sm text-muted-foreground">Characters made by members, with pages of their own.</p>
+          </div>
+          <PersonaGrid items={filteredPersonas} />
+        </section>
+      )}
     </div>
   );
 }

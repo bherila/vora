@@ -25,4 +25,11 @@ Once the `prod` environment is created, you need to configure the following secr
 
 ## Deployment Target
 
-The workflow deploys the application to the `~/bwh-php/` directory on the remote server. Make sure this directory exists and the specified SSH user has write permissions to it.
+The workflow deploys the application to the `~/laravel/` directory on the remote
+server and exposes `~/laravel/public/` through the cPanel document-root symlinks.
+The application directory must remain group-traversable (`710`) so LiteSpeed can
+reach public files without making the application contents group-readable.
+
+After deployment, the workflow verifies `https://macrophile.me/up` through the
+public Cloudflare path. A web-server 404 or an unhealthy Laravel application
+fails the deployment instead of reporting a false success.

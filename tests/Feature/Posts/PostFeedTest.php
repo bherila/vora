@@ -3,6 +3,7 @@
 namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
@@ -13,11 +14,12 @@ class PostFeedTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function follow(User $follower, User $followee): void
+    private function follow(User $follower, User $followee, ?Character $character = null): void
     {
         FollowRequest::query()->create([
             'requester_id' => $follower->id,
             'recipient_id' => $followee->id,
+            'recipient_character_id' => $character?->id,
             'status' => FollowRequest::STATUS_ACCEPTED,
             'responded_at' => now(),
         ]);
@@ -64,6 +66,30 @@ class PostFeedTest extends TestCase
 
         $this->assertContains($followersPost->ulid, $ulids, 'a follower sees a followers-only post');
         $this->assertNotContains($mutualsPost->ulid, $ulids, 'a one-way follow is not a mutual');
+    }
+
+    public function test_persona_only_follow_includes_only_that_personas_posts(): void
+    {
+        User::factory()->create();
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $followedPersona = Character::factory()->for($author)->create(['is_linked' => false]);
+        $otherPersona = Character::factory()->for($author)->create(['is_linked' => false]);
+        $this->follow($viewer, $author, $followedPersona);
+
+        $ownerPost = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create();
+        $followedPersonaPost = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create([
+            'character_id' => $followedPersona->id,
+        ]);
+        $otherPersonaPost = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create([
+            'character_id' => $otherPersona->id,
+        ]);
+
+        $ulids = $this->feedUlids($viewer);
+
+        $this->assertSame([$followedPersonaPost->ulid], $ulids);
+        $this->assertNotContains($ownerPost->ulid, $ulids);
+        $this->assertNotContains($otherPersonaPost->ulid, $ulids);
     }
 
     public function test_feed_hides_unapproved_posts_from_others_but_not_your_own(): void

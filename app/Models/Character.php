@@ -28,10 +28,24 @@ class Character extends Model
             $character->is_linked ??= true;
         });
 
+        // A Separate persona must never fall back to the owner's interests. That
+        // would expose the owner's exact interest fingerprint through matching
+        // and discovery surfaces intended to keep the two identities apart.
+        static::saving(function (Character $character): void {
+            if ($character->is_linked === false) {
+                $character->inherit_interests = false;
+            }
+        });
+
         // Characters soft-delete for admin retention. Only a force delete should
         // drop story "involves" tags, otherwise restore would not put the
         // character back exactly where it was.
         static::deleting(function (Character $character): void {
+            // A database cascade only runs on a force delete. Persona-scoped
+            // follows must also disappear on a soft delete; retaining them or
+            // nulling their scope would turn them into account-wide follows.
+            $character->recipientFollowRequests()->delete();
+
             if (! $character->isForceDeleting()) {
                 return;
             }
@@ -49,6 +63,10 @@ class Character extends Model
             if (! $character->wasChanged('user_id')) {
                 return;
             }
+
+            // Persona followers consented to this identity under its previous
+            // owner. A transfer must not carry those edges to another account.
+            $character->recipientFollowRequests()->delete();
 
             $service = app(StoryService::class);
             $storyIds = $character->storyInvolvements()->pluck('story_id')->unique();
@@ -92,6 +110,12 @@ class Character extends Model
             'inherit_interests' => 'boolean',
             'profile_picture_media_id' => 'integer',
         ];
+    }
+
+    /** @return HasMany<FollowRequest, $this> */
+    public function recipientFollowRequests(): HasMany
+    {
+        return $this->hasMany(FollowRequest::class, 'recipient_character_id');
     }
 
     /**

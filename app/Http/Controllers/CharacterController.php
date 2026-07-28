@@ -194,7 +194,13 @@ class CharacterController extends Controller
         $gender = $data['gender'] ?? null;
         $userType = $data['user_type'] ?? null;
 
-        return [
+        // Only touch is_linked when the client sent it, so older callers keep
+        // the current value (create defaults to linked in the model hook).
+        $linked = array_key_exists('is_linked', $data)
+            ? ['is_linked' => (bool) $data['is_linked']]
+            : [];
+
+        return $linked + [
             'display_name' => $data['display_name'],
             'description' => $data['description'] ?? null,
             'audience' => $request->audience(),

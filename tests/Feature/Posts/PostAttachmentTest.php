@@ -125,7 +125,51 @@ class PostAttachmentTest extends TestCase
             ->assertOk()->assertJsonCount(1, 'data.attachments');
     }
 
-    public function test_post_as_restricted_character_is_hidden_from_unauthorized_viewers(): void
+    public function test_human_post_does_not_correlate_its_author_to_an_attached_separate_persona(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $separate = Character::factory()->for($author)->create([
+            'display_name' => 'Private Persona',
+            'is_linked' => false,
+        ]);
+        $post = Post::factory()->for($author)->approved()->create([
+            'audience' => Audience::Everyone,
+            'character_id' => null,
+        ]);
+        $this->attachCharacter($post, $separate);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data.attachments')
+            ->assertJsonMissing(['label' => 'Private Persona']);
+
+        $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.attachments.0.id', $separate->id);
+    }
+
+    public function test_separate_persona_post_may_name_that_same_persona_as_an_attachment(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $separate = Character::factory()->for($author)->create([
+            'is_linked' => false,
+        ]);
+        $post = Post::factory()->for($author)->approved()->create([
+            'audience' => Audience::Everyone,
+            'character_id' => $separate->id,
+        ]);
+        $this->attachCharacter($post, $separate);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.attachments.0.id', $separate->id);
+    }
+
+    public function test_post_as_restricted_character_shows_the_persona_name_only_never_the_human(): void
     {
         $author = User::factory()->approved()->create();
         $viewer = User::factory()->approved()->create();
@@ -135,10 +179,19 @@ class PostAttachmentTest extends TestCase
             'character_id' => $character->id,
         ]);
 
+        // A viewer the persona's audience does not admit still gets the persona
+        // *name* (unlinked: no ulid, no avatar) — never the human author, which
+        // is exactly what the byline hides.
         $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
-            ->assertOk()->assertJsonPath('data.as_character', null);
+            ->assertOk()
+            ->assertJsonPath('data.as_character.display_name', $character->display_name)
+            ->assertJsonPath('data.as_character.ulid', null)
+            ->assertJsonPath('data.as_character.avatar', null)
+            ->assertJsonPath('data.author', null);
         $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
-            ->assertOk()->assertJsonPath('data.as_character.id', $character->id);
+            ->assertOk()
+            ->assertJsonPath('data.as_character.id', $character->id)
+            ->assertJsonPath('data.as_character.ulid', $character->ulid);
     }
 
     public function test_cannot_attach_non_gallery_media(): void

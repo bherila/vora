@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Follow;
 
+use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\FollowRequestAuditLog;
 use App\Models\Interest;
@@ -288,5 +290,219 @@ class FollowRequestTest extends TestCase
             ->assertJsonPath('success', false);
 
         $this->assertDatabaseHas('follow_requests', ['id' => $followRequest->id, 'status' => 'pending']);
+    }
+
+    public function test_human_follow_mechanics_ignore_persona_scoped_edges(): void
+    {
+        $requester = User::factory()->approved()->create();
+        $recipient = User::factory()->approved()->create();
+        $persona = Character::factory()->for($recipient)->create();
+        FollowRequest::query()->create([
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'recipient_character_id' => $persona->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($requester)
+            ->getJson("/api/users/{$recipient->id}")
+            ->assertOk()
+            ->assertJsonPath('data.follow_request', null);
+
+        $this->postJson("/api/users/{$recipient->id}/follow-requests")
+            ->assertOk()
+            ->assertJsonPath('data.status', FollowRequest::STATUS_PENDING);
+
+        $this->assertDatabaseCount('follow_requests', 2);
+        $this->assertDatabaseHas('follow_requests', [
+            'requester_id' => $requester->id,
+            'recipient_id' => $recipient->id,
+            'recipient_character_id' => null,
+            'status' => FollowRequest::STATUS_PENDING,
+        ]);
+
+        // A reverse persona edge is not a human follow-back relationship.
+        $reversePersona = Character::factory()->for($requester)->create();
+        FollowRequest::query()->create([
+            'requester_id' => $recipient->id,
+            'recipient_id' => $requester->id,
+            'recipient_character_id' => $reversePersona->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->getJson("/api/users/{$recipient->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_follow_back', false);
+    }
+
+    public function test_human_request_inbox_and_counts_ignore_persona_scoped_rows(): void
+    {
+        $recipient = User::factory()->approved()->create();
+        $humanRequester = User::factory()->approved()->create();
+        $personaRequester = User::factory()->approved()->create();
+        $persona = Character::factory()->for($recipient)->create();
+
+        FollowRequest::query()->create([
+            'requester_id' => $humanRequester->id,
+            'recipient_id' => $recipient->id,
+            'recipient_character_id' => null,
+            'status' => FollowRequest::STATUS_PENDING,
+        ]);
+        $personaRequest = FollowRequest::query()->create([
+            'requester_id' => $personaRequester->id,
+            'recipient_id' => $recipient->id,
+            'recipient_character_id' => $persona->id,
+            'status' => FollowRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($recipient)
+            ->getJson('/api/users/follow-requests')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.requester.id', $humanRequester->id);
+
+        $this->getJson('/api/users/follow-requests/count')
+            ->assertOk()
+            ->assertJsonPath('data.count', 1);
+
+        $this->get('/me')->assertSee('requestCount":1', false);
+
+        $this->postJson("/api/users/follow-requests/{$personaRequest->id}/accept")
+            ->assertNotFound();
+        $this->assertSame(FollowRequest::STATUS_PENDING, $personaRequest->refresh()->status);
+    }
+
+    public function test_persona_follow_is_auto_accepted_audited_and_listed_by_edge_identity(): void
+    {
+        Notification::fake();
+        $viewer = User::factory()->approved()->create();
+        $owner = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->audience(Audience::Everyone)->create([
+            'display_name' => 'Kira',
+        ]);
+
+        $this->actingAs($viewer)
+            ->postJson("/api/characters/{$persona->id}/follow")
+            ->assertCreated()
+            ->assertJsonPath('data.status', FollowRequest::STATUS_ACCEPTED)
+            ->assertJsonPath('data.target.type', 'character')
+            ->assertJsonPath('data.target.ulid', $persona->ulid)
+            ->assertJsonPath('data.target.display_name', 'Kira');
+
+        $follow = FollowRequest::query()
+            ->where('requester_id', $viewer->id)
+            ->where('recipient_id', $owner->id)
+            ->where('recipient_character_id', $persona->id)
+            ->firstOrFail();
+
+        $this->assertSame(FollowRequest::STATUS_ACCEPTED, $follow->status);
+        $this->assertNotNull($follow->responded_at);
+        $this->assertDatabaseHas('follow_request_audit_logs', [
+            'follow_request_id' => $follow->id,
+            'actor_id' => $viewer->id,
+            'action' => 'followed',
+        ]);
+        $this->assertSame(
+            ['recipient_character_id' => $persona->id],
+            $follow->auditLogs()->sole()->metadata,
+        );
+        Notification::assertNothingSent();
+
+        $this->getJson("/api/characters/{$persona->id}/followers")
+            ->assertOk()
+            ->assertJsonPath('data.count', 1)
+            ->assertJsonPath('data.viewer_is_following', true)
+            ->assertJsonPath('data.followers.0.follower.id', $viewer->id)
+            ->assertJsonPath('data.followers.0.target.type', 'character')
+            ->assertJsonPath('data.followers.0.target.ulid', $persona->ulid)
+            ->assertJsonMissingPath('data.followers.0.target.owner_id');
+    }
+
+    public function test_persona_follow_rejects_self_hidden_and_inactive_owner_targets(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $publicPersona = Character::factory()->for($owner)->audience(Audience::Everyone)->create();
+        $hiddenPersona = Character::factory()->for($owner)->audience(Audience::SpecificPeople)->create();
+        $ownPersona = Character::factory()->for($viewer)->audience(Audience::Everyone)->create();
+
+        $this->actingAs($viewer)
+            ->postJson("/api/characters/{$ownPersona->id}/follow")
+            ->assertUnprocessable();
+
+        $this->postJson("/api/characters/{$hiddenPersona->id}/follow")
+            ->assertNotFound();
+
+        $owner->forceFill(['deactivated_at' => now()])->save();
+        $this->postJson("/api/characters/{$publicPersona->id}/follow")
+            ->assertNotFound();
+
+        $this->assertDatabaseCount('follow_requests', 0);
+    }
+
+    public function test_persona_follow_is_unique_per_viewer_and_can_coexist_with_human_follow(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $owner = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->audience(Audience::Everyone)->create();
+
+        $this->actingAs($viewer)
+            ->postJson("/api/characters/{$persona->id}/follow")
+            ->assertCreated();
+        $this->postJson("/api/characters/{$persona->id}/follow")
+            ->assertUnprocessable();
+        $this->postJson("/api/users/{$owner->id}/follow-requests")
+            ->assertOk();
+
+        $this->assertDatabaseCount('follow_requests', 2);
+    }
+
+    public function test_persona_follower_list_preserves_edge_identity_and_linked_subsumption(): void
+    {
+        $owner = User::factory()->approved()->create(['display_name' => 'Owner']);
+        $accountFollower = User::factory()->approved()->create();
+        $personaFollower = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $linked = Character::factory()->for($owner)->create([
+            'display_name' => 'Linked Persona',
+            'is_linked' => true,
+        ]);
+        $separate = Character::factory()->for($owner)->create([
+            'display_name' => 'Separate Persona',
+            'is_linked' => false,
+        ]);
+
+        FollowRequest::query()->create([
+            'requester_id' => $accountFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => null,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $personaFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $separate->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+
+        $this->actingAs($viewer)
+            ->getJson("/api/characters/{$linked->id}/followers")
+            ->assertOk()
+            ->assertJsonPath('data.count', 1)
+            ->assertJsonPath('data.followers.0.follower.id', $accountFollower->id)
+            ->assertJsonPath('data.followers.0.target.type', 'user')
+            ->assertJsonPath('data.followers.0.target.id', $owner->id);
+
+        $this->getJson("/api/characters/{$separate->id}/followers")
+            ->assertOk()
+            ->assertJsonPath('data.count', 1)
+            ->assertJsonPath('data.followers.0.follower.id', $personaFollower->id)
+            ->assertJsonPath('data.followers.0.target.type', 'character')
+            ->assertJsonPath('data.followers.0.target.ulid', $separate->ulid)
+            ->assertJsonMissingPath('data.followers.0.target.owner_id');
     }
 }
