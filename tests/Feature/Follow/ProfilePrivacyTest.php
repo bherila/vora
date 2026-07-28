@@ -28,7 +28,11 @@ class ProfilePrivacyTest extends TestCase
 
     private function withProfileAudience(Audience $audience): User
     {
-        $user = User::factory()->approved()->create(['user_type' => 'human']);
+        $user = User::factory()->approved()->create([
+            'bio' => 'A private biography.',
+            'pronouns' => 'they/them',
+            'user_type' => 'human',
+        ]);
         $user->update(['profile_audience' => $audience]);
 
         return $user;
@@ -53,6 +57,8 @@ class ProfilePrivacyTest extends TestCase
         $this->actingAs($viewer)->getJson("/api/users/{$owner->id}")
             ->assertOk()
             ->assertJsonPath('data.restricted', true)
+            ->assertJsonPath('data.bio', null)
+            ->assertJsonPath('data.pronouns', null)
             ->assertJsonPath('data.user_type', null);
 
         $this->follow($viewer, $owner);
@@ -60,6 +66,8 @@ class ProfilePrivacyTest extends TestCase
         $this->actingAs($viewer)->getJson("/api/users/{$owner->id}")
             ->assertOk()
             ->assertJsonPath('data.restricted', false)
+            ->assertJsonPath('data.bio', 'A private biography.')
+            ->assertJsonPath('data.pronouns', 'they/them')
             ->assertJsonPath('data.user_type', 'human');
     }
 

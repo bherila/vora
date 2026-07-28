@@ -23,6 +23,8 @@ class UpdateProfileRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'display_name' => ['required', 'string', 'max:255'],
+            'bio' => ['nullable', 'string', 'max:1000'],
+            'pronouns' => ['nullable', 'string', 'max:40'],
             'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
             'gender_other' => ['required_if:gender,other', 'nullable', 'string', 'max:100'],
             'user_type' => ['nullable', 'string', Rule::in(['human', 'furry', 'other'])],

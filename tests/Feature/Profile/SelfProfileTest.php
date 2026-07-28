@@ -28,12 +28,27 @@ class SelfProfileTest extends TestCase
 
     public function test_me_hydrates_the_owner_profile_in_editable_mode(): void
     {
-        $user = User::factory()->approved()->create();
+        $user = User::factory()->approved()->create([
+            'bio' => 'Owner biography.',
+            'pronouns' => 'she/her',
+        ]);
 
         $response = $this->actingAs($user)->get('/me')->assertOk();
         // Hydrated JSON (not HTML-escaped) carries owner mode + the editable block.
         $response->assertSee('"is_self":true', false);
         $response->assertSee('profileEditable', false);
+
+        $this->assertMatchesRegularExpression(
+            '/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s',
+            $response->getContent(),
+        );
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $response->getContent(), $matches);
+
+        /** @var array<string, mixed> $data */
+        $data = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame('Owner biography.', $data['profileEditable']['bio']);
+        $this->assertSame('she/her', $data['profileEditable']['pronouns']);
     }
 
     public function test_profile_payload_exposes_the_character_strip_and_viewer_favorite_state(): void

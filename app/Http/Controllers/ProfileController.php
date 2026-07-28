@@ -287,6 +287,12 @@ class ProfileController extends Controller
         if ($emailChanged) {
             $user->email = $data['email'];
         }
+        if (array_key_exists('bio', $data)) {
+            $user->bio = $data['bio'];
+        }
+        if (array_key_exists('pronouns', $data)) {
+            $user->pronouns = $data['pronouns'];
+        }
         $gender = array_key_exists('gender', $data) ? $data['gender'] : $user->gender;
         $genderOther = array_key_exists('gender_other', $data) ? $data['gender_other'] : $user->gender_other;
         $userType = array_key_exists('user_type', $data) ? $data['user_type'] : $user->user_type;
@@ -344,6 +350,8 @@ class ProfileController extends Controller
                 'name' => $user->name,
                 'display_name' => $user->display_name,
                 'email' => $user->email,
+                'bio' => $user->bio,
+                'pronouns' => $user->pronouns,
                 'gender' => $user->gender,
                 'gender_other' => $user->gender_other,
                 'user_type' => $user->user_type,

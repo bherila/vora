@@ -120,6 +120,8 @@ class FollowController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'display_name' => $user->display_name,
+            'bio' => $user->bio,
+            'pronouns' => $user->pronouns,
             'gender' => $user->gender,
             'gender_other' => $user->gender_other,
             'user_type' => $user->user_type,
@@ -248,6 +250,8 @@ class FollowController extends Controller
         if (! $this->gate->canView($current, $user)) {
             return $base + [
                 'restricted' => true,
+                'bio' => null,
+                'pronouns' => null,
                 'user_type' => null,
                 'gender' => null,
                 'mutual_interests' => [],
@@ -277,6 +281,8 @@ class FollowController extends Controller
 
         return $base + [
             'restricted' => false,
+            'bio' => $user->bio,
+            'pronouns' => $user->pronouns,
             'user_type' => $user->user_type,
             'gender' => $user->gender,
             'mutual_interests' => $mutualInterests,

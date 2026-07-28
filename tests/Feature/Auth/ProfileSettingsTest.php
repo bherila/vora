@@ -31,6 +31,8 @@ class ProfileSettingsTest extends TestCase
             'name' => $user->name,
             'display_name' => $user->display_name,
             'email' => $user->email,
+            'bio' => $user->bio,
+            'pronouns' => $user->pronouns,
             'gender' => $user->gender,
             'gender_other' => $user->gender === 'other' ? $user->gender_other : '',
             'user_type' => $user->user_type,
@@ -138,6 +140,46 @@ class ProfileSettingsTest extends TestCase
         $this->assertSame('updated@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
         Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    #[Test]
+    public function users_can_update_and_clear_their_bio_and_pronouns(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
+            'bio' => 'I make tiny, friendly robots.',
+            'pronouns' => 'they/them',
+        ]))->assertOk()
+            ->assertJsonPath('data.bio', 'I make tiny, friendly robots.')
+            ->assertJsonPath('data.pronouns', 'they/them');
+
+        $user->refresh();
+        $this->assertSame('I make tiny, friendly robots.', $user->bio);
+        $this->assertSame('they/them', $user->pronouns);
+
+        $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
+            'bio' => null,
+            'pronouns' => null,
+        ]))->assertOk()
+            ->assertJsonPath('data.bio', null)
+            ->assertJsonPath('data.pronouns', null);
+
+        $user->refresh();
+        $this->assertNull($user->bio);
+        $this->assertNull($user->pronouns);
+    }
+
+    #[Test]
+    public function bio_and_pronouns_have_length_limits(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
+            'bio' => str_repeat('b', 1001),
+            'pronouns' => str_repeat('p', 41),
+        ]))->assertUnprocessable()
+            ->assertJsonValidationErrors(['bio', 'pronouns']);
     }
 
     #[Test]
