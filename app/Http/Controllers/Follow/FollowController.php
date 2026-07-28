@@ -15,7 +15,10 @@ use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Services\Privacy\ViewAsContext;
+use App\Services\Profile\PersonaProfilePayload;
 use App\Services\Profile\ProfileContentQueries;
+use App\Support\ActiveIdentity;
 use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
 use App\Support\UserPresenter;
@@ -31,6 +34,9 @@ class FollowController extends Controller
         private readonly ProfileGate $gate,
         private readonly MediaResponseService $mediaResponder,
         private readonly ProfileContentQueries $contentQueries,
+        private readonly ActiveIdentity $activeIdentity,
+        private readonly PersonaProfilePayload $personaProfile,
+        private readonly ViewAsContext $viewAs,
     ) {}
 
     public function directory(Request $request): View
@@ -69,6 +75,11 @@ class FollowController extends Controller
     public function profilePage(Request $request, User $user): View
     {
         $current = $request->user();
+        if ($request->query('view_as') !== null) {
+            // View-as belongs exclusively to the owner's /me surface.
+            $this->viewAs->viewerFor($request, $user);
+            abort(404, 'Not found.');
+        }
         if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             abort(404);
         }
@@ -85,6 +96,38 @@ class FollowController extends Controller
     public function me(Request $request): View
     {
         $current = $request->user();
+        $activeCharacterId = $this->activeIdentity->id($request, $current);
+        $activeCharacter = $activeCharacterId !== null
+            ? $current->characters()->with(['user', 'profilePicture'])->find($activeCharacterId)
+            : null;
+        $viewer = $this->viewAs->viewerFor($request, $current, $activeCharacter);
+
+        if ($this->viewAs->mode() !== null && $activeCharacter instanceof Character) {
+            if (! $activeCharacter->isViewableBy($viewer)) {
+                abort(404, 'Not found.');
+            }
+
+            return view('user.follow-profile', [
+                'initialData' => [
+                    'personaProfile' => $this->personaProfile->build(
+                        $activeCharacter,
+                        $viewer,
+                        allowMutations: false,
+                    ),
+                    'profileViewAs' => $this->viewAs->payload(),
+                ],
+            ]);
+        }
+
+        if ($this->viewAs->mode() !== null) {
+            return view('user.follow-profile', [
+                'initialData' => [
+                    'followProfile' => $this->profilePayload($viewer, $current),
+                    'profileViewAs' => $this->viewAs->payload(),
+                ],
+            ]);
+        }
+
         $characters = $current->characters()->with(['profilePicture', 'audienceMembers'])->latest()->get();
 
         return view('user.follow-profile', [
@@ -100,6 +143,7 @@ class FollowController extends Controller
                 'profileIdentityCounts' => $characters->isEmpty()
                     ? null
                     : $this->contentQueries->identityTotals($current, $characters),
+                'profileViewAs' => null,
             ],
         ]);
     }
@@ -247,6 +291,11 @@ class FollowController extends Controller
     public function profile(Request $request, User $user): JsonResponse
     {
         $current = $request->user();
+        if ($request->query('view_as') !== null) {
+            $viewer = $this->viewAs->viewerFor($request, $user);
+
+            return response()->json(['success' => true, 'data' => $this->profilePayload($viewer, $user)]);
+        }
         if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
         }
@@ -451,9 +500,9 @@ class FollowController extends Controller
      */
     public function characterFollowers(Request $request, Character $character): JsonResponse
     {
-        $current = $request->user();
         $character->loadMissing(['user', 'profilePicture']);
-        if (! $current instanceof User || ! $character->isViewableBy($current)) {
+        $current = $this->viewAs->viewerFor($request, $character->user, $character);
+        if (! $character->isViewableBy($current)) {
             return response()->json(['success' => false, 'message' => 'Persona unavailable.'], 404);
         }
 

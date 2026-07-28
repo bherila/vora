@@ -25,6 +25,7 @@ import type { CommunityPost, PostAttachment, PostComment } from './types';
 interface PostCardProps {
   post: CommunityPost;
   expanded?: boolean;
+  readOnly?: boolean;
 }
 
 function formatDate(value: string | null): string {
@@ -188,7 +189,7 @@ function CommentThread({ postId, initialCount }: { postId: number; initialCount:
   );
 }
 
-export function PostCard({ post: initialPost, expanded = false }: PostCardProps) {
+export function PostCard({ post: initialPost, expanded = false, readOnly = false }: PostCardProps) {
   const [post, setPost] = useState(initialPost);
   const [showComments, setShowComments] = useState(expanded);
   // A persona post is bylined by the persona alone — the human never appears.
@@ -196,7 +197,7 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
   // name with no ulid, so the byline renders the name unlinked rather than
   // falling back to the human author.
   const authorLabel = post.as_character?.display_name ?? post.author?.display_name ?? 'Unknown';
-  const personaHref = post.as_character?.ulid ? `/c/${post.as_character.ulid}` : null;
+  const personaHref = !readOnly && post.as_character?.ulid ? `/c/${post.as_character.ulid}` : null;
   const avatarName = post.as_character?.display_name ?? post.author?.display_name ?? 'Unknown';
   const avatarSrc = post.as_character
     ? post.as_character.avatar?.thumbnail_url ?? post.as_character.avatar?.url ?? null
@@ -233,8 +234,8 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {post.can_report && <ReportButton type="post" id={post.id} variant="ghost" />}
-            <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>
+            {!readOnly && post.can_report && <ReportButton type="post" id={post.id} variant="ghost" />}
+            {!readOnly && <a className="text-sm underline underline-offset-4" href={`/p/${post.ulid}`}>Open</a>}
           </div>
         </div>
       </CardHeader>
@@ -243,7 +244,7 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
         {post.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {post.attachments.map((attachment) => {
-              const href = attachmentHref(attachment);
+              const href = readOnly ? null : attachmentHref(attachment);
               const label = attachmentLabel(attachment);
               return href ? (
                 <a key={`${attachment.type}-${attachment.id}`} href={href}>
@@ -256,7 +257,7 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-4">
+      {!readOnly && <CardFooter className="flex-col items-stretch gap-4">
         <div className="flex items-center gap-2">
           <Button type="button" size="sm" variant={post.viewer_reacted ? 'default' : 'outline'} onClick={() => void toggleReaction()}>
             <Heart className="mr-2 h-4 w-4" />
@@ -268,7 +269,7 @@ export function PostCard({ post: initialPost, expanded = false }: PostCardProps)
           </Button>
         </div>
         {showComments && <CommentThread postId={post.id} initialCount={post.comment_count} />}
-      </CardFooter>
+      </CardFooter>}
     </Card>
   );
 }

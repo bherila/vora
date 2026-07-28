@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\ProfileContentQueries;
 use App\Support\PaginationMeta;
 use App\Support\PostPresenter;
@@ -38,12 +39,13 @@ class ProfileContentController extends Controller
         private readonly MediaResponseService $responder,
         private readonly FavoriteService $favorites,
         private readonly ProfileContentQueries $queries,
+        private readonly ViewAsContext $viewAs,
     ) {}
 
     public function media(Request $request, User $user): JsonResponse
     {
-        $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
+        $viewer = $this->authorizeProfile($request, $user);
 
         $paginator = $this->queries->media($user, $viewer, $character)
             ->with(['character:id,display_name', 'interests'])
@@ -55,8 +57,8 @@ class ProfileContentController extends Controller
 
     public function posts(Request $request, User $user): JsonResponse
     {
-        $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
+        $viewer = $this->authorizeProfile($request, $user);
 
         $paginator = $this->queries->posts($user, $viewer, $character)
             ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
@@ -67,7 +69,12 @@ class ProfileContentController extends Controller
         return response()->json([
             'success' => true,
             'data' => collect($paginator->items())
-                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer, $this->responder))
+                ->map(fn (Post $post): array => PostPresenter::view(
+                    $post,
+                    $viewer,
+                    $this->responder,
+                    allowMutations: $this->viewAs->mode() === null,
+                ))
                 ->all(),
             'meta' => PaginationMeta::from($paginator),
         ]);
@@ -75,8 +82,8 @@ class ProfileContentController extends Controller
 
     public function stories(Request $request, User $user): JsonResponse
     {
-        $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
+        $viewer = $this->authorizeProfile($request, $user);
 
         $paginator = $this->queries->stories($user, $viewer, $character)
             ->with(['user', 'interests', 'authors.user', 'authors.character'])
@@ -101,8 +108,8 @@ class ProfileContentController extends Controller
      */
     public function counts(Request $request, User $user): JsonResponse
     {
-        $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
+        $viewer = $this->authorizeProfile($request, $user);
 
         return response()->json([
             'success' => true,
@@ -123,8 +130,8 @@ class ProfileContentController extends Controller
      */
     public function recent(Request $request, User $user): JsonResponse
     {
-        $viewer = $this->authorizeProfile($request, $user);
         $character = $this->resolveCharacter($request, $user);
+        $viewer = $this->authorizeProfile($request, $user);
 
         $media = $this->queries->media($user, $viewer, $character)
             ->latest()->latest('id')->limit(self::RECENT_LIMIT)->get()
@@ -182,7 +189,7 @@ class ProfileContentController extends Controller
      */
     private function authorizeProfile(Request $request, User $user): User
     {
-        $viewer = $request->user();
+        $viewer = $this->viewAs->viewerFor($request, $user);
         $isSelf = $viewer instanceof User && $viewer->id === $user->id;
         $discoverable = $user->approved_at !== null && $user->isActive();
 
@@ -210,7 +217,7 @@ class ProfileContentController extends Controller
         abort_unless(is_numeric($characterId), 404, 'Not found.');
 
         $viewer = $request->user();
-        $mayResolveSeparate = $viewer instanceof User
+        $mayResolveSeparate = ! $request->has('view_as') && $viewer instanceof User
             && ($viewer->id === $user->id || $viewer->isAdmin());
 
         $character = Character::query()

@@ -8,11 +8,12 @@ import { FavoriteButton } from '@/components/favorite-button';
 import { ReportButton } from '@/components/report-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { MediaListTab, PostsListTab, StoriesListTab } from '@/user/profile-tabs';
+import { type ProfileViewAs, ViewAsBanner } from '@/user/view-as-control';
 
 interface PersonaInterest { id: number; name: string | null; }
 
@@ -20,7 +21,7 @@ interface PersonaInterest { id: number; name: string | null; }
  *  carries nothing that resolves to the human behind it. */
 interface PersonaOwner { display_name: string; href: string; }
 
-interface PersonaProfileData {
+export interface PersonaProfileData {
   id: number;
   ulid: string;
   display_name: string;
@@ -34,6 +35,11 @@ interface PersonaProfileData {
   interests: PersonaInterest[];
   viewer_favorited: boolean;
   can_report: boolean;
+}
+
+interface PersonaProfileViewProps {
+  persona: PersonaProfileData;
+  viewAs?: ProfileViewAs | null;
 }
 
 interface FollowerIdentity {
@@ -87,33 +93,29 @@ const TABS: TabDef[] = [
  * for a persona, so the layout mirrors the visitor profile: header card,
  * then content tabs with media first.
  */
-export function PersonaProfilePage() {
-  const [persona] = useState<PersonaProfileData | null>(
-    () => readInitialData<{ personaProfile?: PersonaProfileData }>().personaProfile ?? null,
-  );
+export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileViewProps) {
   const [tab, setTab] = useState<TabKey>('media');
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
   const [followData, setFollowData] = useState<PersonaFollowersData | null>(null);
   const [followPending, setFollowPending] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
-  const ulid = persona?.ulid ?? null;
-  const personaId = persona?.id ?? null;
+  const ulid = persona.ulid;
+  const personaId = persona.id;
+  const query = viewAs ? `?view_as=${viewAs.mode}` : '';
+  const readOnly = viewAs !== null;
 
   const fetchFollowers = useCallback(async (): Promise<PersonaFollowersData | null> => {
-    if (personaId === null) return null;
-
-    const response = await fetchWrapper.get(`/api/characters/${personaId}/followers`) as { data: PersonaFollowersData };
+    const response = await fetchWrapper.get(`/api/characters/${personaId}/followers${query}`) as { data: PersonaFollowersData };
     return response.data;
-  }, [personaId]);
+  }, [personaId, query]);
 
   useEffect(() => {
-    if (!ulid) return;
     let active = true;
-    fetchWrapper.get(`/api/c/${ulid}/counts`)
+    fetchWrapper.get(`/api/c/${ulid}/counts${query}`)
       .then((response) => { if (active) setCounts((response as { data: Record<TabKey, number> }).data); })
       .catch(() => { if (active) setCounts(null); });
     return () => { active = false; };
-  }, [ulid]);
+  }, [query, ulid]);
 
   useEffect(() => {
     let active = true;
@@ -122,8 +124,6 @@ export function PersonaProfilePage() {
       .catch(() => { if (active) setFollowData(null); });
     return () => { active = false; };
   }, [fetchFollowers]);
-
-  if (!persona) return <div className="mx-auto max-w-4xl px-4 py-8">Loading persona...</div>;
 
   const followPersona = async (): Promise<void> => {
     setFollowPending(true);
@@ -144,6 +144,7 @@ export function PersonaProfilePage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+      {viewAs && <ViewAsBanner viewAs={viewAs} />}
       <a className="text-sm underline underline-offset-4" href="/explore">← Explore</a>
 
       <Card>
@@ -152,7 +153,7 @@ export function PersonaProfilePage() {
             <div className="flex min-w-0 items-center gap-4">
               <Avatar name={persona.display_name} src={persona.avatar_url} sizeClassName="h-20 w-20" />
               <div className="min-w-0">
-                <CardTitle className="truncate text-2xl">{persona.display_name}</CardTitle>
+                <h1 className="truncate text-2xl font-semibold leading-none">{persona.display_name}</h1>
                 <CardDescription className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">Persona</Badge>
                   {persona.user_type && <Badge variant="outline">{persona.user_type}</Badge>}
@@ -184,7 +185,7 @@ export function PersonaProfilePage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {persona.is_owner ? (
+              {readOnly ? null : persona.is_owner ? (
                 <Button variant="outline" asChild>
                   <a href="/me"><Pencil className="h-4 w-4" aria-hidden="true" /> Manage on your profile</a>
                 </Button>
@@ -228,9 +229,13 @@ export function PersonaProfilePage() {
             </Button>
           ))}
         </div>
-        {tab === 'media' && <MediaListTab endpoint={`/api/c/${persona.ulid}/media`} emptyTitle="No media to show." />}
-        {tab === 'stories' && <StoriesListTab endpoint={`/api/c/${persona.ulid}/stories`} emptyTitle="No stories to show." />}
-        {tab === 'posts' && <PostsListTab endpoint={`/api/c/${persona.ulid}/posts`} emptyTitle="No posts to show." />}
+        {tab === 'media' && (
+          <MediaListTab endpoint={`/api/c/${persona.ulid}/media${query}`} emptyTitle="No media to show." readOnly={readOnly} />
+        )}
+        {tab === 'stories' && (
+          <StoriesListTab endpoint={`/api/c/${persona.ulid}/stories${query}`} emptyTitle="No stories to show." readOnly={readOnly} />
+        )}
+        {tab === 'posts' && <PostsListTab endpoint={`/api/c/${persona.ulid}/posts${query}`} emptyTitle="No posts to show." readOnly={readOnly} />}
       </div>
 
       <Dialog open={followersOpen} onOpenChange={setFollowersOpen}>
@@ -241,7 +246,7 @@ export function PersonaProfilePage() {
               Account follows count for Linked personas; direct persona follows count for every persona.
             </DialogDescription>
           </DialogHeader>
-          {followData?.followers.length ? (
+          {followData?.followers?.length ? (
             <div className="space-y-3">
               {followData.followers.map((entry) => (
                 <div key={`${entry.follower.id}:${entry.target.type}:${entry.target.id}`} className="flex items-center gap-3 rounded-lg border p-3">
@@ -265,9 +270,21 @@ export function PersonaProfilePage() {
           )}
         </DialogContent>
       </Dialog>
-      <Toaster position="top-right" richColors closeButton />
+      {!readOnly && <Toaster position="top-right" richColors closeButton />}
     </div>
   );
+}
+
+export function PersonaProfilePage() {
+  const initial = readInitialData<{
+    personaProfile?: PersonaProfileData;
+    profileViewAs?: ProfileViewAs | null;
+  }>();
+  const [persona] = useState<PersonaProfileData | null>(() => initial.personaProfile ?? null);
+
+  if (!persona) return <div className="mx-auto max-w-4xl px-4 py-8">Loading persona...</div>;
+
+  return <PersonaProfileView persona={persona} viewAs={initial.profileViewAs ?? null} />;
 }
 
 const mountEl = document.getElementById('persona-profile');

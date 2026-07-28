@@ -136,6 +136,104 @@ describe('FollowProfilePage (/me)', () => {
     // help hint. No other control on the page mentions personas.
     expect(screen.getByRole('button', { name: 'Create a persona' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /persona/i })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'View as' })).toBeInTheDocument();
+  });
+
+  it('renders public preview through read-only visitor surfaces with the exact persistent copy', async () => {
+    (fetchWrapper.get as jest.Mock).mockImplementation((url: string) => Promise.resolve(
+      url.includes('content-counts')
+        ? { data: { media: 0, stories: 0, posts: 0, favorites: 1 } }
+        : url.includes('/favorites')
+          ? {
+              data: [{
+                type: 'media',
+                id: 21,
+                label: 'Saved portrait',
+                subtitle: 'Media',
+                href: '/m/01MEDIA',
+                thumbnail_url: null,
+              }],
+            }
+          : { data: [] },
+    ));
+    setInitialData(ownerInitialData(
+      { characters: [{ id: 5, display_name: 'Kira', avatar_url: null }] },
+      {
+        followProfile: {
+          ...ownerInitialData().followProfile as Record<string, unknown>,
+          is_self: false,
+          characters: [{ id: 5, display_name: 'Kira', avatar_url: null }],
+        },
+        profileViewAs: { mode: 'public', audience: "someone who doesn't follow you" },
+      },
+    ));
+    render(<FollowProfilePage />);
+
+    expect(await screen.findByText((_, element) => (
+      element?.textContent === "Viewing your profile as someone who doesn't follow you. This is exactly what they see."
+    ))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View as' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Exit preview' })).toHaveAttribute('href', '/me');
+    expect(screen.queryByRole('button', { name: 'Edit profile' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Account settings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create a persona' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit persona' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.queryByTestId('owner-media-manager')).toBeNull();
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith(
+      '/api/users/7/content-counts?view_as=public',
+    ));
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/users/7/media?view_as=public');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Favorites 1' }));
+    const favoriteLabel = await screen.findByText('Saved portrait');
+    expect(favoriteLabel.closest('a')).toBeNull();
+  });
+
+  it('renders an active persona preview as the visitor persona page without mutation controls', async () => {
+    setInitialData({
+      personaProfile: {
+        id: 5,
+        ulid: '01PERSONA',
+        display_name: 'Vex',
+        description: 'A separate identity.',
+        avatar_url: null,
+        user_type: null,
+        gender: null,
+        is_owner: false,
+        is_linked: false,
+        owner: null,
+        interests: [],
+        viewer_favorited: false,
+        can_report: false,
+      },
+      profileViewAs: { mode: 'follower', audience: 'someone who follows you' },
+      navbar: {
+        identities: [
+          { id: null, displayName: 'Ben', avatarUrl: null },
+          { id: 5, displayName: 'Vex', avatarUrl: null },
+        ],
+        activeIdentityId: 5,
+      },
+    });
+    render(<FollowProfilePage />);
+
+    expect(await screen.findByRole('heading', { name: 'Vex' })).toBeInTheDocument();
+    expect(screen.getByText((_, element) => (
+      element?.textContent === 'Viewing your profile as someone who follows you. This is exactly what they see.'
+    ))).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /manage on your profile/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Follow Vex' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /report/i })).toBeNull();
+
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith(
+      '/api/c/01PERSONA/counts?view_as=follower',
+    ));
+    expect(fetchWrapper.get).toHaveBeenCalledWith(
+      '/api/characters/5/followers?view_as=follower',
+    );
   });
 
   it('shows bio and pronouns in the header', async () => {
