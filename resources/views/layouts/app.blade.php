@@ -36,8 +36,9 @@
         // Guests see the marketing home; logged-in users land on the feed, so
         // "Home" would just be a redirect — drop it from the authed nav.
         $__isAuthenticated ? null : ['label' => 'Home', 'href' => route('home', [], false)],
-        // The profile (/me) is the home: it hosts the feed plus the user's media,
-        // stories, characters, posts, and favorites.
+        $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
+        // The profile (/me) hosts the user's media, stories, characters, posts,
+        // and favorites.
         $__isAuthenticated ? ['label' => 'Profile', 'href' => route('me', [], false)] : null,
         $__isAuthenticated ? ['label' => 'Explore', 'href' => route('explore', [], false)] : null,
         // Media, characters, and stories are all created and managed on the
