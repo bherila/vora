@@ -464,48 +464,131 @@ class CharacterTest extends TestCase
         ]);
     }
 
-    public function test_cross_user_character_rating_is_hidden_as_not_found(): void
+    public function test_cross_user_character_rating_is_hidden_and_does_not_change_victim_ratings(): void
     {
-        $owner = User::factory()->approved()->create();
-        $otherUser = User::factory()->approved()->create();
+        $attacker = User::factory()->approved()->create();
+        $victim = User::factory()->approved()->create();
         $interest = Interest::query()->create(['name' => 'Photography']);
         $character = Character::query()->create([
-            'user_id' => $otherUser->id,
+            'user_id' => $victim->id,
             'display_name' => 'Hidden Persona',
+            'inherit_interests' => false,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $victim->id,
+            'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 4,
         ]);
 
-        // Even with an otherwise-invalid payload, ownership is enforced first so
-        // the response is 404 (not a 422 that would leak the character's existence).
-        $this->actingAs($owner)
+        $this->actingAs($attacker)
             ->postJson('/api/interests/ratings', [
                 'character_id' => $character->id,
-                'ratings' => [['interest_id' => $interest->id, 'level' => 999]],
+                'ratings' => [['interest_id' => $interest->id, 'level' => 9]],
             ])
             ->assertNotFound();
 
-        $this->actingAs($owner)
-            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => 'maybe'])
-            ->assertNotFound();
-
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $victim->id,
+            'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 4,
+        ]);
         $this->assertDatabaseMissing('interest_ratings', [
+            'user_id' => $attacker->id,
             'character_id' => $character->id,
         ]);
     }
 
-    public function test_malformed_character_id_does_not_error(): void
+    public function test_cross_user_character_inheritance_is_hidden_and_does_not_change_victim_ratings(): void
+    {
+        $attacker = User::factory()->approved()->create();
+        $victim = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Photography']);
+        $character = Character::query()->create([
+            'user_id' => $victim->id,
+            'display_name' => 'Hidden Persona',
+            'inherit_interests' => false,
+        ]);
+        InterestRating::query()->create([
+            'user_id' => $victim->id,
+            'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 4,
+        ]);
+
+        $this->actingAs($attacker)
+            ->postJson('/api/interests/inherit', ['character_id' => $character->id, 'inherit' => 'maybe'])
+            ->assertNotFound();
+
+        $this->assertFalse($character->refresh()->inherit_interests);
+        $this->assertDatabaseHas('interest_ratings', [
+            'user_id' => $victim->id,
+            'character_id' => $character->id,
+            'interest_id' => $interest->id,
+            'level' => 4,
+        ]);
+    }
+
+    public function test_missing_numeric_character_ids_are_hidden_as_not_found(): void
     {
         $user = User::factory()->approved()->create();
         $interest = Interest::query()->create(['name' => 'Cooking']);
 
-        // A non-scalar character_id must be rejected as 404, not 500.
+        $this->actingAs($user)
+            ->postJson('/api/interests/ratings', [
+                'character_id' => PHP_INT_MAX,
+                'ratings' => [['interest_id' => $interest->id, 'level' => 1]],
+            ])
+            ->assertNotFound();
+
+        $this->postJson('/api/interests/inherit', [
+            'character_id' => PHP_INT_MAX,
+            'inherit' => false,
+        ])->assertNotFound();
+    }
+
+    public function test_soft_deleted_owned_character_ids_are_hidden_as_not_found(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Cooking']);
+        $character = Character::factory()->for($user)->create();
+        $character->delete();
+
+        $this->actingAs($user)
+            ->postJson('/api/interests/ratings', [
+                'character_id' => $character->id,
+                'ratings' => [['interest_id' => $interest->id, 'level' => 1]],
+            ])
+            ->assertNotFound();
+
+        $this->postJson('/api/interests/inherit', [
+            'character_id' => $character->id,
+            'inherit' => false,
+        ])->assertNotFound();
+    }
+
+    public function test_malformed_character_ids_return_validation_errors(): void
+    {
+        $user = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Cooking']);
+
         $this->actingAs($user)
             ->postJson('/api/interests/ratings', [
                 'character_id' => ['nope'],
                 'ratings' => [['interest_id' => $interest->id, 'level' => 1]],
             ])
-            ->assertNotFound();
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('character_id');
 
-        // The GET listing path guards the query value the same way.
+        $this->postJson('/api/interests/inherit', [
+            'character_id' => ['nope'],
+            'inherit' => false,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('character_id');
+
+        // The separate GET listing path still conceals malformed lookup input.
         $this->getJson('/api/interests?character_id[]=1')->assertNotFound();
     }
 
