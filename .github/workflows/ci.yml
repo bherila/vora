@@ -18,7 +18,7 @@ permissions:
 jobs:
   changes:
     name: Detect changes
-    runs-on: [self-hosted, vora-ci]
+    runs-on: ubuntu-24.04-arm
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -64,11 +64,17 @@ jobs:
     name: Changed-area checks
     needs: changes
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
-    runs-on: [self-hosted, vora-ci]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
 
       - name: Verify PHP
         run: php --version
@@ -129,7 +135,7 @@ jobs:
     name: CI result
     needs: [changes, test]
     if: always()
-    runs-on: [self-hosted, vora-ci]
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check result
         run: |
