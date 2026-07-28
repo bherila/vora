@@ -26,3 +26,24 @@ Once the `prod` environment is created, you need to configure the following secr
 ## Deployment Target
 
 The workflow deploys the application to the `~/bwh-php/` directory on the remote server. Make sure this directory exists and the specified SSH user has write permissions to it.
+
+## Migration amendments (CI guard)
+
+`ci.yml` fails a pull request that **modifies** an existing file under
+`database/migrations/`. Only adding new migrations is allowed by default.
+
+Laravel records applied migrations by filename. Editing one in place is
+therefore silently skipped on any database that already ran the original — the
+change reaches fresh installs only. This is not hypothetical: `characters.ulid`
+and `characters.is_linked` were added by amending
+`create_characters_table` in place, so production (which auto-deploys from
+`main` and had run that migration months earlier) never received the columns,
+while the deployed code required them. Reads degraded to `null` and every
+persona write failed; `/up` stayed green throughout, because the app was up.
+
+**To change a shipped schema, add a new migration.**
+
+If a migration has genuinely never been deployed anywhere — a brand-new table
+added earlier in the same unreleased branch, for example — label the PR
+`migration-amend-ok` to bypass the check. Prefer adding a migration; the label
+exists for the rare case where amending is genuinely correct.
