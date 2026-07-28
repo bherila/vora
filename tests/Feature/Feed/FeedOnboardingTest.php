@@ -72,13 +72,13 @@ class FeedOnboardingTest extends TestCase
     }
 
     /**
-     * Parse the onboarding slice the profile home (/me) hydrates for its Feed tab.
+     * Parse the onboarding slice hydrated into the standalone feed page.
      *
      * @return array<string, bool>|null
      */
     private function onboarding(User $user): ?array
     {
-        $html = $this->actingAs($user)->get('/me')->assertOk()->getContent();
+        $html = $this->actingAs($user)->get('/feed')->assertOk()->getContent();
         preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
         $this->assertArrayHasKey(1, $matches, 'initial-data script not found');
 

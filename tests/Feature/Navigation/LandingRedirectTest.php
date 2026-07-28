@@ -33,11 +33,14 @@ class LandingRedirectTest extends TestCase
         $this->actingAs($user)->get('/dashboard')->assertRedirect(route('feed'));
     }
 
-    public function test_feed_forwards_to_profile(): void
+    public function test_feed_renders_for_an_approved_user(): void
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->get('/feed')->assertRedirect(route('me'));
+        $this->actingAs($user)
+            ->get('/feed')
+            ->assertOk()
+            ->assertSee('id="feed"', false);
     }
 
     public function test_characters_still_forwards_to_profile(): void

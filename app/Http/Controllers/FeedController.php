@@ -7,22 +7,32 @@ use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Support\FollowGraph;
+use App\Support\Onboarding;
 use App\Support\PostPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\View\View;
 
 /**
  * The viewer's reverse-chronological timeline: their own posts plus posts from
  * the accounts they follow, gated by each post's audience and (for other
  * people's posts) admin review. Keyset-paginated so the feed can grow without
- * the offset drift of page numbers. Rendered as the Feed tab on the profile
- * home (/me); this controller now serves only the JSON timeline.
+ * the offset drift of page numbers.
  */
 class FeedController extends Controller
 {
     public function __construct(private readonly MediaResponseService $mediaResponder) {}
+
+    public function page(Request $request): View
+    {
+        return view('feed', [
+            'initialData' => [
+                'feedOnboarding' => Onboarding::steps($request->user()),
+            ],
+        ]);
+    }
 
     public function index(Request $request): JsonResponse
     {

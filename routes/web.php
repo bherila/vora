@@ -152,7 +152,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
-    Route::get('/feed', fn () => redirect()->route('me'))->name('feed');
+    Route::get('/feed', [FeedController::class, 'page'])->name('feed');
     // Characters are created and managed on the profile (/me) now; keep the named
     // route as a redirect for old bookmarks.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
