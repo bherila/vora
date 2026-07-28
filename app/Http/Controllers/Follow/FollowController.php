@@ -37,7 +37,33 @@ class FollowController extends Controller
     {
         return view('user.follow-directory', ['initialData' => [
             'followDirectory' => $this->usersPayload($request),
+            'followDirectoryPersonas' => $this->directoryPersonasPayload($request),
         ]]);
+    }
+
+    /**
+     * Discoverable personas for the People directory: strictly Everyone-audience,
+     * discovery-opted personas of active, approved owners — `discoverable = false`
+     * means direct-link-only, so those never appear here. Unlike restricted user
+     * profiles (listed name-only so a follow request stays possible), restricted
+     * personas are omitted entirely: there is no persona follow request to send,
+     * so listing them would expose a name for nothing. No interest matching:
+     * affinity scoring finds real people, not fictional characters — and matching
+     * an inheriting persona would carry the owner's interest fingerprint.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function directoryPersonasPayload(Request $request): array
+    {
+        return Character::query()
+            ->discoverable()
+            ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
+            ->with('profilePicture')
+            ->orderBy('display_name')
+            ->get()
+            ->map(fn (Character $character): array => CharacterPresenter::publicCard($character, $this->mediaResponder, $request->user()))
+            ->values()
+            ->all();
     }
 
     public function profilePage(Request $request, User $user): View
@@ -309,15 +335,21 @@ class FollowController extends Controller
 
     /**
      * The profile's characters, for the identity strip across the top of the
-     * profile-as-container view. A character a viewer cannot see by audience is
-     * still listed here as an identity to switch to; its *content* tabs run the
-     * same per-item privacy filter, so nothing is exposed by listing the name.
+     * profile-as-container view. Separate personas are omitted for everyone
+     * except their owner and admins: enumerating one here would reveal the
+     * persona-to-owner relationship even if every content item stayed hidden.
+     * Linked personas remain listed regardless of their audience because their
+     * owner association is intentionally public.
      *
      * @return list<array<string, mixed>>
      */
     private function charactersStrip(User $user, ?User $viewer): array
     {
         return $user->characters()
+            ->when(
+                ! $viewer instanceof User || ($viewer->id !== $user->id && ! $viewer->isAdmin()),
+                fn ($query) => $query->where('is_linked', true),
+            )
             ->with('profilePicture')
             ->orderBy('display_name')
             ->get()

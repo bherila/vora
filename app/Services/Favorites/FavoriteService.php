@@ -88,6 +88,16 @@ class FavoriteService
             ->get()
             ->map(fn ($favorite): ?Model => $favorite->favoritable)
             ->filter()
+            // A self-favorited Separate persona would otherwise correlate the
+            // persona to its human through /users/{owner}/favorites. The owner
+            // and admins retain their complete administrative view.
+            ->filter(fn (Model $item): bool => ! (
+                $item instanceof Character
+                && ! $item->is_linked
+                && $item->user_id === $owner->id
+                && $viewer->id !== $owner->id
+                && ! $viewer->isAdmin()
+            ))
             ->filter(fn (Model $item): bool => $this->canViewerSee($viewer, $item))
             ->map(fn (Model $item): array => $this->present($item, $viewer))
             ->values()
@@ -216,7 +226,7 @@ class FavoriteService
                 'id' => $item->id,
                 'label' => $item->display_name,
                 'subtitle' => 'Character',
-                'href' => "/users/{$item->user_id}",
+                'href' => "/c/{$item->ulid}",
                 'thumbnail_url' => UserPresenter::pictureUrl($item->profilePicture, $this->responder, $viewer),
             ],
             default => [

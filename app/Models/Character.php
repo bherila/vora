@@ -28,6 +28,15 @@ class Character extends Model
             $character->is_linked ??= true;
         });
 
+        // A Separate persona must never fall back to the owner's interests. That
+        // would expose the owner's exact interest fingerprint through matching
+        // and discovery surfaces intended to keep the two identities apart.
+        static::saving(function (Character $character): void {
+            if ($character->is_linked === false) {
+                $character->inherit_interests = false;
+            }
+        });
+
         // Characters soft-delete for admin retention. Only a force delete should
         // drop story "involves" tags, otherwise restore would not put the
         // character back exactly where it was.

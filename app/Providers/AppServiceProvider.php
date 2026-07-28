@@ -10,6 +10,7 @@ use App\Models\PostComment;
 use App\Models\StaticPage;
 use App\Models\Story;
 use App\Models\User;
+use App\Policies\CharacterPolicy;
 use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
 use App\Services\Auth\VoraAuthUserPolicy;
@@ -51,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
         // disabled admin must not slip through here.
         Gate::define('admin-only', fn (User $user): bool => $user->isAdmin() && $user->isApproved() && $user->canLogin());
 
+        Gate::policy(Character::class, CharacterPolicy::class);
         Gate::policy(Media::class, MediaPolicy::class);
         Gate::policy(Story::class, StoryPolicy::class);
 

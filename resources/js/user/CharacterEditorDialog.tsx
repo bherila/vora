@@ -18,8 +18,10 @@ import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections
 
 export interface CharacterRecord {
   id: number;
+  ulid?: string;
   display_name: string;
   description: string | null;
+  is_linked: boolean;
   audience: Audience;
   audience_user_ids: number[];
   gender: string | null;
@@ -35,6 +37,7 @@ export interface CharacterRecord {
 interface CharacterFormState {
   display_name: string;
   description: string;
+  is_linked: boolean;
   audience: Audience;
   audience_user_ids: number[];
   gender: string;
@@ -61,6 +64,7 @@ function blankForm(): CharacterFormState {
   return {
     display_name: '',
     description: '',
+    is_linked: true,
     audience: 'everyone',
     audience_user_ids: [],
     gender: '',
@@ -76,6 +80,7 @@ function formFromCharacter(character: CharacterRecord): CharacterFormState {
   return {
     display_name: character.display_name,
     description: character.description ?? '',
+    is_linked: character.is_linked,
     audience: character.audience,
     audience_user_ids: character.audience_user_ids,
     gender: normalizeProfileOptionValue(GENDER_OPTIONS, character.gender),
@@ -94,6 +99,62 @@ function blankToNull(value: string): string | null {
 
 function selectionsToPayload(values: string[]): string[] | null {
   return values.length > 0 ? values : null;
+}
+
+interface LinkedSeparateFieldProps {
+  personaName: string;
+  /** true = Linked, false = Separate. */
+  value: boolean;
+  onChange: (isLinked: boolean) => void;
+  disabled?: boolean;
+}
+
+/**
+ * The Linked / Separate choice: one control, both consequences stated together
+ * (H2 in the design doc's copy deck). The copy deliberately claims only what
+ * is built today — persona follower subsumption is a later phase, so neither
+ * option promises anything about followers yet.
+ */
+function LinkedSeparateField({ personaName, value, onChange, disabled }: LinkedSeparateFieldProps) {
+  const options = [
+    {
+      linked: true,
+      title: 'Linked',
+      copy: `People visiting ${personaName} can see this persona is yours.`,
+    },
+    {
+      linked: false,
+      title: 'Separate',
+      copy: `Nothing on ${personaName}’s page shows it’s yours.`,
+    },
+  ];
+
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Connection to your profile</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => (
+          <label
+            key={option.title}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 ${value === option.linked ? 'border-foreground bg-muted/40' : 'border-border hover:bg-muted/30'}`}
+          >
+            <input
+              type="radio"
+              name="character-is-linked"
+              className="mt-1"
+              checked={value === option.linked}
+              onChange={() => onChange(option.linked)}
+              disabled={disabled}
+            />
+            <span className="min-w-0 text-sm">
+              <span className="block font-medium">{option.title}</span>
+              <span className="block text-muted-foreground">{option.copy}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 interface CharacterEditorDialogProps {
@@ -166,6 +227,7 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
     const payload = {
       display_name: form.display_name.trim(),
       description: blankToNull(form.description),
+      is_linked: form.is_linked,
       audience: form.audience,
       audience_user_ids: form.audience === 'specific' ? form.audience_user_ids : [],
       gender: blankToNull(form.gender),
@@ -248,6 +310,12 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
             disabled={saving}
             label="Who can see this character?"
             specificRelationship="mutuals"
+          />
+          <LinkedSeparateField
+            personaName={form.display_name.trim() || 'this persona'}
+            value={form.is_linked}
+            onChange={(is_linked) => updateForm({ is_linked })}
+            disabled={saving}
           />
           <ProfileOptionButtonGroup legend="Gender" name="character-gender" options={GENDER_OPTIONS} value={form.gender} onChange={(value) => updateForm({ gender: value })} />
           {form.gender === 'other' && (

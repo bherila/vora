@@ -195,7 +195,10 @@ class ProfileContentController extends Controller
 
     /**
      * Resolve an optional ?character_id to a character owned by the profile user,
-     * or null for the main-user identity. A foreign/unknown id is a 404.
+     * or null for the main-user identity. A foreign/unknown id is a 404. A
+     * Separate persona is also indistinguishable from an unknown id to anyone
+     * except its owner or an admin; its content belongs exclusively under its
+     * own /c/{ulid} surface.
      */
     private function resolveCharacter(Request $request, User $user): ?Character
     {
@@ -206,7 +209,15 @@ class ProfileContentController extends Controller
 
         abort_unless(is_numeric($characterId), 404, 'Not found.');
 
-        $character = Character::query()->where('id', (int) $characterId)->where('user_id', $user->id)->first();
+        $viewer = $request->user();
+        $mayResolveSeparate = $viewer instanceof User
+            && ($viewer->id === $user->id || $viewer->isAdmin());
+
+        $character = Character::query()
+            ->where('id', (int) $characterId)
+            ->where('user_id', $user->id)
+            ->when(! $mayResolveSeparate, fn ($query) => $query->where('is_linked', true))
+            ->first();
         abort_if($character === null, 404, 'Not found.');
 
         return $character;

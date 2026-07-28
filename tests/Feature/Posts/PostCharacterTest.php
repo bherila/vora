@@ -25,10 +25,14 @@ class PostCharacterTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('data.as_character.display_name', 'Sir Reginald')
-            // Ownership stays user-level: the author is still the user account.
-            ->assertJsonPath('data.author.id', $author->id);
+            ->assertJsonPath('data.as_character.ulid', $character->ulid)
+            // Byline inversion: a persona post is presented by the persona alone.
+            // The human author is omitted from the payload (ownership stays
+            // user-level on post.user_id; admin views still resolve the human).
+            ->assertJsonPath('data.author', null);
 
         $this->assertSame($character->id, Post::query()->firstOrFail()->character_id);
+        $this->assertSame($author->id, Post::query()->firstOrFail()->user_id);
     }
 
     public function test_persona_avatar_is_returned_as_a_loadable_signed_url(): void
@@ -78,9 +82,11 @@ class PostCharacterTest extends TestCase
         $character->delete();
 
         $this->assertSame($character->id, $post->fresh()->character_id, 'the link is retained for restore');
+        // The persona is hidden while deleted — and the byline must NOT fall
+        // back to the human author, so the post presents no identity at all.
         $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
             ->assertOk()
             ->assertJsonPath('data.as_character', null)
-            ->assertJsonPath('data.author.id', $author->id);
+            ->assertJsonPath('data.author', null);
     }
 }
