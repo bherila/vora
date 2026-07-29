@@ -157,13 +157,19 @@ class CharacterTest extends TestCase
         $this->assertNull($character->preferred_genders);
     }
 
-    public function test_omitting_privacy_from_an_update_does_not_widen_a_persona_or_its_media(): void
+    public function test_partial_update_preserves_every_omitted_persona_field_and_media_privacy(): void
     {
         $user = User::factory()->approved()->create();
         $allowed = User::factory()->approved()->create();
         $character = Character::factory()->for($user)->create([
+            'description' => 'Keep this description.',
+            'gender' => 'other',
+            'gender_other' => 'agender',
+            'user_type' => 'other',
+            'user_type_other' => 'robot',
             'audience' => Audience::SpecificPeople,
             'discoverable' => false,
+            'is_linked' => false,
         ]);
         $character->syncAudienceMembers([$allowed->id]);
         $media = Media::factory()->for($user)->approved()->create([
@@ -178,13 +184,25 @@ class CharacterTest extends TestCase
                 'display_name' => 'Still link-only',
             ])
             ->assertOk()
+            ->assertJsonPath('data.description', 'Keep this description.')
+            ->assertJsonPath('data.gender', 'other')
+            ->assertJsonPath('data.gender_other', 'agender')
+            ->assertJsonPath('data.user_type', 'other')
+            ->assertJsonPath('data.user_type_other', 'robot')
             ->assertJsonPath('data.discoverable', false)
+            ->assertJsonPath('data.is_linked', false)
             ->assertJsonPath('data.audience', Audience::SpecificPeople->value)
             ->assertJsonPath('data.audience_user_ids', [$allowed->id]);
 
         $character->refresh();
         $media->refresh();
+        $this->assertSame('Keep this description.', $character->description);
+        $this->assertSame('other', $character->gender);
+        $this->assertSame('agender', $character->gender_other);
+        $this->assertSame('other', $character->user_type);
+        $this->assertSame('robot', $character->user_type_other);
         $this->assertFalse($character->discoverable);
+        $this->assertFalse($character->is_linked);
         $this->assertSame(Audience::SpecificPeople, $character->audience);
         $this->assertSame([$allowed->id], $character->audienceMembers()->pluck('user_id')->map('intval')->all());
         $this->assertFalse($media->discoverable);
