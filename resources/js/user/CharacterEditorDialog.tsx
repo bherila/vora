@@ -316,7 +316,8 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
               <span>Show this persona in Explore and People search</span>
             </label>
             <p className="text-xs text-muted-foreground">
-              When the audience is Everyone, this lists the persona for discovery. Turn it off to keep the persona reachable only by direct link.
+              When the audience is Everyone, this lists the persona in Explore and People search.
+              Turning it off removes those listings; a Linked persona may still appear on its owner&apos;s profile.
             </p>
           </div>
           <LinkedSeparateField
