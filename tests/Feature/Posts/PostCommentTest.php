@@ -3,6 +3,7 @@
 namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
+use App\Models\Character;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
@@ -29,6 +30,56 @@ class PostCommentTest extends TestCase
 
         $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
             ->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_owner_comment_on_a_separate_persona_post_is_framed_as_the_persona_for_visitors(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human']);
+        $viewer = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $post = Post::factory()->for($owner)->approved()->create([
+            'character_id' => $persona->id,
+        ]);
+        PostComment::factory()->for($post)->for($owner)->create(['body' => 'Persona reply']);
+
+        $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.author.id', $persona->id)
+            ->assertJsonPath('data.0.author.display_name', 'Public Persona')
+            ->assertJsonMissing(['display_name' => 'Private Human']);
+
+        // Owner management remains account-framed; the owner already knows the
+        // relationship and still needs the normal delete controls.
+        $this->actingAs($owner)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.author.id', $owner->id)
+            ->assertJsonPath('data.0.author.display_name', 'Private Human');
+    }
+
+    public function test_linked_persona_and_unrelated_comments_keep_normal_human_attribution(): void
+    {
+        $owner = User::factory()->approved()->create(['display_name' => 'Visible Owner']);
+        $commenter = User::factory()->approved()->create(['display_name' => 'Other Commenter']);
+        $viewer = User::factory()->approved()->create();
+        $linked = Character::factory()->for($owner)->create([
+            'is_linked' => true,
+        ]);
+        $post = Post::factory()->for($owner)->approved()->create([
+            'character_id' => $linked->id,
+        ]);
+        PostComment::factory()->for($post)->for($owner)->create(['body' => 'Owner reply']);
+        PostComment::factory()->for($post)->for($commenter)->create(['body' => 'Other reply']);
+
+        $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.author.id', $owner->id)
+            ->assertJsonPath('data.0.author.display_name', 'Visible Owner')
+            ->assertJsonPath('data.1.author.id', $commenter->id)
+            ->assertJsonPath('data.1.author.display_name', 'Other Commenter');
     }
 
     public function test_cannot_comment_on_a_post_you_cannot_view(): void

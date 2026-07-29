@@ -38,6 +38,9 @@ class PostAttachment extends Model
      */
     public function attachable(): MorphTo
     {
-        return $this->morphTo();
+        return $this->morphTo()->morphWith([
+            Media::class => ['character:id,is_linked'],
+            Story::class => ['authors.character:id,is_linked'],
+        ]);
     }
 }

@@ -2,8 +2,11 @@
 
 namespace App\Support;
 
+use App\Models\Character;
+use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostComment;
+use App\Models\User;
 use App\Services\Media\MediaResponseService;
 
 /**
@@ -14,13 +17,25 @@ class PostCommentPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function view(PostComment $comment, ?MediaResponseService $responder = null): array
+    public static function view(
+        PostComment $comment,
+        ?MediaResponseService $responder = null,
+        ?User $viewer = null,
+    ): array {
+        return self::payload($comment, self::publicAuthor($comment, $responder, $viewer));
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $author
+     * @return array<string, mixed>
+     */
+    private static function payload(PostComment $comment, ?array $author): array
     {
         return [
             'id' => $comment->id,
             'parent_id' => $comment->parent_id,
             'body' => $comment->body,
-            'author' => UserPresenter::identity($comment->user, $responder),
+            'author' => $author,
             'created_at' => $comment->created_at?->toIso8601String(),
         ];
     }
@@ -33,12 +48,55 @@ class PostCommentPresenter
      */
     public static function adminView(PostComment $comment): array
     {
-        return self::view($comment) + [
+        return self::payload($comment, UserPresenter::identity($comment->user)) + [
             'post' => self::postRef($comment->post),
             'moderation_status' => $comment->moderation_status->value,
             'moderation_notes' => $comment->moderation_notes,
             'moderated_at' => $comment->moderated_at?->toIso8601String(),
             'moderated_by_user_id' => $comment->moderated_by_user_id,
+        ];
+    }
+
+    /**
+     * A post owner's comment on their Separate-persona post inherits that
+     * persona's framing for visitors. Emitting the account identity here would
+     * undo the post byline's owner scrub in the first comment thread.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function publicAuthor(
+        PostComment $comment,
+        ?MediaResponseService $responder,
+        ?User $viewer,
+    ): ?array {
+        $post = $comment->post;
+        $character = $post?->character;
+        $isOwnerComment = $post instanceof Post
+            && $comment->user_id === $post->user_id;
+        $managementView = $post instanceof Post
+            && $viewer !== null
+            && ($viewer->id === $post->user_id || $viewer->isAdmin());
+
+        if (! $isOwnerComment
+            || ! $character instanceof Character
+            || $character->is_linked
+            || $managementView) {
+            return UserPresenter::identity($comment->user, $responder, $viewer);
+        }
+
+        $avatar = $character->profilePicture;
+        $avatarUrl = null;
+        if ($avatar instanceof Media
+            && $responder !== null
+            && $avatar->isApprovedContent()) {
+            $payload = $responder->visitorItem($avatar, resolveHls: false);
+            $avatarUrl = $payload['thumbnail_url'] ?? $payload['url'] ?? null;
+        }
+
+        return [
+            'id' => $character->id,
+            'display_name' => $character->display_name,
+            'avatar_url' => $avatarUrl,
         ];
     }
 

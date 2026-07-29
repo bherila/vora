@@ -5,7 +5,7 @@ namespace Tests\Feature\Posts;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\User;
-use App\Services\FileStorageService;
+use App\Services\Media\MediaResponseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -37,8 +37,10 @@ class PostCharacterTest extends TestCase
 
     public function test_persona_avatar_is_returned_as_a_loadable_signed_url(): void
     {
-        $this->mock(FileStorageService::class, function ($mock): void {
-            $mock->shouldReceive('getSignedViewUrl')->andReturn('https://r2.example/avatar.jpg');
+        $this->mock(MediaResponseService::class, function ($mock): void {
+            $mock->shouldReceive('visitorItem')
+                ->once()
+                ->andReturn(['url' => '/media-assets/opaque-avatar', 'thumbnail_url' => null]);
         });
 
         $author = User::factory()->approved()->create();
@@ -49,10 +51,10 @@ class PostCharacterTest extends TestCase
         ]);
 
         // A profile-picture ULID is not resolvable via the gallery media endpoint,
-        // so the persona avatar must come back as a signed, loadable URL.
+        // so the persona avatar must come back as a loadable visitor-safe URL.
         $this->actingAs($author)->postJson('/api/posts', ['body' => 'hark', 'character_id' => $character->id])
             ->assertCreated()
-            ->assertJsonPath('data.as_character.avatar.url', 'https://r2.example/avatar.jpg');
+            ->assertJsonPath('data.as_character.avatar.url', '/media-assets/opaque-avatar');
     }
 
     public function test_cannot_post_as_another_users_character(): void
