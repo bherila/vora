@@ -313,10 +313,15 @@ class MediaController extends Controller
             abort(404, 'Not found.');
         }
         $this->authorizeOr404('view', $media);
-        $media->load(['interests', 'user.profilePicture', 'character.profilePicture']);
         $viewer = $request->user();
         $isOwnerOrAdmin = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
+        $relations = ['interests', 'user.profilePicture', 'character.profilePicture'];
+        if ($isOwnerOrAdmin) {
+            $relations[] = 'audienceMembers';
+            $relations[] = 'user.characters:id,user_id,display_name';
+        }
+        $media->load($relations);
 
         $payload = $isOwnerOrAdmin
             ? $this->responder->item($media, includeOriginalVideoUrl: true)

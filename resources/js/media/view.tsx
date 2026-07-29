@@ -1,27 +1,148 @@
 import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Toaster } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
+import { AudienceField } from '@/community/AudienceField';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { ReportButton } from '@/components/report-button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
+
+function getErrorMessage(err: unknown): string {
+  return typeof err === 'string' ? err : err instanceof Error ? err.message : 'Request failed.';
+}
 
 function getInitialMedia(): MediaItem | null {
   return readInitialData<{ mediaView?: MediaItem }>().mediaView ?? null;
 }
 
-function MediaViewPage() {
-  const [item] = useState<MediaItem | null>(getInitialMedia);
+export function MediaViewPage() {
+  const [item, setItem] = useState<MediaItem | null>(getInitialMedia);
+  const [deleted, setDeleted] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCharacterId, setEditCharacterId] = useState('');
+  const [editAudience, setEditAudience] = useState(item?.editable?.audience ?? 'everyone');
+  const [editAudienceUserIds, setEditAudienceUserIds] = useState<number[]>([]);
+  const [editDiscoverable, setEditDiscoverable] = useState(true);
+  const [editBusy, setEditBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  if (deleted) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-3 px-4 py-8">
+        <h1 className="text-xl font-semibold">Media deleted.</h1>
+        <p className="text-muted-foreground">The item is hidden from your profile and retained for admin recovery.</p>
+        <a href="/me" className="inline-flex text-sm underline underline-offset-4">Return to your profile</a>
+        <Toaster position="top-right" richColors closeButton />
+      </div>
+    );
+  }
 
   if (!item) {
     return <div className="mx-auto max-w-3xl px-4 py-8"><p className="text-muted-foreground">This media is unavailable.</p></div>;
   }
 
   const owner = item.owner ?? null;
+  const editable = item.editable;
+
+  const openEditor = (): void => {
+    if (!editable) {
+      return;
+    }
+    setEditTitle(editable.title ?? '');
+    setEditCharacterId(editable.character_id === null ? '' : String(editable.character_id));
+    setEditAudience(editable.audience);
+    setEditAudienceUserIds(editable.audience_user_ids);
+    setEditDiscoverable(editable.discoverable);
+    setEditOpen(true);
+  };
+
+  const saveEdit = async (): Promise<void> => {
+    if (!editable) {
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      title: editTitle.trim() === '' ? null : editTitle.trim(),
+    };
+    if (editCharacterId !== '') {
+      payload.character_id = Number(editCharacterId);
+    } else if (editable.character_id !== null) {
+      payload.character_id = null;
+    } else {
+      payload.audience = editAudience;
+      payload.audience_user_ids = editAudience === 'specific' ? editAudienceUserIds : [];
+      payload.discoverable = editDiscoverable;
+    }
+
+    setEditBusy(true);
+    try {
+      const response = await fetchWrapper.patch(`/api/media/${item.id}`, payload) as {
+        data: MediaItem;
+      };
+      const updated = response.data;
+      setItem({
+        ...item,
+        ...updated,
+        editable: {
+          ...editable,
+          title: updated.title,
+          character_id: updated.character_id,
+          audience: updated.audience,
+          audience_user_ids: updated.character_id === null && updated.audience === 'specific'
+            ? editAudienceUserIds
+            : editable.audience_user_ids,
+          discoverable: updated.discoverable,
+        },
+      });
+      setEditOpen(false);
+      toast.success('Media updated.');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const deleteItem = async (): Promise<void> => {
+    setDeleteBusy(true);
+    try {
+      await fetchWrapper.delete(`/api/media/${item.id}`);
+      setDeleted(true);
+      toast.success('Media deleted.');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   return (
     // A wide container plus a viewport-sized stage so the media uses the space
@@ -56,6 +177,12 @@ function MediaViewPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename || 'Untitled media'}</h1>
         <div className="flex items-center gap-3">
+          {editable && (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={openEditor}>Edit</Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>Delete</Button>
+            </>
+          )}
           {typeof item.favorite_count === 'number' && item.favorite_count > 0 && (
             <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'save' : 'saves'}</span>
           )}
@@ -72,6 +199,97 @@ function MediaViewPage() {
       {item.interests.length > 0 && (
         <p className="text-sm text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
       )}
+
+      {editable && (
+        <Dialog open={editOpen} onOpenChange={(open) => { if (!editBusy) setEditOpen(open); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit media</DialogTitle>
+              <DialogDescription>Fix the title, change its privacy, or attach a character.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="edit-media-title">Title</Label>
+                <Input
+                  id="edit-media-title"
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  disabled={editBusy}
+                />
+              </div>
+              {editable.characters.length > 0 && (
+                <label className="grid gap-1 text-sm">
+                  <span>Character</span>
+                  <select
+                    value={editCharacterId}
+                    onChange={(event) => setEditCharacterId(event.target.value)}
+                    disabled={editBusy}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2"
+                  >
+                    <option value="">No character</option>
+                    {editable.characters.map((character) => (
+                      <option key={character.id} value={character.id}>{character.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {editCharacterId !== '' ? (
+                <p className="text-sm text-muted-foreground">Privacy follows the selected character.</p>
+              ) : editable.character_id !== null ? (
+                <p className="text-sm text-muted-foreground">Detaching the character. Save, then reopen to set this item’s own privacy.</p>
+              ) : (
+                <>
+                  <AudienceField
+                    audience={editAudience}
+                    onAudienceChange={setEditAudience}
+                    selectedUserIds={editAudienceUserIds}
+                    onSelectedUserIdsChange={setEditAudienceUserIds}
+                    disabled={editBusy}
+                    specificRelationship="mutuals"
+                  />
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editDiscoverable}
+                      onChange={(event) => setEditDiscoverable(event.target.checked)}
+                      disabled={editBusy}
+                      className="mt-0.5"
+                    />
+                    <span>List in discovery — otherwise only people with the link can find it.</span>
+                  </label>
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setEditOpen(false)} disabled={editBusy}>Cancel</Button>
+              <Button type="button" onClick={() => void saveEdit()} disabled={editBusy}>
+                {editBusy ? 'Saving…' : 'Save changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!deleteBusy) setDeleteOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be hidden from your profile and retained for admin recovery.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={deleteBusy}
+              onClick={() => void deleteItem()}
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Toaster position="top-right" richColors closeButton />
     </div>
   );

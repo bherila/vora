@@ -2,10 +2,12 @@
 
 namespace App\Support;
 
+use App\Enums\Audience;
 use App\Enums\ModerationStatus;
 use App\Models\Character;
 use App\Models\Interest;
 use App\Models\Media;
+use App\Models\User;
 
 /**
  * Serializes Media for API responses. Owner and visitor shapes are deliberately
@@ -30,11 +32,14 @@ class MediaPresenter
      */
     public static function ownerView(Media $media, array $extras = []): array
     {
-        return self::base($media, $extras) + [
+        $payload = self::base($media, $extras) + [
             'original_filename' => $media->original_filename,
             // Derived "not yet visible to others" flag (no decision/notes leaked).
             'under_review' => $media->moderation_status !== ModerationStatus::Approved,
         ];
+        $editable = self::editable($media);
+
+        return $editable === null ? $payload : $payload + ['editable' => $editable];
     }
 
     /**
@@ -103,6 +108,44 @@ class MediaPresenter
                 ? ['id' => $media->character->id, 'display_name' => $media->character->display_name]
                 : null,
             'created_at' => $media->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * The detail-page editor is capability-by-shape: it exists only when the
+     * caller deliberately loaded the owner-management relations before using
+     * ownerView(). visitorView() has no path to this data.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function editable(Media $media): ?array
+    {
+        if (! $media->relationLoaded('audienceMembers') || ! $media->relationLoaded('user')) {
+            return null;
+        }
+
+        $owner = $media->user;
+        if (! $owner instanceof User
+            || ! $owner->relationLoaded('characters')) {
+            return null;
+        }
+
+        return [
+            'title' => $media->title,
+            'character_id' => $media->character_id,
+            'audience' => $media->audience->value,
+            'audience_user_ids' => $media->audience === Audience::SpecificPeople
+                ? $media->audienceMembers->pluck('user_id')->map('intval')->sort()->values()->all()
+                : [],
+            'discoverable' => $media->discoverable,
+            'characters' => $owner->characters
+                ->sortBy('id')
+                ->map(fn (Character $character): array => [
+                    'id' => $character->id,
+                    'display_name' => $character->display_name,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 }

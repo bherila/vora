@@ -335,6 +335,38 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.can_report', false);
     }
 
+    public function test_by_ulid_exposes_owner_editing_data_without_leaking_it_to_visitors(): void
+    {
+        $this->fakeStorage();
+        $owner = User::factory()->approved()->create();
+        $allowed = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+        $media = Media::factory()->for($owner)->approved()->create([
+            'title' => 'Owner title',
+            'character_id' => $persona->id,
+            'audience' => 'specific',
+            'discoverable' => false,
+        ]);
+        $media->syncAudienceMembers([$allowed->id]);
+
+        $this->actingAs($owner)->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.editable.title', 'Owner title')
+            ->assertJsonPath('data.editable.character_id', $persona->id)
+            ->assertJsonPath('data.editable.audience', 'specific')
+            ->assertJsonPath('data.editable.audience_user_ids', [$allowed->id])
+            ->assertJsonPath('data.editable.discoverable', false)
+            ->assertJsonPath('data.editable.characters.0.id', $persona->id)
+            ->assertJsonPath('data.editable.characters.0.display_name', 'Kira');
+
+        $this->actingAs($allowed)->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonMissingPath('data.editable');
+    }
+
     public function test_separate_persona_media_detail_uses_persona_attribution_and_visitor_shape(): void
     {
         $this->fakeStorage();
