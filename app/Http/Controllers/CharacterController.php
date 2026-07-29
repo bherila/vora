@@ -61,7 +61,12 @@ class CharacterController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        $character = $user->characters()->create($this->payload($request));
+        // Populate creation defaults on the in-memory model before audit
+        // snapshots run; database defaults are not hydrated until refresh.
+        $character = $user->characters()->create([
+            'audience' => $request->audience(),
+            'discoverable' => $request->discoverable(),
+        ] + $this->payload($request));
         $this->syncCharacterAudience($request, $character);
         $this->auditor->recordCreation($character, $user, $character->privacySnapshot(), $request);
 
@@ -79,7 +84,9 @@ class CharacterController extends Controller
         return DB::transaction(function () use ($request, $character, $user): JsonResponse {
             $privacyBefore = $character->privacySnapshot();
             $character->fill($this->payload($request))->save();
-            $this->syncCharacterAudience($request, $character);
+            if (array_key_exists('audience', $request->validated())) {
+                $this->syncCharacterAudience($request, $character);
+            }
             $this->auditor->record($character, $user, $privacyBefore, $character->privacySnapshot(), $request);
             $this->propagateCharacterPrivacy($character, $user, $request);
 
@@ -208,11 +215,15 @@ class CharacterController extends Controller
         $discovery = array_key_exists('discoverable', $data)
             ? ['discoverable' => $request->discoverable()]
             : [];
+        // PATCH callers may edit non-privacy fields. Omitting audience must not
+        // widen the persona to Everyone or discard a SpecificPeople allowlist.
+        $audience = array_key_exists('audience', $data)
+            ? ['audience' => $request->audience()]
+            : [];
 
-        return $linked + $discovery + [
+        return $linked + $discovery + $audience + [
             'display_name' => $data['display_name'],
             'description' => $data['description'] ?? null,
-            'audience' => $request->audience(),
             'gender' => $gender,
             'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
             'user_type' => $userType,
