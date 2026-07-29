@@ -157,27 +157,39 @@ class CharacterTest extends TestCase
         $this->assertNull($character->preferred_genders);
     }
 
-    public function test_omitting_discoverable_from_an_update_does_not_publish_a_link_only_persona_or_its_media(): void
+    public function test_omitting_privacy_from_an_update_does_not_widen_a_persona_or_its_media(): void
     {
         $user = User::factory()->approved()->create();
+        $allowed = User::factory()->approved()->create();
         $character = Character::factory()->for($user)->create([
+            'audience' => Audience::SpecificPeople,
             'discoverable' => false,
         ]);
+        $character->syncAudienceMembers([$allowed->id]);
         $media = Media::factory()->for($user)->approved()->create([
             'character_id' => $character->id,
+            'audience' => Audience::SpecificPeople,
             'discoverable' => false,
         ]);
+        $media->syncAudienceMembers([$allowed->id]);
 
         $this->actingAs($user)
             ->patchJson("/api/characters/{$character->id}", [
                 'display_name' => 'Still link-only',
-                'audience' => $character->audience->value,
             ])
             ->assertOk()
-            ->assertJsonPath('data.discoverable', false);
+            ->assertJsonPath('data.discoverable', false)
+            ->assertJsonPath('data.audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.audience_user_ids', [$allowed->id]);
 
-        $this->assertFalse($character->fresh()->discoverable);
-        $this->assertFalse($media->fresh()->discoverable);
+        $character->refresh();
+        $media->refresh();
+        $this->assertFalse($character->discoverable);
+        $this->assertSame(Audience::SpecificPeople, $character->audience);
+        $this->assertSame([$allowed->id], $character->audienceMembers()->pluck('user_id')->map('intval')->all());
+        $this->assertFalse($media->discoverable);
+        $this->assertSame(Audience::SpecificPeople, $media->audience);
+        $this->assertSame([$allowed->id], $media->audienceMembers()->pluck('user_id')->map('intval')->all());
     }
 
     public function test_owner_can_switch_a_persona_between_linked_and_separate(): void
