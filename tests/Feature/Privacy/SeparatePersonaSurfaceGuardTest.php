@@ -9,6 +9,7 @@ use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostComment;
+use App\Models\Story;
 use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +28,19 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
     use RefreshDatabase;
 
     /**
+     * Persona-reachable visitor surfaces covered below:
+     *
+     * - persona profile, media/stories/posts tabs
+     * - media, story and post detail routes
+     * - favorites, comments, followers and notifications
+     *
+     * IMPORTANT: Any new route reachable from a persona profile must be added
+     * to this inventory and the sweep below. Keep this count in sync so a
+     * partial test edit fails visibly instead of silently shrinking coverage.
+     */
+    private const VISITOR_SURFACE_COUNT = 15;
+
+    /**
      * @return array{
      *     owner: User,
      *     viewer: User,
@@ -34,7 +48,8 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
      *     persona: Character,
      *     media: Media,
      *     account_media: Media,
-     *     post: Post
+     *     post: Post,
+     *     story: Story
      * }
      */
     private function scenario(): array
@@ -68,6 +83,12 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             'body' => 'Persona-authored post',
             'character_id' => $persona->id,
         ]);
+        $story = Story::factory()->for($owner)->readable()->create([
+            'title' => 'Persona-authored story',
+        ]);
+        $story->authors()
+            ->where('user_id', $owner->id)
+            ->update(['character_id' => $persona->id]);
 
         // Simulate a legacy row from before the write-side identity-boundary
         // validation. Read paths must still scrub this correlation.
@@ -93,6 +114,7 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             'media' => $media,
             'account_media' => $accountMedia,
             'post' => $post,
+            'story' => $story,
         ];
     }
 
@@ -135,6 +157,7 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
         $persona = $fixture['persona'];
         $media = $fixture['media'];
         $post = $fixture['post'];
+        $story = $fixture['story'];
 
         $profileHtml = $this->actingAs($viewer)
             ->get("/c/{$persona->ulid}")
@@ -152,6 +175,19 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
                 'data.0.url',
                 "/api/media/by-ulid/{$media->ulid}/asset/original",
             );
+        $storyList = $this->getJson("/api/c/{$persona->ulid}/stories")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.ulid', $story->ulid)
+            ->assertJsonPath('data.0.owner.id', null)
+            ->assertJsonPath('data.0.owner.display_name', 'Independent Persona')
+            ->assertJsonMissingPath('data.0.authors.0.user_id')
+            ->assertJsonMissingPath('data.0.authors.0.character_id');
+        $postList = $this->getJson("/api/c/{$persona->ulid}/posts")
+            ->assertOk()
+            ->assertJsonPath('data.0.ulid', $post->ulid)
+            ->assertJsonPath('data.0.author', null)
+            ->assertJsonPath('data.0.as_character.display_name', 'Independent Persona');
 
         $mediaDetail = $this->getJson("/api/media/by-ulid/{$media->ulid}")
             ->assertOk()
@@ -192,10 +228,31 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             ->assertJsonPath('data.as_character.display_name', 'Independent Persona')
             ->assertJsonCount(0, 'data.attachments')
             ->assertJsonMissing(['label' => 'Account Attachment Correlation Sentinel']);
+        // PostController's page and API share findByUlidPayload(); sweep the
+        // hydrated page too so that contract remains pinned at the route seam.
+        $postPage = $this->get("/p/{$post->ulid}")
+            ->assertOk()
+            ->getContent();
+        $this->assertNull($this->initialData($postPage)['postView']['author']);
         $comments = $this->getJson("/api/posts/{$post->id}/comments")
             ->assertOk()
             ->assertJsonPath('data.0.author.id', $persona->id)
             ->assertJsonPath('data.0.author.display_name', 'Independent Persona');
+
+        $storyDetail = $this->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', null)
+            ->assertJsonPath('data.owner.display_name', 'Independent Persona')
+            ->assertJsonMissingPath('data.authors.0.user_id')
+            ->assertJsonMissingPath('data.authors.0.character_id');
+        // StoryController builds the page and API payloads independently, so
+        // both routes belong in the sweep.
+        $storyPage = $this->get("/s/{$story->ulid}")
+            ->assertOk()
+            ->getContent();
+        $storyPagePayload = $this->initialData($storyPage)['storyReader'];
+        $this->assertNull($storyPagePayload['owner']['id']);
+        $this->assertSame('Independent Persona', $storyPagePayload['owner']['display_name']);
 
         $followers = $this->getJson("/api/characters/{$persona->id}/followers")
             ->assertOk()
@@ -217,18 +274,26 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             ->assertJsonPath('data.0.data.url', "/p/{$post->ulid}")
             ->assertJsonMissingPath('data.0.data.actor_id');
 
-        foreach ([
-            $profileHtml,
-            $mediaList->getContent(),
-            $mediaDetail->getContent(),
-            $favoriteCreate->getContent(),
-            $viewerFavorites->getContent(),
-            $ownerFavorites->getContent(),
-            $postDetail->getContent(),
-            $comments->getContent(),
-            $followers->getContent(),
-            $notifications->getContent(),
-        ] as $visitorPayload) {
+        $visitorPayloads = [
+            'persona profile' => $profileHtml,
+            'persona media list' => $mediaList->getContent(),
+            'persona story list' => $storyList->getContent(),
+            'persona post list' => $postList->getContent(),
+            'media detail' => $mediaDetail->getContent(),
+            'favorite create' => $favoriteCreate->getContent(),
+            'viewer favorites' => $viewerFavorites->getContent(),
+            'owner favorites' => $ownerFavorites->getContent(),
+            'post detail API' => $postDetail->getContent(),
+            'post detail page' => $postPage,
+            'comments' => $comments->getContent(),
+            'story detail API' => $storyDetail->getContent(),
+            'story detail page' => $storyPage,
+            'followers' => $followers->getContent(),
+            'notifications' => $notifications->getContent(),
+        ];
+        $this->assertCount(self::VISITOR_SURFACE_COUNT, $visitorPayloads);
+
+        foreach ($visitorPayloads as $visitorPayload) {
             $this->assertStringNotContainsString('Owner Correlation Sentinel', $visitorPayload);
             $this->assertStringNotContainsString('owner-correlation-sentinel@example.test', $visitorPayload);
             $this->assertStringNotContainsString('owner-filename-correlation-sentinel.jpg', $visitorPayload);
