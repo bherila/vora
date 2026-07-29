@@ -3,6 +3,7 @@
 namespace Tests\Feature\Media;
 
 use App\Models\Media;
+use App\Models\User;
 use App\Support\MediaPresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -39,9 +40,44 @@ class MediaPresenterTest extends TestCase
 
         $this->assertArrayNotHasKey('original_filename', $payload);
         $this->assertArrayNotHasKey('under_review', $payload);
+        $this->assertArrayNotHasKey('editable', $payload);
         foreach (self::MODERATION_KEYS as $key) {
             $this->assertArrayNotHasKey($key, $payload, "visitor view leaked {$key}");
         }
+    }
+
+    public function test_owner_detail_view_exposes_editable_fields_only_when_the_management_relations_are_loaded(): void
+    {
+        $owner = User::factory()->create();
+        $persona = $owner->characters()->create([
+            'display_name' => 'Kira',
+            'description' => null,
+            'audience' => 'everyone',
+            'discoverable' => true,
+        ]);
+        $allowed = User::factory()->create();
+        $media = Media::factory()->for($owner)->create([
+            'title' => 'Owner title',
+            'audience' => 'specific',
+            'discoverable' => false,
+        ]);
+        $media->syncAudienceMembers([$allowed->id]);
+        $media->load(['audienceMembers', 'user.characters:id,user_id,display_name']);
+
+        $ownerPayload = MediaPresenter::ownerView($media);
+        $visitorPayload = MediaPresenter::visitorView($media);
+
+        $this->assertSame([
+            'title' => 'Owner title',
+            'character_id' => null,
+            'audience' => 'specific',
+            'audience_user_ids' => [$allowed->id],
+            'discoverable' => false,
+            'characters' => [
+                ['id' => $persona->id, 'display_name' => 'Kira'],
+            ],
+        ], $ownerPayload['editable']);
+        $this->assertArrayNotHasKey('editable', $visitorPayload);
     }
 
     public function test_admin_view_includes_moderation_state(): void

@@ -21,6 +21,15 @@ export interface MediaCharacter {
   display_name: string;
 }
 
+export interface EditableMedia {
+  title: string | null;
+  character_id: number | null;
+  audience: Audience;
+  audience_user_ids: number[];
+  discoverable: boolean;
+  characters: MediaCharacter[];
+}
+
 export interface PageMeta {
   current_page: number;
   last_page: number;
@@ -65,6 +74,8 @@ export interface MediaItem {
   owner?: MediaOwner | null;
   /** Present on the single-media view: whether the viewer may report this item. */
   can_report?: boolean;
+  /** Owner-management shape; its absence is the visitor authorization boundary. */
+  editable?: EditableMedia;
 }
 
 /** The uploader of a single media item, used to frame the detail page. */
