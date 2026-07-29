@@ -77,6 +77,17 @@ class PostCommentPresenter
             && $viewer !== null
             && ($viewer->id === $post->user_id || $viewer->isAdmin());
 
+        // Persona links survive a soft delete for restore. If the relation no
+        // longer resolves, never reinterpret the owner's comment as account-
+        // authored for visitors: that would reveal the human behind the old
+        // Separate-persona post. Owner/admin management retains the real author.
+        if ($isOwnerComment
+            && $post->character_id !== null
+            && ! $character instanceof Character
+            && ! $managementView) {
+            return null;
+        }
+
         if (! $isOwnerComment
             || ! $character instanceof Character
             || $character->is_linked

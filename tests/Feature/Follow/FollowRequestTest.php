@@ -509,6 +509,15 @@ class FollowRequestTest extends TestCase
             'status' => FollowRequest::STATUS_ACCEPTED,
             'responded_at' => now()->subHour(),
         ]);
+        // The write endpoints reject self-follows, but public output must remain
+        // fail-closed if a legacy/imported row violates that invariant.
+        FollowRequest::query()->create([
+            'requester_id' => $owner->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $separate->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
 
         $linkedResponse = $this->actingAs($viewer)
             ->getJson("/api/characters/{$linked->id}/followers")
@@ -539,5 +548,30 @@ class FollowRequestTest extends TestCase
             ->assertJsonMissingPath('data.followers.0.target')
             ->assertJsonMissing(['id' => $owner->id])
             ->assertJsonMissing(['display_name' => 'Private Human Identity']);
+    }
+
+    public function test_hidden_and_missing_persona_follow_routes_share_the_generic_not_found_response(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $hidden = Character::factory()->for($owner)->audience(Audience::Followers)->create();
+        $missingId = PHP_INT_MAX;
+
+        foreach ([
+            fn () => $this->actingAs($viewer)->getJson("/api/characters/{$hidden->id}/followers"),
+            fn () => $this->actingAs($viewer)->postJson("/api/characters/{$hidden->id}/follow"),
+        ] as $hiddenRequest) {
+            $response = $hiddenRequest()->assertNotFound();
+            $this->assertSame('Not found.', $response->json('message'));
+        }
+
+        foreach ([
+            fn () => $this->actingAs($viewer)->getJson("/api/characters/{$missingId}/followers"),
+            fn () => $this->actingAs($viewer)->postJson("/api/characters/{$missingId}/follow"),
+        ] as $missingRequest) {
+            $response = $missingRequest()->assertNotFound();
+            $this->assertSame('Not found.', $response->json('message'));
+        }
     }
 }

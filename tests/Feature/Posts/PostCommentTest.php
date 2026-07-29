@@ -60,6 +60,34 @@ class PostCommentTest extends TestCase
             ->assertJsonPath('data.0.author.display_name', 'Private Human');
     }
 
+    public function test_owner_comment_on_a_soft_deleted_persona_post_never_falls_back_to_the_human(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human']);
+        $viewer = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $post = Post::factory()->for($owner)->approved()->create([
+            'character_id' => $persona->id,
+        ]);
+        PostComment::factory()->for($post)->for($owner)->create(['body' => 'Persona reply']);
+
+        $persona->delete();
+
+        $response = $this->actingAs($viewer)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.author', null);
+        $this->assertStringNotContainsString('Private Human', $response->getContent());
+
+        $this->actingAs($owner)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->assertJsonPath('data.0.author.id', $owner->id);
+    }
+
     public function test_linked_persona_and_unrelated_comments_keep_normal_human_attribution(): void
     {
         $owner = User::factory()->approved()->create(['display_name' => 'Visible Owner']);

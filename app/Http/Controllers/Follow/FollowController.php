@@ -459,7 +459,7 @@ class FollowController extends Controller
         $owner = $character->user;
 
         if (! $current instanceof User || ! $owner instanceof User || ! $character->isViewableBy($current)) {
-            return response()->json(['success' => false, 'message' => 'Persona unavailable.'], 404);
+            abort(404, 'Not found.');
         }
 
         if ($current->is($owner)) {
@@ -503,7 +503,7 @@ class FollowController extends Controller
         $character->loadMissing(['user', 'profilePicture']);
         $current = $this->viewAs->viewerFor($request, $character->user, $character);
         if (! $character->isViewableBy($current)) {
-            return response()->json(['success' => false, 'message' => 'Persona unavailable.'], 404);
+            abort(404, 'Not found.');
         }
 
         $followers = FollowGraph::followersOfIdentity($character->user_id, $character->id)
@@ -511,6 +511,9 @@ class FollowController extends Controller
                 'requester:id,name,display_name,profile_audience,profile_picture_media_id',
                 'requester.profilePicture',
             ])
+            // Public output must stay fail-closed even if a legacy/imported row
+            // violates the write endpoints' self-follow rejection.
+            ->where('requester_id', '!=', $character->user_id)
             ->whereHas('requester', fn ($query) => $query->active())
             ->oldest('responded_at')
             ->oldest('id')

@@ -306,6 +306,33 @@ class StoryTest extends TestCase
         ));
     }
 
+    public function test_soft_deleted_separate_story_author_hides_the_story_from_visitors(): void
+    {
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
+        $reader = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Public Persona',
+            'is_linked' => false,
+        ]);
+        $story = Story::factory()->for($owner)->readable()->create();
+        $story->authors()->where('user_id', $owner->id)->update(['character_id' => $persona->id]);
+
+        $persona->delete();
+
+        $hidden = $this->actingAs($reader)
+            ->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertNotFound();
+        $missing = $this->getJson('/api/stories/by-ulid/01HZZZZZZZZZZZZZZZZZZZZZZZ')
+            ->assertNotFound();
+
+        $this->assertSame($missing->json('message'), $hidden->json('message'));
+        $this->assertStringNotContainsString('Private Human Identity', $hidden->getContent());
+
+        $this->actingAs($owner)
+            ->getJson("/api/stories/by-ulid/{$story->ulid}")
+            ->assertOk();
+    }
+
     public function test_library_lists_owned_and_co_authored_stories(): void
     {
         $owner = User::factory()->approved()->create();

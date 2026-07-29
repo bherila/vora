@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
 
@@ -36,6 +37,15 @@ class MediaPolicy
         // Admins bypass this via before(). Mirrors StoryPolicy::view.
         $owner = User::withTrashed()->find($media->user_id);
         if ($owner === null || $owner->trashed() || ! $owner->isActive()) {
+            return false;
+        }
+
+        // Soft-deleting a persona deliberately retains media.character_id for
+        // restore. The default relation then resolves to null; treating that as
+        // account-authored media would expose the human uploader on a URL that
+        // visitors learned through the Separate persona. Keep it owner/admin-only
+        // until the persona is restored.
+        if ($media->character_id !== null && ! $media->character instanceof Character) {
             return false;
         }
 

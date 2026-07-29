@@ -45,7 +45,10 @@ class MediaAssetController extends Controller
         $headers = [
             'Content-Type' => $contentType,
             'Content-Disposition' => 'inline',
-            'Cache-Control' => 'private, max-age=3600',
+            // The URL carries no viewer-specific token. Do not let a browser
+            // reuse bytes after logout, account switch, or access revocation
+            // without re-running MediaPolicy.
+            'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ];
         $size = $this->storage->getFileSize($disk, $key);

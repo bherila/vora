@@ -384,6 +384,39 @@ class MediaApiTest extends TestCase
             ->assertJsonPath('data.owner.href', "/users/{$owner->id}");
     }
 
+    public function test_soft_deleted_separate_persona_media_is_hidden_from_visitors(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // ensure the owner is not the id-1 admin
+        $owner = User::factory()->approved()->create(['display_name' => 'Sentinel Human']);
+        $viewer = User::factory()->approved()->create();
+        $persona = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+        $media = Media::factory()->for($owner)->approved()->create([
+            'character_id' => $persona->id,
+        ]);
+
+        $persona->delete();
+
+        $hidden = $this->actingAs($viewer)
+            ->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertNotFound();
+        $missing = $this->getJson('/api/media/by-ulid/01HZZZZZZZZZZZZZZZZZZZZZZZ')
+            ->assertNotFound();
+
+        $this->assertSame($missing->json('message'), $hidden->json('message'));
+        $this->assertStringNotContainsString('Sentinel Human', $hidden->getContent());
+        $this->get("/api/media/by-ulid/{$media->ulid}/asset/original")
+            ->assertNotFound();
+
+        $this->actingAs($owner)
+            ->getJson("/api/media/by-ulid/{$media->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.owner.id', $owner->id);
+    }
+
     public function test_owner_and_admin_media_detail_retain_original_filename(): void
     {
         $this->fakeStorage();
@@ -431,6 +464,7 @@ class MediaApiTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'image/jpeg')
             ->assertHeader('Content-Disposition', 'inline')
+            ->assertHeader('Cache-Control', 'no-store, private')
             ->assertHeader('X-Content-Type-Options', 'nosniff');
 
         $this->assertSame('safe-image-bytes', $response->streamedContent());

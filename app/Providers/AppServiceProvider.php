@@ -83,6 +83,7 @@ class AppServiceProvider extends ServiceProvider
         Route::bind('story', fn (string $value): Story => Story::find($value) ?? abort(404, 'Not found.'));
         Route::bind('post', fn (string $value): Post => Post::find($value) ?? abort(404, 'Not found.'));
         Route::bind('comment', fn (string $value): PostComment => PostComment::find($value) ?? abort(404, 'Not found.'));
+        Route::bind('character', fn (string $value): Character => Character::find($value) ?? abort(404, 'Not found.'));
 
         // Stable aliases for polymorphic story "involves" tags, so the database
         // stores short type keys instead of fully-qualified class names.
