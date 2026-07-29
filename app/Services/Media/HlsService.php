@@ -100,7 +100,9 @@ class HlsService
 
         return [
             'status' => 'ready',
-            'master_url' => route('media.hls', ['media' => $video->id, 'path' => 'master.m3u8']),
+            // Keep this app-relative so playback follows the browser's actual
+            // origin instead of a potentially stale deploy-time APP_URL.
+            'master_url' => route('media.hls', ['media' => $video->id, 'path' => 'master.m3u8'], false),
         ];
     }
 
