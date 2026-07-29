@@ -172,7 +172,9 @@ export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileVie
             <div className="flex shrink-0 items-center gap-2">
               {readOnly ? null : persona.is_owner ? (
                 <Button variant="outline" asChild>
-                  <a href="/me"><Pencil className="h-4 w-4" aria-hidden="true" /> Manage on your profile</a>
+                  <a href={`/c/${persona.ulid}/edit`}>
+                    <Pencil className="h-4 w-4" aria-hidden="true" /> Edit persona
+                  </a>
                 </Button>
               ) : (
                 <>

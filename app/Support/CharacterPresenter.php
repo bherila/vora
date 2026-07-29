@@ -10,9 +10,9 @@ use App\Services\Media\MediaResponseService;
 use Illuminate\Support\Collection;
 
 /**
- * Serializes a Character for owner management (the editor dialog on the profile
- * and the legacy characters API). Includes the editable fields and the profile
- * picture; not used for public/visitor views, which only need the identity strip.
+ * Serializes a Character for owner management (the dedicated persona editor and
+ * the legacy characters API). Includes the editable fields and profile picture;
+ * not used for public/visitor views, which only need the identity strip.
  */
 class CharacterPresenter
 {

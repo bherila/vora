@@ -17,8 +17,10 @@ use App\Services\Media\MediaUploadService;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Support\CharacterPresenter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 
 class CharacterController extends Controller
 {
@@ -28,6 +30,39 @@ class CharacterController extends Controller
         private readonly MediaService $media,
         private readonly PrivacyAuditor $auditor,
     ) {}
+
+    public function createPage(): View
+    {
+        return $this->editorPage();
+    }
+
+    public function editPage(Request $request, string $ulid): View
+    {
+        $user = $request->user();
+        $character = $user instanceof User
+            ? $user->characters()
+                ->where('ulid', $ulid)
+                ->with(['profilePicture', 'audienceMembers'])
+                ->first()
+            : null;
+
+        // Owner scope plus the same generic body for a foreign and missing ULID:
+        // this page must not become a persona-existence oracle.
+        abort_unless($character instanceof Character, 404, 'Not found.');
+
+        return $this->editorPage($character);
+    }
+
+    private function editorPage(?Character $character = null): View
+    {
+        return view('user.persona-editor', ['initialData' => [
+            'personaEditor' => [
+                'character' => $character instanceof Character
+                    ? CharacterPresenter::manage($character, $this->responder)
+                    : null,
+            ],
+        ]]);
+    }
 
     public function index(): JsonResponse
     {

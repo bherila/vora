@@ -159,9 +159,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
     Route::post('/api/onboarding/dismiss', [OnboardingController::class, 'dismiss']);
     Route::post('/api/identity', [IdentityController::class, 'update']);
-    // Characters are created and managed on the profile (/me) now; keep the named
-    // route as a redirect for old bookmarks.
+    // Keep the retired characters index pointed at the profile for old bookmarks;
+    // create/edit use the dedicated persona editor routes below.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
+    Route::get('/personas/new', [CharacterController::class, 'createPage'])->name('characters.create');
 
     // Invites the user can hand out (balance issued by an admin).
     Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');
@@ -182,6 +183,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     // A persona's public profile, resolved by ulid. Gated on the character's
     // own audience — deliberately independent of the owner's profile gate.
+    Route::get('/c/{ulid}/edit', [CharacterController::class, 'editPage'])->name('characters.edit');
     Route::get('/c/{ulid}', [CharacterProfileController::class, 'page'])->name('characters.view');
     Route::prefix('api/c/{ulid}')->group(function () {
         Route::get('/counts', [CharacterProfileController::class, 'counts']);

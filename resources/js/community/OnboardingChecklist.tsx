@@ -176,7 +176,7 @@ export function OnboardingChecklist({ onboarding }: OnboardingChecklistProps) {
             <p className="text-sm text-muted-foreground">
               A persona is a separate identity for fiction, art, or role-play. Most people never need one.
             </p>
-            <a className="text-sm font-medium underline underline-offset-4" href="/me">
+            <a className="text-sm font-medium underline underline-offset-4" href="/personas/new">
               Create a persona
             </a>
           </div>

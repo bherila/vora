@@ -836,6 +836,53 @@ class CharacterTest extends TestCase
         $this->actingAs($user)->get('/characters')->assertRedirect(route('me'));
     }
 
+    public function test_owner_can_open_the_dedicated_persona_create_and_edit_pages(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create([
+            'display_name' => 'Nova',
+            'description' => 'A test persona.',
+            'discoverable' => false,
+            'is_linked' => false,
+        ]);
+
+        $createPayload = $this->initialData(
+            $this->actingAs($owner)->get('/personas/new')->assertOk()->getContent()
+        );
+        $this->assertNull($createPayload['personaEditor']['character']);
+
+        $editPayload = $this->initialData(
+            $this->get("/c/{$character->ulid}/edit")->assertOk()->getContent()
+        );
+        $editable = $editPayload['personaEditor']['character'];
+        $this->assertSame($character->id, $editable['id']);
+        $this->assertSame($character->ulid, $editable['ulid']);
+        $this->assertSame('Nova', $editable['display_name']);
+        $this->assertFalse($editable['discoverable']);
+        $this->assertFalse($editable['is_linked']);
+        $this->assertArrayHasKey('inherit_interests', $editable);
+        $this->assertArrayHasKey('audience_user_ids', $editable);
+        $this->assertArrayNotHasKey('preferred_user_types', $editable);
+        $this->assertArrayNotHasKey('preferred_genders', $editable);
+    }
+
+    public function test_persona_edit_page_hides_foreign_and_missing_ulids_identically(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create();
+
+        $foreign = $this->actingAs($other)
+            ->get("/c/{$character->ulid}/edit")
+            ->assertNotFound();
+        $missing = $this->get('/c/01HZZZZZZZZZZZZZZZZZZZZZZZ/edit')
+            ->assertNotFound();
+
+        $this->assertSame($missing->getContent(), $foreign->getContent());
+        $this->assertStringNotContainsString(Character::class, $foreign->getContent());
+        $this->assertStringNotContainsString($character->ulid, $foreign->getContent());
+    }
+
     public function test_profile_home_hydrates_full_character_records_for_owner(): void
     {
         $this->fakeStorage();
@@ -851,8 +898,19 @@ class CharacterTest extends TestCase
         $this->assertCount(1, $characters);
         $this->assertSame('Nova', $characters[0]['display_name']);
         $this->assertSame('A test persona', $characters[0]['description']);
-        // The editor needs the full record (privacy, prefs, inherit flag).
+        // Owner controls need the stable edit target, privacy, and inherit flag.
+        $this->assertArrayHasKey('ulid', $characters[0]);
         $this->assertArrayHasKey('inherit_interests', $characters[0]);
         $this->assertArrayHasKey('audience_user_ids', $characters[0]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function initialData(string $html): array
+    {
+        preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', $html, $matches);
+
+        return json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
     }
 }

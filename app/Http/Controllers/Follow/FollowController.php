@@ -135,7 +135,7 @@ class FollowController extends Controller
                 'followProfile' => $this->profilePayload($current, $current),
                 'profileEditable' => $this->editablePayload($current),
                 'profileMedia' => $this->profileMediaPayload($current),
-                // Full editable character records for the owner's character editor.
+                // Owner records supply stable edit links and active-persona controls.
                 'profileCharacters' => CharacterPresenter::list($characters, $this->mediaResponder),
                 // Per-identity content totals for the identity rail. Personas are
                 // opt-in: with none, the rail is absent and the totals are skipped

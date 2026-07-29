@@ -105,7 +105,10 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
 
     await waitForMountRequests();
     expect(screen.getByRole('button', { name: '0 followers' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /manage on your profile/i })).toHaveAttribute('href', '/me');
+    expect(screen.getByRole('link', { name: /edit persona/i })).toHaveAttribute(
+      'href',
+      '/c/01HZX5PERSONA/edit',
+    );
     expect(screen.queryByRole('button', { name: /report/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
   });

@@ -76,6 +76,10 @@ describe('OnboardingChecklist', () => {
     const invitation = screen.getByTestId('persona-invitation');
     expect(within(invitation).getByText('Optional')).toBeInTheDocument();
     expect(within(invitation).getByText(/Most people never need one/)).toBeInTheDocument();
+    expect(within(invitation).getByRole('link', { name: 'Create a persona' })).toHaveAttribute(
+      'href',
+      '/personas/new',
+    );
     expect(within(invitation).queryByText('Not completed')).not.toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Getting started steps' })).not.toContainElement(invitation);
   });
