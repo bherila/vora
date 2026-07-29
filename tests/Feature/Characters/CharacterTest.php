@@ -157,6 +157,29 @@ class CharacterTest extends TestCase
         $this->assertNull($character->preferred_genders);
     }
 
+    public function test_omitting_discoverable_from_an_update_does_not_publish_a_link_only_persona_or_its_media(): void
+    {
+        $user = User::factory()->approved()->create();
+        $character = Character::factory()->for($user)->create([
+            'discoverable' => false,
+        ]);
+        $media = Media::factory()->for($user)->approved()->create([
+            'character_id' => $character->id,
+            'discoverable' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'display_name' => 'Still link-only',
+                'audience' => $character->audience->value,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.discoverable', false);
+
+        $this->assertFalse($character->fresh()->discoverable);
+        $this->assertFalse($media->fresh()->discoverable);
+    }
+
     public function test_owner_can_switch_a_persona_between_linked_and_separate(): void
     {
         $user = User::factory()->approved()->create();

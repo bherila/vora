@@ -50,7 +50,7 @@ describe('CharacterEditorDialog', () => {
 
     expect(discoverable).toBeChecked();
     expect(screen.getByText(
-      'When the audience is Everyone, this lists the persona for discovery. Turn it off to keep the persona reachable only by direct link.',
+      "When the audience is Everyone, this lists the persona in Explore and People search. Turning it off removes those listings; a Linked persona may still appear on its owner's profile.",
     )).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'User types to see' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Genders to see' })).not.toBeInTheDocument();

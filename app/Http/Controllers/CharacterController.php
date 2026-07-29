@@ -202,12 +202,17 @@ class CharacterController extends Controller
         $linked = array_key_exists('is_linked', $data)
             ? ['is_linked' => (bool) $data['is_linked']]
             : [];
+        // Omitted on older/partial update clients means "leave unchanged".
+        // Creates still receive the schema's independently defined true
+        // default, while an explicit value remains editable.
+        $discovery = array_key_exists('discoverable', $data)
+            ? ['discoverable' => $request->discoverable()]
+            : [];
 
-        return $linked + [
+        return $linked + $discovery + [
             'display_name' => $data['display_name'],
             'description' => $data['description'] ?? null,
             'audience' => $request->audience(),
-            'discoverable' => $request->discoverable(),
             'gender' => $gender,
             'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
             'user_type' => $userType,
