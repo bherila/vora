@@ -90,11 +90,14 @@ class Character extends Model
         'gender_other',
         'user_type',
         'user_type_other',
-        'preferred_user_types',
-        'preferred_genders',
         'inherit_interests',
         'profile_picture_media_id',
     ];
+
+    // The table still has legacy preferred_user_types/preferred_genders
+    // columns, but personas do not have a viewing context. Keeping them out of
+    // mass assignment and casts prevents the dormant schema from becoming an
+    // accidental editing contract.
 
     /**
      * @return array<string, string>
@@ -105,8 +108,6 @@ class Character extends Model
             'audience' => Audience::class,
             'discoverable' => 'boolean',
             'is_linked' => 'boolean',
-            'preferred_user_types' => 'array',
-            'preferred_genders' => 'array',
             'inherit_interests' => 'boolean',
             'profile_picture_media_id' => 'integer',
         ];

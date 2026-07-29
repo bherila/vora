@@ -26,8 +26,6 @@ class CharacterFactory extends Factory
             'discoverable' => true,
             'gender' => 'male',
             'user_type' => 'human',
-            'preferred_user_types' => ['human', 'furry', 'other'],
-            'preferred_genders' => ['male', 'female', 'other'],
             'inherit_interests' => true,
             'is_linked' => true,
         ];

@@ -21,6 +21,13 @@ function relationshipCopy(): string {
 }
 
 describe('CharacterEditorDialog', () => {
+  beforeAll(() => {
+    Object.defineProperty(window, 'PointerEvent', {
+      configurable: true,
+      value: MouseEvent,
+    });
+  });
+
   it('states the end-state consequences of Linked and Separate personas', () => {
     renderDialog();
 
@@ -32,6 +39,24 @@ describe('CharacterEditorDialog', () => {
     expect(screen.getByText(
       'Nobody can tell Kira is yours. Kira builds a following from scratch.',
     )).toBeInTheDocument();
+  });
+
+  it('offers independent listing control without persona viewing preferences', () => {
+    renderDialog();
+
+    const discoverable = screen.getByRole('checkbox', {
+      name: 'Show this persona in Explore and People search',
+    });
+
+    expect(discoverable).toBeChecked();
+    expect(screen.getByText(
+      'When the audience is Everyone, this lists the persona for discovery. Turn it off to keep the persona reachable only by direct link.',
+    )).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'User types to see' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Genders to see' })).not.toBeInTheDocument();
+
+    fireEvent.click(discoverable);
+    expect(discoverable).not.toBeChecked();
   });
 
   // The persona name is arbitrary and a persona carries its own gender, so the

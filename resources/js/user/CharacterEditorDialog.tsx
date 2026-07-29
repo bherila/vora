@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { AudienceField } from '@/community/AudienceField';
 import { Avatar } from '@/components/avatar';
-import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
+import { ProfileOptionButtonGroup } from '@/components/profile-option-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +15,7 @@ import { CharacterInterestsEditor } from '@/interests/character-interests-editor
 import { type Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
-import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
+import { GENDER_OPTIONS, normalizeProfileOptionValue, USER_TYPE_OPTIONS } from '@/profile-options';
 
 export interface CharacterRecord {
   id: number;
@@ -24,12 +25,11 @@ export interface CharacterRecord {
   is_linked: boolean;
   audience: Audience;
   audience_user_ids: number[];
+  discoverable: boolean;
   gender: string | null;
   gender_other: string | null;
   user_type: string | null;
   user_type_other: string | null;
-  preferred_user_types: string[] | null;
-  preferred_genders: string[] | null;
   inherit_interests: boolean;
   profile_picture: MediaItem | null;
 }
@@ -40,12 +40,11 @@ interface CharacterFormState {
   is_linked: boolean;
   audience: Audience;
   audience_user_ids: number[];
+  discoverable: boolean;
   gender: string;
   gender_other: string;
   user_type: string;
   user_type_other: string;
-  preferred_user_types: string[];
-  preferred_genders: string[];
 }
 
 interface CharacterResponse {
@@ -67,12 +66,11 @@ function blankForm(): CharacterFormState {
     is_linked: true,
     audience: 'everyone',
     audience_user_ids: [],
+    discoverable: true,
     gender: '',
     gender_other: '',
     user_type: '',
     user_type_other: '',
-    preferred_user_types: [],
-    preferred_genders: [],
   };
 }
 
@@ -83,22 +81,17 @@ function formFromCharacter(character: CharacterRecord): CharacterFormState {
     is_linked: character.is_linked,
     audience: character.audience,
     audience_user_ids: character.audience_user_ids,
+    discoverable: character.discoverable,
     gender: normalizeProfileOptionValue(GENDER_OPTIONS, character.gender),
     gender_other: character.gender_other ?? '',
     user_type: normalizeProfileOptionValue(USER_TYPE_OPTIONS, character.user_type),
     user_type_other: character.user_type_other ?? '',
-    preferred_user_types: normalizeProfileSelections(USER_TYPE_OPTIONS, character.preferred_user_types),
-    preferred_genders: normalizeProfileSelections(GENDER_OPTIONS, character.preferred_genders),
   };
 }
 
 function blankToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
-}
-
-function selectionsToPayload(values: string[]): string[] | null {
-  return values.length > 0 ? values : null;
 }
 
 interface LinkedSeparateFieldProps {
@@ -233,12 +226,11 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
       is_linked: form.is_linked,
       audience: form.audience,
       audience_user_ids: form.audience === 'specific' ? form.audience_user_ids : [],
+      discoverable: form.discoverable,
       gender: blankToNull(form.gender),
       gender_other: form.gender === 'other' ? blankToNull(form.gender_other) : null,
       user_type: blankToNull(form.user_type),
       user_type_other: form.user_type === 'other' ? blankToNull(form.user_type_other) : null,
-      preferred_user_types: selectionsToPayload(form.preferred_user_types),
-      preferred_genders: selectionsToPayload(form.preferred_genders),
     };
 
     try {
@@ -314,6 +306,19 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
             label="Who can see this character?"
             specificRelationship="mutuals"
           />
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Checkbox
+                checked={form.discoverable}
+                onCheckedChange={(checked) => updateForm({ discoverable: checked === true })}
+                disabled={saving}
+              />
+              <span>Show this persona in Explore and People search</span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              When the audience is Everyone, this lists the persona for discovery. Turn it off to keep the persona reachable only by direct link.
+            </p>
+          </div>
           <LinkedSeparateField
             personaName={form.display_name.trim() || 'this persona'}
             value={form.is_linked}
@@ -334,9 +339,6 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
               <Input id="character-user-type-other" value={form.user_type_other} onChange={(event) => updateForm({ user_type_other: event.target.value })} required />
             </div>
           )}
-          <ProfileOptionCheckboxGroup legend="User types to see" description="Optional discovery preferences for this character." name="character-user-types" options={USER_TYPE_OPTIONS} values={form.preferred_user_types} onChange={(values) => updateForm({ preferred_user_types: values })} />
-          <ProfileOptionCheckboxGroup legend="Genders to see" description="Optional discovery preferences for this character." name="character-genders" options={GENDER_OPTIONS} values={form.preferred_genders} onChange={(values) => updateForm({ preferred_genders: values })} />
-
           {current !== null ? (
             <div className="space-y-4 border-t border-border pt-4">
               <div className="flex items-center gap-3">

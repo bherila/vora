@@ -33,12 +33,11 @@ class CharacterPresenter
             'audience_user_ids' => $character->audience === Audience::SpecificPeople
                 ? $character->audienceMembers()->pluck('user_id')->map('intval')->sort()->values()->all()
                 : [],
+            'discoverable' => $character->discoverable,
             'gender' => $character->gender,
             'gender_other' => $character->gender_other,
             'user_type' => $character->user_type,
             'user_type_other' => $character->user_type_other,
-            'preferred_user_types' => $character->preferred_user_types ?? [],
-            'preferred_genders' => $character->preferred_genders ?? [],
             'inherit_interests' => $character->inherit_interests,
             'profile_picture' => $picture instanceof Media ? $responder->item($picture, resolveHls: false) : null,
         ];
