@@ -1,5 +1,5 @@
 import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { NotificationBell } from '@/community/NotificationBell';
 import { Avatar } from '@/components/avatar';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { fetchWrapper } from '@/fetchWrapper';
 import { type IdentityOption, switchActiveIdentity, useIdentityStore } from '@/identity';
+import { safeInternalUrl } from '@/security/dom-url';
 
 type NavbarProps = {
   brand?: NavbarBrand;
@@ -75,16 +76,56 @@ function applyTheme(mode: ThemeMode) {
   root.classList.toggle('dark', isDark);
 }
 
-function safeHref(href: string): string {
-  return href.startsWith('/') && !href.startsWith('//') ? href : '#';
-}
-
 function navLabel(item: NavLink): string {
   return typeof item.badge === 'number' && item.badge > 0 ? `${item.label} (${item.badge})` : item.label;
 }
 
 function dropdownLinkClassName(): string {
   return 'block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]';
+}
+
+interface InternalNavLinkProps {
+  href: string;
+  className: string;
+  invalidClassName?: string;
+  onClick?: () => void;
+  children: ReactNode;
+}
+
+/**
+ * Navigation data is hydrated from the DOM. Invalid destinations stay visible
+ * as inert text so a bad payload cannot create a focusable, top-jumping "#"
+ * fallback that still announces itself as a link.
+ */
+function InternalNavLink({
+  href,
+  className,
+  invalidClassName = className,
+  onClick,
+  children,
+}: InternalNavLinkProps) {
+  const safeHref = safeInternalUrl(href);
+
+  if (safeHref === null) {
+    return <span className={invalidClassName}>{children}</span>;
+  }
+
+  return <a href={safeHref} className={className} onClick={onClick}>{children}</a>;
+}
+
+function AccountMenuLink({ item }: { item: NavMenuLinkItem }) {
+  const safeHref = safeInternalUrl(item.href);
+  const className = 'min-h-6 rounded-none px-4 py-2';
+
+  if (safeHref === null) {
+    return <DropdownMenuItem disabled className={className}>{item.label}</DropdownMenuItem>;
+  }
+
+  return (
+    <DropdownMenuItem asChild className={className}>
+      <a href={safeHref}>{item.label}</a>
+    </DropdownMenuItem>
+  );
 }
 
 function identityValue(identityId: number | null): string {
@@ -215,15 +256,19 @@ export default function Navbar({
             {mobileOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
           </button>
         )}
-        <a href={safeHref(brand.href)} className='select-none'>
+        <InternalNavLink href={brand.href} className='select-none'>
           <h1 className='text-lg font-semibold tracking-tight'>{brand.label}</h1>
-        </a>
+        </InternalNavLink>
         <ul className='hidden md:flex items-center gap-4 text-sm'>
           {navItems.map((item) => (
             <li key={`${item.href}:${item.label}`}>
-              <a className='hover:underline underline-offset-4' href={safeHref(item.href)}>
+              <InternalNavLink
+                href={item.href}
+                className='hover:underline underline-offset-4'
+                invalidClassName='text-muted-foreground'
+              >
                 {navLabel(item)}
-              </a>
+              </InternalNavLink>
             </li>
           ))}
           {adminMenu && (
@@ -239,14 +284,15 @@ export default function Navbar({
               {adminMenuOpen && (
                 <div className='absolute left-0 top-full mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19] z-50'>
                   {adminMenu.items.map((item) => (
-                    <a
+                    <InternalNavLink
                       key={`${item.href}:${item.label}`}
-                      href={safeHref(item.href)}
+                      href={item.href}
                       className={dropdownLinkClassName()}
                       onClick={() => setAdminMenuOpen(false)}
+                      invalidClassName='block px-4 py-2 text-sm text-muted-foreground'
                     >
                       {item.label}
-                    </a>
+                    </InternalNavLink>
                   ))}
                 </div>
               )}
@@ -261,15 +307,16 @@ export default function Navbar({
         {!authenticated ? (
           <div className='flex items-center gap-2 text-sm'>
             {guestMenuItems.map((item) => (
-              <a
+              <InternalNavLink
                 key={`${item.href}:${item.label}`}
-                href={safeHref(item.href)}
+                href={item.href}
                 className={item.variant === 'primary'
                   ? 'rounded-md bg-foreground px-3 py-1.5 text-background hover:opacity-90'
                   : 'hover:underline underline-offset-4'}
+                invalidClassName='text-muted-foreground'
               >
                 {item.label}
-              </a>
+              </InternalNavLink>
             ))}
           </div>
         ) : (
@@ -334,13 +381,10 @@ export default function Navbar({
               <DropdownMenuGroup className='py-1'>
                 {accountItems.map((item) => (
                   item.type === 'link' ? (
-                    <DropdownMenuItem
+                    <AccountMenuLink
                       key={`${item.href}:${item.label}`}
-                      asChild
-                      className='min-h-6 rounded-none px-4 py-2'
-                    >
-                      <a href={safeHref(item.href)}>{item.label}</a>
-                    </DropdownMenuItem>
+                      item={item}
+                    />
                   ) : (
                     <DropdownMenuItem
                       key={`${item.action}:${item.label}`}
@@ -408,27 +452,29 @@ export default function Navbar({
           <ul className='flex flex-col py-2'>
             {navItems.map((item) => (
               <li key={`m:${item.href}:${item.label}`}>
-                <a
+                <InternalNavLink
                   className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
-                  href={safeHref(item.href)}
+                  href={item.href}
                   onClick={() => setMobileOpen(false)}
+                  invalidClassName='block px-4 py-2.5 text-sm text-muted-foreground'
                 >
                   {navLabel(item)}
-                </a>
+                </InternalNavLink>
               </li>
             ))}
             {adminMenu && (
               <li className='mt-1 border-t border-gray-200 pt-1 dark:border-[#3E3E3A]'>
                 <p className='px-4 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>{adminMenu.label}</p>
                 {adminMenu.items.map((item) => (
-                  <a
+                  <InternalNavLink
                     key={`m:${item.href}:${item.label}`}
                     className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
-                    href={safeHref(item.href)}
+                    href={item.href}
                     onClick={() => setMobileOpen(false)}
+                    invalidClassName='block px-4 py-2.5 text-sm text-muted-foreground'
                   >
                     {item.label}
-                  </a>
+                  </InternalNavLink>
                 ))}
               </li>
             )}
@@ -437,14 +483,15 @@ export default function Navbar({
                 <p className='px-4 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>{accountMenu.label}</p>
                 {accountMenu.items.map((item) => (
                   item.type === 'link' ? (
-                    <a
+                    <InternalNavLink
                       key={`m:${item.href}:${item.label}`}
                       className='block px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
-                      href={safeHref(item.href)}
+                      href={item.href}
                       onClick={() => setMobileOpen(false)}
+                      invalidClassName='block px-4 py-2.5 text-sm text-muted-foreground'
                     >
                       {item.label}
-                    </a>
+                    </InternalNavLink>
                   ) : (
                     <button
                       key={`m:${item.action}:${item.label}`}

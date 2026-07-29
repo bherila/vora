@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
+import { safeInternalUrl } from '@/security/dom-url';
 
 interface FollowRequest { id: number; requester: { id: number; display_name: string; restricted: boolean; user_type: string | null; gender: string | null; }; created_at: string | null; }
 interface FollowInboxResponse { success: boolean; data: FollowRequest[]; }
@@ -50,7 +51,12 @@ function RequestsPage() {
               <CardDescription>Requested {request.created_at ? new Date(request.created_at).toLocaleString() : 'recently'}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
-              <a className="text-sm font-medium underline underline-offset-4" href={`/users/${request.requester.id}`}>View profile</a>
+              <a
+                className="text-sm font-medium underline underline-offset-4"
+                href={safeInternalUrl(`/users/${request.requester.id}`) ?? '#'}
+              >
+                View profile
+              </a>
               <Button size="sm" onClick={() => void decideFollow(request.id, 'accept')}>Accept</Button>
               <Button size="sm" variant="outline" onClick={() => void decideFollow(request.id, 'decline')}>Decline</Button>
             </CardContent>

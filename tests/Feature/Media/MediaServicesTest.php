@@ -14,6 +14,7 @@ use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class MediaServicesTest extends TestCase
@@ -289,6 +290,7 @@ class MediaServicesTest extends TestCase
     public function test_hls_status_processing_then_ready_with_proxy_url(): void
     {
         Storage::fake('hls');
+        URL::forceRootUrl('https://configured-host.example');
         $media = Media::factory()->video()->create(['disk' => 's3']);
         $service = app(HlsService::class);
 
@@ -303,7 +305,7 @@ class MediaServicesTest extends TestCase
         $this->travel(3)->minutes();
         $resolved = $service->status($media->fresh());
         $this->assertSame('ready', $resolved['status']);
-        $this->assertStringContainsString("/api/media/{$media->id}/hls/master.m3u8", $resolved['master_url']);
+        $this->assertSame("/api/media/{$media->id}/hls/master.m3u8", $resolved['master_url']);
         $this->assertSame('sha256:abc', $media->fresh()->hls_content_id);
     }
 

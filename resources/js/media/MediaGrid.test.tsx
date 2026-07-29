@@ -47,4 +47,10 @@ describe('MediaGrid visitor fallbacks', () => {
     expect(screen.getByRole('img', { name: 'Untitled media' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Untitled media' })).toBeInTheDocument();
   });
+
+  it('does not turn an untrusted listing URL into a link', () => {
+    render(<MediaGrid items={[visitorItem()]} getHref={() => 'javascript:alert(1)'} />);
+
+    expect(screen.queryByRole('link', { name: 'Open Untitled media' })).not.toBeInTheDocument();
+  });
 });

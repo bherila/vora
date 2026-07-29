@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 import { switchActiveIdentity, useIdentityStore } from '@/identity';
+import { safeInternalUrl } from '@/security/dom-url';
 
 interface PendingAction {
   label: string;
@@ -52,13 +53,24 @@ function PersonLink({
   href: string;
   detail?: string | undefined;
 }) {
-  return (
-    <a href={href} className="flex min-w-0 items-center gap-2 rounded-md p-1.5 hover:bg-muted">
+  const safeHref = safeInternalUrl(href);
+  const content = (
+    <>
       <Avatar name={name} src={avatarUrl} sizeClassName="h-8 w-8" />
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium">{name}</span>
         {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
       </span>
+    </>
+  );
+
+  if (safeHref === null) {
+    return <div className="flex min-w-0 items-center gap-2 rounded-md p-1.5">{content}</div>;
+  }
+
+  return (
+    <a href={safeHref} className="flex min-w-0 items-center gap-2 rounded-md p-1.5 hover:bg-muted">
+      {content}
     </a>
   );
 }
@@ -149,16 +161,24 @@ export function AppSideRail() {
           <CardTitle className="text-sm">Pending actions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
-          {(payload?.pending_actions ?? []).map((action) => (
-            <a
-              key={action.label}
-              href={action.href}
-              className="flex items-center justify-between rounded-md px-1 py-1.5 text-sm hover:bg-muted"
-            >
-              <span>{action.label}</span>
-              <Badge variant={action.count > 0 ? 'default' : 'secondary'}>{action.count}</Badge>
-            </a>
-          ))}
+          {(payload?.pending_actions ?? []).map((action) => {
+            const safeHref = safeInternalUrl(action.href);
+            const content = (
+              <>
+                <span>{action.label}</span>
+                <Badge variant={action.count > 0 ? 'default' : 'secondary'}>{action.count}</Badge>
+              </>
+            );
+            const className = 'flex items-center justify-between rounded-md px-1 py-1.5 text-sm';
+
+            return safeHref === null ? (
+              <div key={action.label} className={className}>{content}</div>
+            ) : (
+              <a key={action.label} href={safeHref} className={`${className} hover:bg-muted`}>
+                {content}
+              </a>
+            );
+          })}
         </CardContent>
       </Card>
 

@@ -87,6 +87,17 @@ it('does not render owner controls when the visitor payload omits editable data'
   expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
 });
 
+it('does not render an untrusted owner profile URL as a link', () => {
+  const item = mediaItem(false);
+  item.owner = { ...item.owner!, href: 'javascript:alert(1)' };
+  mockReadInitialData.mockReturnValue({ mediaView: item });
+
+  render(<MediaViewPage />);
+
+  expect(screen.getByText('Uploader')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Uploader|View profile/ })).not.toBeInTheDocument();
+});
+
 it('offers the owner the complete single-item edit form and saves through the existing endpoint', async () => {
   const item = mediaItem(true);
   mockReadInitialData.mockReturnValue({ mediaView: item });

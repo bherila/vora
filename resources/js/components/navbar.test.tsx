@@ -60,6 +60,63 @@ beforeEach(() => {
 });
 
 describe('Navbar account and identity menu', () => {
+  it('does not render untrusted DOM data as navigation URLs', () => {
+    const { container } = render(
+      <Navbar
+        brand={{ label: 'Unsafe brand', href: 'javascript:alert(1)' }}
+        authenticated={false}
+        navItems={[{ label: 'Unsafe nav', href: '//evil.example/nav' }]}
+        adminMenu={null}
+        accountMenu={null}
+        guestMenuItems={[{ label: 'Unsafe guest', href: 'data:text/html,<script>alert(1)</script>' }]}
+      />,
+    );
+
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Unsafe brand' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Unsafe nav' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Unsafe guest' })).toBeNull();
+    expect(screen.getByText('Unsafe brand').closest('span')).not.toBeNull();
+  });
+
+  it('makes invalid desktop, mobile, admin, and account destinations inert', () => {
+    const { container } = render(
+      <Navbar
+        brand={{ label: 'Unsafe brand', href: 'javascript:alert(1)' }}
+        authenticated
+        navItems={[{ label: 'Unsafe nav', href: '//evil.example/nav' }]}
+        adminMenu={{
+          label: 'Admin',
+          items: [{ type: 'link', label: 'Unsafe admin', href: 'data:text/html,unsafe' }],
+        }}
+        accountMenu={{
+          label: 'Human Name',
+          profileHref: 'javascript:alert(1)',
+          items: [
+            { type: 'link', label: 'Unsafe account', href: '//evil.example/account' },
+            { type: 'action', label: 'Log out', action: 'logout' },
+          ],
+        }}
+        guestMenuItems={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle navigation menu' }));
+
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+    expect(screen.queryByRole('link', { name: 'Unsafe admin' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Unsafe account' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Account and identity menu (currently Human Name)',
+    }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).queryByRole('link')).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Profile' })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(menu).getByRole('menuitem', { name: 'Unsafe account' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('uses one accessible menu in the persona-free state and keeps every account link available', () => {
     const { container } = renderNavbar();
 

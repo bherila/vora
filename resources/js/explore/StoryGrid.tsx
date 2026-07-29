@@ -2,6 +2,7 @@ import { BookOpen, GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { safeInternalUrl } from '@/security/dom-url';
 import type { StoryDiscoveryItem } from '@/stories/types';
 
 interface StoryGridProps {
@@ -18,7 +19,7 @@ export function StoryGrid({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((story) => {
-        const href = getHref(story);
+        const href = safeInternalUrl(getHref(story));
 
         return (
           <Card key={story.id}>
