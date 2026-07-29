@@ -374,7 +374,7 @@ class FollowRequestTest extends TestCase
         $this->assertSame(FollowRequest::STATUS_PENDING, $personaRequest->refresh()->status);
     }
 
-    public function test_persona_follow_is_auto_accepted_audited_and_listed_by_edge_identity(): void
+    public function test_persona_follow_is_auto_accepted_audited_and_listed_without_edge_mechanics(): void
     {
         Notification::fake();
         $viewer = User::factory()->approved()->create();
@@ -387,9 +387,7 @@ class FollowRequestTest extends TestCase
             ->postJson("/api/characters/{$persona->id}/follow")
             ->assertCreated()
             ->assertJsonPath('data.status', FollowRequest::STATUS_ACCEPTED)
-            ->assertJsonPath('data.target.type', 'character')
-            ->assertJsonPath('data.target.ulid', $persona->ulid)
-            ->assertJsonPath('data.target.display_name', 'Kira');
+            ->assertJsonMissingPath('data.target');
 
         $follow = FollowRequest::query()
             ->where('requester_id', $viewer->id)
@@ -415,9 +413,7 @@ class FollowRequestTest extends TestCase
             ->assertJsonPath('data.count', 1)
             ->assertJsonPath('data.viewer_is_following', true)
             ->assertJsonPath('data.followers.0.follower.id', $viewer->id)
-            ->assertJsonPath('data.followers.0.target.type', 'character')
-            ->assertJsonPath('data.followers.0.target.ulid', $persona->ulid)
-            ->assertJsonMissingPath('data.followers.0.target.owner_id');
+            ->assertJsonMissingPath('data.followers.0.target');
     }
 
     public function test_persona_follow_rejects_self_hidden_and_inactive_owner_targets(): void
@@ -459,11 +455,14 @@ class FollowRequestTest extends TestCase
         $this->assertDatabaseCount('follow_requests', 2);
     }
 
-    public function test_persona_follower_list_preserves_edge_identity_and_linked_subsumption(): void
+    public function test_persona_follower_list_hides_edge_identity_and_deduplicates_linked_subsumption(): void
     {
-        $owner = User::factory()->approved()->create(['display_name' => 'Owner']);
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
         $accountFollower = User::factory()->approved()->create();
-        $personaFollower = User::factory()->approved()->create();
+        $linkedPersonaFollower = User::factory()->approved()->create();
+        $overlappingFollower = User::factory()->approved()->create();
+        $separatePersonaFollower = User::factory()->approved()->create();
         $viewer = User::factory()->approved()->create();
         $linked = Character::factory()->for($owner)->create([
             'display_name' => 'Linked Persona',
@@ -473,36 +472,72 @@ class FollowRequestTest extends TestCase
             'display_name' => 'Separate Persona',
             'is_linked' => false,
         ]);
+        $overlappingFirstFollowedAt = now()->subHours(3);
 
         FollowRequest::query()->create([
             'requester_id' => $accountFollower->id,
             'recipient_id' => $owner->id,
             'recipient_character_id' => null,
             'status' => FollowRequest::STATUS_ACCEPTED,
-            'responded_at' => now(),
+            'responded_at' => now()->subHours(5),
         ]);
         FollowRequest::query()->create([
-            'requester_id' => $personaFollower->id,
+            'requester_id' => $linkedPersonaFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $linked->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now()->subHours(4),
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $overlappingFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => null,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => $overlappingFirstFollowedAt,
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $overlappingFollower->id,
+            'recipient_id' => $owner->id,
+            'recipient_character_id' => $linked->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now()->subHours(2),
+        ]);
+        FollowRequest::query()->create([
+            'requester_id' => $separatePersonaFollower->id,
             'recipient_id' => $owner->id,
             'recipient_character_id' => $separate->id,
             'status' => FollowRequest::STATUS_ACCEPTED,
-            'responded_at' => now(),
+            'responded_at' => now()->subHour(),
         ]);
 
-        $this->actingAs($viewer)
+        $linkedResponse = $this->actingAs($viewer)
             ->getJson("/api/characters/{$linked->id}/followers")
             ->assertOk()
-            ->assertJsonPath('data.count', 1)
-            ->assertJsonPath('data.followers.0.follower.id', $accountFollower->id)
-            ->assertJsonPath('data.followers.0.target.type', 'user')
-            ->assertJsonPath('data.followers.0.target.id', $owner->id);
+            ->assertJsonPath('data.count', 3)
+            ->assertJsonCount(3, 'data.followers')
+            ->assertJsonMissingPath('data.followers.0.target')
+            ->assertJsonMissingPath('data.followers.1.target')
+            ->assertJsonMissingPath('data.followers.2.target')
+            ->assertJsonMissing(['id' => $owner->id])
+            ->assertJsonMissing(['display_name' => 'Private Human Identity']);
+
+        $this->assertSame(
+            [$accountFollower->id, $linkedPersonaFollower->id, $overlappingFollower->id],
+            collect($linkedResponse->json('data.followers'))->pluck('follower.id')->all(),
+        );
+        $this->assertSame(
+            $overlappingFirstFollowedAt->toIso8601String(),
+            collect($linkedResponse->json('data.followers'))
+                ->firstWhere('follower.id', $overlappingFollower->id)['followed_at'],
+        );
 
         $this->getJson("/api/characters/{$separate->id}/followers")
             ->assertOk()
             ->assertJsonPath('data.count', 1)
-            ->assertJsonPath('data.followers.0.follower.id', $personaFollower->id)
-            ->assertJsonPath('data.followers.0.target.type', 'character')
-            ->assertJsonPath('data.followers.0.target.ulid', $separate->ulid)
-            ->assertJsonMissingPath('data.followers.0.target.owner_id');
+            ->assertJsonCount(1, 'data.followers')
+            ->assertJsonPath('data.followers.0.follower.id', $separatePersonaFollower->id)
+            ->assertJsonMissingPath('data.followers.0.target')
+            ->assertJsonMissing(['id' => $owner->id])
+            ->assertJsonMissing(['display_name' => 'Private Human Identity']);
     }
 }

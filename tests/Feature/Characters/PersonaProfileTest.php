@@ -275,7 +275,7 @@ class PersonaProfileTest extends TestCase
         }
     }
 
-    public function test_persona_page_follow_contract_lists_only_privacy_safe_edge_identities(): void
+    public function test_persona_page_follow_contract_omits_edge_and_owner_identity(): void
     {
         User::factory()->create(); // spacer so nobody under test is the admin (id 1)
         $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
@@ -312,9 +312,8 @@ class PersonaProfileTest extends TestCase
             ->assertJsonPath('data.count', 1)
             ->assertJsonPath('data.viewer_is_following', false)
             ->assertJsonPath('data.followers.0.follower.id', $personaFollower->id)
-            ->assertJsonPath('data.followers.0.target.type', 'character')
-            ->assertJsonPath('data.followers.0.target.ulid', $persona->ulid)
-            ->assertJsonMissingPath('data.followers.0.target.owner_id')
+            ->assertJsonMissingPath('data.followers.0.target')
+            ->assertJsonMissing(['id' => $owner->id])
             ->assertJsonMissing(['display_name' => 'Private Human Identity']);
     }
 

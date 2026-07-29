@@ -110,7 +110,7 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
   });
 
-  it('shows follower count and edge identity without exposing a persona owner', async () => {
+  it('shows generic follower rows without exposing edge identity or a persona owner', async () => {
     mockGet.mockImplementation((url: string) => Promise.resolve(
       url.endsWith('/followers')
         ? {
@@ -120,12 +120,10 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
               followers: [
                 {
                   follower: { id: 11, display_name: 'Alice', avatar_url: null, restricted: false },
-                  target: { type: 'character', id: 9, ulid: '01HZX5PERSONA', display_name: 'Kira', avatar_url: null },
                   followed_at: '2026-07-28T12:00:00Z',
                 },
                 {
                   follower: { id: 12, display_name: 'Sam', avatar_url: null, restricted: true },
-                  target: { type: 'user', id: 7, display_name: 'Private Human', avatar_url: null },
                   followed_at: '2026-07-28T13:00:00Z',
                 },
               ],
@@ -141,8 +139,10 @@ describe('PersonaProfilePage (/c/{ulid})', () => {
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Alice' })).toHaveAttribute('href', '/users/11');
-    expect(screen.getByText('Follows Kira directly')).toBeInTheDocument();
-    expect(screen.getByText(/Follows the linked account/)).toBeInTheDocument();
+    expect(screen.getByText('People who follow Kira.')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Follower/)).toHaveLength(2);
+    expect(screen.queryByText(/directly/i)).toBeNull();
+    expect(screen.queryByText(/linked account/i)).toBeNull();
     expect(screen.queryByText('Private Human')).toBeNull();
   });
 

@@ -455,7 +455,7 @@ class FollowController extends Controller
     public function followCharacter(Request $request, Character $character): JsonResponse
     {
         $current = $request->user();
-        $character->loadMissing(['user', 'profilePicture']);
+        $character->loadMissing('user');
         $owner = $character->user;
 
         if (! $current instanceof User || ! $owner instanceof User || ! $character->isViewableBy($current)) {
@@ -488,7 +488,6 @@ class FollowController extends Controller
             'success' => true,
             'data' => [
                 'status' => FollowRequest::STATUS_ACCEPTED,
-                'target' => $this->characterTargetPayload($character, $current),
             ],
         ], 201);
     }
@@ -496,7 +495,8 @@ class FollowController extends Controller
     /**
      * Followers of a visible persona, including account followers when the
      * persona is Linked. FollowGraph owns that subsumption rule; this endpoint
-     * only renders the identity each returned edge actually targets.
+     * renders each requester once without exposing which qualifying edge they
+     * used. The oldest edge supplies followed_at when both edge scopes exist.
      */
     public function characterFollowers(Request $request, Character $character): JsonResponse
     {
@@ -510,14 +510,13 @@ class FollowController extends Controller
             ->with([
                 'requester:id,name,display_name,profile_audience,profile_picture_media_id',
                 'requester.profilePicture',
-                'recipient:id,name,display_name,profile_picture_media_id',
-                'recipient.profilePicture',
-                'recipientCharacter:id,ulid,display_name,profile_picture_media_id',
-                'recipientCharacter.profilePicture',
             ])
             ->whereHas('requester', fn ($query) => $query->active())
             ->oldest('responded_at')
-            ->get();
+            ->oldest('id')
+            ->get()
+            ->unique('requester_id')
+            ->values();
 
         $requesters = $followers->pluck('requester')->filter()->values();
         $canView = $this->gate->canViewMany($current, $requesters);
@@ -540,7 +539,6 @@ class FollowController extends Controller
                         'avatar_url' => UserPresenter::avatarUrl($follower, $this->mediaResponder, $current),
                         'restricted' => ! $visible,
                     ],
-                    'target' => $this->edgeTargetPayload($followRequest, $current),
                     'followed_at' => $followRequest->responded_at?->toIso8601String(),
                 ];
             })->values(),
@@ -667,46 +665,6 @@ class FollowController extends Controller
             'status' => $followRequest->status,
             'updated_at' => $followRequest->updated_at?->toIso8601String(),
             'can_retry' => $this->declinedRequestCanBeRetried($followRequest),
-        ];
-    }
-
-    /**
-     * The public identity selected by a persona edge. Deliberately omits user_id
-     * so a Separate persona payload cannot disclose its owner.
-     *
-     * @return array{type: string, id: int, ulid: string, display_name: string, avatar_url: ?string}
-     */
-    private function characterTargetPayload(Character $character, ?User $viewer): array
-    {
-        return [
-            'type' => 'character',
-            'id' => $character->id,
-            'ulid' => $character->ulid,
-            'display_name' => $character->display_name,
-            'avatar_url' => UserPresenter::pictureUrl($character->profilePicture, $this->mediaResponder, $viewer),
-        ];
-    }
-
-    /**
-     * Render the identity explicitly selected by an edge. A character target
-     * never carries its owner id; an account edge is visibly an account edge.
-     *
-     * @return array<string, mixed>
-     */
-    private function edgeTargetPayload(FollowRequest $followRequest, ?User $viewer): array
-    {
-        $character = $followRequest->recipientCharacter;
-        if ($character instanceof Character) {
-            return $this->characterTargetPayload($character, $viewer);
-        }
-
-        $recipient = $followRequest->recipient;
-
-        return [
-            'type' => 'user',
-            'id' => $recipient?->id,
-            'display_name' => $recipient?->display_name ?: $recipient?->name,
-            'avatar_url' => UserPresenter::avatarUrl($recipient, $this->mediaResponder, $viewer),
         ];
     }
 
