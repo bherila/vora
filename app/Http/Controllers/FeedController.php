@@ -47,8 +47,8 @@ class FeedController extends Controller
     {
         $viewer = $request->user();
         $viewerId = $viewer?->id;
-        // Keep following as the default until #104's post-moderation decision is
-        // settled. The explicit mixed scope is ready for controlled callers.
+        // Following is the settled safe default. Mixed must remain an explicit
+        // opt-in, and unknown values must not silently widen membership.
         $scope = $request->query('scope') === 'mixed' ? 'mixed' : 'following';
 
         $posts = Post::query()

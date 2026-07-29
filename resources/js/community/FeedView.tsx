@@ -6,20 +6,43 @@ import { communityApi } from './api';
 import { OnboardingChecklist, type OnboardingSteps } from './OnboardingChecklist';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
-import type { CommunityPost } from './types';
+import type { CommunityPost, FeedScope } from './types';
 
 interface FeedViewProps {
   /** First-run checklist state; hidden when null/undefined. */
   onboarding?: OnboardingSteps | null;
 }
 
+function scopeFromLocation(): FeedScope {
+  return new URLSearchParams(window.location.search).get('scope') === 'mixed'
+    ? 'mixed'
+    : 'following';
+}
+
+function replaceScopeInLocation(scope: FeedScope): void {
+  const url = new URL(window.location.href);
+
+  if (scope === 'mixed') {
+    url.searchParams.set('scope', scope);
+  } else {
+    url.searchParams.delete('scope');
+  }
+
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 /**
- * The cross-author timeline (your posts + the people you follow) with a
- * composer. Self-contained: it fetches its first page on mount, so it can be
- * embedded wherever — notably the profile home's Feed tab. The host supplies the
- * page chrome and a Toaster.
+ * The cross-author timeline with a composer. Following preserves the focused
+ * timeline; Mixed explicitly adds public discovery. The selected scope is kept
+ * in the page URL so a reload restores it, while every cursor request carries
+ * the same scope independently.
  */
 export function FeedView({ onboarding = null }: FeedViewProps) {
+  const [scope, setScope] = useState<FeedScope>(scopeFromLocation);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,8 +50,10 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
   const [error, setError] = useState('');
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const requestSequenceRef = useRef(0);
 
-  const load = useCallback(async (cursor: string | null = null): Promise<void> => {
+  const load = useCallback(async (selectedScope: FeedScope, cursor: string | null = null): Promise<void> => {
+    const requestSequence = ++requestSequenceRef.current;
     if (cursor) {
       setLoadingMore(true);
     } else {
@@ -36,20 +61,44 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
     }
     setError('');
     try {
-      const response = await communityApi.feed(cursor);
+      const response = await communityApi.feed(selectedScope, cursor);
+      if (requestSequence !== requestSequenceRef.current) return;
+
       setPosts((current) => cursor ? [...current, ...response.data] : response.data);
       setNextCursor(response.next_cursor);
     } catch (err) {
+      if (requestSequence !== requestSequenceRef.current) return;
+
       setError(typeof err === 'string' ? err : 'Could not load feed.');
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestSequence === requestSequenceRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(scope);
+
+    return () => {
+      requestSequenceRef.current += 1;
+    };
+  }, [load, scope]);
+
+  const selectScope = (nextScope: FeedScope): void => {
+    if (nextScope === scope) return;
+
+    // Do not leave the previous membership's posts labelled as the newly
+    // selected feed while its first page is in flight.
+    requestSequenceRef.current += 1;
+    setPosts([]);
+    setNextCursor(null);
+    setError('');
+    setLoading(true);
+    replaceScopeInLocation(nextScope);
+    setScope(nextScope);
+  };
 
   // Auto-load the next page when the sentinel scrolls into view. The Load more
   // button stays as a fallback (and for when the observer is unavailable).
@@ -59,17 +108,41 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
 
     const observer = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting && !loadingMore) {
-        void load(nextCursor);
+        void load(scope, nextCursor);
       }
     }, { rootMargin: '300px' });
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [nextCursor, loadingMore, load]);
+  }, [nextCursor, loadingMore, load, scope]);
 
   return (
     <div className="space-y-6">
       {onboarding && <OnboardingChecklist steps={onboarding} />}
+      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Feed scope">
+        <Button
+          type="button"
+          variant={scope === 'mixed' ? 'default' : 'outline'}
+          aria-pressed={scope === 'mixed'}
+          className="h-auto justify-start whitespace-normal px-4 py-3 text-left"
+          onClick={() => selectScope('mixed')}
+        >
+          <span>
+            <strong>Mixed</strong> — <span className="font-normal">public posts from everyone, plus the people and personas you follow.</span>
+          </span>
+        </Button>
+        <Button
+          type="button"
+          variant={scope === 'following' ? 'default' : 'outline'}
+          aria-pressed={scope === 'following'}
+          className="h-auto justify-start whitespace-normal px-4 py-3 text-left"
+          onClick={() => selectScope('following')}
+        >
+          <span>
+            <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
+          </span>
+        </Button>
+      </div>
       <PostComposer onCreated={(post) => setPosts((current) => [post, ...current])} />
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (
@@ -83,7 +156,7 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
       )}
       {nextCursor && (
         <div ref={sentinelRef} className="flex justify-center">
-          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void load(nextCursor)}>
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void load(scope, nextCursor)}>
             {loadingMore ? 'Loading...' : 'Load more'}
           </Button>
         </div>

@@ -1,6 +1,6 @@
 import { fetchWrapper } from '@/fetchWrapper';
 
-import type { CommunityPost, Envelope, FeedResponse, PostComment } from './types';
+import type { CommunityPost, Envelope, FeedResponse, FeedScope, PostComment } from './types';
 
 export interface PostInput {
   body: string;
@@ -12,9 +12,11 @@ export interface PostInput {
 }
 
 export const communityApi = {
-  feed: (cursor?: string | null): Promise<FeedResponse> => {
-    const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-    return fetchWrapper.get(`/api/feed${suffix}`) as Promise<FeedResponse>;
+  feed: (scope: FeedScope, cursor?: string | null): Promise<FeedResponse> => {
+    const params = new URLSearchParams({ scope });
+    if (cursor) params.set('cursor', cursor);
+
+    return fetchWrapper.get(`/api/feed?${params.toString()}`) as Promise<FeedResponse>;
   },
   postByUlid: (ulid: string): Promise<CommunityPost> =>
     fetchWrapper.get(`/api/posts/by-ulid/${encodeURIComponent(ulid)}`).then((r) => (r as Envelope<CommunityPost>).data),

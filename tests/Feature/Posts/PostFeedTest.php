@@ -79,6 +79,49 @@ class PostFeedTest extends TestCase
         $this->assertNotContains($inactivePost->ulid, $ulids);
     }
 
+    public function test_missing_and_invalid_scope_values_use_the_following_feed(): void
+    {
+        $followed = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $this->follow($viewer, $followed);
+
+        $followedPost = Post::factory()->for($followed)->approved()->create();
+        $publicPost = Post::factory()->for($stranger)->approved()->create();
+
+        $this->assertSame(
+            $this->feedUlids($viewer),
+            $this->feedUlids($viewer, 'not-a-scope'),
+        );
+        $this->assertContains($followedPost->ulid, $this->feedUlids($viewer, 'not-a-scope'));
+        $this->assertNotContains($publicPost->ulid, $this->feedUlids($viewer, 'not-a-scope'));
+    }
+
+    public function test_mixed_scope_keeps_followed_membership_but_still_applies_viewable_by(): void
+    {
+        $followed = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $this->follow($viewer, $followed);
+
+        $followersPost = Post::factory()->for($followed)->approved()
+            ->audience(Audience::Followers)->unlisted()->create();
+        $mutualsPost = Post::factory()->for($followed)->approved()
+            ->audience(Audience::Mutuals)->create();
+
+        $ulids = $this->feedUlids($viewer, 'mixed');
+
+        $this->assertContains(
+            $followersPost->ulid,
+            $ulids,
+            'mixed adds discovery to the existing following membership instead of replacing it',
+        );
+        $this->assertNotContains(
+            $mutualsPost->ulid,
+            $ulids,
+            'mixed membership must not bypass the existing audience gate',
+        );
+    }
+
     public function test_feed_applies_the_audience_tier_of_followed_posts(): void
     {
         $followed = User::factory()->approved()->create();
@@ -175,6 +218,23 @@ class PostFeedTest extends TestCase
         $this->assertNotNull($cursor);
 
         $second = $this->actingAs($viewer)->getJson('/api/feed?cursor='.$cursor)->assertOk();
+        $this->assertCount(3, $second->json('data'));
+        $this->assertNull($second->json('next_cursor'));
+    }
+
+    public function test_mixed_feed_paginates_with_a_cursor_without_losing_its_scope(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $pageSize = (int) config('media.page_size', 24);
+        Post::factory()->for($stranger)->approved()->count($pageSize + 3)->create();
+
+        $first = $this->actingAs($viewer)->getJson('/api/feed?scope=mixed')->assertOk();
+        $this->assertCount($pageSize, $first->json('data'));
+        $cursor = $first->json('next_cursor');
+        $this->assertNotNull($cursor);
+
+        $second = $this->actingAs($viewer)->getJson('/api/feed?scope=mixed&cursor='.$cursor)->assertOk();
         $this->assertCount(3, $second->json('data'));
         $this->assertNull($second->json('next_cursor'));
     }
