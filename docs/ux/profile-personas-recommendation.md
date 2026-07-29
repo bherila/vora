@@ -1,50 +1,48 @@
 # Profile & Personas — UX Recommendation
 
-> Design study output. Decisions were taken by the product owner in an interview;
-> the implementation plan is a proposal.
+> Design study and implementation record. Decisions were taken by the product
+> owner in an interview and reconciled here with the shipped system.
 >
-> **Revision 2** — incorporates a critical review that fact-checked the first
-> draft against the code. Corrections are marked ⚠️ where the first draft was
-> wrong. Follows on from
+> **Revision 3** — reconciles the recommendation with the implementation that
+> shipped. Corrections are marked ⚠️ where an earlier draft was wrong. Follows
+> on from
 > [`ia-redesign-recommendation.md`](./ia-redesign-recommendation.md), which
 > produced today's `/me`, and answers that document's open question #2.
 >
-> **Pre-launch.** The app has no users yet. There is no data to migrate, no
-> bookmark to preserve, and no transition window to engineer. Migrations may be
-> amended in place rather than layered; constraints should simply be defined
-> correctly the first time. This removes rollout risk — it does **not** soften
-> any design flaw, since a design flaw ships with the first real user.
+> **Deployed.** This document began as a pre-launch study, but the subsystem is
+> now live. Its original in-place migration advice is historical and no longer
+> applies: schema changes must be additive so already-deployed databases receive
+> them.
 
 ## TL;DR
 
-Today `/me` is the post-login landing page and it opens on the **feed**. Signing
-in shows a to-do checklist and other people's posts — not your profile, not your
-work, and nothing resembling what a visitor sees. Personas exist but are a filter
-chip inside a card: no page of their own, no followers, no reach.
+The redesign is shipped. `/feed` is the post-login landing page; `/me` is the
+self-profile. Personas have their own pages, follow scopes, content identity,
+and privacy boundary.
 
-Six moves:
+The implementation rests on six moves:
 
-1. **Split the surfaces.** `/feed` becomes a real page again and the post-login
-   landing. `/me` becomes a real self-profile — the visitor page plus edit
+1. **Split the surfaces.** `/feed` is a real page and the post-login landing.
+   `/me` is a real self-profile — the visitor page plus edit
    affordances, with a showcase of your latest work above the fold.
 2. **Promote personas to full profiles.** Own URL (`/c/{ulid}`), own bio, own
    interests, own media/posts, own followers — and the persona's name alone on
    the byline.
 3. **Follow is one edge with a persona scope**, and **every consumer of the
-   follow graph must become persona-aware.** This is the hard part; see
+   follow graph is persona-aware.** This is the hard part; see
    [The persona-aware rule](#the-persona-aware-rule).
 4. **Global identity switcher in the navbar,** hydrated from the existing
    `initial-data` payload — shipped together with the surfaces that consume it,
    and invisible until you have a persona.
-5. **Publishing media auto-creates a Post** at moderation approval, so the feed
-   carries real activity without a union query.
-6. **Ship the explanation with the feature.** See [Inline help](#inline-help).
+5. **Publishing media or eligible stories auto-creates a Post** at moderation
+   approval, so the feed carries real activity without a union query.
+6. **The explanation ships with the feature.** See [Inline help](#inline-help).
 
 ## Decisions taken
 
 | # | Question | Decision |
 |---|----------|----------|
-| D1 | Landing surface | Profile-first `/me`; feed moves to `/feed` |
+| D1 | Landing surface | Self-profile at `/me`; post-login feed at `/feed` |
 | D2 | Persona status | Full profiles with their own URL and followers |
 | D3 | Follow direction | **Inbound only for v1** — personas are followed, they don't follow out |
 | D4 | Persona reach | Following a persona grants **that persona's content only** — including feed membership and notifications (see [B1](#b1)) |
@@ -91,14 +89,13 @@ one. **Personas stay invisible until opted into.**
 The test: **would a user who will never create one notice it?** If yes, it's in
 the wrong place.
 
-## Current state
+## Baseline state (historical)
 
-`resources/js/user/follow-profile.tsx` serves both the visitor profile and the
-owner's, branching on `is_self`: header card, interests, identity strip, and tabs
-`Home (feed) · Media · Stories · Posts · Favorites`. The owner defaults to `feed`
-(`:246`).
+The tables below record the gaps the epic started from. They are retained as
+design rationale, not as a description of the current product. The phased plan
+later in this document records the shipped state.
 
-### Gaps
+### Baseline gaps (closed)
 
 | # | Gap | Evidence |
 |---|-----|----------|
@@ -133,6 +130,27 @@ to `character->user_id`. Access must stay account-level: the owner bypass resolv
 to an account, moderation resolves to a human, and a persona-level ban invites a
 new persona.
 
+### Active authoring identity
+
+`ActiveIdentity` owns the server-side authoring choice. The navbar hydrates the
+available identities and active id from Blade; `POST /api/identity` accepts only
+a non-deleted persona owned by the signed-in user and stores its id in the
+session under `active_character_id`. A missing, stale, or deleted session id
+resolves back to the human identity. A foreign id submitted to the endpoint gets
+the same generic 404 as a missing one, so the switch cannot become an ownership
+oracle.
+
+The shared frontend identity store keeps independently mounted React roots in
+sync. The post composer and media upload dialog read it directly; new-story
+creation resolves the same session value on the server and writes it to the
+owner's `story_authors` row. An existing story author may choose their own
+persona on that per-author row.
+
+This is **authorship state only**. `ActiveIdentity` is not an input to
+`ProfileGate`, `HasPrivacyPolicy`, or ordinary `FollowGraph` decisions. Tests run
+the same privacy fixtures under different active identities to pin that
+separation.
+
 ### The follow edge
 
 ```
@@ -149,8 +167,12 @@ FKs is `nullOnDelete` (`media.character_id`), but applied here, deleting a perso
 would silently convert every persona-only follower into a **full account
 follower**. Uniqueness is `(requester_id, recipient_id, recipient_character_id)`
 — but a nullable column makes NULLs distinct in both MySQL and SQLite, so
-duplicate `(alice, ben, NULL)` rows stay insertable. Use a coalesced/generated
-column or an equivalent guard.
+duplicate `(alice, ben, NULL)` rows stay insertable. The shipped schema therefore
+adds the virtual generated column
+`recipient_scope_id = COALESCE(recipient_character_id, 0)` and makes
+`(requester_id, recipient_id, recipient_scope_id)` unique. Zero cannot be a real
+character id, so account and persona scopes are both NULL-safe on MySQL and
+SQLite.
 
 ⚠️ **`requester_character_id` is dropped from v1.** The first draft added it
 unpopulated to "avoid a migration rewrite." Adding a nullable column later is one
@@ -160,43 +182,35 @@ trivial migration; an unused column invites accidental reads.
 
 **This is the crux, and the first draft got it wrong.**
 
-<a id="b1"></a>Every consumer of the follow graph currently matches on
-`recipient_id` alone. Once persona-scoped edges exist, each such consumer
-**silently treats a persona follow as an account follow**. The first draft said
-the feed was account-level and this "falls out rather than being special-cased."
-It does not. Concrete failure:
+<a id="b1"></a>The implementation had to audit every consumer that originally
+matched `recipient_id` alone. Otherwise each would have **silently treated a
+persona follow as an account follow**. The first draft said the feed was
+account-level and this "falls out rather than being special-cased." It does not.
+The failure the shipped rule prevents is:
 
 > @alice follows **only Vex** (Separate). Her edge is `(alice → Ben, character =
 > Vex)`. `FeedController` matches `recipient_id` only, so **Ben's** posts and
 > **Kira's** posts appear in her Following feed. She followed one pseudonymous
 > persona and the human surfaced — exactly the inference D6 exists to prevent.
 
-`NotifyFollowersOfPost` has the identical bug: it selects followers by
-`recipient_id` with no character scoping, so a Vex-only follower is notified
-"Ben posted."
-
 **The rule:** a persona-scoped edge admits **only that persona's content**, for
-access, feed membership, and notifications alike. Every call site below must be
-audited and given persona context — or explicitly denied it, with a comment
-saying why.
+access, feed membership, and notifications alike.
 
-| Call site | Concern |
+| Call site | Shipped treatment |
 |---|---|
-| `HasPrivacyPolicy.php:103, 111, 114, 173` | Item-level gates; needs the outer row's character column — and for a `Character` *as* the item, that column is `characters.id` itself |
-| `ProfileGate.php:34–35` | Single profile check |
-| `ProfileGate::canViewMany()` | Plucks `recipient_id` with **no character column** — would treat every persona edge as an account follow |
-| `FollowController.php:164–165` | Mutuals filter in the directory |
-| `FollowController.php:234` | `->first()` assumes one row per pair; must filter `whereNull('recipient_character_id')` — as must `can_follow_back`, `requestFollow`, and the inbox |
-| `FeedController.php:47` | Feed membership ([B1](#b1)) |
-| `FavoriteService.php` | `canSeeCharacter()` — already drifting (gap 14); consolidate *before* this change makes it a third path |
-| `Onboarding::steps()` | `is_following` |
-| `NotifyFollowersOfPost.php` | Fan-out membership |
+| `HasPrivacyPolicy` | Supplies the outer row's character column; for a `Character` item that is `characters.id` itself |
+| `ProfileGate` and `canViewMany()` | Human-profile checks accept only account-scoped edges |
+| `FollowController` | Human mutuals, follow-back, requests and inbox queries explicitly require account scope; persona endpoints pass persona context |
+| `FeedController` | Passes `posts.character_id` into the correlated membership rule ([B1](#b1)) |
+| `FavoriteService` | Delegates persona visibility to `Character::isViewableBy()` |
+| `Onboarding::steps()` | Human-profile follow state requires an account-scoped edge |
+| `NotifyFollowersOfPost` | Fans out with `FollowGraph::followersOfIdentity()` using the post's persona context |
 
 The correlated-subquery form additionally needs a join to `characters.is_linked`
 for subsumption. **`FollowGraph` is the single auditable source of truth in both
-its boolean and SQL forms** — its own docblock says so. The rule must live there
-and nowhere else, or the two paths drift, and a drift here is a leak, not a
-display bug.
+its boolean and SQL forms**. The rule lives there and nowhere else; parity tests
+exercise identical human, Linked, and Separate fixtures because drift here is a
+leak, not a display bug.
 
 ### Linked vs Separate (D5 + D6)
 
@@ -211,29 +225,50 @@ content, @alice reasons: *"I never followed Vex, yet I can see Vex's
 followers-only posts — Vex must belong to someone I follow."* With a small follow
 list that identifies Ben.
 
-### <a id="b3"></a>Separate is a lie until these are scrubbed
+### <a id="b3"></a>The Separate boundary
 
-⚠️ **Existing surfaces already expose the persona→owner link.** Shipping the
-Separate toggle before fixing all of these ships a written guarantee the system
-does not honor:
+⚠️ **A persona page is not private if a surface one click away identifies its
+owner.** The shipped implementation treats the whole reachable surface as one
+boundary:
 
-| Surface | Leak |
+| Surface | Shipped contract |
 |---|---|
-| `FollowController::charactersStrip()` | Enumerates **every** persona's name + avatar to any viewer passing the profile gate — deliberately, per its docblock |
-| `ProfileContentController::scopeToIdentity` | Persona content tabs live on the **human's** profile |
-| `FavoriteService` | A favorited character's `href` points at `/users/{owner_id}` |
-| `StoryInvolvement` | Involvement-tagged stories tie a character to the owner |
-| `/c/{ulid}` 403-vs-404 | A "hidden but exists" response is an existence oracle. Use the `first()` + generic 404 + `authorizeOr404()` pattern that Media already uses (and that #85 is applying to Story/Post) |
-| `inherit_interests` | A Separate persona in the directory carries the owner's exact interest signature — a correlation vector |
+| Human profile and identity strip | Visitors never discover a Separate persona through its owner; persona content lives at `/c/{ulid}` |
+| Posts, stories, comments, favorites and Explore | Visitor presenters suppress cross-identity attachments and owner links; persona-authored comments remain persona-framed |
+| Follow dialogs | Show people who follow the identity, not account-vs-persona edge mechanics |
+| Notifications | Carry the public persona name and content URL without a human actor id |
+| Reports | Target the public persona/content entity while moderation resolves the owner only on the admin surface |
+| `/c/{ulid}` and persona-reachable records | Missing and hidden records share a generic 404 |
+| Interests | Linked personas may inherit; Separate personas have an explicit, initially empty rating set |
+| Media payloads and assets | `MediaPresenter::visitorView()` omits original filenames and review state. `MediaResponseService::visitorItem()` emits app-relative asset URLs containing only the media ULID; `MediaAssetController` re-authorizes and streams the object so legacy storage keys containing the uploader id never reach the visitor |
+
+The visitor contract is deliberately separate from `ownerView()` and
+`adminView()`. Owner/admin surfaces retain management metadata and human
+attribution. Visitor media detail frames a Separate item with the persona name,
+avatar, and `/c/{ulid}` link; it never assembles an uploader block ad hoc.
+`ContentIdentity` also rejects new cross-identity attachments and scrubs legacy
+rows on read. A cross-surface feature guard walks a Separate persona's reachable
+profile, media, post/comment, favorite, follow, notification, and asset surfaces
+and asserts that the owner's id, name, profile URL, filename, and storage-key
+correlators are absent.
 
 ### Bylines (D10)
 
-Invert `PostCard.tsx:194–196`. The human never appears in a byline.
+The human never appears in a persona byline. `PostPresenter` omits the account
+author from persona-authored visitor payloads. When the viewer fails the
+persona's own audience, the fallback is the **persona name only, unlinked** —
+never the human. Admin presentation restores the human account for moderation.
 
-⚠️ **Specify the fallback.** `PostPresenter::asCharacter()` currently returns
-`null` when the viewer fails the character's audience, and `PostCard` falls back
-to the human name — leaking precisely what D10 hides. After inversion, the byline
-must show the **persona name only, unlinked**, never the human.
+### Story authorship
+
+Stories remain owned and moderated by one human account, but authorship identity
+is per author. Each `story_authors` row has a nullable `character_id`: null means
+that co-author writes as themselves; a value means that co-author writes as a
+persona they own. The foreign key cascades on persona deletion, and
+`UpdateStoryAuthorIdentityRequest` scopes validation to the author so one
+co-author cannot claim another person's persona. Public presenters expose the
+selected author identity without changing the story's account-level privacy
+owner.
 
 ## Information architecture
 
@@ -275,33 +310,57 @@ becomes a real **tab rail**, absent for persona-free users.
 
 ### The persona switcher (D8)
 
-The navbar already hydrates from the Blade `initial-data` script. Extend that
-payload with `identities` and `activeIdentityId`; persist via a small
-`POST /api/identity` session key.
-
-⚠️ **Ship it with its consumers.** The first draft put the switcher in Phase 1
-while the composer, upload dialog, and story editor still take `character_id`
-from client-local state — so its help copy ("New posts, uploads, and stories will
-be from Kira") would have been false on day one. The switcher and those three
-surfaces ship together.
+The navbar hydrates `identities` and `activeIdentityId` from the Blade
+`initial-data` payload and persists changes through `POST /api/identity`. It is
+not rendered for persona-free users. The navbar, post composer, upload dialog,
+and story creation path shipped together, so the H1 help copy describes real
+behavior rather than a future promise. See [Active authoring
+identity](#active-authoring-identity) for the server contract.
 
 The session key is **authorship state only**. It must never enter a privacy
-decision — assert in tests that the gate decides identically regardless of
+decision; tests assert that the gate decides identically regardless of
 `active_character_id`.
+
+### View as
+
+Owner-only `view_as=public|follower` preview runs the real privacy stack.
+`ViewAsMode` is the typed two-mode contract. `ViewAsContext` validates that the
+signed-in user owns the exact human/persona profile being previewed, requires the
+session's active identity to match a persona preview, and returns a generic 404
+for invalid modes or identity mismatches.
+
+The context supplies a normal, non-admin `User` model with synthetic id `0`.
+That impossible id is safer than a nullable viewer or a boolean "pretend"
+branch: null means unauthenticated in existing gates and would bypass the
+authenticated-viewer paths being tested, while an out-of-band flag invites each
+presenter to implement its own approximation. Id 0 instead forces
+`ProfileGate`, `HasPrivacyPolicy`, owner/admin checks, allowlists, and correlated
+SQL scopes to execute normally without accidentally matching a real account,
+favorite, reaction, or stored follow edge.
+
+Only `FollowGraph` recognizes the request-scoped simulation. Public supplies no
+edge. Follower supplies one one-way edge to the previewed human or persona; an
+account preview subsumes Linked personas but never Separate ones, and it never
+implies the reverse edge required by Mutuals. The boolean and correlated-query
+forms share that context and have parity tests. Preview mode disables mutations
+and never changes `active_character_id`.
 
 ## Feed
 
 ### Mixed vs Following
 
-Add a `scope` parameter: `following` (today's behaviour) and `mixed` (default,
-adding `discoverable` + `Everyone` posts from any active user). `viewableBy()`
-still applies, so mixed widens *membership*, never access.
+`FeedController` accepts `scope=following|mixed`.
 
-⚠️ **Moderation note.** Posts are auto-approved at creation
-(`PostService.php:74`) while media and stories are pre-moderated. Mixed-by-default
-therefore turns every new account's feed into a distribution channel for
-unreviewed strangers' posts. `FeedController` already requires others' posts to be
-Approved — confirm that reactive moderation is still sufficient at this volume.
+| Scope | Membership |
+|---|---|
+| `following` | The viewer's own posts plus posts from account/persona identities they follow |
+| `mixed` | Everything in Following, plus discoverable, Everyone-audience posts from any active user |
+
+`following` is the settled default. Missing and unknown values also fail closed
+to Following; Mixed is an explicit opt-in because posts are reactively
+moderated. The UI stores the choice in the URL and sends it on every cursor
+request. Both scopes still require active authors, approval for other people's
+posts, and `Post::scopeViewableBy()`, so Mixed widens *membership*, never access.
 
 ### Auto-post on publish (D7)
 
@@ -310,10 +369,21 @@ pre-moderated; posts are auto-approved. Announcing at upload creates an Approved
 post wrapping a Pending attachment that `PostPresenter::canSee()` hides —
 followers see an empty shell until an admin approves.
 
-**An announcement post has no privacy of its own.** It carries the item's
-`audience`, `discoverable`, and `SpecificPeople` allowlist — omitting the
-allowlist would make the post visible to nobody — and an observer propagates any
-later change to the item, so the two can never diverge.
+The persisted controls make retries and observer runs deterministic:
+
+- `media.announce_on_approval` and `stories.announce_on_approval` are the
+  per-item preferences. New gallery uploads default the visible checkbox on;
+  new stories opt in at creation. The migration defaults existing content to
+  false, so deployment never retroactively announces old items.
+- `posts.is_announcement` marks the generated wrapper, distinguishes it from a
+  manual share of the same item, and lets synchronization find the one canonical
+  announcement.
+
+**An announcement post has no independent privacy opinion.** It copies the
+item's `audience`, `discoverable`, and `SpecificPeople` allowlist — omitting the
+allowlist would make the post visible to nobody — and observers propagate later
+item changes. A pending, rejected, unpublished, deleted, or opted-out item cannot
+leave a publishable announcement behind.
 
 Implemented as **copy-and-propagate**, not a nullable `posts.audience` resolved at
 read time. The literal form is the truer single source of truth, but
@@ -324,18 +394,25 @@ to reach the item's `audience_members` for the `SpecificPeople` tier, duplicatin
 the audience rule per attachable table. Copying gives the identical guarantee and
 leaves the feed query untouched.
 
-**The general invariant: a post may never be broader than its most restrictive
-attachment.** Enforce the clamp at write for *all* posts, not just announcements.
-A manual public post attaching a followers-only photo currently renders as an
-empty shell, because `PostPresenter::canSee()` nulls the attachment out.
-Announcements are simply the degenerate case where the post has no opinion of its
-own.
+**The general invariant: a post may never be broader than any attachment.**
+`PostService` enforces this at write for all posts, not just announcements.
+Ordered relationship tiers clamp to the stricter tier and discoverability is the
+logical intersection. `SpecificPeople` is not treated as merely "most
+restrictive": all specific allowlists are intersected, then every candidate is
+filtered through the requested relationship tier and every attachment's real
+privacy check. For example, a Followers post attaching a SpecificPeople item
+stores only allowlisted users who currently pass the Followers rule. This exact
+intersection avoids widening access when an allowlist grant and relationship
+tier disagree.
 
 Deleting the post never deletes the item, and vice versa. Re-publishing does not
 re-announce — guard on an existing attachment for that item.
 
-⚠️ **Stories cannot carry `character_id`** (gap 12). Either add a real authorship
-column or exclude stories from auto-posting in v1.
+Stories carry persona authorship on `story_authors.character_id`, not on the
+`stories` row. Their privacy remains account-scoped. Eligible account/Linked
+story announcements therefore use the account privacy identity; a story whose
+owner authors as a Separate persona is not auto-announced until byline and
+privacy identity can be represented independently without exposing the owner.
 
 ## Inline help
 
@@ -359,7 +436,7 @@ intuitive: *a secret identity builds its own audience.*
 ### Pattern
 
 `PrivacyBadge` establishes the house style: an icon opening a `Popover` with a
-bold label and a plain line, rendered owner-only. Generalise to `<HelpHint>`.
+bold label and a plain line, rendered owner-only. `<HelpHint>` generalises it.
 Persistent inline text for H1 (a rule this counter-intuitive can't hide behind a
 click); popover for visible controls; dismissible first-run for the persona
 explainer; **never a bare tooltip** — no hover target on touch.
@@ -377,12 +454,7 @@ In the dropdown footer:
 > You'll see what Kira posts. To see everything Ben makes, follow Ben too.
 > *(second sentence only when Linked)*
 
-On the Linked / Separate control.
-
-⚠️ **Also staged.** The end-state wording describes follower subsumption, which
-did not exist when #101 shipped — the same "never promise more than currently
-exists" rule applied to the persona explainer below. Now that #102 has landed,
-the end-state wording is true and the control copy can be upgraded.
+On the Linked / Separate control:
 
 ⚠️ **Write this copy pronoun-free.** The wording below parameterises the persona
 name; it must not also assert a pronoun. An earlier draft read "…can see *she's*
@@ -392,33 +464,17 @@ yours" before a name is typed. Personas are the identity feature and carry their
 own `gender`; asserting she/her over a user's chosen identity is the wrong
 default. See #132.
 
-*End state (now accurate — #102 merged):*
 > **Linked** — People visiting {name} can see this persona is yours, and anyone
 > who follows you will also see {name}'s followers-only posts.
 >
 > **Separate** — Nobody can tell {name} is yours. {name} builds a following from
 > scratch.
 
-*Shipped in #101, before persona follows existed:*
-> **Linked** — People visiting Kira can see this persona is yours.
->
-> **Separate** — Nothing on Kira's page shows it's yours.
-
 First-run persona explainer (the only persona copy a persona-free user sees).
 
-⚠️ **This copy is staged — it must never promise more than currently exists.**
-The wording below describes the end state, after persona pages (#101) and
-persona follows (#102) have shipped. Until then the explainer must claim only
-what is built, or it falls into exactly the trap this document raises for H1:
-help copy that is false on day one. **Upgrade it as each phase lands.**
-
-*End state (after #101 and #102):*
 > **Personas** are characters you create — for fiction, art, and role-play. Each
 > gets its own page, its own followers, and its own media. Your real profile
 > stays separate. Most people never need one.
-
-*Before persona pages and follows exist:* describe only the identity-and-content
-grouping that actually works, and drop the page/follower claims.
 
 **H3 — auto-posts.** Fires for everyone:
 > Share this to your followers' feeds. Unchecking keeps the upload private to your
@@ -441,7 +497,7 @@ No copy for the account-vs-persona access layering or the human recipient on the
 edge. These are implementation facts whose exposure would undermine the
 pseudonymity the model protects.
 
-## Phased plan
+## Shipped phases
 
 Gates for every phase:
 `pnpm run type-check && lint && test && build` and
@@ -450,88 +506,101 @@ Gates for every phase:
 **Inline help ships with the control it explains.** A phase that lands the
 switcher without H1 has not landed.
 
-### Phase 0 — Feed split + bio fields → issue #98 *(in progress)*
+### Phase 0 — Feed split + bio fields → issue #98 *(shipped)*
 
 `/feed` restored as a real page; `/` and `/dashboard` repointed; `users.bio` and
 `users.pronouns` added (fields only, no UI); the pinned tests updated. No schema
 beyond the one migration, no privacy surface.
 
-### Phase 1 — Make `/me` a profile *(design-dense)*
+### Phase 1 — Make `/me` a profile *(shipped)*
 
-Drop the `feed` tab; default the owner to a showcase; add the "Latest" strip;
-identity strip → avatar tab rail, **omitted with no personas**; surface
-`bio`/`pronouns` in the header and identity editor; `<HelpHint>` generalised from
-`PrivacyBadge`; move `OnboardingChecklist` to `/feed` with **no persona step**.
+The `feed` tab is gone; the owner defaults to a showcase with a "Latest" strip.
+The identity strip is an avatar tab rail, **omitted with no personas**. The
+profile surfaces `bio`/`pronouns` in the header and identity editor;
+`<HelpHint>` is generalised from `PrivacyBadge`; `OnboardingChecklist` lives on
+`/feed` with **no persona step**.
 
 No schema, no gate changes.
 
-### Phase 2 — Consolidate character visibility *(prerequisite for Phase 4)*
+### Phase 2 — Consolidate character visibility *(shipped)*
 
-Collapse `FavoriteService::canSeeCharacter()` into `Character::isViewableBy()`
-(gap 14) so Phase 4 doesn't create a third divergent path. Add persona (and user)
-targets to `StoreReportRequest` (gap 13). Pure refactor + tests.
+`FavoriteService` delegates character visibility to
+`Character::isViewableBy()`. `StoreReportRequest` accepts persona and user
+targets. This remains a pure consolidation: the shared privacy rule did not
+change.
 
-### Phase 3 — Personas as public profiles
+### Phase 3 — Personas as public profiles *(shipped)*
 
-`characters.ulid` and `is_linked` (amend the original migration — pre-launch);
+`characters.ulid` and `is_linked`;
 `GET /c/{ulid}` using the `first()` + generic-404 pattern; persona mode in the
 profile component; **byline inversion** including the audience-fail fallback;
 Linked/Separate control + H2 copy; personas in Explore/People.
 
-**Ships with the Phase 4 scrubbing**, or the Separate guarantee is false — see
-[Separate is a lie until these are scrubbed](#b3).
+The visitor surface ships with the Phase 4/Track A scrubbing described in
+[The Separate boundary](#b3).
 
-### Phase 4 — Persona follows *(privacy-critical)*
+### Phase 4 — Persona follows *(shipped; privacy-critical)*
 
 `follow_requests.recipient_character_id` with `cascadeOnDelete` and NULL-safe
 uniqueness; the persona-aware rule applied to **all nine call sites**; subsumption
-inside `FollowGraph` only; follow lists rendered by edge identity; notification
-fan-out scoped by edge; the [B3](#b3) surface scrubbing.
+inside `FollowGraph` only; follow lists rendered by public identity; notification
+fan-out scoped by edge; the [Separate boundary](#b3) surface scrubbing.
 
-Tests before UI, including the negative assertions: a follower of the owner must
+Regression tests pin the negative assertions: a follower of the owner must
 **not** see a Separate persona's followers-only content, must **not** receive its
 notifications, and must **not** see the owner's posts from a persona-only edge.
 
-### Phase 5 — Feed composition
+### Phase 5 — Feed composition *(shipped)*
 
-`scope=mixed|following`; auto-post at **approval**, carrying the allowlist;
-"Announce this" checkbox + H3 copy. Resolve the stories-authorship question
-(gap 12) or exclude stories.
+`scope=mixed|following` with Following as the default; auto-post at **approval**,
+carrying the exact audience/allowlist; "Announce this" checkbox + H3 copy.
+Story authorship uses `story_authors.character_id`; Separate-owner story
+announcements remain suppressed as described above.
 
-### Phase 6 — View as
+### Phase 6 — View as *(shipped)*
 
 Public / Follower simulation running the real gate. ⚠️ **Cut "a specific person"
 from v1** — it requires plumbing a viewer override through every payload builder
 for marginal value over the two-tier simulation.
 
-### Switcher — ships with its consumers
+### Switcher *(shipped with its consumers)*
 
 Navbar switcher + `POST /api/identity` + H1 copy, landed together with the
-composer, upload dialog, and story editor reading the session identity. Not
+composer, upload dialog, and new-story path reading the session identity. Not
 Phase 1.
 
-## Risks & open questions
+## Risks, settled decisions and deferred questions
 
 | Risk | Mitigation |
 |---|---|
 | **The persona-aware rule has two implementations** (boolean + subquery). Drift = a leak. | Keep it in `FollowGraph`; test both forms against identical fixtures including the Separate case |
-| **A call site missed in the nine-site audit** silently widens access | Make the inventory a checklist in the Phase 4 issue; require a comment at any site explicitly denied persona context |
+| **A follow-graph call site or persona-reachable surface is missed** and silently widens access or exposes the owner | Keep the route inventory and cross-surface Separate-persona guard current; require an explicit reason wherever persona context is denied |
 | **Persona session state leaking into privacy decisions** | Authorship only; assert the gate is invariant to `active_character_id` |
-| **Persona pages multiply the moderation surface** | Admin views resolve `character.user_id` regardless of Linked/Separate; gap 13 must land first |
+| **Persona pages multiply the moderation surface** | Admin views resolve `character.user_id` regardless of Linked/Separate; reports accept both user and persona targets |
 | **Blocking (not yet built) collides with Separate personas** — if @alice blocks Kira and Ben's content vanishes, she infers the link. Blocking must be account-level to prevent evasion. | Decide deliberately when blocking is designed |
-| **Mixed feed distributes unreviewed posts** | Confirm reactive moderation suffices, or pre-moderate posts |
+| **Mixed feed distributes reactively moderated posts** | Keep Following as the fail-closed default; Mixed remains explicit opt-in and still requires Approved posts from other users |
 
-**Open questions:**
+### Settled implementation decisions
 
-1. **Persona interests** — own, or inherited? `inherit_interests` exists, but a
-   Separate persona inheriting the owner's signature is a correlation vector.
-2. **Story authorship** (gap 12) — add `stories.character_id`, show
-   involvement-tagged stories including other authors', or exclude stories from
-   persona pages?
-3. **Persona follow lifecycle** — auto-accept or pending? There is no per-persona
-   `profile_audience` equivalent, and the request notification copy needs framing.
-4. **Linked meta vs owner profile audience** — "a persona of @ben" on a public
-   persona page reveals Ben to viewers who fail *his* profile gate. Probably
-   acceptable for Linked, but it should be a decision.
+1. **Persona interests.** An `interest_ratings.character_id` of null is the
+   human profile's rating. Linked personas with `inherit_interests=true` read
+   those rows; switching a Linked persona to explicit ratings copies the owner's
+   current rows as an editable starting point. Separate personas are forced to
+   `inherit_interests=false` and start with no rows, so they never expose the
+   owner's interest fingerprint.
+2. **Story authorship.** Identity is per co-author on nullable
+   `story_authors.character_id`; ownership and privacy remain on the story's
+   human account.
+3. **Persona follow lifecycle.** Persona follows auto-accept immediately. They
+   never enter the human friendship-request inbox and the API does not expose
+   the underlying account edge mechanics.
+4. **Announcement audience inheritance.** An announcement literally copies and
+   propagates the attached item's audience, discoverability, and exact
+   SpecificPeople allowlist. Manual posts compute the exact intersection of
+   their requested policy and all attachments.
+5. **Linked attribution.** Linked deliberately exposes its human owner as page
+   meta. Separate never does. Personas appear in the People directory under
+   these same rules.
 
-*Resolved:* personas appear in the People directory (per the two-graph framing).
+Blocking and chat remain deferred design work, as listed above; they are not
+implicit gaps in the shipped persona contract.
