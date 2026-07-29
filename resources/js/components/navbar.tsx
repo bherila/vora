@@ -1,8 +1,19 @@
 import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
 import { NotificationBell } from '@/community/NotificationBell';
 import { Avatar } from '@/components/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { fetchWrapper } from '@/fetchWrapper';
 import { type IdentityOption, switchActiveIdentity, useIdentityStore } from '@/identity';
 
@@ -52,7 +63,7 @@ export interface NavMenu {
 export interface AccountMenu {
   label: string;
   avatarUrl?: string | null;
-  /** When set, the avatar + name link here (the caret still opens the menu). */
+  /** Profile destination, exposed as an item in the combined account menu. */
   profileHref?: string;
   items: AccountMenuItem[];
 }
@@ -76,6 +87,47 @@ function dropdownLinkClassName(): string {
   return 'block px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]';
 }
 
+function identityValue(identityId: number | null): string {
+  return identityId === null ? 'account' : `character:${identityId}`;
+}
+
+function combinedAccountItems(accountMenu: AccountMenu | null): AccountMenuItem[] {
+  if (!accountMenu) {
+    return [];
+  }
+
+  const profileAlreadyPresent = accountMenu.items.some(
+    (item) => item.type === 'link' && item.href === accountMenu.profileHref,
+  );
+
+  if (!accountMenu.profileHref || profileAlreadyPresent) {
+    return accountMenu.items;
+  }
+
+  return [
+    { type: 'link', label: 'Profile', href: accountMenu.profileHref },
+    ...accountMenu.items,
+  ];
+}
+
+function trapMenuTab(event: KeyboardEvent<HTMLDivElement>): void {
+  if (event.key !== 'Tab') {
+    return;
+  }
+
+  event.preventDefault();
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'),
+  ).filter((item) => item.getAttribute('aria-disabled') !== 'true');
+  const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+  const direction = event.shiftKey ? -1 : 1;
+  const nextIndex = currentIndex < 0
+    ? (event.shiftKey ? items.length - 1 : 0)
+    : (currentIndex + direction + items.length) % items.length;
+
+  items[nextIndex]?.focus();
+}
+
 export default function Navbar({
   brand = { label: '', href: '/' },
   authenticated,
@@ -86,13 +138,10 @@ export default function Navbar({
 }: NavbarProps) {
   const { identities, activeIdentityId: selectedIdentityId } = useIdentityStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [identityMenuOpen, setIdentityMenuOpen] = useState(false);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityError, setIdentityError] = useState('');
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement | null>(null);
-  const identityMenuRef = useRef<HTMLDivElement | null>(null);
   const adminMenuRef = useRef<HTMLLIElement | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem('theme') as ThemeMode) || 'system');
 
@@ -103,8 +152,6 @@ export default function Navbar({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
-      if (identityMenuRef.current && !identityMenuRef.current.contains(e.target as Node)) setIdentityMenuOpen(false);
       if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setAdminMenuOpen(false);
     };
     document.addEventListener('mousedown', handler);
@@ -130,10 +177,13 @@ export default function Navbar({
   };
 
   const activeIdentity = identities.find((identity) => identity.id === selectedIdentityId) ?? identities[0] ?? null;
+  const triggerName = activeIdentity?.displayName ?? accountMenu?.label ?? '';
+  const triggerAvatarUrl = activeIdentity?.avatarUrl ?? accountMenu?.avatarUrl;
+  const accountItems = combinedAccountItems(accountMenu);
 
   const handleIdentityChange = async (identity: IdentityOption): Promise<void> => {
     if (identitySaving || identity.id === selectedIdentityId) {
-      setIdentityMenuOpen(false);
+      setUserMenuOpen(false);
       return;
     }
 
@@ -141,7 +191,7 @@ export default function Navbar({
     setIdentityError('');
     try {
       await switchActiveIdentity(identity.id);
-      setIdentityMenuOpen(false);
+      setUserMenuOpen(false);
     } catch {
       setIdentityError('Could not switch identity. Please try again.');
     } finally {
@@ -223,102 +273,87 @@ export default function Navbar({
             ))}
           </div>
         ) : (
-          <div className='relative flex items-center gap-1' ref={userMenuRef}>
-            {identities.length > 0 && activeIdentity ? (
-              <div className='relative' ref={identityMenuRef}>
-                <button
-                  type='button'
-                  className='flex items-center gap-2 rounded-md text-sm hover:underline underline-offset-4 disabled:opacity-60'
-                  onClick={() => {
-                    setIdentityMenuOpen((open) => !open);
-                    setUserMenuOpen(false);
-                  }}
-                  aria-expanded={identityMenuOpen}
-                  aria-label={`Switch identity (currently ${activeIdentity.displayName})`}
-                  disabled={identitySaving}
-                >
-                  <Avatar name={activeIdentity.displayName} src={activeIdentity.avatarUrl} sizeClassName='h-7 w-7' />
-                  <span data-identity-label className='hidden sm:inline max-w-[10rem] truncate'>{activeIdentity.displayName}</span>
-                  <ChevronDown className='hidden h-3 w-3 sm:block' aria-hidden='true' />
-                </button>
-                {identityMenuOpen && (
-                  <div
-                    className='absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19]'
-                    role='menu'
-                    aria-label='Choose identity'
-                  >
-                    <div className='py-1'>
-                      {identities.map((identity) => (
-                        <button
-                          key={identity.id ?? 'user'}
-                          type='button'
-                          role='menuitemradio'
-                          aria-checked={identity.id === selectedIdentityId}
-                          className='flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-60 dark:hover:bg-[#262625]'
-                          onClick={() => void handleIdentityChange(identity)}
-                          disabled={identitySaving}
-                        >
-                          <Avatar name={identity.displayName} src={identity.avatarUrl} sizeClassName='h-7 w-7' />
-                          <span className='truncate'>{identity.displayName}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className='border-t border-gray-200 px-4 py-3 text-xs text-gray-600 dark:border-[#3E3E3A] dark:text-[#A1A09A]'>
-                      Switching changes who you create as — never what you can see.
-                    </p>
-                    {identityError && <p className='px-4 pb-3 text-xs text-red-700 dark:text-red-300'>{identityError}</p>}
-                  </div>
-                )}
-              </div>
-            ) : accountMenu?.profileHref ? (
-              <a
-                href={safeHref(accountMenu.profileHref)}
-                className='flex items-center gap-2 text-sm hover:underline underline-offset-4'
+          <DropdownMenu
+            open={userMenuOpen}
+            onOpenChange={(open) => {
+              setUserMenuOpen(open);
+              if (open) {
+                setIdentityError('');
+              }
+            }}
+            modal
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type='button'
+                className='flex min-h-6 min-w-6 items-center gap-2 rounded-md text-sm hover:underline underline-offset-4 disabled:opacity-60'
+                aria-haspopup='menu'
+                aria-label={`Account and identity menu (currently ${triggerName})`}
+                disabled={identitySaving}
               >
-                <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
-                <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
-              </a>
-            ) : (
-              <span className='flex items-center gap-2 text-sm'>
-                <Avatar name={accountMenu?.label ?? ''} src={accountMenu?.avatarUrl} sizeClassName='h-7 w-7' />
-                <span className='hidden sm:inline max-w-[10rem] truncate'>{accountMenu?.label ?? ''}</span>
-              </span>
-            )}
-            <button
-              type='button'
-              className='rounded-md p-1 hover:bg-gray-50 dark:hover:bg-[#1f1f1e]'
-              onClick={() => setUserMenuOpen((v) => !v)}
-              aria-expanded={userMenuOpen}
-              aria-label='Account menu'
+                <Avatar name={triggerName} src={triggerAvatarUrl} sizeClassName='h-7 w-7' />
+                <span data-identity-label className='hidden max-w-[10rem] truncate sm:inline'>{triggerName}</span>
+                <ChevronDown className='h-4 w-4' aria-hidden='true' />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align='end'
+              className='w-64 p-0'
+              aria-label='Account and identity'
+              onKeyDown={trapMenuTab}
             >
-              <ChevronDown className='w-3 h-3' />
-            </button>
-            {userMenuOpen && (
-              <div className='absolute right-0 top-full mt-1 w-44 rounded-md border border-gray-200 bg-white shadow-lg dark:border-[#3E3E3A] dark:bg-[#1a1a19] z-50'>
-                {accountMenu?.items.map((item) => (
+              {identities.length > 0 && activeIdentity && (
+                <>
+                  <DropdownMenuRadioGroup value={identityValue(selectedIdentityId)}>
+                    <DropdownMenuLabel className='px-4 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+                      Acting as
+                    </DropdownMenuLabel>
+                    {identities.map((identity) => (
+                      <DropdownMenuRadioItem
+                        key={identity.id ?? 'user'}
+                        value={identityValue(identity.id)}
+                        closeOnClick={false}
+                        disabled={identitySaving}
+                        className='min-h-6 rounded-none py-2 pl-4 pr-4'
+                        onClick={() => void handleIdentityChange(identity)}
+                      >
+                        <Avatar name={identity.displayName} src={identity.avatarUrl} sizeClassName='h-7 w-7' />
+                        <span className='truncate'>{identity.displayName}</span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <p className='border-t border-gray-200 px-4 py-3 text-xs text-gray-600 dark:border-[#3E3E3A] dark:text-[#A1A09A]'>
+                    Switching changes who you create as — never what you can see.
+                  </p>
+                  {identityError && (
+                    <p className='px-4 pb-3 text-xs text-red-700 dark:text-red-300'>{identityError}</p>
+                  )}
+                  <DropdownMenuSeparator className='m-0' />
+                </>
+              )}
+              <DropdownMenuGroup className='py-1'>
+                {accountItems.map((item) => (
                   item.type === 'link' ? (
-                    <a
+                    <DropdownMenuItem
                       key={`${item.href}:${item.label}`}
-                      href={safeHref(item.href)}
-                      className={dropdownLinkClassName()}
-                      onClick={() => setUserMenuOpen(false)}
+                      asChild
+                      className='min-h-6 rounded-none px-4 py-2'
                     >
-                      {item.label}
-                    </a>
+                      <a href={safeHref(item.href)}>{item.label}</a>
+                    </DropdownMenuItem>
                   ) : (
-                    <button
+                    <DropdownMenuItem
                       key={`${item.action}:${item.label}`}
-                      type='button'
-                      className='w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-[#262625]'
+                      className='min-h-6 cursor-pointer rounded-none px-4 py-2'
                       onClick={() => void handleLogout()}
                     >
                       {item.label}
-                    </button>
+                    </DropdownMenuItem>
                   )
                 ))}
-              </div>
-            )}
-          </div>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         {/* Tri-state theme toggle */}

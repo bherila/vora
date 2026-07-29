@@ -92,7 +92,7 @@
       $__accountMenu = $__isAuthenticated ? [
         'label' => $__currentUser->display_name ?: $__currentUser->name,
         'avatarUrl' => $__accountAvatarUrl,
-        // The avatar + name link straight to the profile; the caret opens this menu.
+        // The combined account/identity menu always exposes this profile destination.
         'profileHref' => route('me', [], false),
         'items' => array_values(array_filter([
           empty($__identities) ? null : ['type' => 'link', 'label' => 'Profile', 'href' => route('me', [], false)],
