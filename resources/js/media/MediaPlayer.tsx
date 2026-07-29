@@ -30,7 +30,7 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
     if (!item.url) {
       return <p className="text-sm text-muted-foreground">Unavailable.</p>;
     }
-    return <ProtectedImage src={item.url} alt={item.title ?? item.original_filename} className={className} />;
+    return <ProtectedImage src={item.url} alt={item.title || item.original_filename || 'Untitled media'} className={className} />;
   }
 
   // Video.

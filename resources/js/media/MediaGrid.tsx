@@ -53,7 +53,7 @@ interface MediaCardProps {
 }
 
 function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCardProps) {
-  const label = item.title || item.original_filename;
+  const label = item.title || item.original_filename || 'Untitled media';
   const preview = (
     <div className="relative aspect-video bg-muted">
       <MediaThumbnail item={item} />
@@ -106,7 +106,7 @@ function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCar
 }
 
 function MediaThumbnail({ item }: { item: MediaItem }) {
-  const alt = item.title ?? item.original_filename;
+  const alt = item.title || item.original_filename || 'Untitled media';
 
   // Prefer the lightweight thumbnail/poster. Photos can fall back to the signed
   // original; videos without a poster show a neutral placeholder rather than

@@ -122,7 +122,11 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       case 'interest':
         return interests.map((interest) => ({ type: 'interest', id: interest.id, label: interest.name }));
       case 'media':
-        return media.map((item) => ({ type: 'media', id: item.id, label: item.title ?? item.original_filename }));
+        return media.map((item) => ({
+          type: 'media',
+          id: item.id,
+          label: item.title ?? item.original_filename ?? 'Untitled media',
+        }));
       case 'story':
         return stories.map((story) => ({ type: 'story', id: story.id, label: story.title }));
       default:

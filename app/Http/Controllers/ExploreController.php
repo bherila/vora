@@ -119,7 +119,7 @@ class ExploreController extends Controller
             ->paginate((int) config('media.page_size', 24));
 
         return $this->favorites->annotateListing(
-            $this->responder->page($paginator, includeOriginalVideoUrls: false),
+            $this->responder->visitorPage($paginator),
             $request->user(),
             'media',
         );

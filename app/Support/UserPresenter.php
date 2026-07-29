@@ -68,6 +68,10 @@ class UserPresenter
             return null;
         }
 
+        if ($viewer?->id !== $picture->user_id && ! $viewer?->isAdmin()) {
+            return $responder->visitorAssetUrl($picture);
+        }
+
         $payload = $responder->item($picture, resolveHls: false);
 
         return $payload['thumbnail_url'] ?? $payload['url'] ?? null;

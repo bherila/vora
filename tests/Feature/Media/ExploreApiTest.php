@@ -91,6 +91,23 @@ class ExploreApiTest extends TestCase
             ->assertJsonMissingPath('data.0.moderation_status');
     }
 
+    public function test_explore_uses_filename_free_visitor_media_shape(): void
+    {
+        $this->fakeStorage();
+        $other = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($other)->approved()->create([
+            'original_filename' => 'sentinel-private-name.jpg',
+            'title' => null,
+        ]);
+
+        $this->actingAs($viewer)->getJson('/api/explore')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $media->id)
+            ->assertJsonMissingPath('data.0.original_filename')
+            ->assertJsonPath('data.0.url', "/api/media/by-ulid/{$media->ulid}/asset/original");
+    }
+
     public function test_explore_excludes_viewers_own_unlisted_media(): void
     {
         $this->fakeStorage();
