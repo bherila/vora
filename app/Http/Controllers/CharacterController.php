@@ -212,8 +212,6 @@ class CharacterController extends Controller
             'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
             'user_type' => $userType,
             'user_type_other' => $userType === 'other' ? ($data['user_type_other'] ?? null) : null,
-            'preferred_user_types' => $data['preferred_user_types'] ?? null,
-            'preferred_genders' => $data['preferred_genders'] ?? null,
         ];
     }
 

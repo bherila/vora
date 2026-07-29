@@ -90,6 +90,7 @@ class CharacterTest extends TestCase
                 'gender' => 'other',
                 'gender_other' => 'nonbinary',
                 'user_type' => 'furry',
+                'discoverable' => false,
                 'preferred_user_types' => ['human', 'furry'],
                 'preferred_genders' => ['female', 'other'],
             ])
@@ -99,9 +100,16 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.audience_user_ids', [])
             ->assertJsonPath('data.gender_other', 'nonbinary')
             ->assertJsonPath('data.user_type', 'furry')
+            ->assertJsonPath('data.discoverable', false)
             ->assertJsonPath('data.inherit_interests', true)
             ->assertJsonPath('data.is_linked', true)
+            ->assertJsonMissingPath('data.preferred_user_types')
+            ->assertJsonMissingPath('data.preferred_genders')
             ->json('data.id');
+
+        $createdCharacter = Character::query()->findOrFail($created);
+        $this->assertNull($createdCharacter->preferred_user_types);
+        $this->assertNull($createdCharacter->preferred_genders);
 
         $this->patchJson("/api/characters/{$created}", [
             'display_name' => 'Nova Prime',
@@ -110,6 +118,7 @@ class CharacterTest extends TestCase
             'gender_other' => null,
             'user_type' => 'other',
             'user_type_other' => 'construct',
+            'discoverable' => true,
             'preferred_user_types' => null,
             'preferred_genders' => null,
         ])
@@ -118,8 +127,34 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.gender_other', null)
             ->assertJsonPath('data.user_type', 'other')
             ->assertJsonPath('data.user_type_other', 'construct')
-            ->assertJsonPath('data.preferred_user_types', [])
+            ->assertJsonPath('data.discoverable', true)
+            ->assertJsonMissingPath('data.preferred_user_types')
             ->assertJsonPath('data.is_linked', true);
+    }
+
+    public function test_separate_persona_discovery_defaults_are_independent_from_owner_preferences(): void
+    {
+        $user = User::factory()->approved()->create([
+            'preferred_user_types' => ['other'],
+            'preferred_genders' => ['other'],
+        ]);
+
+        $created = $this->actingAs($user)
+            ->postJson('/api/characters', [
+                'display_name' => 'Independent',
+                'is_linked' => false,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.discoverable', true)
+            ->assertJsonMissingPath('data.preferred_user_types')
+            ->assertJsonMissingPath('data.preferred_genders')
+            ->json('data.id');
+
+        $character = Character::query()->findOrFail($created);
+        $this->assertFalse($character->is_linked);
+        $this->assertTrue($character->discoverable);
+        $this->assertNull($character->preferred_user_types);
+        $this->assertNull($character->preferred_genders);
     }
 
     public function test_owner_can_switch_a_persona_between_linked_and_separate(): void

@@ -151,6 +151,21 @@ This is **authorship state only**. `ActiveIdentity` is not an input to
 the same privacy fixtures under different active identities to pin that
 separation.
 
+### Persona discovery preferences
+
+A persona has one identity-level discovery choice: `discoverable` controls
+whether an Everyone-audience persona is listed in Explore and People search or
+remains reachable only by direct link. It defaults independently on the persona
+and is never copied from the owner's account settings.
+
+Persona `preferred_user_types` and `preferred_genders` are not supported editing
+fields. Those names describe what an identity wants to see, but personas do not
+browse; switching identity never changes the viewing context. Reinterpreting
+them as "show this persona to..." would introduce a new targeting and
+correlation surface, so persona discovery remains interest-based. The existing
+nullable database columns are dormant legacy schema and are not accepted or
+returned by the persona management API.
+
 ### The follow edge
 
 ```
@@ -601,6 +616,10 @@ Phase 1.
 5. **Linked attribution.** Linked deliberately exposes its human owner as page
    meta. Separate never does. Personas appear in the People directory under
    these same rules.
+6. **Persona discovery.** `discoverable` is an independently edited listing
+   switch. Persona `preferred_user_types` / `preferred_genders` are unsupported;
+   personas do not have a viewing context, and discovery matching remains based
+   on the persona's independent interest ratings.
 
 Blocking and chat remain deferred design work, as listed above; they are not
 implicit gaps in the shipped persona contract.
