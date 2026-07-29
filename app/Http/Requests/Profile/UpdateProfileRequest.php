@@ -21,8 +21,8 @@ class UpdateProfileRequest extends FormRequest
         $userId = $this->user()?->id;
 
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'display_name' => ['required', 'string', 'max:255'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'display_name' => ['sometimes', 'required', 'string', 'max:255'],
             'bio' => ['nullable', 'string', 'max:1000'],
             'pronouns' => ['nullable', 'string', 'max:40'],
             'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
@@ -45,6 +45,7 @@ class UpdateProfileRequest extends FormRequest
             'notify_co_author_invite_accepted' => ['sometimes', 'boolean'],
             'notify_favorite' => ['sometimes', 'boolean'],
             'email' => [
+                'sometimes',
                 'required',
                 'string',
                 'email',

@@ -143,6 +143,28 @@ class ProfileSettingsTest extends TestCase
     }
 
     #[Test]
+    public function notification_preferences_can_be_saved_without_identity_fields(): void
+    {
+        $user = User::factory()->approved()->create([
+            'name' => 'Unchanged Name',
+            'display_name' => 'Unchanged Display',
+            'email' => 'unchanged@example.com',
+            'notify_post_comment' => true,
+        ]);
+
+        $this->actingAs($user)->patchJson('/api/account', [
+            'notify_post_comment' => false,
+        ])->assertOk()
+            ->assertJsonPath('data.notify_post_comment', false);
+
+        $user->refresh();
+        $this->assertFalse($user->notify_post_comment);
+        $this->assertSame('Unchanged Name', $user->name);
+        $this->assertSame('Unchanged Display', $user->display_name);
+        $this->assertSame('unchanged@example.com', $user->email);
+    }
+
+    #[Test]
     public function users_can_update_and_clear_their_bio_and_pronouns(): void
     {
         $user = User::factory()->approved()->create();
