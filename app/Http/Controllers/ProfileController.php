@@ -261,9 +261,9 @@ class ProfileController extends Controller
         }
 
         $data = $request->validated();
-        $emailChanged = $user->email !== $data['email'];
-        $nameChanged = $user->name !== $data['name'];
-        $displayNameChanged = $user->display_name !== $data['display_name'];
+        $emailChanged = array_key_exists('email', $data) && $user->email !== $data['email'];
+        $nameChanged = array_key_exists('name', $data) && $user->name !== $data['name'];
+        $displayNameChanged = array_key_exists('display_name', $data) && $user->display_name !== $data['display_name'];
         if ($nameChanged && $user->name_locked) {
             return response()->json([
                 'success' => false,

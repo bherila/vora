@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { type Audience } from '@/lib/audience';
@@ -113,6 +114,9 @@ interface UserSettingsResponse {
 interface AccountPayload {
   name: string;
   email: string;
+}
+
+interface NotificationPayload {
   notify_new_post: boolean;
   notify_post_reaction: boolean;
   notify_post_comment: boolean;
@@ -121,6 +125,14 @@ interface AccountPayload {
   notify_co_author_invite: boolean;
   notify_co_author_invite_accepted: boolean;
   notify_favorite: boolean;
+}
+
+const SETTINGS_TABS = ['account', 'notifications', 'security', 'data'] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+function tabFromUrl(): SettingsTab {
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  return SETTINGS_TABS.includes(tab as SettingsTab) ? tab as SettingsTab : 'account';
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -200,9 +212,10 @@ function normalizeNumberList(value: unknown): number[] {
     : [];
 }
 
-function UserSettingsPage() {
+export function UserSettingsPage() {
   const initialData = getInitialData();
 
+  const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromUrl);
   const [accountName, setAccountName] = useState(initialData.name);
   const [accountBirthDate] = useState(initialData.birth_date);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
@@ -230,9 +243,13 @@ function UserSettingsPage() {
   const [pushMessage, setPushMessage] = useState('');
   const [pushError, setPushError] = useState('');
   const [accountSaving, setAccountSaving] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
   const [accountMessage, setAccountMessage] = useState('');
   const [accountError, setAccountError] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationError, setNotificationError] = useState('');
+  const [dataError, setDataError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
@@ -275,13 +292,36 @@ function UserSettingsPage() {
     };
   }, []);
 
-  const applyResponseData = (data: UserSettingsResponse['data']) => {
+  useEffect(() => {
+    const handlePopState = (): void => setActiveTab(tabFromUrl());
+    window.addEventListener('popstate', handlePopState);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleTabChange = (value: string): void => {
+    const nextTab = SETTINGS_TABS.includes(value as SettingsTab) ? value as SettingsTab : 'account';
+    setActiveTab(nextTab);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', nextTab);
+    window.history.pushState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  const applyAccountResponseData = (data: UserSettingsResponse['data']) => {
     if (!data) {
       return;
     }
 
     setAccountName(data.name);
     setAccountEmail(data.email);
+  };
+
+  const applyNotificationResponseData = (data: UserSettingsResponse['data']) => {
+    if (!data) {
+      return;
+    }
+
     setNotifyNewPost(data.notify_new_post);
     setNotifyPostReaction(data.notify_post_reaction);
     setNotifyPostComment(data.notify_post_comment);
@@ -296,9 +336,7 @@ function UserSettingsPage() {
   // (display name, gender, type, audience, interests, picture) are edited on /me.
   // Those fields are nullable/sometimes on the endpoint, so omitting them here
   // leaves them untouched — the account form can never clobber a /me edit.
-  const buildAccountPayload = (overrides: Partial<Pick<AccountPayload, 'name' | 'email'>> = {}): AccountPayload => ({
-    name: overrides.name ?? accountName.trim(),
-    email: overrides.email ?? accountEmail.trim(),
+  const buildNotificationPayload = (): NotificationPayload => ({
     notify_new_post: notifyNewPost,
     notify_post_reaction: notifyPostReaction,
     notify_post_comment: notifyPostComment,
@@ -317,7 +355,7 @@ function UserSettingsPage() {
       await fetchWrapper.post('/api/account/deactivate', {});
       window.location.href = '/account/deactivated';
     } catch (err) {
-      setAccountError(typeof err === 'string' ? err : 'Failed to deactivate account.');
+      setDataError(typeof err === 'string' ? err : 'Failed to deactivate account.');
     }
   };
 
@@ -329,7 +367,7 @@ function UserSettingsPage() {
       await fetchWrapper.post('/api/account/delete', {});
       window.location.href = '/login';
     } catch (err) {
-      setAccountError(typeof err === 'string' ? err : 'Failed to delete account.');
+      setDataError(typeof err === 'string' ? err : 'Failed to delete account.');
     }
   };
 
@@ -388,17 +426,35 @@ function UserSettingsPage() {
     setAccountMessage('');
 
     try {
-      const response = await fetchWrapper.patch('/api/account', buildAccountPayload({
+      const response = await fetchWrapper.patch('/api/account', {
         name,
         email,
-      })) as UserSettingsResponse;
+      } satisfies AccountPayload) as UserSettingsResponse;
 
       setAccountMessage(response.message ?? 'Account updated.');
-      applyResponseData(response.data);
+      applyAccountResponseData(response.data);
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to update account.');
     } finally {
       setAccountSaving(false);
+    }
+  };
+
+  const handleNotificationSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setNotificationSaving(true);
+    setNotificationError('');
+    setNotificationMessage('');
+
+    try {
+      const response = await fetchWrapper.patch('/api/account', buildNotificationPayload()) as UserSettingsResponse;
+
+      setNotificationMessage(response.message ?? 'Notification preferences updated.');
+      applyNotificationResponseData(response.data);
+    } catch (err) {
+      setNotificationError(typeof err === 'string' ? err : 'Failed to update notification preferences.');
+    } finally {
+      setNotificationSaving(false);
     }
   };
 
@@ -416,152 +472,161 @@ function UserSettingsPage() {
         </CardContent>
       </Card>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold">Account &amp; security</h2>
-        <Card>
-          <CardHeader>
-            <CardTitle>Account information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {accountError && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{accountError}</AlertDescription>
-              </Alert>
-            )}
-            {accountMessage && (
-              <Alert className="mb-4">
-                <AlertDescription>{accountMessage}</AlertDescription>
-              </Alert>
-            )}
-            <form className="space-y-4" onSubmit={(event) => void handleAccountSubmit(event)}>
-              <div className="space-y-1">
-                <Label htmlFor="account-name">Real name</Label>
-                <Input
-                  id="account-name"
-                  value={accountName}
-                  disabled={nameLocked}
-                  onChange={(event) => setAccountName(event.target.value)}
-                  autoComplete="name"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Used for account review and ID verification. Your real name is never displayed to others.
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList
+          aria-label="Settings sections"
+          className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4"
+        >
+          <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="data">Data &amp; account</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="account">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {accountError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>{accountError}</AlertDescription>
+                </Alert>
+              )}
+              {accountMessage && (
+                <Alert className="mb-4">
+                  <AlertDescription>{accountMessage}</AlertDescription>
+                </Alert>
+              )}
+              <form className="space-y-4" onSubmit={(event) => void handleAccountSubmit(event)}>
+                <div className="space-y-1">
+                  <Label htmlFor="account-name">Real name</Label>
+                  <Input
+                    id="account-name"
+                    value={accountName}
+                    disabled={nameLocked}
+                    onChange={(event) => setAccountName(event.target.value)}
+                    autoComplete="name"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used for account review and ID verification. Your real name is never displayed to others.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Birth date</Label>
+                  <p className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                    {accountBirthDate || 'Not provided'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Used to verify age eligibility and never displayed to others. Contact an administrator if this date is incorrect.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="account-email">Email</Label>
+                  <Input
+                    id="account-email"
+                    type="email"
+                    value={accountEmail}
+                    disabled={emailLocked}
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
                 </p>
-              </div>
-              <div className="space-y-1">
-                <Label>Birth date</Label>
-                <p className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
-                  {accountBirthDate || 'Not provided'}
+                <p className="text-sm text-muted-foreground">
+                  {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Used to verify age eligibility and never displayed to others. Contact an administrator if this date is incorrect.
+                <p className="text-sm text-muted-foreground">
+                  ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
                 </p>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="account-email">Email</Label>
-                <Input
-                  id="account-email"
-                  type="email"
-                  value={accountEmail}
-                  disabled={emailLocked}
-                  onChange={(event) => setAccountEmail(event.target.value)}
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
-              </p>
-              <div className="space-y-3 rounded-md border border-input p-3">
-                <p className="text-sm font-medium">In-app notifications</p>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyNewPost}
-                    onChange={(event) => setNotifyNewPost(event.target.checked)}
-                  />
-                  Notify me when someone I follow posts
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyPostReaction}
-                    onChange={(event) => setNotifyPostReaction(event.target.checked)}
-                  />
-                  Notify me when someone reacts to my post
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyPostComment}
-                    onChange={(event) => setNotifyPostComment(event.target.checked)}
-                  />
-                  Notify me when someone comments on my post
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyFollowRequest}
-                    onChange={(event) => setNotifyFollowRequest(event.target.checked)}
-                  />
-                  Notify me when I receive a follow request
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyFollowAccepted}
-                    onChange={(event) => setNotifyFollowAccepted(event.target.checked)}
-                  />
-                  Notify me when one of my follow requests is accepted
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyCoAuthorInvite}
-                    onChange={(event) => setNotifyCoAuthorInvite(event.target.checked)}
-                  />
-                  Notify me when I receive a co-author invite
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyCoAuthorInviteAccepted}
-                    onChange={(event) => setNotifyCoAuthorInviteAccepted(event.target.checked)}
-                  />
-                  Notify me when a co-author invite is accepted
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={notifyFavorite}
-                    onChange={(event) => setNotifyFavorite(event.target.checked)}
-                  />
-                  Notify me when someone saves my content
-                </label>
-                <p className="text-xs text-muted-foreground">Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.</p>
-              </div>
+                <Button type="submit" disabled={accountSaving}>
+                  {accountSaving ? 'Saving...' : 'Save account information'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification preferences</CardTitle>
+              <CardDescription>
+                Save in-app preferences with the button below. Browser push changes save immediately for this device.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {notificationError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{notificationError}</AlertDescription>
+                </Alert>
+              )}
+              {notificationMessage && (
+                <Alert>
+                  <AlertDescription>{notificationMessage}</AlertDescription>
+                </Alert>
+              )}
+              <form className="space-y-4" onSubmit={(event) => void handleNotificationSubmit(event)}>
+                <fieldset className="space-y-3 rounded-md border border-input p-3">
+                  <legend className="px-1 text-sm font-medium">In-app notifications</legend>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyNewPost} onChange={(event) => setNotifyNewPost(event.target.checked)} />
+                    Notify me when someone I follow posts
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyPostReaction} onChange={(event) => setNotifyPostReaction(event.target.checked)} />
+                    Notify me when someone reacts to my post
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyPostComment} onChange={(event) => setNotifyPostComment(event.target.checked)} />
+                    Notify me when someone comments on my post
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyFollowRequest} onChange={(event) => setNotifyFollowRequest(event.target.checked)} />
+                    Notify me when I receive a follow request
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyFollowAccepted} onChange={(event) => setNotifyFollowAccepted(event.target.checked)} />
+                    Notify me when one of my follow requests is accepted
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyCoAuthorInvite} onChange={(event) => setNotifyCoAuthorInvite(event.target.checked)} />
+                    Notify me when I receive a co-author invite
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyCoAuthorInviteAccepted} onChange={(event) => setNotifyCoAuthorInviteAccepted(event.target.checked)} />
+                    Notify me when a co-author invite is accepted
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyFavorite} onChange={(event) => setNotifyFavorite(event.target.checked)} />
+                    Notify me when someone saves my content
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.
+                  </p>
+                </fieldset>
+                <Button type="submit" disabled={notificationSaving}>
+                  {notificationSaving ? 'Saving...' : 'Save notification preferences'}
+                </Button>
+              </form>
+
               <div className="space-y-3 rounded-md border border-input p-3">
                 <div>
                   <p className="text-sm font-medium">Browser push notifications</p>
+                  <p className="text-xs text-muted-foreground">Enable and disable actions save immediately for this device.</p>
                   <p className="text-xs text-muted-foreground">
                     {pushSupported
                       ? `This account has ${pushSubscriptionCount} subscribed ${pushSubscriptionCount === 1 ? 'device' : 'devices'}.`
                       : 'This browser does not support push notifications.'}
                   </p>
                 </div>
-                {pushMessage && (
-                  <Alert>
-                    <AlertDescription>{pushMessage}</AlertDescription>
-                  </Alert>
-                )}
-                {pushError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{pushError}</AlertDescription>
-                  </Alert>
-                )}
+                {pushMessage && <Alert><AlertDescription>{pushMessage}</AlertDescription></Alert>}
+                {pushError && <Alert variant="destructive"><AlertDescription>{pushError}</AlertDescription></Alert>}
                 {pushSupported && !initialData.web_push_public_key && (
                   <p className="text-sm text-muted-foreground">Browser push is not configured.</p>
                 )}
@@ -581,76 +646,70 @@ function UserSettingsPage() {
                   </div>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
-              </p>
-              <Button type="submit" disabled={accountSaving}>
-                {accountSaving ? 'Saving...' : 'Save account settings'}
-              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-4">
+          {passkeyMessage && <Alert><AlertDescription>{passkeyMessage}</AlertDescription></Alert>}
+          <PasskeySection
+            components={getAuthComponents()}
+            onSuccess={(message) => setPasskeyMessage(message)}
+            onError={(_field, message) => setPasskeyMessage(message)}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Password</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {passwordError && <Alert variant="destructive"><AlertDescription>{passwordError}</AlertDescription></Alert>}
+              {passwordMessage && <Alert><AlertDescription>{passwordMessage}</AlertDescription></Alert>}
+              <ChangePasswordForm
+                components={getAuthComponents()}
+                onSuccess={(result) => {
+                  setPasswordMessage(result.message ?? 'Password changed successfully.');
+                  setPasswordError('');
+                }}
+                onError={(message) => {
+                  setPasswordError(message);
+                  setPasswordMessage('');
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="data" className="space-y-4">
+          {dataError && <Alert variant="destructive"><AlertDescription>{dataError}</AlertDescription></Alert>}
+          <Card>
+            <CardHeader>
+              <CardTitle>Export account data</CardTitle>
+              <CardDescription>Download a copy of your account and content data.</CardDescription>
+            </CardHeader>
+            <CardContent>
               <Button type="button" variant="outline" onClick={handleExportAccount}>
                 Export account data
               </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {passkeyMessage && (
-          <Alert>
-            <AlertDescription>{passkeyMessage}</AlertDescription>
-          </Alert>
-        )}
-        <PasskeySection
-          components={getAuthComponents()}
-          onSuccess={(message) => setPasskeyMessage(message)}
-          onError={(_field, message) => setPasskeyMessage(message)}
-        />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Password</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {passwordError && (
-              <Alert variant="destructive">
-                <AlertDescription>{passwordError}</AlertDescription>
-              </Alert>
-            )}
-            {passwordMessage && (
-              <Alert>
-                <AlertDescription>{passwordMessage}</AlertDescription>
-              </Alert>
-            )}
-            <ChangePasswordForm
-              components={getAuthComponents()}
-              onSuccess={(result) => {
-                setPasswordMessage(result.message ?? 'Password changed successfully.');
-                setPasswordError('');
-              }}
-              onError={(message) => {
-                setPasswordError(message);
-                setPasswordMessage('');
-              }}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Deactivate or delete</CardTitle>
-            <CardDescription>
-              Deactivating hides your account from other users and can be reversed by logging back in. Deleting is permanent for you — only an admin can restore it.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Button type="button" variant="outline" onClick={() => void handleDeactivateAccount()}>
-              Deactivate account
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => void handleDeleteAccount()}>
-              Delete account
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Deactivate or delete</CardTitle>
+              <CardDescription>
+                Deactivating hides your account from other users and can be reversed by logging back in. Deleting is permanent for you — only an admin can restore it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              <Button type="button" variant="outline" onClick={() => void handleDeactivateAccount()}>
+                Deactivate account
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void handleDeleteAccount()}>
+                Delete account
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
       <Toaster position="top-right" richColors closeButton />
     </div>
   );
