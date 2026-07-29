@@ -40,6 +40,7 @@ export default defineConfig({
                 'resources/js/user/follow-directory.tsx',
                 'resources/js/user/follow-profile.tsx',
                 'resources/js/user/follow-requests.tsx',
+                'resources/js/user/persona-editor.tsx',
                 'resources/js/user/persona-profile.tsx',
                 'resources/js/media/view.tsx',
                 'resources/js/stories/page.tsx',

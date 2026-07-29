@@ -18,14 +18,13 @@ import { fetchWrapper } from '@/fetchWrapper';
 import {
   removeIdentityOption,
   switchActiveIdentity,
-  upsertIdentityOption,
   useIdentityStore,
 } from '@/identity';
 import { readInitialData } from '@/initialData';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
-import { CharacterEditorDialog, type CharacterRecord } from '@/user/CharacterEditorDialog';
+import type { CharacterRecord } from '@/user/persona-editor';
 import { type PersonaProfileData, PersonaProfileView } from '@/user/persona-profile';
 import { type ProfileEditable, ProfileIdentityEditor } from '@/user/profile-identity-editor';
 import { GridSkeleton, MediaListTab, PostsListTab, StoriesListTab, TabEmpty, TabError, useProfileList } from '@/user/profile-tabs';
@@ -97,15 +96,6 @@ function getPersonaProfile(): PersonaProfileData | null {
 
 function getHydratedActiveIdentity(): number | null {
   return readInitialData<{ navbar?: { activeIdentityId?: number | null } }>().navbar?.activeIdentityId ?? null;
-}
-
-/** Identity-rail data derived from a full character record. */
-function characterRefFrom(record: CharacterRecord): CharacterRef {
-  return {
-    id: record.id,
-    display_name: record.display_name,
-    avatar_url: record.profile_picture?.thumbnail_url ?? record.profile_picture?.url ?? null,
-  };
 }
 
 function profileQuery(identity: number | null, viewAs: ProfileViewAs | null = null): string {
@@ -183,7 +173,7 @@ interface IdentityRailProps {
   identity: number | null;
   counts: IdentityCounts | null;
   onSelect: (identity: number | null) => void;
-  onCreate?: (() => void) | undefined;
+  createHref?: string | undefined;
 }
 
 /**
@@ -191,7 +181,7 @@ interface IdentityRailProps {
  * persona), with per-identity content totals on the owner's own page. Rendered
  * only when at least one persona exists — a lone "You" tab explains nothing.
  */
-function IdentityRail({ profile, identity, counts, onSelect, onCreate }: IdentityRailProps) {
+function IdentityRail({ profile, identity, counts, onSelect, createHref }: IdentityRailProps) {
   const railItems: { key: string; id: number | null; name: string; avatar_url: string | null | undefined; count: number | undefined }[] = [
     { key: 'self', id: null, name: profile.display_name, avatar_url: profile.avatar_url, count: counts?.self },
     ...profile.characters.map((character) => ({
@@ -228,17 +218,16 @@ function IdentityRail({ profile, identity, counts, onSelect, onCreate }: Identit
           </button>
         );
       })}
-      {onCreate && (
-        <button
-          type="button"
-          onClick={onCreate}
+      {createHref && (
+        <a
+          href={createHref}
           className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg px-2 py-2 text-center text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-border">
             <Plus className="h-5 w-5" aria-hidden="true" />
           </span>
           <span className="w-full truncate text-xs font-medium">New persona</span>
-        </button>
+        </a>
       )}
     </nav>
   );
@@ -301,8 +290,6 @@ export function FollowProfilePage() {
   const [profileMedia, setProfileMedia] = useState<ProfileMediaData>(getProfileMedia);
   const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
   const [identityCounts] = useState<IdentityCounts | null>(getIdentityCounts);
-  const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
-  const [editingCharacter, setEditingCharacter] = useState<CharacterRecord | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const { activeIdentityId } = useIdentityStore();
@@ -354,51 +341,6 @@ export function FollowProfilePage() {
       loadProfile();
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Unable to send follow request.');
-    }
-  };
-
-  const openCreateCharacter = (): void => {
-    setEditingCharacter(null);
-    setCharacterDialogOpen(true);
-  };
-
-  // Keep the full character records (for the editor) and the identity rail in
-  // step after a create/update/delete.
-  const handleCharacterSaved = (record: CharacterRecord): void => {
-    setProfileCharacters((current) => current.some((c) => c.id === record.id)
-      ? current.map((c) => (c.id === record.id ? record : c))
-      : [record, ...current]);
-    setProfile((current) => {
-      if (!current) return current;
-      const ref = characterRefFrom(record);
-      const exists = current.characters.some((c) => c.id === record.id);
-      return { ...current, characters: exists ? current.characters.map((c) => (c.id === record.id ? ref : c)) : [...current.characters, ref] };
-    });
-    setProfileMedia((current) => {
-      const option: CharacterOption = {
-        id: record.id,
-        display_name: record.display_name,
-        audience: record.audience,
-        audience_user_ids: record.audience_user_ids,
-      };
-      const exists = current.characters.some((character) => character.id === record.id);
-      return {
-        ...current,
-        characters: exists
-          ? current.characters.map((character) => character.id === record.id ? option : character)
-          : [...current.characters, option],
-      };
-    });
-    if (profile) {
-      upsertIdentityOption({
-        id: record.id,
-        displayName: record.display_name,
-        avatarUrl: characterRefFrom(record).avatar_url ?? null,
-      }, {
-        id: null,
-        displayName: profile.display_name,
-        avatarUrl: profile.avatar_url ?? null,
-      });
     }
   };
 
@@ -512,8 +454,10 @@ export function FollowProfilePage() {
                   none. Everything else persona-shaped is absent until then. */}
               {profile.is_self && !hasPersonas && (
                 <div className="flex items-center gap-1">
-                  <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={openCreateCharacter}>
-                    <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
+                  <Button size="sm" variant="ghost" className="text-muted-foreground" asChild>
+                    <a href="/personas/new">
+                      <Plus className="h-4 w-4" aria-hidden="true" /> Create a persona
+                    </a>
                   </Button>
                   <HelpHint label="Personas">
                     <p>
@@ -536,14 +480,16 @@ export function FollowProfilePage() {
               identity={identity}
               counts={profile.is_self ? identityCounts : null}
               onSelect={handleIdentitySelect}
-              onCreate={profile.is_self && !isPreview ? openCreateCharacter : undefined}
+              createHref={profile.is_self && !isPreview ? '/personas/new' : undefined}
             />
           )}
           {/* Owner controls for the active persona. */}
           {!profile.restricted && userId && profile.is_self && activeCharacter && (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => { setEditingCharacter(activeCharacter); setCharacterDialogOpen(true); }}>
-                <Pencil className="h-4 w-4" /> Edit persona
+              <Button size="sm" variant="outline" asChild>
+                <a href={`/c/${activeCharacter.ulid}/edit`}>
+                  <Pencil className="h-4 w-4" /> Edit persona
+                </a>
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => void handleDeleteCharacter(activeCharacter)}>
                 <Trash2 className="h-4 w-4" /> Delete
@@ -599,14 +545,6 @@ export function FollowProfilePage() {
           </div>
         )}
       </div>
-      {profile.is_self && (
-        <CharacterEditorDialog
-          open={characterDialogOpen}
-          onOpenChange={setCharacterDialogOpen}
-          editing={editingCharacter}
-          onSaved={handleCharacterSaved}
-        />
-      )}
       {editable && (
         <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
           <DialogContent className="sm:max-w-2xl">

@@ -293,10 +293,13 @@ owner.
 | `/me` | Self-profile. | Repurposed |
 | `/users/{user}` | Someone else's profile. | Unchanged |
 | `/c/{ulid}` | A persona's public profile. | **New** |
+| `/personas/new` | Create a persona, then continue on its stable editor. | **New** |
+| `/c/{ulid}/edit` | Owner-only persona editor. | **New** |
 
 ⚠️ **Not `/home`** — `route('home')` is the guest marketing splash
 (`routes/web.php:42`). `/dashboard` repoints to `feed`; **`/characters` stays
-pointed at `/me`**, since personas are still managed there.
+pointed at `/me`** as a legacy bookmark, while persona creation and editing use
+their dedicated pages.
 
 ### `/me` layout
 

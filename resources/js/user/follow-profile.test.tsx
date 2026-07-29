@@ -31,7 +31,7 @@ jest.mock('@/fetchWrapper', () => ({
 jest.mock('@/community/NotificationBell', () => ({ NotificationBell: () => null }));
 jest.mock('sonner', () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 
-// The tab bodies and dialogs are heavy, separately-tested trees; this suite is
+// The tab bodies and profile dialog are heavy, separately-tested trees; this suite is
 // about the page chrome (header, identity rail, persona affordances, tabs).
 jest.mock('@/media/OwnerMediaManager', () => ({
   OwnerMediaManager: ({ identity }: { identity: number | null }) => (
@@ -39,35 +39,13 @@ jest.mock('@/media/OwnerMediaManager', () => ({
   ),
 }));
 jest.mock('@/stories/OwnerStoriesManager', () => ({ OwnerStoriesManager: () => null }));
-jest.mock('@/user/CharacterEditorDialog', () => ({
-  CharacterEditorDialog: ({
-    open,
-    onSaved,
-  }: {
-    open: boolean;
-    onSaved: (record: Record<string, unknown>) => void;
-  }) => open ? (
-    <button
-      type="button"
-      onClick={() => onSaved({
-        id: 23,
-        display_name: 'Nova',
-        profile_picture: null,
-        audience: 'everyone',
-        audience_user_ids: [],
-      })}
-    >
-      Save Nova
-    </button>
-  ) : null,
-}));
 jest.mock('@/user/profile-identity-editor', () => ({ ProfileIdentityEditor: () => null }));
 jest.mock('@/community/PostCard', () => ({ PostCard: () => null }));
 jest.mock('@/explore/StoryGrid', () => ({ StoryGrid: () => null }));
 jest.mock('@/media/MediaGrid', () => ({ MediaGrid: () => null }));
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => null }));
 
-interface ProfileOverrides { characters?: { id: number; display_name: string; avatar_url?: string | null }[] }
+interface ProfileOverrides { characters?: { id: number; ulid?: string; display_name: string; avatar_url?: string | null }[] }
 
 function ownerInitialData(overrides: ProfileOverrides = {}, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -88,7 +66,12 @@ function ownerInitialData(overrides: ProfileOverrides = {}, extra: Record<string
     },
     profileEditable: null,
     profileMedia: { characters: [], last_interest_ids: [] },
-    profileCharacters: (overrides.characters ?? []).map((c) => ({ id: c.id, display_name: c.display_name, profile_picture: null })),
+    profileCharacters: (overrides.characters ?? []).map((c) => ({
+      id: c.id,
+      ulid: c.ulid,
+      display_name: c.display_name,
+      profile_picture: null,
+    })),
     profileIdentityCounts: null,
     ...extra,
   };
@@ -147,8 +130,8 @@ describe('FollowProfilePage (/me)', () => {
 
     // Exactly one entry point: the quiet "Create a persona" button and its
     // help hint. No other control on the page mentions personas.
-    expect(screen.getByRole('button', { name: 'Create a persona' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /persona/i })).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Create a persona' })).toHaveAttribute('href', '/personas/new');
+    expect(screen.getAllByRole('button', { name: /persona/i })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'View as' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Personas' }));
@@ -194,8 +177,8 @@ describe('FollowProfilePage (/me)', () => {
     expect(screen.getByRole('link', { name: 'Exit preview' })).toHaveAttribute('href', '/me');
     expect(screen.queryByRole('button', { name: 'Edit profile' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Account settings' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Create a persona' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Edit persona' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Create a persona' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Edit persona' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     expect(screen.queryByTestId('owner-media-manager')).toBeNull();
 
@@ -264,8 +247,17 @@ describe('FollowProfilePage (/me)', () => {
 
   it('renders the identity rail with per-identity counts once a persona exists', async () => {
     setInitialData(ownerInitialData(
-      { characters: [{ id: 5, display_name: 'Kira', avatar_url: null }] },
-      { profileIdentityCounts: { self: 3, characters: { '5': 2 } } },
+      { characters: [{ id: 5, ulid: '01HZX5KIRA', display_name: 'Kira', avatar_url: null }] },
+      {
+        profileIdentityCounts: { self: 3, characters: { '5': 2 } },
+        navbar: {
+          identities: [
+            { id: null, displayName: 'Ben', avatarUrl: null },
+            { id: 5, displayName: 'Kira', avatarUrl: null },
+          ],
+          activeIdentityId: null,
+        },
+      },
     ));
     render(<FollowProfilePage />);
 
@@ -275,8 +267,13 @@ describe('FollowProfilePage (/me)', () => {
     expect(rail).toHaveTextContent('3');
     expect(rail).toHaveTextContent('2');
     // The entry point moves into the rail; the quiet one disappears.
-    expect(screen.getByRole('button', { name: /new persona/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create a persona' })).toBeNull();
+    expect(screen.getByRole('link', { name: /new persona/i })).toHaveAttribute('href', '/personas/new');
+    expect(screen.queryByRole('link', { name: 'Create a persona' })).toBeNull();
+    fireEvent.click(within(rail).getByRole('button', { name: /Kira/ }));
+    expect(await screen.findByRole('link', { name: 'Edit persona' })).toHaveAttribute(
+      'href',
+      '/c/01HZX5KIRA/edit',
+    );
   });
 
   it('keeps the navbar, profile rail, and upload listing on one live identity in both directions', async () => {
@@ -315,21 +312,6 @@ describe('FollowProfilePage (/me)', () => {
     await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: 5 }));
     expect(within(rail).getByRole('button', { name: 'Kira' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('owner-media-manager')).toHaveAttribute('data-identity', '5');
-  });
-
-  it('adds a newly created persona to the live navbar options', async () => {
-    setInitialData(ownerInitialData({}, {
-      navbar: { identities: [], activeIdentityId: null },
-    }));
-    render(<Navbar authenticated navItems={[]} adminMenu={null} accountMenu={null} guestMenuItems={[]} />);
-    render(<FollowProfilePage />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Create a persona' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Nova' }));
-
-    expect(await screen.findByRole('button', { name: 'Account and identity menu (currently Ben)' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Account and identity menu (currently Ben)' }));
-    expect(screen.getByRole('menuitemradio', { name: 'Nova' })).toBeInTheDocument();
   });
 
   it('deleting the active persona clears the server identity and removes its live option', async () => {

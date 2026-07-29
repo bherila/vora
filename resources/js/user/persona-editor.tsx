@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { type MouseEvent, useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 
 import { AudienceField } from '@/community/AudienceField';
 import { Avatar } from '@/components/avatar';
+import { READING_PAGE_WIDTH } from '@/components/page-width';
 import { ProfileOptionButtonGroup } from '@/components/profile-option-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 import { CharacterInterestsEditor } from '@/interests/character-interests-editor';
 import { type Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
@@ -19,7 +22,7 @@ import { GENDER_OPTIONS, normalizeProfileOptionValue, USER_TYPE_OPTIONS } from '
 
 export interface CharacterRecord {
   id: number;
-  ulid?: string;
+  ulid: string;
   display_name: string;
   description: string | null;
   is_linked: boolean;
@@ -153,50 +156,55 @@ function LinkedSeparateField({ personaName, value, onChange, disabled }: LinkedS
   );
 }
 
-interface CharacterEditorDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** The character to edit, or null to create a new one. */
-  editing: CharacterRecord | null;
-  /** Called after every successful create/update (incl. picture changes). */
-  onSaved: (character: CharacterRecord) => void;
+interface PersonaEditorPageProps {
+  /** Override Blade hydration in tests. Undefined reads personaEditor.character. */
+  initialCharacter?: CharacterRecord | null;
+  /** Injectable navigation boundary for redirect tests. */
+  navigate?: (href: string) => void;
 }
 
 /**
- * Create or edit a character. Reused on the profile (the identity strip's Add /
- * Edit controls). Profile picture and custom interests need a saved character, so
- * they appear once it exists.
+ * Dedicated create/edit page for a persona. Create submits redirect to the stable
+ * ULID editor, where picture and interest editing are available on initial load.
  */
-export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: CharacterEditorDialogProps) {
-  // Working copy of the character being edited; updated locally when a picture
-  // upload completes so the avatar refreshes without reopening.
-  const [current, setCurrent] = useState<CharacterRecord | null>(editing);
-  const [form, setForm] = useState<CharacterFormState>(() => (editing ? formFromCharacter(editing) : blankForm()));
+export function PersonaEditorPage({
+  initialCharacter,
+  navigate = (href) => window.location.assign(href),
+}: PersonaEditorPageProps) {
+  const hydrated = initialCharacter === undefined
+    ? readInitialData<{ personaEditor?: { character?: CharacterRecord | null } }>().personaEditor?.character ?? null
+    : initialCharacter;
+  const [current, setCurrent] = useState<CharacterRecord | null>(hydrated);
+  const [form, setForm] = useState<CharacterFormState>(() => (hydrated ? formFromCharacter(hydrated) : blankForm()));
   const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // Reset the form to the target whenever the dialog opens.
+  // Preserve the modal's discard protection for refreshes and browser navigation.
   useEffect(() => {
-    if (open) {
-      setCurrent(editing);
-      setForm(editing ? formFromCharacter(editing) : blankForm());
-      setDirty(false);
-      setError('');
-    }
-  }, [open, editing]);
+    const guard = (event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [dirty]);
 
   const updateForm = (patch: Partial<CharacterFormState>): void => {
     setForm((value) => ({ ...value, ...patch }));
+    dirtyRef.current = true;
     setDirty(true);
   };
 
-  const handleOpenChange = (next: boolean): void => {
-    if (!next && dirty && !window.confirm('Discard your unsaved changes to this character?')) {
-      return;
+  const confirmNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (dirtyRef.current && !window.confirm('Discard your unsaved changes to this persona?')) {
+      event.preventDefault();
     }
-    onOpenChange(next);
   };
 
   const validate = (): boolean => {
@@ -219,6 +227,7 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
     if (!validate()) return;
     setSaving(true);
     setError('');
+    setMessage('');
 
     const payload = {
       display_name: form.display_name.trim(),
@@ -237,14 +246,16 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
       const response = current === null
         ? await fetchWrapper.post('/api/characters', payload) as CharacterResponse
         : await fetchWrapper.patch(`/api/characters/${current.id}`, payload) as CharacterResponse;
-      onSaved(response.data);
+      dirtyRef.current = false;
       setDirty(false);
-      if (addAnother) {
-        setCurrent(null);
-        setForm(blankForm());
-      } else {
-        onOpenChange(false);
+      if (current === null) {
+        navigate(addAnother ? '/personas/new' : `/c/${response.data.ulid}/edit`);
+
+        return;
       }
+      setCurrent(response.data);
+      setForm(formFromCharacter(response.data));
+      setMessage('Persona saved.');
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to save character.');
     } finally {
@@ -270,7 +281,7 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
       await putToSignedUrl(created.upload_url, file, created.upload_headers, () => {});
       const completed = await fetchWrapper.post(`/api/characters/${current.id}/profile-picture/${created.data.id}/complete`, {}) as CharacterResponse;
       setCurrent(completed.data);
-      onSaved(completed.data);
+      setMessage('Profile picture updated.');
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to upload character profile picture.');
     } finally {
@@ -279,14 +290,26 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{current === null ? 'New persona' : `Edit ${current.display_name}`}</DialogTitle>
-          <DialogDescription>A persona is a character of yours — it does not change your real user account profile.</DialogDescription>
-        </DialogHeader>
-
+    <div className={`${READING_PAGE_WIDTH} space-y-4 px-4 py-8`}>
+      <a
+        className="text-sm underline underline-offset-4"
+        href="/me"
+        onClick={confirmNavigation}
+      >
+        ← Back to profile
+      </a>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h1>{current === null ? 'New persona' : `Edit ${current.display_name}`}</h1>
+          </CardTitle>
+          <CardDescription>
+            A persona is a character of yours — it does not change your real user account profile.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
 
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(false); }}>
           <div className="space-y-1">
@@ -352,20 +375,28 @@ export function CharacterEditorDialog({ open, onOpenChange, editing, onSaved }: 
               <CharacterInterestsEditor
                 characterId={current.id}
                 initialInherit={current.inherit_interests}
-                onInheritChange={(inherit) => { const next = { ...current, inherit_interests: inherit }; setCurrent(next); onSaved(next); }}
+                onInheritChange={(inherit) => setCurrent({ ...current, inherit_interests: inherit })}
               />
             </div>
           ) : (
-            <p className="border-t border-border pt-4 text-sm text-muted-foreground">Save the character to add a profile picture and custom interests.</p>
+            <p className="border-t border-border pt-4 text-sm text-muted-foreground">
+              Save this persona to continue to its edit page, where you can add a profile picture and custom interests.
+            </p>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={saving}>Cancel</Button>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <Button type="button" variant="ghost" asChild>
+              <a href="/me" onClick={confirmNavigation}>Cancel</a>
+            </Button>
             {current === null && <Button type="button" variant="outline" disabled={saving} onClick={() => void save(true)}>Save &amp; add another</Button>}
             <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save character'}</Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
+
+const mountEl = document.getElementById('persona-editor');
+if (mountEl) createRoot(mountEl).render(<PersonaEditorPage />);

@@ -333,7 +333,8 @@ export function UserSettingsPage() {
   };
 
   // Settings owns only account + security + notifications now; identity fields
-  // (display name, gender, type, audience, interests, picture) are edited on /me.
+  // (display name, gender, type, audience, interests, picture) are edited on
+  // their dedicated persona pages.
   // Those fields are nullable/sometimes on the endpoint, so omitting them here
   // leaves them untouched — the account form can never clobber a /me edit.
   const buildNotificationPayload = (): NotificationPayload => ({
