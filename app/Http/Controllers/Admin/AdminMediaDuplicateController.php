@@ -39,7 +39,13 @@ class AdminMediaDuplicateController extends Controller
             })
             ->all();
 
-        return response()->json(['success' => true, 'data' => $clusters]);
+        return response()->json([
+            'success' => true,
+            'data' => $clusters,
+            'meta' => [
+                'duplicate_scan' => $this->duplicates->scanStatus(),
+            ],
+        ]);
     }
 
     public function queueReview(Request $request, Media $media): JsonResponse

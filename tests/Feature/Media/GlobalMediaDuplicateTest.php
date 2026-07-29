@@ -127,6 +127,55 @@ class GlobalMediaDuplicateTest extends TestCase
         $this->assertTrue($ids->contains($second->id));
     }
 
+    public function test_duplicate_scan_is_bounded_and_reports_visible_truncation_metadata(): void
+    {
+        $this->fakeStorage();
+        config(['media.pdq_global_scan_limit' => 2]);
+        $admin = User::factory()->admin()->create();
+        $oldestOwner = User::factory()->approved()->create();
+        $newerOwner = User::factory()->approved()->create();
+        $newestOwner = User::factory()->approved()->create();
+        $oldest = Media::factory()->for($oldestOwner)->create(['pdq_hash' => str_repeat('0', 64)]);
+        $newer = Media::factory()->for($newerOwner)->create(['pdq_hash' => str_repeat('0', 64)]);
+        $newest = Media::factory()->for($newestOwner)->create(['pdq_hash' => str_repeat('0', 64)]);
+
+        $response = $this->actingAs($admin)
+            ->getJson('/api/admin/media-duplicates')
+            ->assertOk()
+            ->assertJsonPath('meta.duplicate_scan.truncated', true)
+            ->assertJsonPath('meta.duplicate_scan.scanned_media_count', 2)
+            ->assertJsonPath('meta.duplicate_scan.scan_limit', 2);
+
+        $ids = collect($response->json('data.0.media'))->pluck('id');
+        $this->assertFalse($ids->contains($oldest->id));
+        $this->assertTrue($ids->contains($newer->id));
+        $this->assertTrue($ids->contains($newest->id));
+
+        $this->getJson('/api/admin/media')
+            ->assertOk()
+            ->assertJsonPath('duplicate_scan.truncated', true)
+            ->assertJsonPath('duplicate_scan.scanned_media_count', 2)
+            ->assertJsonPath('duplicate_scan.scan_limit', 2);
+    }
+
+    public function test_shared_distance_path_handles_full_unsigned_pdq_range(): void
+    {
+        config([
+            'media.pdq_global_threshold' => 256,
+            'media.pdq_global_scan_limit' => 10,
+        ]);
+        $firstOwner = User::factory()->approved()->create();
+        $secondOwner = User::factory()->approved()->create();
+        $first = Media::factory()->for($firstOwner)->create(['pdq_hash' => str_repeat('0', 64)]);
+        $second = Media::factory()->for($secondOwner)->create(['pdq_hash' => str_repeat('f', 64)]);
+
+        $summary = app(GlobalMediaDuplicateService::class)->summariesFor(collect([$first]))[$first->id];
+
+        $this->assertSame(1, $summary['match_count']);
+        $this->assertSame($second->id, $summary['matches'][0]['media_id']);
+        $this->assertSame(256, $summary['matches'][0]['distance']);
+    }
+
     public function test_admin_can_queue_a_cross_account_match_for_existing_abuse_review_actions(): void
     {
         $admin = User::factory()->admin()->create();

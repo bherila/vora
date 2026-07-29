@@ -22,6 +22,15 @@ interface AdminDuplicateCluster {
 
 interface ClusterResponse {
   data: AdminDuplicateCluster[];
+  meta?: {
+    duplicate_scan?: DuplicateScanStatus;
+  };
+}
+
+interface DuplicateScanStatus {
+  truncated: boolean;
+  scanned_media_count: number;
+  scan_limit: number;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -35,6 +44,7 @@ function accountName(item: AdminMediaItem): string {
 export function AdminMediaDuplicatesPage() {
   const [clusters, setClusters] = useState<AdminDuplicateCluster[]>([]);
   const [sort, setSort] = useState<ClusterSort>('size_desc');
+  const [scanStatus, setScanStatus] = useState<DuplicateScanStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [queued, setQueued] = useState<Set<number>>(() => new Set());
   const [busy, setBusy] = useState<Set<number>>(() => new Set());
@@ -45,7 +55,11 @@ export function AdminMediaDuplicatesPage() {
     fetchWrapper
       .get(`/api/admin/media-duplicates?sort=${sort}`)
       .then((response) => {
-        if (active) setClusters((response as ClusterResponse).data ?? []);
+        if (active) {
+          const payload = response as ClusterResponse;
+          setClusters(payload.data ?? []);
+          setScanStatus(payload.meta?.duplicate_scan ?? null);
+        }
       })
       .catch((error) => {
         if (active) toast.error(getErrorMessage(error));
@@ -84,6 +98,13 @@ export function AdminMediaDuplicatesPage() {
           Admin-only PDQ matches across different accounts. A match is a review signal, not an automatic enforcement decision.
         </p>
       </div>
+
+      {scanStatus?.truncated && (
+        <p role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800">
+          Only the newest {scanStatus.scanned_media_count} eligible photos were scanned.
+          Older photos may contain additional matches.
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2" aria-label="Cluster sort order">
         <Button

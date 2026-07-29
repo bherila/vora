@@ -32,6 +32,10 @@ return [
     // the per-owner 31-bit review flag to reduce noise in global clusters.
     'pdq_global_threshold' => (int) env('MEDIA_PDQ_GLOBAL_THRESHOLD', 15),
 
+    // Bound synchronous global comparisons to the newest eligible photos.
+    // The service also hard-caps this at 1,000 and reports truncation to admins.
+    'pdq_global_scan_limit' => (int) env('MEDIA_PDQ_GLOBAL_SCAN_LIMIT', 500),
+
     // Disk for client-generated thumbnails/posters. Defaults to the photo disk
     // because the video transcoder never scans it and it already accepts image
     // objects. Video posters live here too, never on the video (source) disk.

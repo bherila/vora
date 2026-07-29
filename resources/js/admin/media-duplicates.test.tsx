@@ -13,6 +13,13 @@ jest.mock('@/fetchWrapper', () => ({
 
 const clusterResponse = {
   success: true,
+  meta: {
+    duplicate_scan: {
+      truncated: false,
+      scanned_media_count: 2,
+      scan_limit: 500,
+    },
+  },
   data: [
     {
       id: 'cluster-12',
@@ -80,6 +87,25 @@ it('reloads clusters with the selected sort order', async () => {
 
   await waitFor(() =>
     expect(fetchWrapper.get).toHaveBeenCalledWith('/api/admin/media-duplicates?sort=newest_desc'),
+  );
+});
+
+it('warns when the bounded scan omits older eligible media', async () => {
+  jest.mocked(fetchWrapper.get).mockResolvedValue({
+    ...clusterResponse,
+    meta: {
+      duplicate_scan: {
+        truncated: true,
+        scanned_media_count: 500,
+        scan_limit: 500,
+      },
+    },
+  });
+
+  render(<AdminMediaDuplicatesPage />);
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Only the newest 500 eligible photos were scanned',
   );
 });
 
