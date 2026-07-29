@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminInviteController;
 use App\Http\Controllers\Admin\AdminMediaController;
+use App\Http\Controllers\Admin\AdminMediaDuplicateController;
 use App\Http\Controllers\Admin\AdminPostCommentController;
 use App\Http\Controllers\Admin\AdminPostController;
 use App\Http\Controllers\Admin\AdminReportController;
@@ -328,6 +329,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
+    Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'index'])->name('media-duplicates');
     Route::get('/reports', [AdminReportController::class, 'index'])->name('reports');
     Route::get('/stories', [AdminStoryController::class, 'index'])->name('stories');
     Route::get('/deleted-content', [AdminDeletedContentController::class, 'index'])->name('deleted-content');
@@ -369,6 +371,8 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/interest-requests/{interestRequest}/reject', [AdminInterestController::class, 'rejectRequest']);
 
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
+    Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'apiIndex']);
+    Route::post('/media/{media}/duplicate-review', [AdminMediaDuplicateController::class, 'queueReview']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
 
     Route::get('/reports', [AdminReportController::class, 'apiIndex']);

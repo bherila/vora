@@ -387,7 +387,7 @@ function AdminUsersPage() {
           </TableHeader>
           <TableBody>
             {users.map((user) => (
-              <TableRow key={user.id}>
+              <TableRow key={user.id} id={`user-${user.id}`}>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.display_name ?? user.name}</TableCell>
                 <TableCell>

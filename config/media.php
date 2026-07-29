@@ -28,6 +28,10 @@ return [
     // land in a separate bucket. The app reads `image-mappings/<key>.json` here.
     'pdq_disk' => env('MEDIA_PDQ_DISK', 'hls'),
 
+    // Cross-account matching is admin-only and uses a tighter threshold than
+    // the per-owner 31-bit review flag to reduce noise in global clusters.
+    'pdq_global_threshold' => (int) env('MEDIA_PDQ_GLOBAL_THRESHOLD', 15),
+
     // Disk for client-generated thumbnails/posters. Defaults to the photo disk
     // because the video transcoder never scans it and it already accepts image
     // objects. Video posters live here too, never on the video (source) disk.
