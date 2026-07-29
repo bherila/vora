@@ -8,11 +8,10 @@ use App\Models\Interest;
 use App\Models\Media;
 
 /**
- * Serializes Media for API responses. The owner/public shape never includes the
- * moderation DECISION or notes — admin review stays silent; only adminView()
- * exposes those. It does carry a derived `under_review` flag so an owner knows
- * their freshly-uploaded item isn't visible to others yet (it is only ever true
- * on items the viewer owns, since others can't see un-approved media at all).
+ * Serializes Media for API responses. Owner and visitor shapes are deliberately
+ * separate: original filenames and review state are useful to the uploader but
+ * are identifying metadata that must never reach cross-user surfaces. Admin
+ * review stays silent outside adminView().
  *
  * Pure: signed URLs and HLS status are computed by the caller and passed in via
  * $extras (keys: "url" for a signed view URL, "download_url" for an admin-only
@@ -31,6 +30,22 @@ class MediaPresenter
      */
     public static function ownerView(Media $media, array $extras = []): array
     {
+        return self::base($media, $extras) + [
+            'original_filename' => $media->original_filename,
+            // Derived "not yet visible to others" flag (no decision/notes leaked).
+            'under_review' => $media->moderation_status !== ModerationStatus::Approved,
+        ];
+    }
+
+    /**
+     * Cross-user representation. Identifying upload metadata and owner-only
+     * review state are intentionally absent.
+     *
+     * @param  Extras  $extras
+     * @return array<string, mixed>
+     */
+    public static function visitorView(Media $media, array $extras = []): array
+    {
         return self::base($media, $extras);
     }
 
@@ -42,7 +57,7 @@ class MediaPresenter
      */
     public static function adminView(Media $media, array $extras = []): array
     {
-        return self::base($media, $extras) + [
+        return self::ownerView($media, $extras) + [
             'moderation_status' => $media->moderation_status->value,
             'moderation_notes' => $media->moderation_notes,
             'moderated_at' => $media->moderated_at?->toIso8601String(),
@@ -73,14 +88,11 @@ class MediaPresenter
             'type' => $media->type->value,
             'purpose' => $media->purpose->value,
             'title' => $media->title,
-            'original_filename' => $media->original_filename,
             'mime_type' => $media->mime_type,
             'size_bytes' => $media->size_bytes,
             'audience' => $media->audience->value,
             'discoverable' => $media->discoverable,
             'upload_status' => $media->upload_status,
-            // Derived "not yet visible to others" flag (no decision/notes leaked).
-            'under_review' => $media->moderation_status !== ModerationStatus::Approved,
             'url' => $extras['url'] ?? null,
             'thumbnail_url' => $extras['thumbnail_url'] ?? null,
             'video' => $extras['video'] ?? null,

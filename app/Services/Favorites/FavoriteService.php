@@ -192,10 +192,13 @@ class FavoriteService
             $item instanceof Media => [
                 'type' => 'media',
                 'id' => $item->id,
-                'label' => $item->title ?: $item->original_filename,
+                // Favorite cards are visitor-facing, even when they appear on
+                // the saver's own profile. Client filenames can identify an
+                // otherwise pseudonymous uploader, so use a neutral fallback.
+                'label' => $item->title ?: 'Untitled media',
                 'subtitle' => ucfirst($item->type->value ?? (string) $item->type),
                 'href' => "/m/{$item->ulid}",
-                'thumbnail_url' => $this->mediaThumb($item),
+                'thumbnail_url' => $this->visitorMediaThumb($item),
             ],
             $item instanceof Story => [
                 'type' => 'story',
@@ -240,13 +243,13 @@ class FavoriteService
         };
     }
 
-    private function mediaThumb(?Media $media): ?string
+    private function visitorMediaThumb(?Media $media): ?string
     {
         if (! $media instanceof Media) {
             return null;
         }
 
-        $payload = $this->responder->item($media, resolveHls: false);
+        $payload = $this->responder->visitorItem($media, resolveHls: false);
 
         return $payload['thumbnail_url'] ?? $payload['url'] ?? null;
     }

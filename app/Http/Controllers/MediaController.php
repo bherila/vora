@@ -313,12 +313,14 @@ class MediaController extends Controller
             abort(404, 'Not found.');
         }
         $this->authorizeOr404('view', $media);
-        $media->load(['interests', 'user']);
+        $media->load(['interests', 'user.profilePicture', 'character.profilePicture']);
         $viewer = $request->user();
-        $includeOriginalVideoUrl = $viewer instanceof User
+        $isOwnerOrAdmin = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
 
-        $payload = $this->responder->item($media, includeOriginalVideoUrl: $includeOriginalVideoUrl);
+        $payload = $isOwnerOrAdmin
+            ? $this->responder->item($media, includeOriginalVideoUrl: true)
+            : $this->responder->visitorItem($media);
         $payload['favorited'] = $viewer instanceof User && Favorite::query()
             ->where('user_id', $viewer->id)
             ->where('favoritable_type', $media->getMorphClass())
@@ -330,13 +332,24 @@ class MediaController extends Controller
         // owner's profile (a header back to Explore + a link to that profile).
         $owner = $media->user;
         $isSelf = $viewer instanceof User && $owner instanceof User && $owner->id === $viewer->id;
-        $payload['owner'] = $owner instanceof User ? [
-            'id' => $owner->id,
-            'display_name' => $owner->display_name ?: $owner->name,
-            'avatar_url' => UserPresenter::avatarUrl($owner, $this->responder, $viewer),
-            'href' => $isSelf ? route('me', [], false) : route('users.profile', $owner, false),
-            'is_self' => $isSelf,
-        ] : null;
+        $character = $media->character;
+        if (! $isOwnerOrAdmin && $character instanceof Character && ! $character->is_linked) {
+            $payload['owner'] = [
+                'id' => null,
+                'display_name' => $character->display_name,
+                'avatar_url' => UserPresenter::pictureUrl($character->profilePicture, $this->responder, $viewer),
+                'href' => route('characters.view', ['ulid' => $character->ulid], false),
+                'is_self' => false,
+            ];
+        } else {
+            $payload['owner'] = $owner instanceof User ? [
+                'id' => $owner->id,
+                'display_name' => $owner->display_name ?: $owner->name,
+                'avatar_url' => UserPresenter::avatarUrl($owner, $this->responder, $viewer),
+                'href' => $isSelf ? route('me', [], false) : route('users.profile', $owner, false),
+                'is_self' => $isSelf,
+            ] : null;
+        }
         // Anyone signed in who isn't the owner can report the item for abuse.
         $payload['can_report'] = $viewer instanceof User && ! $isSelf;
 

@@ -275,7 +275,7 @@ class PersonaProfileTest extends TestCase
         }
     }
 
-    public function test_persona_page_follow_contract_lists_only_privacy_safe_edge_identities(): void
+    public function test_persona_page_follow_contract_omits_edge_and_owner_identity(): void
     {
         User::factory()->create(); // spacer so nobody under test is the admin (id 1)
         $owner = User::factory()->approved()->create(['display_name' => 'Private Human Identity']);
@@ -312,9 +312,8 @@ class PersonaProfileTest extends TestCase
             ->assertJsonPath('data.count', 1)
             ->assertJsonPath('data.viewer_is_following', false)
             ->assertJsonPath('data.followers.0.follower.id', $personaFollower->id)
-            ->assertJsonPath('data.followers.0.target.type', 'character')
-            ->assertJsonPath('data.followers.0.target.ulid', $persona->ulid)
-            ->assertJsonMissingPath('data.followers.0.target.owner_id')
+            ->assertJsonMissingPath('data.followers.0.target')
+            ->assertJsonMissing(['id' => $owner->id])
             ->assertJsonMissing(['display_name' => 'Private Human Identity']);
     }
 
@@ -344,6 +343,40 @@ class PersonaProfileTest extends TestCase
 
         $counts = $this->actingAs($viewer)->getJson("/api/c/{$character->ulid}/counts")->assertOk();
         $this->assertSame(1, $counts->json('data.media'));
+    }
+
+    public function test_persona_avatar_and_media_use_opaque_filename_free_visitor_assets(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // ensure the owner is not the id-1 admin
+        $owner = User::factory()->approved()->create(['display_name' => 'Sentinel Human']);
+        $viewer = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+        $avatar = Media::factory()->profilePicture()->approved()->for($owner)->create([
+            'original_filename' => 'sentinel-avatar-name.jpg',
+            'object_key' => "uploads/{$owner->id}/avatar.jpg",
+        ]);
+        $character->update(['profile_picture_media_id' => $avatar->id]);
+        $gallery = Media::factory()->for($owner)->approved()->create([
+            'character_id' => $character->id,
+            'original_filename' => 'sentinel-gallery-name.jpg',
+            'object_key' => "uploads/{$owner->id}/gallery.jpg",
+        ]);
+
+        $profile = $this->initialData(
+            $this->actingAs($viewer)->get("/c/{$character->ulid}")->assertOk()->getContent(),
+        )['personaProfile'];
+        $this->assertSame("/api/media/by-ulid/{$avatar->ulid}/asset/original", $profile['avatar_url']);
+
+        $response = $this->getJson("/api/c/{$character->ulid}/media")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $gallery->id)
+            ->assertJsonMissingPath('data.0.original_filename');
+        $this->assertStringNotContainsString('sentinel-gallery-name.jpg', $response->getContent());
+        $this->assertStringNotContainsString("uploads/{$owner->id}", $response->getContent());
     }
 
     public function test_posts_tab_bylines_the_persona_and_never_the_human(): void

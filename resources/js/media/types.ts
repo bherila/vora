@@ -41,14 +41,15 @@ export interface MediaItem {
   type: MediaTypeValue;
   purpose: MediaPurposeValue;
   title: string | null;
-  original_filename: string;
+  /** Owner/admin responses only; visitor payloads deliberately omit it. */
+  original_filename?: string;
   mime_type: string;
   size_bytes: number | null;
   audience: Audience;
   discoverable: boolean;
   upload_status: string;
   /** Owner-only signal that the item isn't visible to others yet (awaiting review). */
-  under_review: boolean;
+  under_review?: boolean;
   url: string | null;
   /** Signed URL of the small JPEG thumbnail/poster, when one was generated. */
   thumbnail_url: string | null;
@@ -68,7 +69,8 @@ export interface MediaItem {
 
 /** The uploader of a single media item, used to frame the detail page. */
 export interface MediaOwner {
-  id: number;
+  /** Null when a Separate persona is the deliberate public attribution. */
+  id: number | null;
   display_name: string;
   avatar_url: string | null;
   /** Profile URL (/me for the owner, /users/{id} otherwise). */
@@ -81,6 +83,7 @@ export type MediaTypeFilter = 'all' | MediaTypeValue;
 
 /** Admin list responses additionally carry the internal review state. */
 export interface AdminMediaItem extends MediaItem {
+  original_filename: string;
   moderation_status: ModerationStatusValue;
   moderation_notes: string | null;
   moderated_at: string | null;

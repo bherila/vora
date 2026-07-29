@@ -52,7 +52,14 @@ class ProfileContentController extends Controller
             ->latest()
             ->paginate((int) config('media.page_size', 24));
 
-        return response()->json(['success' => true, ...$this->responder->page($paginator)]);
+        $isOwnerOrAdmin = $viewer->id === $user->id || $viewer->isAdmin();
+
+        return response()->json([
+            'success' => true,
+            ...($isOwnerOrAdmin
+                ? $this->responder->page($paginator)
+                : $this->responder->visitorPage($paginator)),
+        ]);
     }
 
     public function posts(Request $request, User $user): JsonResponse
@@ -135,16 +142,23 @@ class ProfileContentController extends Controller
 
         $media = $this->queries->media($user, $viewer, $character)
             ->latest()->latest('id')->limit(self::RECENT_LIMIT)->get()
-            ->map(function (Media $item): array {
-                // Prefer the small thumbnail; fall back to the signed original
-                // for photos uploaded before thumbnails existed.
-                $extras = $this->responder->extras($item, resolveHls: false);
+            ->map(function (Media $item) use ($user, $viewer): array {
+                // Cross-user profile cards use the same opaque visitor asset
+                // path as full media rows. Owner/admin cards retain their direct
+                // signed-storage behavior for management.
+                $isOwnerOrAdmin = $viewer->id === $user->id || $viewer->isAdmin();
+                if ($isOwnerOrAdmin) {
+                    $extras = $this->responder->extras($item, resolveHls: false);
+                    $thumbnailUrl = $extras['thumbnail_url'] ?? $extras['url'];
+                } else {
+                    $thumbnailUrl = $this->responder->visitorAssetUrl($item);
+                }
 
                 return [
                     'type' => 'media',
                     'id' => $item->id,
                     'title' => $item->title,
-                    'thumbnail_url' => $extras['thumbnail_url'] ?? $extras['url'],
+                    'thumbnail_url' => $thumbnailUrl,
                     'href' => route('media.view', ['ulid' => $item->ulid], false),
                     'created_at' => $item->created_at?->toIso8601String(),
                 ];

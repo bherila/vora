@@ -29,6 +29,7 @@ class PostCommentController extends Controller
         $this->authorizeOr404('view', $post);
 
         $viewer = $request->user();
+        $post->loadMissing('character.profilePicture');
 
         $comments = $post->comments()
             ->with(['user:id,name,display_name,profile_picture_media_id', 'user.profilePicture'])
@@ -43,7 +44,7 @@ class PostCommentController extends Controller
                 // keep the delete-policy check from re-querying the post per row.
                 $comment->setRelation('post', $post);
 
-                return PostCommentPresenter::view($comment, $this->mediaResponder)
+                return PostCommentPresenter::view($comment, $this->mediaResponder, $viewer)
                     + ['can_delete' => $viewer !== null && Gate::forUser($viewer)->allows('delete', $comment)];
             })->values(),
         ]);
@@ -56,6 +57,7 @@ class PostCommentController extends Controller
 
         /** @var User $user */
         $user = $request->user();
+        $post->loadMissing('character.profilePicture');
 
         $comment = $post->comments()->make([
             'user_id' => $user->id,
@@ -77,7 +79,7 @@ class PostCommentController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => PostCommentPresenter::view($comment, $this->mediaResponder)
+            'data' => PostCommentPresenter::view($comment, $this->mediaResponder, $user)
                 + ['can_delete' => Gate::forUser($user)->allows('delete', $comment)],
         ], 201);
     }

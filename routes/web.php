@@ -24,6 +24,7 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\InviteController;
+use App\Http\Controllers\MediaAssetController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostCommentController;
@@ -266,6 +267,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::patch('/bulk', [MediaController::class, 'bulkUpdate']);
         Route::delete('/bulk', [MediaController::class, 'bulkDestroy']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
+        Route::get('/by-ulid/{ulid}/asset/{variant}', [MediaAssetController::class, 'show'])
+            ->where('variant', 'original|thumbnail')
+            ->name('media.asset');
         Route::post('/{media}/multipart/init', [MediaController::class, 'initMultipart']);
         Route::post('/{media}/multipart/parts', [MediaController::class, 'presignMultipartParts']);
         Route::post('/{media}/multipart/complete', [MediaController::class, 'completeMultipart']);

@@ -20,7 +20,7 @@ class MediaPresenterTest extends TestCase
 
     public function test_owner_view_never_exposes_moderation_state(): void
     {
-        $media = Media::factory()->rejected()->create();
+        $media = Media::factory()->rejected()->create(['original_filename' => 'identifying-name.jpg']);
 
         $payload = MediaPresenter::ownerView($media);
 
@@ -28,6 +28,20 @@ class MediaPresenterTest extends TestCase
             $this->assertArrayNotHasKey($key, $payload, "owner view leaked {$key}");
         }
         $this->assertArrayNotHasKey('user', $payload);
+        $this->assertSame('identifying-name.jpg', $payload['original_filename']);
+    }
+
+    public function test_visitor_view_omits_owner_only_filename_and_review_state(): void
+    {
+        $media = Media::factory()->approved()->create(['original_filename' => 'identifying-name.jpg']);
+
+        $payload = MediaPresenter::visitorView($media);
+
+        $this->assertArrayNotHasKey('original_filename', $payload);
+        $this->assertArrayNotHasKey('under_review', $payload);
+        foreach (self::MODERATION_KEYS as $key) {
+            $this->assertArrayNotHasKey($key, $payload, "visitor view leaked {$key}");
+        }
     }
 
     public function test_admin_view_includes_moderation_state(): void

@@ -154,6 +154,31 @@ class ReportTest extends TestCase
         ]);
     }
 
+    public function test_reporting_a_separate_persona_returns_only_the_generic_visitor_contract(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create(['display_name' => 'Hidden Owner']);
+        $reporter = User::factory()->approved()->create();
+        $character = Character::factory()->for($owner)->create([
+            'display_name' => 'Separate Persona',
+            'is_linked' => false,
+        ]);
+
+        $this->actingAs($reporter)->postJson('/api/reports', [
+            'type' => 'character',
+            'id' => $character->id,
+            'reason' => 'harassment',
+        ])->assertCreated()->assertExactJson([
+            'success' => true,
+            'message' => 'Thanks — our team will review this report.',
+        ]);
+
+        $report = Report::query()->sole();
+        $this->assertSame($character->getMorphClass(), $report->reportable_type);
+        $this->assertSame($character->id, $report->reportable_id);
+        $this->assertSame($owner->id, $report->reportable->user_id);
+    }
+
     public function test_viewer_cannot_report_a_character_hidden_from_them(): void
     {
         User::factory()->create();

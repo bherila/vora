@@ -49,24 +49,8 @@ interface FollowerIdentity {
   restricted: boolean;
 }
 
-interface CharacterFollowTarget {
-  type: 'character';
-  id: number;
-  ulid: string;
-  display_name: string;
-  avatar_url: string | null;
-}
-
-interface AccountFollowTarget {
-  type: 'user';
-  id: number;
-  display_name: string;
-  avatar_url: string | null;
-}
-
 interface PersonaFollower {
   follower: FollowerIdentity;
-  target: CharacterFollowTarget | AccountFollowTarget;
   followed_at: string | null;
 }
 
@@ -242,23 +226,19 @@ export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileVie
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{persona.display_name}&apos;s followers</DialogTitle>
-            <DialogDescription>
-              Account follows count for Linked personas; direct persona follows count for every persona.
-            </DialogDescription>
+            <DialogDescription>People who follow {persona.display_name}.</DialogDescription>
           </DialogHeader>
           {followData?.followers?.length ? (
             <div className="space-y-3">
               {followData.followers.map((entry) => (
-                <div key={`${entry.follower.id}:${entry.target.type}:${entry.target.id}`} className="flex items-center gap-3 rounded-lg border p-3">
+                <div key={entry.follower.id} className="flex items-center gap-3 rounded-lg border p-3">
                   <Avatar name={entry.follower.display_name} src={entry.follower.avatar_url} sizeClassName="h-10 w-10" />
                   <div className="min-w-0">
                     <a className="block truncate text-sm font-medium underline underline-offset-4" href={`/users/${entry.follower.id}`}>
                       {entry.follower.display_name}
                     </a>
                     <p className="text-xs text-muted-foreground">
-                      {entry.target.type === 'character'
-                        ? `Follows ${entry.target.display_name} directly`
-                        : 'Follows the linked account'}
+                      Follower
                       {entry.follower.restricted ? ' · Private profile' : ''}
                     </p>
                   </div>

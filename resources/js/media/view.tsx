@@ -54,7 +54,7 @@ function MediaViewPage() {
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename}</h1>
+        <h1 className="truncate text-xl font-semibold">{item.title || item.original_filename || 'Untitled media'}</h1>
         <div className="flex items-center gap-3">
           {typeof item.favorite_count === 'number' && item.favorite_count > 0 && (
             <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'save' : 'saves'}</span>

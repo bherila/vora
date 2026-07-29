@@ -76,6 +76,18 @@ class MediaResponseService
     }
 
     /**
+     * Present media for a cross-user surface. Asset URLs stay app-relative and
+     * carry only the opaque media ULID; the storage key (which may contain the
+     * uploader's numeric id for legacy objects) never reaches the visitor.
+     *
+     * @return array<string, mixed>
+     */
+    public function visitorItem(Media $media, bool $resolveHls = true): array
+    {
+        return MediaPresenter::visitorView($media, $this->visitorExtras($media, $resolveHls));
+    }
+
+    /**
      * Present a paginated listing as the standard `{ data, meta }` envelope.
      * Listings never resolve HLS per item (no per-row R2 read).
      *
@@ -93,5 +105,70 @@ class MediaResponseService
             'data' => $data,
             'meta' => PaginationMeta::from($paginator),
         ];
+    }
+
+    /**
+     * Present a cross-user listing without owner-only metadata or storage keys.
+     *
+     * @param  LengthAwarePaginator<int, Media>  $paginator
+     * @return array{data: list<array<string, mixed>>, meta: array<string, mixed>}
+     */
+    public function visitorPage(LengthAwarePaginator $paginator): array
+    {
+        $data = collect($paginator->items())
+            ->map(fn (Media $media): array => $this->visitorItem($media, resolveHls: false))
+            ->values()
+            ->all();
+
+        return [
+            'data' => $data,
+            'meta' => PaginationMeta::from($paginator),
+        ];
+    }
+
+    /**
+     * Opaque app-relative URL for an avatar/card image. Prefer the thumbnail
+     * when one exists and otherwise use the original photo.
+     */
+    public function visitorAssetUrl(Media $media): ?string
+    {
+        if (! $media->isReady()) {
+            return null;
+        }
+
+        $variant = $media->playbackThumbnailKey() !== null ? 'thumbnail' : 'original';
+
+        return route('media.asset', ['ulid' => $media->ulid, 'variant' => $variant], false);
+    }
+
+    /**
+     * @return array{url: ?string, thumbnail_url: ?string, video: ?array<string, mixed>}
+     */
+    private function visitorExtras(Media $media, bool $resolveHls): array
+    {
+        $extras = ['url' => null, 'thumbnail_url' => null, 'video' => null];
+        if (! $media->isReady()) {
+            return $extras;
+        }
+
+        if (! $media->type->isVideo()) {
+            $extras['url'] = route('media.asset', [
+                'ulid' => $media->ulid,
+                'variant' => 'original',
+            ], false);
+        }
+
+        if ($media->playbackThumbnailKey() !== null) {
+            $extras['thumbnail_url'] = route('media.asset', [
+                'ulid' => $media->ulid,
+                'variant' => 'thumbnail',
+            ], false);
+        }
+
+        if ($media->type->isVideo()) {
+            $extras['video'] = $this->hls->status($media, $resolveHls);
+        }
+
+        return $extras;
     }
 }

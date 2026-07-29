@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Enums\StoryStatus;
 use App\Models\Story;
+use App\Models\StoryAuthor;
 use App\Models\User;
 
 class StoryPolicy
@@ -37,6 +38,19 @@ class StoryPolicy
         // Mirrors MediaPolicy::view — isActive() folds in banHidesContent().
         $owner = User::withTrashed()->find($story->user_id);
         if ($owner === null || $owner->trashed() || ! $owner->isActive()) {
+            return false;
+        }
+
+        // Story-author persona links survive a persona soft delete so restoring
+        // it restores the same byline. A missing linked character must therefore
+        // fail closed for visitors; otherwise the presenter would fall back to
+        // the author's human identity on the old persona-reachable URL.
+        $hasUnavailablePersonaAuthor = $story->authors()
+            ->where('status', StoryAuthor::STATUS_ACCEPTED)
+            ->whereNotNull('character_id')
+            ->whereDoesntHave('character')
+            ->exists();
+        if ($hasUnavailablePersonaAuthor) {
             return false;
         }
 

@@ -214,6 +214,20 @@ class FileStorageService
         return $storage->exists($key) ? $storage->get($key) : null;
     }
 
+    /**
+     * @return resource|null
+     */
+    public function readStream(string $disk, string $key)
+    {
+        try {
+            $stream = $this->storage($disk)->readStream($key);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return is_resource($stream) ? $stream : null;
+    }
+
     public function deleteFile(string $disk, string $key): bool
     {
         return $this->storage($disk)->delete($key);

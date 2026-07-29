@@ -54,6 +54,42 @@ class FavoriteTest extends TestCase
             ->assertJsonPath('data.0.id', $media->id);
     }
 
+    public function test_media_favorite_cards_use_the_filename_free_visitor_contract(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create([
+            'title' => null,
+            'original_filename' => 'sentinel-private-name.jpg',
+            'object_key' => "uploads/{$owner->id}/sentinel-private-name.jpg",
+        ]);
+
+        $create = $this->actingAs($viewer)
+            ->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])
+            ->assertCreated()
+            ->assertJsonPath('data.favorite.label', 'Untitled media')
+            ->assertJsonPath(
+                'data.favorite.thumbnail_url',
+                "/api/media/by-ulid/{$media->ulid}/asset/original",
+            );
+
+        $list = $this->actingAs($viewer)
+            ->getJson("/api/users/{$viewer->id}/favorites")
+            ->assertOk()
+            ->assertJsonPath('data.0.label', 'Untitled media')
+            ->assertJsonPath(
+                'data.0.thumbnail_url',
+                "/api/media/by-ulid/{$media->ulid}/asset/original",
+            );
+
+        foreach ([$create, $list] as $response) {
+            $this->assertStringNotContainsString('sentinel-private-name.jpg', $response->getContent());
+            $this->assertStringNotContainsString("uploads/{$owner->id}", $response->getContent());
+        }
+    }
+
     public function test_favoriting_notifies_the_owner_once_and_never_on_self(): void
     {
         Notification::fake();

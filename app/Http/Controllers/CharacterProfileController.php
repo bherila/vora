@@ -65,7 +65,7 @@ class CharacterProfileController extends Controller
             ->latest()
             ->paginate((int) config('media.page_size', 24));
 
-        return response()->json(['success' => true, ...$this->responder->page($paginator)]);
+        return response()->json(['success' => true, ...$this->responder->visitorPage($paginator)]);
     }
 
     public function stories(Request $request, string $ulid): JsonResponse

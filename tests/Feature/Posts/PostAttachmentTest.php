@@ -47,6 +47,14 @@ class PostAttachmentTest extends TestCase
         ]);
     }
 
+    private function attachStory(Post $post, Story $story): void
+    {
+        $post->attachments()->create([
+            'attachable_type' => $story->getMorphClass(),
+            'attachable_id' => $story->id,
+        ]);
+    }
+
     public function test_user_can_attach_their_own_media_and_an_interest(): void
     {
         $user = User::factory()->approved()->create();
@@ -248,6 +256,155 @@ class PostAttachmentTest extends TestCase
         }
 
         $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_identity_boundary_rejects_public_media_attachments_when_either_side_is_separate(): void
+    {
+        $user = User::factory()->approved()->create();
+        $separate = Character::factory()->for($user)->create(['is_linked' => false]);
+        $personaMedia = Media::factory()->for($user)->approved()->create([
+            'character_id' => $separate->id,
+            'audience' => Audience::Everyone,
+        ]);
+        $accountMedia = Media::factory()->for($user)->approved()->create([
+            'character_id' => null,
+            'audience' => Audience::Everyone,
+        ]);
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Account to persona',
+            'audience' => Audience::Everyone->value,
+            'attachments' => [['type' => 'media', 'id' => $personaMedia->id]],
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Persona to account',
+            'audience' => Audience::Everyone->value,
+            'character_id' => $separate->id,
+            'attachments' => [['type' => 'media', 'id' => $accountMedia->id]],
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+
+        $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_identity_boundary_rejects_specific_people_story_attachments_when_either_side_is_separate(): void
+    {
+        $user = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $separate = Character::factory()->for($user)->create(['is_linked' => false]);
+        $personaStory = Story::factory()->for($user)->readable()->create([
+            'audience' => Audience::SpecificPeople,
+        ]);
+        $personaStory->authors()->where('user_id', $user->id)->update(['character_id' => $separate->id]);
+        $accountStory = Story::factory()->for($user)->readable()->create([
+            'audience' => Audience::SpecificPeople,
+        ]);
+
+        foreach ([$personaStory, $accountStory] as $story) {
+            $story->syncAudienceMembers([$viewer->id]);
+        }
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Account to persona story',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$viewer->id],
+            'attachments' => [['type' => 'story', 'id' => $personaStory->id]],
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Persona to account story',
+            'audience' => Audience::SpecificPeople->value,
+            'audience_user_ids' => [$viewer->id],
+            'character_id' => $separate->id,
+            'attachments' => [['type' => 'story', 'id' => $accountStory->id]],
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('attachments');
+
+        $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_matching_separate_and_linked_attribution_remain_valid_for_attachments(): void
+    {
+        $user = User::factory()->approved()->create();
+        $separate = Character::factory()->for($user)->create(['is_linked' => false]);
+        $linked = Character::factory()->for($user)->create(['is_linked' => true]);
+        $personaMedia = Media::factory()->for($user)->approved()->create([
+            'character_id' => $separate->id,
+        ]);
+        $linkedMedia = Media::factory()->for($user)->approved()->create([
+            'character_id' => $linked->id,
+        ]);
+        $personaStory = Story::factory()->for($user)->readable()->create();
+        $personaStory->authors()->where('user_id', $user->id)->update(['character_id' => $separate->id]);
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Matching persona',
+            'character_id' => $separate->id,
+            'attachments' => [
+                ['type' => 'media', 'id' => $personaMedia->id],
+                ['type' => 'story', 'id' => $personaStory->id],
+            ],
+        ])->assertCreated()->assertJsonCount(2, 'data.attachments');
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Linked persona is deliberately attributable',
+            'attachments' => [['type' => 'media', 'id' => $linkedMedia->id]],
+        ])->assertCreated()->assertJsonCount(1, 'data.attachments');
+    }
+
+    public function test_existing_cross_identity_media_and_story_attachments_are_scrubbed_from_visitors(): void
+    {
+        User::factory()->create(); // spacer so nobody under test is the admin (id 1)
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $separate = Character::factory()->for($owner)->create(['is_linked' => false]);
+        $personaMedia = Media::factory()->for($owner)->approved()->create([
+            'character_id' => $separate->id,
+            'title' => 'Persona-only attachment',
+        ]);
+        $personaStory = Story::factory()->for($owner)->readable()->create([
+            'title' => 'Persona-only story',
+        ]);
+        $personaStory->authors()->where('user_id', $owner->id)->update(['character_id' => $separate->id]);
+        $post = Post::factory()->for($owner)->approved()->create([
+            'audience' => Audience::Everyone,
+            'character_id' => null,
+        ]);
+        $this->attach($post, $personaMedia);
+        $this->attachStory($post, $personaStory);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data.attachments')
+            ->assertJsonMissing(['label' => 'Persona-only attachment'])
+            ->assertJsonMissing(['label' => 'Persona-only story']);
+
+        $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.attachments');
+
+        $accountMedia = Media::factory()->for($owner)->approved()->create([
+            'character_id' => null,
+            'title' => 'Account-only attachment',
+        ]);
+        $accountStory = Story::factory()->for($owner)->readable()->create([
+            'title' => 'Account-only story',
+        ]);
+        $personaPost = Post::factory()->for($owner)->approved()->create([
+            'audience' => Audience::Everyone,
+            'character_id' => $separate->id,
+        ]);
+        $this->attach($personaPost, $accountMedia);
+        $this->attachStory($personaPost, $accountStory);
+
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$personaPost->ulid}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data.attachments')
+            ->assertJsonMissing(['label' => 'Account-only attachment'])
+            ->assertJsonMissing(['label' => 'Account-only story']);
+
+        $this->actingAs($owner)->getJson("/api/posts/by-ulid/{$personaPost->ulid}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.attachments');
     }
 
     public function test_pending_media_and_unavailable_stories_cannot_be_manually_attached(): void

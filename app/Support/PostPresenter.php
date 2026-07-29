@@ -152,7 +152,7 @@ class PostPresenter
             'id' => $character->id,
             'display_name' => $character->display_name,
             'ulid' => $character->ulid,
-            'avatar' => $showAvatar ? $mediaResponder->item($avatar, resolveHls: false) : null,
+            'avatar' => $showAvatar ? $mediaResponder->visitorItem($avatar, resolveHls: false) : null,
         ];
     }
 
@@ -191,6 +191,14 @@ class PostPresenter
             && $attachable->user_id === $post->user_id
             && $post->character_id !== $attachable->id
             && ! self::ownerOrAdmin($post->user_id, $viewer)) {
+            return null;
+        }
+
+        // Historical rows may predate the write-side identity guard. Scrub them
+        // for visitors so a click from a persona-reachable post cannot correlate
+        // a Separate persona with its owner or another persona.
+        if (! self::ownerOrAdmin($post->user_id, $viewer)
+            && ContentIdentity::crossesSeparatePersonaBoundary($post->character, $attachable)) {
             return null;
         }
 

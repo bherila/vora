@@ -73,6 +73,26 @@ class ProfileContentTest extends TestCase
             ->assertOk()->assertJsonCount(2, 'data');
     }
 
+    public function test_cross_user_profile_media_omits_filename_but_owner_management_retains_it(): void
+    {
+        $this->fakeStorage();
+        User::factory()->create(); // ensure the owner is not the id-1 admin
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create([
+            'original_filename' => 'sentinel-private-name.jpg',
+        ]);
+
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}/media")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $media->id)
+            ->assertJsonMissingPath('data.0.original_filename');
+
+        $this->actingAs($owner)->getJson("/api/users/{$owner->id}/media")
+            ->assertOk()
+            ->assertJsonPath('data.0.original_filename', 'sentinel-private-name.jpg');
+    }
+
     public function test_profile_content_requires_profile_visibility(): void
     {
         $this->fakeStorage();

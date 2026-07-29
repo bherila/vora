@@ -13,6 +13,7 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Privacy\PrivacyAuditor;
+use App\Support\ContentIdentity;
 use App\Support\FollowGraph;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -71,7 +72,7 @@ class PostService
         ): Post {
             $resolved = $this->resolveAttachments($author, $attachments);
             $character = $this->resolveCharacter($author, $characterId);
-            $this->assertRelationshipIdentitiesMatch($character?->id, $resolved);
+            $this->assertAttachmentIdentitiesMatch($character, $resolved);
             $privacy = $this->clampPrivacy(
                 $author,
                 $character?->id,
@@ -300,13 +301,14 @@ class PostService
     }
 
     /**
-     * Relationship tiers are defined against one effective identity. Mapping a
-     * persona-scoped Followers/Mutuals policy onto another persona or the human
-     * account silently changes who can see the attachment, so reject instead.
+     * Separate-persona pseudonymity is independent of audience tier. Reject any
+     * attachment that would connect a Separate persona to the account identity
+     * or another Separate persona. Matching Separate attribution, and the
+     * deliberately attributable account/Linked group, remain valid.
      *
      * @param  list<Model>  $attachments
      */
-    private function assertRelationshipIdentitiesMatch(?int $postCharacterId, array $attachments): void
+    private function assertAttachmentIdentitiesMatch(?Character $postCharacter, array $attachments): void
     {
         foreach ($attachments as $attachment) {
             if (! $attachment instanceof Character
@@ -315,22 +317,9 @@ class PostService
                 continue;
             }
 
-            if (! in_array($attachment->audience, [Audience::Followers, Audience::Mutuals], true)) {
-                continue;
-            }
-
-            $attachmentCharacterId = match (true) {
-                $attachment instanceof Character => (int) $attachment->id,
-                $attachment instanceof Media => $attachment->character_id !== null
-                    ? (int) $attachment->character_id
-                    : null,
-                // Story privacy is account-scoped.
-                default => null,
-            };
-
-            if ($attachmentCharacterId !== $postCharacterId) {
+            if (ContentIdentity::crossesSeparatePersonaBoundary($postCharacter, $attachment)) {
                 throw ValidationException::withMessages([
-                    'attachments' => 'Relationship-restricted content can only be attached by the same identity.',
+                    'attachments' => 'Content can only be attached by the same public identity.',
                 ]);
             }
         }
