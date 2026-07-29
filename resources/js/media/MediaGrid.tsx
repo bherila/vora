@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ProtectedImage } from '@/components/protected-image';
 import { Card, CardContent } from '@/components/ui/card';
 import type { MediaItem } from '@/media/types';
+import { safeInternalUrl } from '@/security/dom-url';
 
 interface MediaGridProps {
   items: MediaItem[];
@@ -54,6 +55,7 @@ interface MediaCardProps {
 
 function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCardProps) {
   const label = item.title || item.original_filename || 'Untitled media';
+  const safeHref = safeInternalUrl(href);
   const preview = (
     <div className="relative aspect-video bg-muted">
       <MediaThumbnail item={item} />
@@ -84,8 +86,8 @@ function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCar
             />
           </label>
         )}
-        {href ? (
-          <a href={href} className="block" aria-label={`Open ${label}`}>
+        {safeHref ? (
+          <a href={safeHref} className="block" aria-label={`Open ${label}`}>
             {preview}
           </a>
         ) : preview}

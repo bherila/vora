@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
 import { readInitialData } from '@/initialData';
+import { safeInternalUrl } from '@/security/dom-url';
 
 interface DirectoryUser {
   id: number;
@@ -74,7 +75,12 @@ function FollowDirectoryPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <a className="text-sm font-medium underline underline-offset-4" href={`/users/${user.id}`}>View profile</a>
+              <a
+                className="text-sm font-medium underline underline-offset-4"
+                href={safeInternalUrl(`/users/${user.id}`) ?? '#'}
+              >
+                View profile
+              </a>
             </CardContent>
           </Card>
         ))}

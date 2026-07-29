@@ -32,6 +32,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
+import { safeInternalUrl } from '@/security/dom-url';
 
 function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : err instanceof Error ? err.message : 'Request failed.';
@@ -70,6 +71,7 @@ export function MediaViewPage() {
   }
 
   const owner = item.owner ?? null;
+  const ownerHref = safeInternalUrl(owner?.href);
   const editable = item.editable;
 
   const openEditor = (): void => {
@@ -158,14 +160,28 @@ export function MediaViewPage() {
           page and links through to the full profile. */}
       {owner && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <a href={owner.href} className="flex min-w-0 items-center gap-3">
-            <Avatar name={owner.display_name} src={owner.avatar_url} sizeClassName="h-10 w-10" />
-            <span className="min-w-0">
-              <span className="block text-xs text-muted-foreground">{owner.is_self ? 'Your media' : 'Uploaded by'}</span>
-              <span className="block truncate font-medium">{owner.display_name}</span>
-            </span>
-          </a>
-          <a href={owner.href} className="text-sm underline underline-offset-4">{owner.is_self ? 'Go to your profile' : 'View profile'}</a>
+          {ownerHref ? (
+            <a href={ownerHref} className="flex min-w-0 items-center gap-3">
+              <Avatar name={owner.display_name} src={owner.avatar_url} sizeClassName="h-10 w-10" />
+              <span className="min-w-0">
+                <span className="block text-xs text-muted-foreground">{owner.is_self ? 'Your media' : 'Uploaded by'}</span>
+                <span className="block truncate font-medium">{owner.display_name}</span>
+              </span>
+            </a>
+          ) : (
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={owner.display_name} src={owner.avatar_url} sizeClassName="h-10 w-10" />
+              <span className="min-w-0">
+                <span className="block text-xs text-muted-foreground">{owner.is_self ? 'Your media' : 'Uploaded by'}</span>
+                <span className="block truncate font-medium">{owner.display_name}</span>
+              </span>
+            </div>
+          )}
+          {ownerHref && (
+            <a href={ownerHref} className="text-sm underline underline-offset-4">
+              {owner.is_self ? 'Go to your profile' : 'View profile'}
+            </a>
+          )}
         </div>
       )}
 

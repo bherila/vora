@@ -155,3 +155,39 @@ it('clears recent history without removing the other rail sections', async () =>
   await waitFor(() => expect(screen.queryByText('Recently visited')).toBeNull());
   expect(screen.getByText('Pending actions')).toBeInTheDocument();
 });
+
+it('does not turn server-returned script URLs into links', async () => {
+  jest.mocked(fetchWrapper.get).mockResolvedValue({
+    data: {
+      pending_actions: [
+        { label: 'Unsafe action', count: 1, href: 'javascript:alert(1)' },
+      ],
+      suggested_people: [
+        {
+          id: 8,
+          display_name: 'Unsafe suggestion',
+          avatar_url: null,
+          href: '//evil.example/suggestion',
+          interest_match_score: 100,
+          matching_interests_count: 1,
+        },
+      ],
+      recently_visited: [
+        {
+          type: 'user',
+          id: 9,
+          display_name: 'Unsafe history',
+          avatar_url: null,
+          href: 'data:text/html,<script>alert(1)</script>',
+        },
+      ],
+    },
+  });
+
+  render(<AppSideRail />);
+
+  expect(await screen.findByText('Unsafe action')).toBeInTheDocument();
+  expect(screen.getByText('Unsafe suggestion')).toBeInTheDocument();
+  expect(screen.getByText('Unsafe history')).toBeInTheDocument();
+  expect(screen.queryAllByRole('link')).toHaveLength(0);
+});

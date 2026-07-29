@@ -1,6 +1,8 @@
 import Hls from 'hls.js';
 import { useEffect, useRef } from 'react';
 
+import { safeSameOriginUrl } from '@/security/dom-url';
+
 interface HlsVideoPlayerProps {
   /** App-relative URL of the HLS master playlist proxy (`…/hls/master.m3u8`). */
   src: string;
@@ -34,9 +36,15 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       return;
     }
 
+    const safeSource = safeSameOriginUrl(src);
+    if (safeSource === null) {
+      onErrorRef.current?.();
+      return;
+    }
+
     // Native HLS (Safari, iOS): point the element at the manifest.
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src;
+      video.src = safeSource;
       const handleNativeError = () => onErrorRef.current?.();
       video.addEventListener('error', handleNativeError);
       return () => {
@@ -51,7 +59,7 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
           onErrorRef.current?.();
         }
       });
-      hls.loadSource(src);
+      hls.loadSource(safeSource);
       hls.attachMedia(video);
       return () => {
         hls.destroy();

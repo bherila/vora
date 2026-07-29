@@ -10,6 +10,7 @@ import { StoryGrid } from '@/explore/StoryGrid';
 import { fetchWrapper } from '@/fetchWrapper';
 import { MediaGrid } from '@/media/MediaGrid';
 import type { AdminMediaItem, MediaItem, PagedResponse,PageMeta } from '@/media/types';
+import { safeHttpsUrl } from '@/security/dom-url';
 import type { Audience, StoryDiscoveryItem } from '@/stories/types';
 
 type DeletedContentType = 'media' | 'stories' | 'characters' | 'posts';
@@ -132,26 +133,30 @@ function AdminDeletedContentPage() {
     }
   };
 
-  const actions = (item: DeletedBase, downloadUrl?: string | null) => (
-    <div className="flex flex-wrap gap-2">
-      {downloadUrl && (
-        <Button asChild type="button" size="sm" variant="outline">
-          <a href={downloadUrl} download target="_blank" rel="noreferrer">
-            <Download className="h-4 w-4" />
-            Download
-          </a>
+  const actions = (item: DeletedBase, downloadUrl?: string | null) => {
+    const safeDownloadUrl = safeHttpsUrl(downloadUrl);
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {safeDownloadUrl && (
+          <Button asChild type="button" size="sm" variant="outline">
+            <a href={safeDownloadUrl} download target="_blank" rel="noreferrer">
+              <Download className="h-4 w-4" />
+              Download
+            </a>
+          </Button>
+        )}
+        <Button type="button" size="sm" variant="outline" disabled={busy[item.id]} onClick={() => void restore(item.id)}>
+          <RotateCcw className="h-4 w-4" />
+          Restore
         </Button>
-      )}
-      <Button type="button" size="sm" variant="outline" disabled={busy[item.id]} onClick={() => void restore(item.id)}>
-        <RotateCcw className="h-4 w-4" />
-        Restore
-      </Button>
-      <Button type="button" size="sm" variant="destructive" disabled={busy[item.id]} onClick={() => void permanentlyDelete(item.id)}>
-        <Trash2 className="h-4 w-4" />
-        Delete forever
-      </Button>
-    </div>
-  );
+        <Button type="button" size="sm" variant="destructive" disabled={busy[item.id]} onClick={() => void permanentlyDelete(item.id)}>
+          <Trash2 className="h-4 w-4" />
+          Delete forever
+        </Button>
+      </div>
+    );
+  };
 
   const renderContent = () => {
     if (loading) {
