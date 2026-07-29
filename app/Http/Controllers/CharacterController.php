@@ -82,9 +82,11 @@ class CharacterController extends Controller
         }
 
         return DB::transaction(function () use ($request, $character, $user): JsonResponse {
+            $data = $request->validated();
             $privacyBefore = $character->privacySnapshot();
             $character->fill($this->payload($request))->save();
-            if (array_key_exists('audience', $request->validated())) {
+            $audienceChanged = $character->wasChanged('audience');
+            if ($audienceChanged || array_key_exists('audience_user_ids', $data)) {
                 $this->syncCharacterAudience($request, $character);
             }
             $this->auditor->record($character, $user, $privacyBefore, $character->privacySnapshot(), $request);
@@ -234,7 +236,7 @@ class CharacterController extends Controller
     private function syncCharacterAudience(UpsertCharacterRequest $request, Character $character): void
     {
         $character->syncAudienceMembers(
-            $request->audience() === Audience::SpecificPeople ? $request->audienceUserIds() : []
+            $character->audience === Audience::SpecificPeople ? $request->audienceUserIds() : []
         );
     }
 

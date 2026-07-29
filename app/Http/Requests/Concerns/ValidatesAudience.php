@@ -69,9 +69,11 @@ trait ValidatesAudience
      * For surfaces that allow explicit per-user grants, keep those grants to
      * mutual followers. An empty allowlist is valid and means "only me".
      */
-    protected function validateSpecificAudienceMembersAreMutuals(Validator $validator): void
-    {
-        if ($this->audience() !== Audience::SpecificPeople) {
+    protected function validateSpecificAudienceMembersAreMutuals(
+        Validator $validator,
+        ?Audience $effectiveAudience = null,
+    ): void {
+        if (($effectiveAudience ?? $this->audience()) !== Audience::SpecificPeople) {
             return;
         }
 

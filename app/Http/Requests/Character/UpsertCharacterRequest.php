@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Character;
 
 use App\Http\Requests\Concerns\ValidatesAudience;
+use App\Models\Character;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -39,6 +40,14 @@ class UpsertCharacterRequest extends FormRequest
 
     protected function withValidator(Validator $validator): void
     {
-        $validator->after(fn (Validator $validator) => $this->validateSpecificAudienceMembersAreMutuals($validator));
+        $validator->after(function (Validator $validator): void {
+            $effectiveAudience = $this->audience();
+            $character = $this->route('character');
+            if (! $this->has('audience') && $character instanceof Character) {
+                $effectiveAudience = $character->audience;
+            }
+
+            $this->validateSpecificAudienceMembersAreMutuals($validator, $effectiveAudience);
+        });
     }
 }

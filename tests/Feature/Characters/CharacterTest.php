@@ -192,6 +192,41 @@ class CharacterTest extends TestCase
         $this->assertSame([$allowed->id], $media->audienceMembers()->pluck('user_id')->map('intval')->all());
     }
 
+    public function test_specific_persona_allowlist_can_change_without_repeating_the_unchanged_audience(): void
+    {
+        $user = User::factory()->approved()->create();
+        $allowed = User::factory()->approved()->create();
+        $notMutual = User::factory()->approved()->create();
+        $character = Character::factory()->for($user)->create([
+            'audience' => Audience::SpecificPeople,
+        ]);
+        $character->syncAudienceMembers([$allowed->id]);
+        $media = Media::factory()->for($user)->approved()->create([
+            'character_id' => $character->id,
+            'audience' => Audience::SpecificPeople,
+        ]);
+        $media->syncAudienceMembers([$allowed->id]);
+
+        $this->actingAs($user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'display_name' => $character->display_name,
+                'audience_user_ids' => [$notMutual->id],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('audience_user_ids.0');
+
+        $this->patchJson("/api/characters/{$character->id}", [
+            'display_name' => $character->display_name,
+            'audience_user_ids' => [],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.audience', Audience::SpecificPeople->value)
+            ->assertJsonPath('data.audience_user_ids', []);
+
+        $this->assertSame([], $character->audienceMembers()->pluck('user_id')->all());
+        $this->assertSame([], $media->audienceMembers()->pluck('user_id')->all());
+    }
+
     public function test_owner_can_switch_a_persona_between_linked_and_separate(): void
     {
         $user = User::factory()->approved()->create();
