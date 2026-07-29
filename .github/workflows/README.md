@@ -35,6 +35,11 @@ After deployment, the workflow verifies `https://macrophile.me/up` through the
 public Cloudflare path. A web-server 404 or an unhealthy Laravel application
 fails the deployment instead of reporting a false success.
 
+Immediately after migrations, deployment also runs `schema:assert-persona`.
+This fails the deployment immediately when any database column required by the
+persona models is missing. The assertion complements `/up`: the health endpoint
+can stay green when reads degrade but persona writes cannot succeed.
+
 ## Migration amendments (CI guard)
 
 `ci.yml` fails a pull request that **modifies** an existing file under
@@ -55,4 +60,3 @@ If a migration has genuinely never been deployed anywhere — a brand-new table
 added earlier in the same unreleased branch, for example — label the PR
 `migration-amend-ok` to bypass the check. Prefer adding a migration; the label
 exists for the rare case where amending is genuinely correct.
-
