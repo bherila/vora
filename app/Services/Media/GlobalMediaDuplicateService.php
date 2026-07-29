@@ -5,9 +5,7 @@ namespace App\Services\Media;
 use App\Enums\MediaType;
 use App\Models\Media;
 use App\Support\PerceptualHash;
-use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Admin-only cross-account PDQ matching.
@@ -27,6 +25,8 @@ class GlobalMediaDuplicateService
      * @var list<array{left_id: int, right_id: int, distance: int}>|null
      */
     private ?array $pairs = null;
+
+    private bool $scanTruncated = false;
 
     /**
      * Direct cross-account matches for media already loaded into an admin page.
@@ -135,11 +135,30 @@ class GlobalMediaDuplicateService
     }
 
     /**
+     * @return array{truncated: bool, scanned_media_count: int, scan_limit: int}
+     */
+    public function scanStatus(): array
+    {
+        $photos = $this->photos();
+
+        return [
+            'truncated' => $this->scanTruncated,
+            'scanned_media_count' => $photos->count(),
+            'scan_limit' => $this->scanLimit(),
+        ];
+    }
+
+    /**
      * @return Collection<int, Media>
      */
     private function photos(): Collection
     {
-        return $this->photos ??= Media::query()
+        if ($this->photos instanceof Collection) {
+            return $this->photos;
+        }
+
+        $limit = $this->scanLimit();
+        $photos = Media::query()
             ->with([
                 'interests',
                 'user' => fn ($query) => $query->withTrashed(),
@@ -147,8 +166,14 @@ class GlobalMediaDuplicateService
             ->where('type', MediaType::Photo->value)
             ->where('upload_status', 'ready')
             ->whereNotNull('pdq_hash')
-            ->get()
-            ->keyBy('id');
+            ->orderByDesc('id')
+            ->limit($limit + 1)
+            ->get();
+
+        $this->scanTruncated = $photos->count() > $limit;
+        $this->photos = $photos->take($limit)->keyBy('id');
+
+        return $this->photos;
     }
 
     /**
@@ -160,65 +185,29 @@ class GlobalMediaDuplicateService
             return $this->pairs;
         }
 
-        $this->pairs = DB::connection()->getDriverName() === 'mysql'
-            ? $this->mysqlPairs()
-            : $this->portablePairs();
+        $this->pairs = $this->sharedPairs();
 
         return $this->pairs;
     }
 
     /**
-     * MySQL computes the four 64-bit chunks in the database so the global
-     * search does not transfer every hash pair to PHP.
+     * All drivers deliberately use the same distance implementation. This
+     * avoids a silent MySQL/SQLite signedness divergence at 64-bit chunk
+     * boundaries and lets the SQLite suite exercise the production algorithm.
+     *
+     * The pdq_hash index added by
+     * 2026_07_29_060000_add_pdq_hash_index_to_media only helps locate non-null
+     * candidates; it cannot accelerate a computed Hamming-distance predicate.
+     * photos() bounds that otherwise-quadratic candidate set before this loop.
      *
      * @return list<array{left_id: int, right_id: int, distance: int}>
      */
-    private function mysqlPairs(): array
-    {
-        $chunks = [];
-        foreach ([1, 17, 33, 49] as $start) {
-            $left = "CAST(CONV(SUBSTRING(left_media.pdq_hash, {$start}, 16), 16, 10) AS UNSIGNED)";
-            $right = "CAST(CONV(SUBSTRING(right_media.pdq_hash, {$start}, 16), 16, 10) AS UNSIGNED)";
-            $chunks[] = "BIT_COUNT({$left} ^ {$right})";
-        }
-        $distance = implode(' + ', $chunks);
-
-        return DB::table('media as left_media')
-            ->join('media as right_media', function (JoinClause $join): void {
-                $join->whereColumn('right_media.id', '>', 'left_media.id')
-                    ->whereColumn('right_media.user_id', '!=', 'left_media.user_id');
-            })
-            ->selectRaw("left_media.id AS left_id, right_media.id AS right_id, ({$distance}) AS distance")
-            ->where('left_media.type', MediaType::Photo->value)
-            ->where('right_media.type', MediaType::Photo->value)
-            ->where('left_media.upload_status', 'ready')
-            ->where('right_media.upload_status', 'ready')
-            ->whereNull('left_media.deleted_at')
-            ->whereNull('right_media.deleted_at')
-            ->whereNotNull('left_media.pdq_hash')
-            ->whereNotNull('right_media.pdq_hash')
-            ->whereRaw("left_media.pdq_hash REGEXP '^[0-9a-fA-F]{64}$'")
-            ->whereRaw("right_media.pdq_hash REGEXP '^[0-9a-fA-F]{64}$'")
-            ->havingRaw("({$distance}) <= ?", [$this->threshold()])
-            ->get()
-            ->map(fn (object $row): array => [
-                'left_id' => (int) $row->left_id,
-                'right_id' => (int) $row->right_id,
-                'distance' => (int) $row->distance,
-            ])
-            ->all();
-    }
-
-    /**
-     * SQLite test/development fallback. Production MySQL uses mysqlPairs().
-     *
-     * @return list<array{left_id: int, right_id: int, distance: int}>
-     */
-    private function portablePairs(): array
+    private function sharedPairs(): array
     {
         $photos = $this->photos()->values();
         $pairs = [];
         $count = $photos->count();
+        $threshold = $this->threshold();
 
         for ($leftIndex = 0; $leftIndex < $count; $leftIndex++) {
             $left = $photos->get($leftIndex);
@@ -232,7 +221,7 @@ class GlobalMediaDuplicateService
                 }
 
                 $distance = PerceptualHash::hammingDistanceHex($left->pdq_hash, $right->pdq_hash);
-                if ($distance !== null && $distance <= $this->threshold()) {
+                if ($distance !== null && $distance <= $threshold) {
                     $pairs[] = [
                         'left_id' => $left->id,
                         'right_id' => $right->id,
@@ -264,6 +253,11 @@ class GlobalMediaDuplicateService
     private function threshold(): int
     {
         return max(0, min(256, (int) config('media.pdq_global_threshold', 15)));
+    }
+
+    private function scanLimit(): int
+    {
+        return max(2, min(1000, (int) config('media.pdq_global_scan_limit', 500)));
     }
 
     /**

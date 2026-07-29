@@ -67,6 +67,7 @@ class AdminMediaController extends Controller
 
         return response()->json([
             'success' => true,
+            'duplicate_scan' => $this->duplicates->scanStatus(),
             ...$page,
         ]);
     }

@@ -15,6 +15,16 @@ type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
 const FILTERS: StatusFilter[] = ['pending', 'approved', 'rejected', 'all'];
 
+interface DuplicateScanStatus {
+  truncated: boolean;
+  scanned_media_count: number;
+  scan_limit: number;
+}
+
+interface AdminMediaResponse extends PagedResponse<AdminMediaItem> {
+  duplicate_scan?: DuplicateScanStatus;
+}
+
 function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : 'Request failed.';
 }
@@ -30,7 +40,7 @@ function badgeClass(status: ModerationStatusValue): string {
   }
 }
 
-function AdminMediaPage() {
+export function AdminMediaPage() {
   const [items, setItems] = useState<AdminMediaItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('pending');
   const [loading, setLoading] = useState(true);
@@ -39,6 +49,7 @@ function AdminMediaPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  const [scanStatus, setScanStatus] = useState<DuplicateScanStatus | null>(null);
 
   // page 1 replaces the list (filter change / after a moderation action); higher
   // pages append for the "Load more" control.
@@ -53,10 +64,11 @@ function AdminMediaPage() {
       if (next !== 'all') {
         params.set('status', next);
       }
-      const response = (await fetchWrapper.get(`/api/admin/media?${params.toString()}`)) as PagedResponse<AdminMediaItem>;
+      const response = (await fetchWrapper.get(`/api/admin/media?${params.toString()}`)) as AdminMediaResponse;
       const rows = response.data ?? [];
       setItems((current) => (nextPage > 1 ? [...current, ...rows] : rows));
       setHasMore(response.meta?.has_more ?? false);
+      setScanStatus(response.duplicate_scan ?? null);
       setPage(nextPage);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -95,6 +107,12 @@ function AdminMediaPage() {
       <Button asChild type="button" size="sm" variant="outline" className="mb-6">
         <a href="/admin/media-duplicates">Review cross-account duplicate clusters</a>
       </Button>
+      {scanStatus?.truncated && (
+        <p role="alert" className="mb-6 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800">
+          Duplicate signals cover only the newest {scanStatus.scanned_media_count} eligible photos.
+          Review the cluster page for the bounded scan details.
+        </p>
+      )}
 
       <div className="mb-6 flex gap-2">
         {FILTERS.map((value) => (
