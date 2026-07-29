@@ -234,38 +234,47 @@ class CharacterController extends Controller
         return response()->json(['success' => true, 'data' => $this->present($character->refresh())]);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Build persona attributes with PATCH semantics: display_name is required,
+     * while every optional field changes only when its key is present. Add new
+     * optional fields to the resolver map so omission can never erase data.
+     *
+     * @return array<string, mixed>
+     */
     private function payload(UpsertCharacterRequest $request): array
     {
         $data = $request->validated();
-        $gender = $data['gender'] ?? null;
-        $userType = $data['user_type'] ?? null;
-
-        // Only touch is_linked when the client sent it, so older callers keep
-        // the current value (create defaults to linked in the model hook).
-        $linked = array_key_exists('is_linked', $data)
-            ? ['is_linked' => (bool) $data['is_linked']]
-            : [];
-        // Omitted on older/partial update clients means "leave unchanged".
-        // Creates still receive the schema's independently defined true
-        // default, while an explicit value remains editable.
-        $discovery = array_key_exists('discoverable', $data)
-            ? ['discoverable' => $request->discoverable()]
-            : [];
-        // PATCH callers may edit non-privacy fields. Omitting audience must not
-        // widen the persona to Everyone or discard a SpecificPeople allowlist.
-        $audience = array_key_exists('audience', $data)
-            ? ['audience' => $request->audience()]
-            : [];
-
-        return $linked + $discovery + $audience + [
+        $attributes = [
             'display_name' => $data['display_name'],
-            'description' => $data['description'] ?? null,
-            'gender' => $gender,
-            'gender_other' => $gender === 'other' ? ($data['gender_other'] ?? null) : null,
-            'user_type' => $userType,
-            'user_type_other' => $userType === 'other' ? ($data['user_type_other'] ?? null) : null,
         ];
+
+        $optionalResolvers = [
+            'description' => static fn (): mixed => $data['description'],
+            'gender' => static fn (): mixed => $data['gender'],
+            'gender_other' => static fn (): mixed => $data['gender_other'],
+            'user_type' => static fn (): mixed => $data['user_type'],
+            'user_type_other' => static fn (): mixed => $data['user_type_other'],
+            'is_linked' => static fn (): bool => (bool) $data['is_linked'],
+            'discoverable' => fn (): bool => $request->discoverable(),
+            'audience' => fn (): Audience => $request->audience(),
+        ];
+
+        foreach ($optionalResolvers as $field => $resolve) {
+            if (array_key_exists($field, $data)) {
+                $attributes[$field] = $resolve();
+            }
+        }
+
+        // Explicitly changing a typed field away from "other" also clears its
+        // now-inapplicable detail; merely omitting either field preserves both.
+        if (array_key_exists('gender', $data) && $data['gender'] !== 'other') {
+            $attributes['gender_other'] = null;
+        }
+        if (array_key_exists('user_type', $data) && $data['user_type'] !== 'other') {
+            $attributes['user_type_other'] = null;
+        }
+
+        return $attributes;
     }
 
     private function syncCharacterAudience(UpsertCharacterRequest $request, Character $character): void
