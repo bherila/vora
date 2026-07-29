@@ -12,7 +12,7 @@ function FeedPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Feed</h1>
-        <p className="text-muted-foreground">Posts from you and people you follow.</p>
+        <p className="text-muted-foreground">Posts shared with you.</p>
       </div>
       <FeedView onboarding={onboarding} />
       <Toaster position="top-right" richColors closeButton />

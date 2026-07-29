@@ -2,6 +2,7 @@ import type { Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 
 export type AttachmentType = 'character' | 'interest' | 'media' | 'story';
+export type FeedScope = 'following' | 'mixed';
 
 export interface UserOption {
   id: number;
