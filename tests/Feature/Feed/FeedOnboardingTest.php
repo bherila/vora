@@ -26,10 +26,14 @@ class FeedOnboardingTest extends TestCase
         $onboarding = $this->onboarding($user);
 
         $this->assertSame([
-            'has_avatar' => false,
-            'has_interests' => false,
-            'is_following' => false,
-            'has_posted' => false,
+            'display_name' => $user->display_name,
+            'has_personas' => false,
+            'steps' => [
+                'has_avatar' => false,
+                'has_interests' => false,
+                'is_following' => false,
+                'has_posted' => false,
+            ],
         ], $onboarding);
     }
 
@@ -86,13 +90,42 @@ class FeedOnboardingTest extends TestCase
             'responded_at' => now(),
         ]);
 
-        $this->assertFalse($this->onboarding($user)['is_following']);
+        $this->assertFalse($this->onboarding($user)['steps']['is_following']);
+    }
+
+    public function test_persona_is_exposed_as_optional_context_without_changing_required_progress(): void
+    {
+        User::factory()->approved()->create();
+        $user = User::factory()->approved()->create();
+        Character::factory()->for($user)->create();
+
+        $onboarding = $this->onboarding($user);
+
+        $this->assertTrue($onboarding['has_personas']);
+        $this->assertCount(4, $onboarding['steps']);
+    }
+
+    public function test_dismissal_is_persisted_to_the_account_and_hides_onboarding_on_a_later_request(): void
+    {
+        User::factory()->approved()->create();
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/onboarding/dismiss')
+            ->assertOk()
+            ->assertExactJson(['success' => true]);
+
+        $this->assertNotNull($user->fresh()->onboarding_dismissed_at);
+
+        // A fresh HTTP request reads account state rather than device-local
+        // storage, so another browser receives the same dismissed state.
+        $this->assertNull($this->onboarding($user->fresh()));
     }
 
     /**
      * Parse the onboarding slice hydrated into the standalone feed page.
      *
-     * @return array<string, bool>|null
+     * @return array<string, mixed>|null
      */
     private function onboarding(User $user): ?array
     {
@@ -103,7 +136,7 @@ class FeedOnboardingTest extends TestCase
         /** @var array<string, mixed> $payload */
         $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
 
-        /** @var array<string, bool>|null $onboarding */
+        /** @var array<string, mixed>|null $onboarding */
         $onboarding = $payload['feedOnboarding'] ?? null;
 
         return $onboarding;

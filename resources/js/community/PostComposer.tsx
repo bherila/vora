@@ -192,7 +192,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-          <Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={5} placeholder="Share an update" disabled={saving} />
+          <Textarea id="post-composer-body" value={body} onChange={(event) => setBody(event.target.value)} rows={5} placeholder="Share an update" disabled={saving} />
 
           <button
             type="button"

@@ -2,11 +2,11 @@ import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
 import { FeedView } from '@/community/FeedView';
-import type { OnboardingSteps } from '@/community/OnboardingChecklist';
+import type { OnboardingData } from '@/community/OnboardingChecklist';
 import { readInitialData } from '@/initialData';
 
 function FeedPage() {
-  const onboarding = readInitialData<{ feedOnboarding?: OnboardingSteps | null }>().feedOnboarding ?? null;
+  const onboarding = readInitialData<{ feedOnboarding?: OnboardingData | null }>().feedOnboarding ?? null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

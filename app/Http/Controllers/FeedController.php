@@ -30,7 +30,7 @@ class FeedController extends Controller
     {
         return view('feed', [
             'initialData' => [
-                'feedOnboarding' => Onboarding::steps($request->user()),
+                'feedOnboarding' => Onboarding::payload($request->user()),
             ],
         ]);
     }

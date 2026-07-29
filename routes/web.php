@@ -27,6 +27,7 @@ use App\Http\Controllers\InviteController;
 use App\Http\Controllers\MediaAssetController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PostCommentController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\PostReactionController;
@@ -156,6 +157,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::post('/api/onboarding/dismiss', [OnboardingController::class, 'dismiss']);
     Route::post('/api/identity', [IdentityController::class, 'update']);
     // Characters are created and managed on the profile (/me) now; keep the named
     // route as a redirect for old bookmarks.

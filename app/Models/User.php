@@ -72,6 +72,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'onboarding_dismissed_at' => 'datetime',
             'approved_at' => 'datetime',
             'deactivated_at' => 'datetime',
             'id_verified_at' => 'datetime',
