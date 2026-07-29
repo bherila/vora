@@ -8,6 +8,7 @@ use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Notifications\FollowedUserPosted;
 use App\Services\UserAccountService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -84,7 +85,47 @@ class NotificationTest extends TestCase
         $this->assertSame(0, $ownerFollower->notifications()->count());
         $this->assertSame(0, $otherPersonaFollower->notifications()->count());
         $this->assertSame(1, $personaFollower->notifications()->count());
-        $this->assertSame('Distinct Persona', $personaFollower->notifications()->first()->data['actor_name']);
+        $data = $personaFollower->notifications()->first()->data;
+        $this->assertSame('Distinct Persona', $data['actor_name']);
+        $this->assertSame('/p/'.$post->ulid, $data['url']);
+        $this->assertArrayNotHasKey('actor_id', $data);
+
+        $responseData = $this->actingAs($personaFollower)
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->json('data.0.data');
+        $this->assertSame('Distinct Persona', $responseData['actor_name']);
+        $this->assertSame('/p/'.$post->ulid, $responseData['url']);
+        $this->assertArrayNotHasKey('actor_id', $responseData);
+
+        $push = (new FollowedUserPosted($post))->toWebPush(
+            $personaFollower,
+            new FollowedUserPosted($post),
+        )->toArray();
+        $this->assertSame('Distinct Persona posted something new.', $push['body']);
+        $this->assertSame([
+            'url' => '/p/'.$post->ulid,
+            'type' => 'new_post',
+        ], $push['data']);
+    }
+
+    public function test_account_and_linked_persona_notifications_retain_public_owner_attribution(): void
+    {
+        $author = User::factory()->approved()->create(['display_name' => 'Public Owner']);
+        $linkedPersona = Character::factory()->for($author)->create([
+            'display_name' => 'Linked Persona',
+            'is_linked' => true,
+        ]);
+
+        $accountPost = Post::factory()->for($author)->approved()->create();
+        $linkedPost = Post::factory()->for($author)->approved()->create([
+            'character_id' => $linkedPersona->id,
+        ]);
+
+        $this->assertSame($author->id, (new FollowedUserPosted($accountPost))->toArray($author)['actor_id']);
+        $linkedData = (new FollowedUserPosted($linkedPost))->toArray($author);
+        $this->assertSame($author->id, $linkedData['actor_id']);
+        $this->assertSame('Linked Persona', $linkedData['actor_name']);
     }
 
     public function test_overlapping_account_and_linked_persona_edges_send_one_notification(): void

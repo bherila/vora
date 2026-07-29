@@ -10,8 +10,8 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
 /**
- * Sent to a follower when an account they follow publishes a post they are
- * allowed to see.
+ * Sent to a follower when an account or persona they follow publishes a post
+ * they are allowed to see.
  */
 class FollowedUserPosted extends Notification implements ShouldQueue
 {
@@ -35,15 +35,31 @@ class FollowedUserPosted extends Notification implements ShouldQueue
     {
         $author = $this->post->user;
         $character = $this->post->character;
+        $actorName = match (true) {
+            $character !== null => $character->display_name,
+            $this->post->character_id === null => $author?->display_name ?: $author?->name,
+            default => null,
+        };
 
-        return [
+        $data = [
             'type' => 'new_post',
-            'actor_id' => $this->post->user_id,
-            'actor_name' => $character?->display_name ?: ($author?->display_name ?: $author?->name),
+            'actor_name' => $actorName,
             'post_id' => $this->post->id,
             'post_ulid' => $this->post->ulid,
             'url' => '/p/'.$this->post->ulid,
         ];
+
+        // Linked personas deliberately disclose their owner relationship, so
+        // their notifications retain the account actor id. A Separate persona
+        // must never make that correlation machine-readable. If a persona has
+        // disappeared before the queued web-push channel runs, fail closed:
+        // character_id still tells us this was persona-authored, but not whether
+        // public account attribution was safe.
+        if ($this->post->character_id === null || $character?->is_linked === true) {
+            $data['actor_id'] = $this->post->user_id;
+        }
+
+        return $data;
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
