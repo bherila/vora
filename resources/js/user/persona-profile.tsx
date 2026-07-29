@@ -5,6 +5,7 @@ import { toast, Toaster } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
+import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ReportButton } from '@/components/report-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -127,7 +128,7 @@ export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileVie
   const followerLabel = `${followerCount} ${followerCount === 1 ? 'follower' : 'followers'}`;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className={`${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`}>
       {viewAs && <ViewAsBanner viewAs={viewAs} />}
       <a className="text-sm underline underline-offset-4" href="/explore">← Explore</a>
 
@@ -262,7 +263,7 @@ export function PersonaProfilePage() {
   }>();
   const [persona] = useState<PersonaProfileData | null>(() => initial.personaProfile ?? null);
 
-  if (!persona) return <div className="mx-auto max-w-4xl px-4 py-8">Loading persona...</div>;
+  if (!persona) return <div className={`${BROWSING_PAGE_WIDTH} px-4 py-8`}>Loading persona...</div>;
 
   return <PersonaProfileView persona={persona} viewAs={initial.profileViewAs ?? null} />;
 }

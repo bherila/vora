@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
+import { READING_PAGE_WIDTH } from '@/components/page-width';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -111,7 +112,7 @@ function InvitesPage() {
   const balance = data?.balance ?? 0;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <div className={`${READING_PAGE_WIDTH} px-4 py-8`}>
       <Toaster position="top-right" richColors closeButton />
       <Card>
         <CardHeader>

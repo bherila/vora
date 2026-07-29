@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Avatar } from '@/components/avatar';
+import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -40,7 +41,7 @@ function FollowDirectoryPage() {
   }, [personas, query]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className={`${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`}>
       <div>
         <h1 className="text-2xl font-bold">Browse people</h1>
         <p className="text-sm text-muted-foreground">View profiles, request to follow people, and discover their personas.</p>
@@ -52,7 +53,7 @@ function FollowDirectoryPage() {
         placeholder="Search by name"
         aria-label="Search people and personas by name"
       />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filtered.map((user) => (
           <Card key={user.id}>
             <CardHeader>
@@ -78,7 +79,7 @@ function FollowDirectoryPage() {
           </Card>
         ))}
         {filtered.length === 0 && (
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-2 lg:col-span-3">
             <CardHeader>
               <CardTitle>{query.trim() ? 'No matching users yet' : 'No one to browse yet'}</CardTitle>
               <CardDescription>
