@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { SideRailLayout } from '@/components/app-side-rail';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
@@ -391,10 +392,11 @@ export function FollowProfilePage() {
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
 
-      <div data-profile-layout="summary-and-content" className={!profile.restricted && userId
+      <SideRailLayout enabled={profile.is_self && !isPreview}>
+        <div data-profile-layout="summary-and-content" className={!profile.restricted && userId
         ? 'grid gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:items-start'
         : undefined}
-      >
+        >
         <div className="min-w-0 space-y-4">
           <Card>
         <CardHeader>
@@ -544,7 +546,8 @@ export function FollowProfilePage() {
           )}
           </div>
         )}
-      </div>
+        </div>
+      </SideRailLayout>
       {editable && (
         <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
           <DialogContent className="sm:max-w-2xl">

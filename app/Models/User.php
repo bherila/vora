@@ -373,4 +373,14 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(FollowRequest::class, 'recipient_id');
     }
+
+    /**
+     * Viewer-private recently visited profile references.
+     *
+     * @return HasMany<RecentProfileVisit, $this>
+     */
+    public function recentProfileVisits(): HasMany
+    {
+        return $this->hasMany(RecentProfileVisit::class, 'viewer_user_id');
+    }
 }

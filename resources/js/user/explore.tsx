@@ -3,11 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { SideRailLayout } from '@/components/app-side-rail';
 import { FavoriteButton } from '@/components/favorite-button';
 import { InterestPicker } from '@/components/interest-picker';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { Button } from '@/components/ui/button';
-import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
+import { type PersonaDiscoveryItem, PersonaGrid } from '@/explore/PersonaGrid';
 import { StoryGrid } from '@/explore/StoryGrid';
 import { usePersonaListing } from '@/explore/usePersonaListing';
 import { useStoryListing } from '@/explore/useStoryListing';
@@ -41,7 +42,7 @@ function sameIds(a: number[], b: number[]): boolean {
  * interests (seeded server-side); the viewer can reset to those defaults or clear
  * the filter to browse everything as an explicit exception.
  */
-function ExplorePage() {
+export function ExplorePage() {
   const initial = readInitialData<{ explore?: ExploreInitial }>().explore;
   const defaultInterestIds = useMemo(() => initial?.default_interest_ids ?? [], [initial]);
   const [tab, setTab] = useState<ExploreTab>('media');
@@ -75,6 +76,8 @@ function ExplorePage() {
 
   return (
     <div className={`${BROWSING_PAGE_WIDTH} px-4 py-8`}>
+      <SideRailLayout>
+        <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Explore</h1>
         <p className="text-muted-foreground">Discover media, stories, and personas shared by the community.</p>
@@ -152,6 +155,8 @@ function ExplorePage() {
           </Button>
         </div>
       )}
+        </div>
+      </SideRailLayout>
       <Toaster position="top-right" richColors closeButton />
     </div>
   );

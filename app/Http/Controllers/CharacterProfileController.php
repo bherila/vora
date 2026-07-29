@@ -10,6 +10,7 @@ use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\PersonaProfilePayload;
 use App\Services\Profile\ProfileContentQueries;
+use App\Services\Profile\RecentProfileTrail;
 use App\Support\PaginationMeta;
 use App\Support\PostPresenter;
 use App\Support\StoryPresenter;
@@ -40,18 +41,23 @@ class CharacterProfileController extends Controller
         private readonly ProfileContentQueries $queries,
         private readonly PersonaProfilePayload $profilePayload,
         private readonly ViewAsContext $viewAs,
+        private readonly RecentProfileTrail $recentProfiles,
     ) {}
 
     public function page(Request $request, string $ulid): View
     {
         [$character, $viewer] = $this->resolveCharacter($request, $ulid);
+        $profile = $this->profilePayload->build(
+            $character,
+            $viewer,
+            allowMutations: $this->viewAs->mode() === null,
+        );
+        if ($this->viewAs->mode() === null) {
+            $this->recentProfiles->recordCharacter($viewer, $character);
+        }
 
         return view('user.persona-profile', ['initialData' => [
-            'personaProfile' => $this->profilePayload->build(
-                $character,
-                $viewer,
-                allowMutations: $this->viewAs->mode() === null,
-            ),
+            'personaProfile' => $profile,
             'profileViewAs' => $this->viewAs->payload(),
         ]]);
     }
