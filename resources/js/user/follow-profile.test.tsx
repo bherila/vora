@@ -310,7 +310,7 @@ describe('FollowProfilePage (/me)', () => {
     expect(await screen.findByRole('heading', { name: /Creating as Vex\./ })).toBeInTheDocument();
     expect(screen.getByTestId('owner-media-manager')).toHaveAttribute('data-identity', '6');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Vex)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Account and identity menu (currently Vex)' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Kira' }));
     await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: 5 }));
     expect(within(rail).getByRole('button', { name: 'Kira' })).toHaveAttribute('aria-pressed', 'true');
@@ -327,8 +327,8 @@ describe('FollowProfilePage (/me)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create a persona' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Nova' }));
 
-    expect(await screen.findByRole('button', { name: 'Switch identity (currently Ben)' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Ben)' }));
+    expect(await screen.findByRole('button', { name: 'Account and identity menu (currently Ben)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Account and identity menu (currently Ben)' }));
     expect(screen.getByRole('menuitemradio', { name: 'Nova' })).toBeInTheDocument();
   });
 
@@ -358,7 +358,7 @@ describe('FollowProfilePage (/me)', () => {
     await waitFor(() => expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/characters/5'));
     expect(fetchWrapper.post).toHaveBeenCalledWith('/api/identity', { character_id: null });
     expect(screen.queryByRole('heading', { name: /Creating as Kira\./ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Switch identity (currently Ben)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Account and identity menu (currently Ben)' }));
     expect(screen.queryByRole('menuitemradio', { name: 'Kira' })).toBeNull();
     expect(screen.getByRole('menuitemradio', { name: 'Vex' })).toBeInTheDocument();
   });
