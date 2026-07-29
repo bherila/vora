@@ -45,7 +45,7 @@ export function useProfileList<T>(endpoint: string | null): { items: T[]; loadin
 /** A grid of pulsing placeholders shown while a tab's content loads. */
 export function GridSkeleton({ itemClassName = 'aspect-video' }: { itemClassName?: string }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-busy="true">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" role="status" aria-busy="true">
       <span className="sr-only">Loading…</span>
       {Array.from({ length: 6 }).map((_, index) => (
         <Skeleton key={index} className={`w-full ${itemClassName}`} />

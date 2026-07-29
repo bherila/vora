@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
+import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ProtectedImage } from '@/components/protected-image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -258,7 +259,7 @@ function FavoritesTab({ userId, isSelf, viewAs }: { userId: number; isSelf: bool
     );
   }
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
       {items.map((item) => {
         const card = (
           <Card className={`h-full ${viewAs ? '' : 'transition-colors hover:bg-muted'}`}>
@@ -422,7 +423,7 @@ export function FollowProfilePage() {
   };
 
   if (personaProfile && viewAs) return <PersonaProfileView persona={personaProfile} viewAs={viewAs} />;
-  if (!profile) return <div className="mx-auto max-w-4xl px-4 py-8">Loading profile...</div>;
+  if (!profile) return <div className={`${BROWSING_PAGE_WIDTH} px-4 py-8`}>Loading profile...</div>;
   const isPreview = viewAs !== null;
   const hasActiveRequest = profile.follow_request !== null && !profile.follow_request.can_retry;
   const hasPersonas = profile.characters.length > 0;
@@ -442,13 +443,18 @@ export function FollowProfilePage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className={`${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} data-page-width="browsing">
       {viewAs && <ViewAsBanner viewAs={viewAs} />}
       {!profile.is_self && <a className="text-sm underline underline-offset-4" href="/users">← Browse people</a>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {message && <Alert><AlertDescription>{message}</AlertDescription></Alert>}
 
-      <Card>
+      <div data-profile-layout="summary-and-content" className={!profile.restricted && userId
+        ? 'grid gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] lg:items-start'
+        : undefined}
+      >
+        <div className="min-w-0 space-y-4">
+          <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-4">
@@ -521,12 +527,10 @@ export function FollowProfilePage() {
             </>
           )}
         </CardContent>
-      </Card>
+          </Card>
 
-      {!profile.restricted && userId && (
-        <div className="space-y-4">
           {/* Identity rail — absent entirely until the first persona exists. */}
-          {hasPersonas && (
+          {!profile.restricted && userId && hasPersonas && (
             <IdentityRail
               profile={profile}
               identity={identity}
@@ -535,9 +539,8 @@ export function FollowProfilePage() {
               onCreate={profile.is_self && !isPreview ? openCreateCharacter : undefined}
             />
           )}
-
           {/* Owner controls for the active persona. */}
-          {profile.is_self && activeCharacter && (
+          {!profile.restricted && userId && profile.is_self && activeCharacter && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => { setEditingCharacter(activeCharacter); setCharacterDialogOpen(true); }}>
                 <Pencil className="h-4 w-4" /> Edit persona
@@ -547,7 +550,10 @@ export function FollowProfilePage() {
               </Button>
             </div>
           )}
+        </div>
 
+        {!profile.restricted && userId && (
+          <div className="min-w-0 space-y-4">
           {profile.is_self && <LatestStrip userId={userId} identity={identity} />}
 
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="Profile content">
@@ -590,8 +596,9 @@ export function FollowProfilePage() {
           {activeTab === 'favorites' && identity === null && (
             <FavoritesTab userId={userId} isSelf={profile.is_self} viewAs={viewAs} />
           )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
       {profile.is_self && (
         <CharacterEditorDialog
           open={characterDialogOpen}

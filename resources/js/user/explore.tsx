@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 
 import { FavoriteButton } from '@/components/favorite-button';
 import { InterestPicker } from '@/components/interest-picker';
+import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { Button } from '@/components/ui/button';
 import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
 import { StoryGrid } from '@/explore/StoryGrid';
@@ -73,7 +74,7 @@ function ExplorePage() {
   }, [hasMore, loadingMore, loadMore]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className={`${BROWSING_PAGE_WIDTH} px-4 py-8`}>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Explore</h1>
         <p className="text-muted-foreground">Discover media, stories, and personas shared by the community.</p>

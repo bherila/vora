@@ -119,6 +119,19 @@ describe('FollowProfilePage (/me)', () => {
     window.confirm = jest.fn(() => true);
   });
 
+  it('uses the wide browsing container and a desktop summary/content split', async () => {
+    setInitialData(ownerInitialData());
+    render(<FollowProfilePage />);
+
+    await waitFor(() => expect(screen.getByTestId('owner-media-manager')).toBeInTheDocument());
+
+    const page = document.querySelector('[data-page-width="browsing"]');
+    expect(page).toHaveClass('max-w-7xl');
+    expect(page?.querySelector('[data-profile-layout="summary-and-content"]')).toHaveClass(
+      'lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]',
+    );
+  });
+
   it('renders a persona-free owner with no persona affordances beyond the single quiet entry point', async () => {
     setInitialData(ownerInitialData());
     render(<FollowProfilePage />);

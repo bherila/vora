@@ -65,6 +65,13 @@ composer test
 
 ## React / TypeScript conventions
 
+- Use the shared page-width tokens in `resources/js/components/page-width.ts`.
+  Reading and form surfaces use `READING_PAGE_WIDTH` (`max-w-3xl`) to protect
+  line length; browsing and grid surfaces use `BROWSING_PAGE_WIDTH`
+  (`max-w-7xl`) so cards, galleries, and optional secondary rails can use the
+  viewport. `/me`, Explore, media galleries, and People are browsing surfaces;
+  settings, story readers, and long prose are reading/form surfaces.
+
 - Use `interface` for component props.
 - Named function declarations for components (not arrow-function const exports).
 - Strict TypeScript — no `any` unless unavoidable and commented.

@@ -30,6 +30,16 @@ function visitorItem(): MediaItem {
 }
 
 describe('MediaGrid visitor fallbacks', () => {
+  it('adds browsing columns at large desktop breakpoints', () => {
+    render(<MediaGrid items={[visitorItem()]} />);
+
+    expect(document.querySelector('[data-layout="media-grid"]')).toHaveClass(
+      'sm:grid-cols-2',
+      'lg:grid-cols-4',
+      'xl:grid-cols-5',
+    );
+  });
+
   it('uses neutral copy when the visitor payload has no title or filename', () => {
     render(<MediaGrid items={[visitorItem()]} />);
 

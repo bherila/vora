@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 
 import { FavoriteButton } from '@/components/favorite-button';
 import { Markdown } from '@/components/Markdown';
+import { READING_PAGE_WIDTH } from '@/components/page-width';
 import { ReportButton } from '@/components/report-button';
 import { readInitialData } from '@/initialData';
 
@@ -18,12 +19,12 @@ function StoryReaderPage() {
   const [story] = useState<StoryReader | null>(getInitialStory);
   const error = 'This story is unavailable.';
 
-  if (story === null) return <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-destructive">{error}</div>;
+  if (story === null) return <div className={`${READING_PAGE_WIDTH} px-4 py-10 text-sm text-destructive`}>{error}</div>;
 
   const authorNames = story.authors.map((a) => a.display_name).join(', ');
 
   return (
-    <article className="mx-auto max-w-3xl space-y-6 px-4 py-10">
+    <article className={`${READING_PAGE_WIDTH} space-y-6 px-4 py-10`}>
       <header className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h1 className="text-3xl font-bold">{story.title}</h1>

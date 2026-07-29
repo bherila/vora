@@ -29,7 +29,7 @@ export function MediaGrid({ items, renderActions, getHref = (item) => `/m/${item
   };
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" data-layout="media-grid">
       {items.map((item) => (
         <MediaCard
           key={item.id}
