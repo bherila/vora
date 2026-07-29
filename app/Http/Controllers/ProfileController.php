@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Profile\RecentProfileTrail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -161,7 +162,7 @@ class ProfileController extends Controller
      * cannot recover the account themselves — only an admin can restore or
      * permanently delete it.
      */
-    public function destroy(Request $request): JsonResponse
+    public function destroy(Request $request, RecentProfileTrail $recentProfiles): JsonResponse
     {
         $user = $request->user();
 
@@ -198,6 +199,7 @@ class ProfileController extends Controller
             }
         }
 
+        $recentProfiles->clear($user);
         $user->delete();
 
         Auth::logout();
@@ -372,7 +374,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function export(Request $request): JsonResponse
+    public function export(Request $request, RecentProfileTrail $recentProfiles): JsonResponse
     {
         $user = $request->user();
 
@@ -516,6 +518,7 @@ class ProfileController extends Controller
                     'character_id' => $rating->character_id,
                     'level' => $rating->level,
                 ])->values(),
+                'recently_visited' => $recentProfiles->cards($user),
                 'notifications' => $user->notifications()->latest()->get()->map(fn ($notification): array => [
                     'id' => $notification->id,
                     'type' => $notification->data['type'] ?? $notification->type,

@@ -32,13 +32,13 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
      *
      * - persona profile, media/stories/posts tabs
      * - media, story and post detail routes
-     * - favorites, comments, followers and notifications
+     * - favorites, comments, followers, notifications and side rail history
      *
      * IMPORTANT: Any new route reachable from a persona profile must be added
      * to this inventory and the sweep below. Keep this count in sync so a
      * partial test edit fails visibly instead of silently shrinking coverage.
      */
-    private const VISITOR_SURFACE_COUNT = 15;
+    private const VISITOR_SURFACE_COUNT = 16;
 
     /**
      * @return array{
@@ -273,6 +273,10 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             ->assertJsonPath('data.0.data.actor_name', 'Independent Persona')
             ->assertJsonPath('data.0.data.url', "/p/{$post->ulid}")
             ->assertJsonMissingPath('data.0.data.actor_id');
+        $sideRail = $this->getJson('/api/side-rail')
+            ->assertOk()
+            ->assertJsonPath('data.recently_visited.0.display_name', 'Independent Persona')
+            ->assertJsonPath('data.recently_visited.0.href', "/c/{$persona->ulid}");
 
         $visitorPayloads = [
             'persona profile' => $profileHtml,
@@ -290,6 +294,7 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             'story detail page' => $storyPage,
             'followers' => $followers->getContent(),
             'notifications' => $notifications->getContent(),
+            'side rail recently visited' => $sideRail->getContent(),
         ];
         $this->assertCount(self::VISITOR_SURFACE_COUNT, $visitorPayloads);
 

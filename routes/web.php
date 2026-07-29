@@ -35,6 +35,7 @@ use App\Http\Controllers\ProfileContentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SideRailController;
 use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
@@ -159,6 +160,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
     Route::post('/api/onboarding/dismiss', [OnboardingController::class, 'dismiss']);
     Route::post('/api/identity', [IdentityController::class, 'update']);
+    Route::get('/api/side-rail', [SideRailController::class, 'show']);
+    Route::delete('/api/side-rail/history', [SideRailController::class, 'clearHistory']);
     // Keep the retired characters index pointed at the profile for old bookmarks;
     // create/edit use the dedicated persona editor routes below.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');

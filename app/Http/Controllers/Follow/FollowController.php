@@ -18,6 +18,7 @@ use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\PersonaProfilePayload;
 use App\Services\Profile\ProfileContentQueries;
+use App\Services\Profile\RecentProfileTrail;
 use App\Support\ActiveIdentity;
 use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
@@ -37,6 +38,7 @@ class FollowController extends Controller
         private readonly ActiveIdentity $activeIdentity,
         private readonly PersonaProfilePayload $personaProfile,
         private readonly ViewAsContext $viewAs,
+        private readonly RecentProfileTrail $recentProfiles,
     ) {}
 
     public function directory(Request $request): View
@@ -84,8 +86,11 @@ class FollowController extends Controller
             abort(404);
         }
 
+        $profile = $this->profilePayload($current, $user);
+        $this->recentProfiles->recordUser($current, $user);
+
         return view('user.follow-profile', [
-            'initialData' => ['followProfile' => $this->profilePayload($current, $user)],
+            'initialData' => ['followProfile' => $profile],
         ]);
     }
 

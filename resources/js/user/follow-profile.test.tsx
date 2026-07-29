@@ -110,6 +110,7 @@ describe('FollowProfilePage (/me)', () => {
 
     const page = document.querySelector('[data-page-width="browsing"]');
     expect(page).toHaveClass('max-w-7xl');
+    expect(screen.getByRole('complementary', { name: 'Account overview' })).toBeInTheDocument();
     expect(page?.querySelector('[data-profile-layout="summary-and-content"]')).toHaveClass(
       'lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]',
     );
