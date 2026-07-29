@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 import { communityApi } from './api';
-import { OnboardingChecklist, type OnboardingSteps } from './OnboardingChecklist';
+import { OnboardingChecklist, type OnboardingData } from './OnboardingChecklist';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
 import type { CommunityPost, FeedScope } from './types';
 
 interface FeedViewProps {
   /** First-run checklist state; hidden when null/undefined. */
-  onboarding?: OnboardingSteps | null;
+  onboarding?: OnboardingData | null;
 }
 
 function scopeFromLocation(): FeedScope {
@@ -118,7 +118,7 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
 
   return (
     <div className="space-y-6">
-      {onboarding && <OnboardingChecklist steps={onboarding} />}
+      {onboarding && <OnboardingChecklist onboarding={onboarding} />}
       <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Feed scope">
         <Button
           type="button"
@@ -143,7 +143,12 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
           </span>
         </Button>
       </div>
-      <PostComposer onCreated={(post) => setPosts((current) => [post, ...current])} />
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Every post has an audience. New posts default to Everyone; open Audience, persona &amp; attachments to choose who can see yours.
+        </p>
+        <PostComposer onCreated={(post) => setPosts((current) => [post, ...current])} />
+      </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading feed...</p>

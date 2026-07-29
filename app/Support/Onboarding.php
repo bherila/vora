@@ -8,20 +8,30 @@ use App\Models\Post;
 use App\Models\User;
 
 /**
- * First-run checklist state shown on the feed (/feed, the post-login landing).
- * Returns null once every step is complete so the checklist disappears for
- * established users. Each flag is a single existence check, kept cheap.
- *
- * Deliberately no persona step: personas are an opt-in layer most users never
- * touch, so onboarding must not suggest one is expected.
+ * First-run guide shown on the feed (/feed, the post-login landing). Returns
+ * null once every required step is complete or the account has dismissed it.
+ * Each flag is a single existence check, kept cheap.
  */
 class Onboarding
 {
     /**
-     * @return array<string, bool>|null
+     * @return array{
+     *     display_name: string,
+     *     has_personas: bool,
+     *     steps: array{
+     *         has_avatar: bool,
+     *         has_interests: bool,
+     *         is_following: bool,
+     *         has_posted: bool
+     *     }
+     * }|null
      */
-    public static function steps(User $viewer): ?array
+    public static function payload(User $viewer): ?array
     {
+        if ($viewer->onboarding_dismissed_at !== null) {
+            return null;
+        }
+
         $steps = [
             'has_avatar' => $viewer->profile_picture_media_id !== null,
             'has_interests' => InterestRating::query()
@@ -39,6 +49,16 @@ class Onboarding
             'has_posted' => Post::query()->where('user_id', $viewer->id)->exists(),
         ];
 
-        return in_array(false, $steps, true) ? $steps : null;
+        if (! in_array(false, $steps, true)) {
+            return null;
+        }
+
+        return [
+            'display_name' => $viewer->display_name ?: $viewer->name,
+            // Personas are optional. This flag controls a separate invitation;
+            // it never contributes to the required-step count.
+            'has_personas' => $viewer->characters()->exists(),
+            'steps' => $steps,
+        ];
     }
 }

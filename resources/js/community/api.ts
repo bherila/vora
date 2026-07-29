@@ -12,6 +12,8 @@ export interface PostInput {
 }
 
 export const communityApi = {
+  dismissOnboarding: (): Promise<{ success: boolean }> =>
+    fetchWrapper.post('/api/onboarding/dismiss', {}) as Promise<{ success: boolean }>,
   feed: (scope: FeedScope, cursor?: string | null): Promise<FeedResponse> => {
     const params = new URLSearchParams({ scope });
     if (cursor) params.set('cursor', cursor);
