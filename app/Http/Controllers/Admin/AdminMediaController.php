@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ModerateMediaRequest;
 use App\Models\Media;
 use App\Services\Media\AdminMediaResponseService;
+use App\Services\Media\GlobalMediaDuplicateService;
 use App\Services\Media\MediaModerationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class AdminMediaController extends Controller
 {
     public function __construct(
         private readonly AdminMediaResponseService $responder,
+        private readonly GlobalMediaDuplicateService $duplicates,
         private readonly MediaModerationService $moderation,
     ) {}
 
@@ -51,9 +53,21 @@ class AdminMediaController extends Controller
             ->latest()
             ->paginate((int) config('media.page_size', 24));
 
+        $page = $this->responder->page($paginator, resolveHls: false);
+        $summaries = $this->duplicates->summariesFor(collect($paginator->items()));
+        $page['data'] = collect($page['data'])->map(function (array $item) use ($summaries): array {
+            $item['cross_account_duplicates'] = $summaries[$item['id']] ?? [
+                'other_account_count' => 0,
+                'match_count' => 0,
+                'matches' => [],
+            ];
+
+            return $item;
+        })->all();
+
         return response()->json([
             'success' => true,
-            ...$this->responder->page($paginator, resolveHls: false),
+            ...$page,
         ]);
     }
 
@@ -87,6 +101,9 @@ class AdminMediaController extends Controller
 
         $media->load(['interests', 'user']);
 
-        return response()->json(['success' => true, 'data' => $this->responder->item($media)]);
+        $data = $this->responder->item($media);
+        $data['cross_account_duplicates'] = $this->duplicates->summariesFor(collect([$media]))[$media->id];
+
+        return response()->json(['success' => true, 'data' => $data]);
     }
 }

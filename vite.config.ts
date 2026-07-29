@@ -29,6 +29,7 @@ export default defineConfig({
                 'resources/js/admin/audit-log.tsx',
                 'resources/js/admin/interests.tsx',
                 'resources/js/admin/media.tsx',
+                'resources/js/admin/media-duplicates.tsx',
                 'resources/js/admin/reports.tsx',
                 'resources/js/admin/posts.tsx',
                 'resources/js/admin/stories.tsx',

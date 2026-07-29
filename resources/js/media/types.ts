@@ -103,6 +103,19 @@ export interface AdminMediaItem extends MediaItem {
   /** Admin-only dedup signals. */
   file_hash: string | null;
   duplicate_of_media_id: number | null;
+  cross_account_duplicates?: {
+    other_account_count: number;
+    match_count: number;
+    matches: {
+      media_id: number;
+      media_href: string;
+      account_id: number;
+      account_name: string | null;
+      account_email: string | null;
+      account_href: string;
+      distance: number;
+    }[];
+  };
   user: { id: number; name: string | null; email: string | null };
 }
 

@@ -92,6 +92,9 @@ function AdminMediaPage() {
       <p className="mb-6 text-muted-foreground">
         Review uploaded photos and videos for TOS/AUP compliance. Uploaders cannot see this review status.
       </p>
+      <Button asChild type="button" size="sm" variant="outline" className="mb-6">
+        <a href="/admin/media-duplicates">Review cross-account duplicate clusters</a>
+      </Button>
 
       <div className="mb-6 flex gap-2">
         {FILTERS.map((value) => (
@@ -114,7 +117,7 @@ function AdminMediaPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {items.map((item) => (
-            <Card key={item.id}>
+            <Card key={item.id} id={`media-${item.id}`}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between text-base">
                   <span className="truncate">{item.title || item.original_filename}</span>
@@ -158,6 +161,28 @@ function AdminMediaPage() {
                     <div className="flex justify-between text-amber-600">
                       <dt>Possible duplicate</dt>
                       <dd>of media #{item.duplicate_of_media_id}</dd>
+                    </div>
+                  )}
+                  {(item.cross_account_duplicates?.other_account_count ?? 0) > 0 && (
+                    <div className="mt-2 border-t border-border pt-2 text-amber-600">
+                      <dt>
+                        {item.cross_account_duplicates?.other_account_count}{' '}
+                        {item.cross_account_duplicates?.other_account_count === 1 ? 'other account' : 'other accounts'} uploaded near-identical media
+                      </dt>
+                      <dd className="mt-1 space-y-1 text-right">
+                        {item.cross_account_duplicates?.matches.map((match) => (
+                          <span key={match.media_id} className="block">
+                            <a className="underline underline-offset-4" href={match.media_href}>
+                              media #{match.media_id}
+                            </a>
+                            {' · '}
+                            <a className="underline underline-offset-4" href={match.account_href}>
+                              {match.account_name ?? `account #${match.account_id}`}
+                            </a>
+                            {' · '}distance {match.distance}
+                          </span>
+                        ))}
+                      </dd>
                     </div>
                   )}
                 </dl>
