@@ -23,6 +23,78 @@ class BlockingPrivacyTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_blocked_list_preserves_the_exact_target_and_never_resolves_a_separate_persona_owner(): void
+    {
+        User::factory()->create();
+        $alice = User::factory()->approved()->create();
+        $owner = User::factory()->approved()->create([
+            'display_name' => 'Owner Sentinel',
+            'name' => 'Owner Sentinel',
+        ]);
+        $kira = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+        $drew = User::factory()->approved()->create(['display_name' => 'Drew']);
+        $personaBlock = Block::query()->create([
+            'blocker_id' => $alice->id,
+            'blocked_user_id' => $owner->id,
+            'blocked_character_id' => $kira->id,
+        ]);
+        $personaBlock->forceFill(['created_at' => '2026-07-29 12:00:00'])->save();
+        $accountBlock = Block::query()->create([
+            'blocker_id' => $alice->id,
+            'blocked_user_id' => $drew->id,
+        ]);
+
+        $data = $this->actingAs($alice)->getJson('/api/blocks')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->json('data');
+
+        $persona = collect($data)->firstWhere('block_id', $personaBlock->id);
+        $this->assertSame('character', $persona['type']);
+        $this->assertSame($kira->id, $persona['id']);
+        $this->assertSame('Kira', $persona['display_name']);
+        $this->assertSame("/c/{$kira->ulid}", $persona['profile_url']);
+        $this->assertSame('2026-07-29T12:00:00+00:00', $persona['blocked_at']);
+        $this->assertStringNotContainsString('Owner Sentinel', json_encode($persona, JSON_THROW_ON_ERROR));
+
+        $account = collect($data)->firstWhere('block_id', $accountBlock->id);
+        $this->assertSame('user', $account['type']);
+        $this->assertSame($drew->id, $account['id']);
+        $this->assertSame('Drew', $account['display_name']);
+    }
+
+    public function test_blocked_list_keeps_a_deleted_separate_persona_exact_and_never_falls_back_to_its_owner(): void
+    {
+        User::factory()->create();
+        $alice = User::factory()->approved()->create();
+        $owner = User::factory()->approved()->create([
+            'display_name' => 'Owner Sentinel',
+            'name' => 'Owner Sentinel',
+        ]);
+        $kira = Character::factory()->for($owner)->create([
+            'display_name' => 'Kira',
+            'is_linked' => false,
+        ]);
+        $block = Block::query()->create([
+            'blocker_id' => $alice->id,
+            'blocked_user_id' => $owner->id,
+            'blocked_character_id' => $kira->id,
+        ]);
+        $kira->delete();
+
+        $this->actingAs($alice)->getJson('/api/blocks')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.block_id', $block->id)
+            ->assertJsonPath('data.0.type', 'character')
+            ->assertJsonPath('data.0.id', $kira->id)
+            ->assertJsonPath('data.0.display_name', 'Kira')
+            ->assertJsonMissing(['display_name' => 'Owner Sentinel']);
+    }
+
     public function test_blocking_severs_only_the_follow_edges_each_side_may_observe_safely_and_audits_them(): void
     {
         User::factory()->create();

@@ -136,6 +136,15 @@ interface MutedIdentity {
   profile_url: string;
 }
 
+interface BlockedIdentity {
+  block_id: number;
+  type: 'user' | 'character';
+  id: number;
+  display_name: string;
+  avatar_url: string | null;
+  blocked_at: string | null;
+}
+
 const SETTINGS_TABS = ['account', 'notifications', 'privacy', 'security', 'data'] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
@@ -264,6 +273,9 @@ export function UserSettingsPage() {
   const [mutedIdentities, setMutedIdentities] = useState<MutedIdentity[]>([]);
   const [mutesLoading, setMutesLoading] = useState(false);
   const [mutesError, setMutesError] = useState('');
+  const [blockedIdentities, setBlockedIdentities] = useState<BlockedIdentity[]>([]);
+  const [blocksLoading, setBlocksLoading] = useState(false);
+  const [blocksError, setBlocksError] = useState('');
 
   useEffect(() => {
     const supported = isWebPushSupported();
@@ -319,6 +331,18 @@ export function UserSettingsPage() {
       })
       .finally(() => {
         if (active) setMutesLoading(false);
+      });
+    setBlocksLoading(true);
+    setBlocksError('');
+    fetchWrapper.get('/api/blocks')
+      .then((response) => {
+        if (active) setBlockedIdentities((response as { data: BlockedIdentity[] }).data);
+      })
+      .catch((error) => {
+        if (active) setBlocksError(typeof error === 'string' ? error : 'Could not load blocked identities.');
+      })
+      .finally(() => {
+        if (active) setBlocksLoading(false);
       });
 
     return () => {
@@ -419,6 +443,16 @@ export function UserSettingsPage() {
       ));
     } catch (error) {
       setMutesError(typeof error === 'string' ? error : 'Could not unmute this identity.');
+    }
+  };
+
+  const unblock = async (identity: BlockedIdentity): Promise<void> => {
+    setBlocksError('');
+    try {
+      await fetchWrapper.delete(`/api/blocks/${identity.block_id}`);
+      setBlockedIdentities((current) => current.filter((item) => item.block_id !== identity.block_id));
+    } catch (error) {
+      setBlocksError(typeof error === 'string' ? error : 'Could not unblock this identity.');
     }
   };
 
@@ -698,7 +732,53 @@ export function UserSettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="privacy">
+        <TabsContent value="privacy" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Blocked accounts and personas</CardTitle>
+              <CardDescription>
+                You can review the accounts and personas you blocked. Unblocking restores visibility, but follow relationships removed by blocking are not restored.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {blocksError && <Alert variant="destructive"><AlertDescription>{blocksError}</AlertDescription></Alert>}
+              {blocksLoading ? (
+                <p className="text-sm text-muted-foreground">Loading blocked identities…</p>
+              ) : blockedIdentities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">You have not blocked anyone.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {blockedIdentities.map((identity) => (
+                    <li key={identity.block_id} className="flex items-center justify-between gap-3 p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar name={identity.display_name} src={identity.avatar_url} sizeClassName="h-10 w-10" />
+                        <div className="min-w-0">
+                          <p className="truncate">
+                            {identity.display_name}
+                            {identity.type === 'character' && <span className="ml-2 text-xs text-muted-foreground">Persona</span>}
+                          </p>
+                          {identity.blocked_at && (
+                            <p className="text-xs text-muted-foreground">
+                              Blocked {new Date(identity.blocked_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Unblock ${identity.display_name}`}
+                        onClick={() => void unblock(identity)}
+                      >
+                        Unblock
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Muted accounts and personas</CardTitle>

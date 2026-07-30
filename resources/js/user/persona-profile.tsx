@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
+import { BlockButton } from '@/components/block-button';
 import { FavoriteButton } from '@/components/favorite-button';
 import { MuteButton } from '@/components/mute-button';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
@@ -38,6 +39,7 @@ export interface PersonaProfileData {
   viewer_favorited: boolean;
   can_report: boolean;
   viewer_muted: boolean;
+  viewer_block_id: number | null;
 }
 
 interface PersonaProfileViewProps {
@@ -196,6 +198,12 @@ export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileVie
                     id={persona.id}
                     displayName={persona.display_name}
                     initialMuted={persona.viewer_muted}
+                  />
+                  <BlockButton
+                    type="character"
+                    id={persona.id}
+                    displayName={persona.display_name}
+                    initialBlockId={persona.viewer_block_id}
                   />
                   {persona.can_report && <ReportButton type="character" id={persona.id} variant="ghost" />}
                 </>
