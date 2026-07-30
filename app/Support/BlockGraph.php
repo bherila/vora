@@ -240,55 +240,69 @@ final class BlockGraph
             return $query;
         }
 
-        $query->whereNotExists(function (QueryBuilder $blocks) use ($table, $viewer): void {
-            $blocks->from('blocks as story_denial_blocks')
-                ->where('story_denial_blocks.blocked_user_id', $viewer->id)
-                ->whereExists(function (QueryBuilder $author) use ($table): void {
+        return $query->where(function (EloquentBuilder $visibility) use ($table, $viewer): void {
+            // Match canViewStory(): owners and accepted coauthors retain access
+            // even when another accepted author has blocked them.
+            $visibility->where("{$table}.user_id", $viewer->id)
+                ->orWhereExists(function (QueryBuilder $author) use ($table, $viewer): void {
                     $author->selectRaw('1')
-                        ->from('story_authors as denied_story_authors')
-                        ->whereColumn('denied_story_authors.story_id', "{$table}.id")
-                        ->where('denied_story_authors.status', StoryAuthor::STATUS_ACCEPTED)
-                        ->whereColumn('denied_story_authors.user_id', 'story_denial_blocks.blocker_id');
-                });
-        });
+                        ->from('story_authors as viewer_story_authors')
+                        ->whereColumn('viewer_story_authors.story_id', "{$table}.id")
+                        ->where('viewer_story_authors.user_id', $viewer->id)
+                        ->where('viewer_story_authors.status', StoryAuthor::STATUS_ACCEPTED);
+                })
+                ->orWhere(function (EloquentBuilder $blockedVisibility) use ($table, $viewer): void {
+                    $blockedVisibility->whereNotExists(function (QueryBuilder $blocks) use ($table, $viewer): void {
+                        $blocks->from('blocks as story_denial_blocks')
+                            ->where('story_denial_blocks.blocked_user_id', $viewer->id)
+                            ->whereExists(function (QueryBuilder $author) use ($table): void {
+                                $author->selectRaw('1')
+                                    ->from('story_authors as denied_story_authors')
+                                    ->whereColumn('denied_story_authors.story_id', "{$table}.id")
+                                    ->where('denied_story_authors.status', StoryAuthor::STATUS_ACCEPTED)
+                                    ->whereColumn('denied_story_authors.user_id', 'story_denial_blocks.blocker_id');
+                            });
+                    });
 
-        return $query->whereNotExists(function (QueryBuilder $blocks) use ($table, $viewer): void {
-            $blocks->from('blocks as story_hide_blocks')
-                ->where('story_hide_blocks.blocker_id', $viewer->id)
-                ->whereExists(function (QueryBuilder $author) use ($table): void {
-                    $author->selectRaw('1')
-                        ->from('story_authors as blocked_story_authors')
-                        ->whereColumn('blocked_story_authors.story_id', "{$table}.id")
-                        ->where('blocked_story_authors.status', StoryAuthor::STATUS_ACCEPTED)
-                        ->whereColumn('blocked_story_authors.user_id', 'story_hide_blocks.blocked_user_id')
-                        ->where(function (QueryBuilder $identity): void {
-                            $identity->where(function (QueryBuilder $publicCluster): void {
-                                $publicCluster->where(function (QueryBuilder $outerIdentity): void {
-                                    $outerIdentity->whereNull('blocked_story_authors.character_id')
-                                        ->orWhereExists(function (QueryBuilder $outerCharacter): void {
-                                            self::constrainLinkedCharacter(
-                                                $outerCharacter,
-                                                'blocked_story_authors.character_id',
-                                                'blocked_story_authors.user_id',
-                                                'story_linked_characters',
-                                            );
-                                        });
-                                })->where(function (QueryBuilder $blockedIdentity): void {
-                                    $blockedIdentity->whereNull('story_hide_blocks.blocked_character_id')
-                                        ->orWhereExists(function (QueryBuilder $blockedCharacter): void {
-                                            self::constrainLinkedCharacter(
-                                                $blockedCharacter,
-                                                'story_hide_blocks.blocked_character_id',
-                                                'story_hide_blocks.blocked_user_id',
-                                                'story_blocked_linked_characters',
-                                            );
-                                        });
-                                });
-                            })->orWhereColumn(
-                                'story_hide_blocks.blocked_character_id',
-                                'blocked_story_authors.character_id',
-                            );
-                        });
+                    $blockedVisibility->whereNotExists(function (QueryBuilder $blocks) use ($table, $viewer): void {
+                        $blocks->from('blocks as story_hide_blocks')
+                            ->where('story_hide_blocks.blocker_id', $viewer->id)
+                            ->whereExists(function (QueryBuilder $author) use ($table): void {
+                                $author->selectRaw('1')
+                                    ->from('story_authors as blocked_story_authors')
+                                    ->whereColumn('blocked_story_authors.story_id', "{$table}.id")
+                                    ->where('blocked_story_authors.status', StoryAuthor::STATUS_ACCEPTED)
+                                    ->whereColumn('blocked_story_authors.user_id', 'story_hide_blocks.blocked_user_id')
+                                    ->where(function (QueryBuilder $identity): void {
+                                        $identity->where(function (QueryBuilder $publicCluster): void {
+                                            $publicCluster->where(function (QueryBuilder $outerIdentity): void {
+                                                $outerIdentity->whereNull('blocked_story_authors.character_id')
+                                                    ->orWhereExists(function (QueryBuilder $outerCharacter): void {
+                                                        self::constrainLinkedCharacter(
+                                                            $outerCharacter,
+                                                            'blocked_story_authors.character_id',
+                                                            'blocked_story_authors.user_id',
+                                                            'story_linked_characters',
+                                                        );
+                                                    });
+                                            })->where(function (QueryBuilder $blockedIdentity): void {
+                                                $blockedIdentity->whereNull('story_hide_blocks.blocked_character_id')
+                                                    ->orWhereExists(function (QueryBuilder $blockedCharacter): void {
+                                                        self::constrainLinkedCharacter(
+                                                            $blockedCharacter,
+                                                            'story_hide_blocks.blocked_character_id',
+                                                            'story_hide_blocks.blocked_user_id',
+                                                            'story_blocked_linked_characters',
+                                                        );
+                                                    });
+                                            });
+                                        })->orWhereColumn(
+                                            'story_hide_blocks.blocked_character_id',
+                                            'blocked_story_authors.character_id',
+                                        );
+                                    });
+                            });
+                    });
                 });
         });
     }

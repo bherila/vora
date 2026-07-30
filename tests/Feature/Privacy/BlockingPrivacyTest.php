@@ -13,6 +13,7 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
+use App\Support\BlockGraph;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
@@ -232,6 +233,45 @@ class BlockingPrivacyTest extends TestCase
         $this->getJson('/api/explore/stories')
             ->assertOk()
             ->assertJsonMissing(['ulid' => $story->ulid]);
+    }
+
+    public function test_story_authors_bypass_blocks_consistently_in_boolean_and_query_checks(): void
+    {
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $coauthor = User::factory()->approved()->create();
+        $visitor = User::factory()->approved()->create();
+        $story = Story::factory()->for($owner)->readable()->create();
+        $story->authors()->create([
+            'user_id' => $coauthor->id,
+            'role' => StoryAuthor::ROLE_CO_AUTHOR,
+            'status' => StoryAuthor::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+        Block::query()->create([
+            'blocker_id' => $owner->id,
+            'blocked_user_id' => $coauthor->id,
+        ]);
+        Block::query()->create([
+            'blocker_id' => $coauthor->id,
+            'blocked_user_id' => $owner->id,
+        ]);
+        Block::query()->create([
+            'blocker_id' => $visitor->id,
+            'blocked_user_id' => $owner->id,
+        ]);
+
+        foreach ([$owner, $coauthor] as $author) {
+            $this->assertTrue(BlockGraph::canViewStory($author, $story));
+            $this->assertTrue(
+                Story::query()->viewableBy($author)->whereKey($story)->exists(),
+            );
+        }
+
+        $this->assertFalse(BlockGraph::canViewStory($visitor, $story));
+        $this->assertFalse(
+            Story::query()->viewableBy($visitor)->whereKey($story)->exists(),
+        );
     }
 
     public function test_unblock_by_owned_block_row_does_not_require_the_target_to_remain_visible(): void
