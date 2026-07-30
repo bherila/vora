@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Support\BlockGraph;
 use App\Support\PaginationMeta;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,10 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $paginator = $request->user()->notifications()->paginate((int) config('media.page_size', 24));
+        $viewer = $request->user();
+        $query = $viewer->notifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        $paginator = $query->paginate((int) config('media.page_size', 24));
 
         return response()->json([
             'success' => true,
@@ -28,15 +33,22 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): JsonResponse
     {
+        $viewer = $request->user();
+        $query = $viewer->unreadNotifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+
         return response()->json([
             'success' => true,
-            'data' => ['count' => $request->user()->unreadNotifications()->count()],
+            'data' => ['count' => $query->count()],
         ]);
     }
 
     public function markRead(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user()->notifications()->whereKey($id)->first();
+        $viewer = $request->user();
+        $query = $viewer->notifications()->getQuery()->whereKey($id);
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        $notification = $query->first();
         if ($notification === null) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
@@ -48,7 +60,10 @@ class NotificationController extends Controller
 
     public function markAllRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $viewer = $request->user();
+        $query = $viewer->unreadNotifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        $query->update(['read_at' => now()]);
 
         return response()->json(['success' => true]);
     }
@@ -60,6 +75,7 @@ class NotificationController extends Controller
     {
         /** @var array<string, mixed> $data */
         $data = $notification->data;
+        unset($data['_actor_user_id'], $data['_actor_character_id']);
 
         return [
             'id' => $notification->id,

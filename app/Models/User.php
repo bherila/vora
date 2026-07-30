@@ -375,6 +375,22 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * @return HasMany<Block, $this>
+     */
+    public function blocksMade(): HasMany
+    {
+        return $this->hasMany(Block::class, 'blocker_id');
+    }
+
+    /**
+     * @return HasMany<Block, $this>
+     */
+    public function blocksReceived(): HasMany
+    {
+        return $this->hasMany(Block::class, 'blocked_user_id');
+    }
+
+    /**
      * Viewer-private recently visited profile references.
      *
      * @return HasMany<RecentProfileVisit, $this>

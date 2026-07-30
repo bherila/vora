@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\StoryAuthor;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\HasDatabaseActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -12,6 +13,7 @@ use NotificationChannels\WebPush\WebPushMessage;
 class CoAuthorInviteAccepted extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
+    use HasDatabaseActor;
     use Queueable;
 
     public function __construct(private readonly StoryAuthor $storyAuthor) {}
@@ -39,6 +41,12 @@ class CoAuthorInviteAccepted extends Notification implements ShouldQueue
             'story_title' => $story?->title,
             'url' => '/stories',
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->withDatabaseActor($this->toArray($notifiable), $this->storyAuthor->user_id);
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

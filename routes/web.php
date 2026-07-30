@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\BlockController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
 use App\Http\Controllers\ExploreController;
@@ -163,6 +164,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/api/identity', [IdentityController::class, 'update']);
     Route::get('/api/side-rail', [SideRailController::class, 'show']);
     Route::delete('/api/side-rail/history', [SideRailController::class, 'clearHistory']);
+    Route::delete('/api/blocks/{block}', [BlockController::class, 'destroy']);
     // Keep the retired characters index pointed at the profile for old bookmarks;
     // create/edit use the dedicated persona editor routes below.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
@@ -215,6 +217,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{character}', [CharacterController::class, 'destroy']);
         Route::get('/{character}/followers', [FollowController::class, 'characterFollowers']);
         Route::post('/{character}/follow', [FollowController::class, 'followCharacter']);
+        Route::post('/{blockCharacter}/block', [BlockController::class, 'blockCharacter']);
+        Route::delete('/{character}/block', [BlockController::class, 'unblockCharacter']);
         Route::post('/{character}/profile-picture', [CharacterController::class, 'storeProfilePicture']);
         Route::post('/{character}/profile-picture/{media}/complete', [CharacterController::class, 'completeProfilePicture']);
         Route::delete('/{character}/profile-picture', [CharacterController::class, 'removeProfilePicture']);
@@ -243,6 +247,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/{user}/posts', [ProfileContentController::class, 'posts']);
         Route::get('/{user}', [FollowController::class, 'profile']);
         Route::post('/{user}/follow-requests', [FollowController::class, 'requestFollow']);
+        Route::post('/{blockUser}/block', [BlockController::class, 'blockUser']);
+        Route::delete('/{user}/block', [BlockController::class, 'unblockUser']);
     });
 
     Route::prefix('api/stories')->group(function () {

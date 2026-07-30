@@ -6,6 +6,7 @@ use App\Enums\StoryStatus;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
+use App\Support\BlockGraph;
 
 class StoryPolicy
 {
@@ -31,6 +32,10 @@ class StoryPolicy
 
         if ($story->isAuthoredBy($user)) {
             return true;
+        }
+
+        if (! BlockGraph::canViewStory($user, $story)) {
+            return false;
         }
 
         // Stories owned by a deleted, deactivated, disabled, or ban-hidden account

@@ -7,6 +7,7 @@ use App\Models\RecentProfileVisit;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Support\BlockGraph;
 use App\Support\CharacterPresenter;
 use App\Support\UserPresenter;
 
@@ -121,7 +122,9 @@ class RecentProfileTrail
      */
     private function userCard(User $viewer, int $targetId): ?array
     {
-        $target = User::query()->active()->whereNotNull('approved_at')->with('profilePicture')->find($targetId);
+        $query = User::query()->active()->whereNotNull('approved_at')->with('profilePicture');
+        BlockGraph::visibleTo($query, $viewer, 'users.id');
+        $target = $query->find($targetId);
         if (! $target instanceof User || ! $this->profileGate->canView($viewer, $target)) {
             return null;
         }
@@ -140,10 +143,11 @@ class RecentProfileTrail
      */
     private function characterCard(User $viewer, int $targetId): ?array
     {
-        $target = Character::query()
+        $query = Character::query()
             ->with(['user', 'profilePicture'])
-            ->whereHas('user', fn ($query) => $query->active()->whereNotNull('approved_at'))
-            ->find($targetId);
+            ->whereHas('user', fn ($query) => $query->active()->whereNotNull('approved_at'));
+        BlockGraph::visibleTo($query, $viewer, 'characters.user_id', 'characters.id');
+        $target = $query->find($targetId);
         if (! $target instanceof Character || ! $target->isViewableBy($viewer)) {
             return null;
         }

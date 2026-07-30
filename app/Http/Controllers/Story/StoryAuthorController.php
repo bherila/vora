@@ -10,6 +10,7 @@ use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Notifications\CoAuthorInviteReceived;
 use App\Services\Story\StoryService;
+use App\Support\BlockGraph;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Gate;
 
@@ -38,6 +39,9 @@ class StoryAuthorController extends Controller
         $invitee = User::query()->find((int) $request->validated('user_id'));
 
         if (! $invitee instanceof User || ! $this->isInvitable($invitee)) {
+            return response()->json(['success' => false, 'message' => 'This user cannot be invited.'], 422);
+        }
+        if (! $owner instanceof User || ! BlockGraph::canViewIdentity($owner, $invitee->id)) {
             return response()->json(['success' => false, 'message' => 'This user cannot be invited.'], 422);
         }
 

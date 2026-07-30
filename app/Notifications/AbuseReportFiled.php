@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Report;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\HasDatabaseActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -16,6 +17,7 @@ use NotificationChannels\WebPush\WebPushMessage;
 class AbuseReportFiled extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
+    use HasDatabaseActor;
     use Queueable;
 
     public function __construct(private readonly Report $report) {}
@@ -38,6 +40,12 @@ class AbuseReportFiled extends Notification implements ShouldQueue
             'reason' => $this->report->reason->value,
             'url' => '/admin/reports',
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->withDatabaseActor($this->toArray($notifiable), $this->report->reporter_user_id);
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

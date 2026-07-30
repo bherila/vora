@@ -104,7 +104,7 @@ class ExploreController extends Controller
     {
         $query = Media::query()
             ->where('purpose', MediaPurpose::Gallery->value)
-            ->discoverable()
+            ->discoverable($request->user())
             ->moderationStatus(ModerationStatus::Approved)
             ->where('upload_status', 'ready')
             // Hide media owned by deactivated, disabled, or deleted accounts.
@@ -148,7 +148,7 @@ class ExploreController extends Controller
 
         $query = Story::query()
             ->where('status', StoryStatus::Published->value)
-            ->discoverable()
+            ->discoverable($request->user())
             ->moderationStatus(ModerationStatus::Approved)
             ->whereHas('user', fn ($q) => $q->active())
             ->with(['user', 'interests', 'authors.user', 'authors.character'])
@@ -198,7 +198,7 @@ class ExploreController extends Controller
         )));
 
         $query = Character::query()
-            ->discoverable()
+            ->discoverable($request->user())
             ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
             ->with('profilePicture')
             ->when($interestIds !== [], fn ($q) => $q->whereHas(
