@@ -47,6 +47,8 @@ jest.mock('@/push', () => ({
 }));
 
 const patch = jest.mocked(fetchWrapper.patch);
+const get = jest.mocked(fetchWrapper.get);
+const remove = jest.mocked(fetchWrapper.delete);
 
 function notificationResponse() {
   return {
@@ -72,6 +74,10 @@ describe('UserSettingsPage', () => {
     window.history.replaceState({}, '', '/user/settings');
     patch.mockReset();
     patch.mockResolvedValue(notificationResponse());
+    get.mockReset();
+    remove.mockReset();
+    get.mockResolvedValue({ data: [] });
+    remove.mockResolvedValue({ data: { muted: false } });
   });
 
   it('opens a URL-addressed tab and keeps the profile card above it', () => {
@@ -126,9 +132,33 @@ describe('UserSettingsPage', () => {
     expect(screen.getByRole('tab', { name: 'Data & account' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('lists exact muted identities in Privacy and uses target-specific unmute controls', async () => {
+    window.history.replaceState({}, '', '/user/settings?tab=privacy');
+    get.mockResolvedValue({
+      data: [{
+        type: 'character',
+        id: 9,
+        display_name: 'Kira',
+        avatar_url: null,
+        profile_url: '/c/01KIRA',
+      }],
+    });
+
+    render(<UserSettingsPage />);
+
+    expect(await screen.findByRole('link', { name: /Kira/ })).toHaveAttribute('href', '/c/01KIRA');
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute Kira' }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('/api/mutes', {
+      type: 'character',
+      id: 9,
+    }));
+    expect(screen.queryByText('Kira')).toBeNull();
+  });
+
   it('uses a wrapping mobile-safe tab grid', () => {
     render(<UserSettingsPage />);
 
-    expect(screen.getByRole('tablist', { name: 'Settings sections' })).toHaveClass('grid-cols-2', 'sm:grid-cols-4');
+    expect(screen.getByRole('tablist', { name: 'Settings sections' })).toHaveClass('grid-cols-2', 'sm:grid-cols-5');
   });
 });

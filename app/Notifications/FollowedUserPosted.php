@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\Post;
 use App\Notifications\Concerns\DeliversWebPush;
 use App\Notifications\Concerns\HasDatabaseActor;
+use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -19,6 +20,7 @@ class FollowedUserPosted extends Notification implements ShouldQueue
     use DeliversWebPush;
     use HasDatabaseActor;
     use Queueable;
+    use SuppressesMutedActor;
 
     public function __construct(private readonly Post $post) {}
 
@@ -27,6 +29,10 @@ class FollowedUserPosted extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
+        if ($this->actorIsMuted($notifiable, $this->post->user_id, $this->post->character_id)) {
+            return [];
+        }
+
         return $this->deliveryChannels($notifiable, 'notify_new_post');
     }
 
@@ -50,6 +56,10 @@ class FollowedUserPosted extends Notification implements ShouldQueue
             'post_ulid' => $this->post->ulid,
             'url' => '/p/'.$this->post->ulid,
         ];
+
+        if ($this->post->character_id !== null) {
+            $data['actor_character_id'] = $this->post->character_id;
+        }
 
         // Linked personas deliberately disclose their owner relationship, so
         // their notifications retain the account actor id. A Separate persona

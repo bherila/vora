@@ -15,6 +15,7 @@ use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Support\CharacterPresenter;
 use App\Support\MediaFilter;
+use App\Support\MuteGraph;
 use App\Support\PaginationMeta;
 use App\Support\StoryPresenter;
 use Illuminate\Http\JsonResponse;
@@ -114,6 +115,15 @@ class ExploreController extends Controller
             ->with('interests')
             ->latest();
 
+        if ($request->user() instanceof User) {
+            MuteGraph::excludeMutedIdentities(
+                $query,
+                $request->user()->id,
+                'media.user_id',
+                'media.character_id',
+            );
+        }
+
         $paginator = MediaFilter::fromRequest($request)
             ->applyTo($query)
             ->paginate((int) config('media.page_size', 24));
@@ -156,6 +166,10 @@ class ExploreController extends Controller
             ->withAnyInterest($interestIds)
             ->latest('published_at')
             ->latest('id');
+
+        if ($request->user() instanceof User) {
+            MuteGraph::excludeMutedStoryAuthors($query, $request->user()->id);
+        }
 
         $paginator = $query->paginate((int) config('media.page_size', 24));
 
@@ -207,6 +221,15 @@ class ExploreController extends Controller
             ))
             ->latest()
             ->latest('id');
+
+        if ($request->user() instanceof User) {
+            MuteGraph::excludeMutedIdentities(
+                $query,
+                $request->user()->id,
+                'characters.user_id',
+                'characters.id',
+            );
+        }
 
         $paginator = $query->paginate((int) config('media.page_size', 24));
         $viewer = $request->user();

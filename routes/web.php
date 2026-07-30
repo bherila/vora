@@ -28,6 +28,7 @@ use App\Http\Controllers\InterestController;
 use App\Http\Controllers\InviteController;
 use App\Http\Controllers\MediaAssetController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MuteController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PostCommentController;
@@ -103,6 +104,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'status']);
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store']);
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
+
+    // Viewer-side identity mutes. Settings is available before approval, so its
+    // list/unmute API belongs in the same authenticated route group.
+    Route::get('/api/mutes', [MuteController::class, 'index']);
+    Route::post('/api/mutes', [MuteController::class, 'store']);
+    Route::delete('/api/mutes', [MuteController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
     Route::get('/user/settings', function () {

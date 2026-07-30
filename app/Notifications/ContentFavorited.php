@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\User;
 use App\Notifications\Concerns\DeliversWebPush;
 use App\Notifications\Concerns\HasDatabaseActor;
+use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -20,6 +21,7 @@ class ContentFavorited extends Notification implements ShouldQueue
     use DeliversWebPush;
     use HasDatabaseActor;
     use Queueable;
+    use SuppressesMutedActor;
 
     public function __construct(
         private readonly User $actor,
@@ -33,6 +35,10 @@ class ContentFavorited extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
+        if ($this->actorIsMuted($notifiable, $this->actor->id)) {
+            return [];
+        }
+
         return $this->deliveryChannels($notifiable, 'notify_favorite');
     }
 

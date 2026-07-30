@@ -8,6 +8,7 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Support\CharacterPresenter;
+use App\Support\MuteGraph;
 
 /**
  * Builds the visitor-facing persona header shared by /c/{ulid} and /me's
@@ -39,6 +40,8 @@ class PersonaProfilePayload
                 ->where('favoritable_id', $character->id)
                 ->exists(),
             'can_report' => $allowMutations && ! $isOwner,
+            'viewer_muted' => $allowMutations && ! $isOwner
+                && MuteGraph::isMutedIdentity($viewer->id, $character->user_id, $character->id),
         ];
     }
 

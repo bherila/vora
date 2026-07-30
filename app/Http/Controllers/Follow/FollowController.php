@@ -23,6 +23,7 @@ use App\Support\ActiveIdentity;
 use App\Support\BlockGraph;
 use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
+use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,11 +65,22 @@ class FollowController extends Controller
      */
     private function directoryPersonasPayload(Request $request): array
     {
-        return Character::query()
+        $query = Character::query()
             ->discoverable($request->user())
             ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
             ->with('profilePicture')
-            ->orderBy('display_name')
+            ->orderBy('display_name');
+
+        if ($request->user() instanceof User) {
+            MuteGraph::excludeMutedIdentities(
+                $query,
+                $request->user()->id,
+                'characters.user_id',
+                'characters.id',
+            );
+        }
+
+        return $query
             ->get()
             ->map(fn (Character $character): array => CharacterPresenter::publicCard($character, $this->mediaResponder, $request->user()))
             ->values()
@@ -242,6 +254,10 @@ class FollowController extends Controller
             BlockGraph::visibleTo($query, $current, 'users.id');
         }
 
+        if ($current instanceof User) {
+            MuteGraph::excludeMutedIdentities($query, $current->id, 'users.id');
+        }
+
         if ($request->query('relationship') === 'mutuals') {
             if (! $current instanceof User) {
                 return collect();
@@ -343,6 +359,7 @@ class FollowController extends Controller
             'display_name' => $user->display_name ?: $user->name,
             'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $current),
             'follow_request' => $this->followRequestPayload($followRequest),
+            'viewer_muted' => ! $isSelf && MuteGraph::isMutedIdentity($current->id, $user->id, null),
         ];
 
         if (! $this->gate->canView($current, $user)) {
@@ -542,7 +559,15 @@ class FollowController extends Controller
                 $blocks,
                 'follow_requests.requester_id',
                 $current->id,
-            ))
+            ));
+
+        MuteGraph::excludeMutedIdentities(
+            $followers,
+            $current->id,
+            'follow_requests.requester_id',
+        );
+
+        $followers = $followers
             ->oldest('responded_at')
             ->oldest('id')
             ->get()

@@ -9,6 +9,7 @@ use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\BlockGraph;
 use App\Support\CharacterPresenter;
+use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 
 class RecentProfileTrail
@@ -45,11 +46,22 @@ class RecentProfileTrail
      */
     public function cards(User $viewer): array
     {
-        $visits = RecentProfileVisit::query()
+        $query = RecentProfileVisit::query()
             ->where('viewer_user_id', $viewer->id)
             ->where('visited_at', '>=', now()->subDays(self::RETENTION_DAYS))
             ->latest('visited_at')
-            ->latest('id')
+            ->latest('id');
+
+        MuteGraph::excludeMutedProfileTargets(
+            $query,
+            $viewer->id,
+            'recent_profile_visits.target_type',
+            'recent_profile_visits.target_id',
+            RecentProfileVisit::TARGET_USER,
+            RecentProfileVisit::TARGET_CHARACTER,
+        );
+
+        $visits = $query
             ->limit(self::MAX_ENTRIES)
             ->get();
 

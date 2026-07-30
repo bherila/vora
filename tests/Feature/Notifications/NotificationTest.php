@@ -87,6 +87,7 @@ class NotificationTest extends TestCase
         $this->assertSame(1, $personaFollower->notifications()->count());
         $data = $personaFollower->notifications()->first()->data;
         $this->assertSame('Distinct Persona', $data['actor_name']);
+        $this->assertSame($persona->id, $data['actor_character_id']);
         $this->assertSame('/p/'.$post->ulid, $data['url']);
         $this->assertArrayNotHasKey('actor_id', $data);
 
@@ -125,6 +126,7 @@ class NotificationTest extends TestCase
         $this->assertSame($author->id, (new FollowedUserPosted($accountPost))->toArray($author)['actor_id']);
         $linkedData = (new FollowedUserPosted($linkedPost))->toArray($author);
         $this->assertSame($author->id, $linkedData['actor_id']);
+        $this->assertSame($linkedPersona->id, $linkedData['actor_character_id']);
         $this->assertSame('Linked Persona', $linkedData['actor_name']);
     }
 
@@ -193,6 +195,22 @@ class NotificationTest extends TestCase
         app(UserAccountService::class)->purge($reactor);
 
         $this->assertSame(0, $author->notifications()->count(), 'erasing the actor removes notifications about them');
+    }
+
+    public function test_purging_a_persona_owner_removes_notifications_referencing_the_persona(): void
+    {
+        User::factory()->create();
+        $author = User::factory()->approved()->create();
+        $follower = User::factory()->approved()->create();
+        $persona = Character::factory()->for($author)->create(['is_linked' => false]);
+        $this->follow($follower, $author, $persona);
+        $post = Post::factory()->for($author)->approved()->create(['character_id' => $persona->id]);
+        (new NotifyFollowersOfPost($post))->handle();
+        $this->assertSame(1, $follower->notifications()->count());
+
+        app(UserAccountService::class)->purge($author);
+
+        $this->assertSame(0, $follower->notifications()->count());
     }
 
     public function test_unread_count_and_marking_read(): void

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\BlockGraph;
+use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Support\Collection;
 
@@ -101,6 +102,7 @@ class SideRailService
                 ->whereNull('character_id')
                 ->where('level', '>', 0)]);
         BlockGraph::visibleTo($users, $viewer, 'users.id');
+        MuteGraph::excludeMutedIdentities($users, $viewer->id, 'users.id');
         $users = $users
             ->get();
         $canView = $this->profileGate->canViewMany($viewer, $users);
