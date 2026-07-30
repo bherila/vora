@@ -202,10 +202,9 @@ class AdminReportTest extends TestCase
 
     public function test_cannot_take_account_action_against_primary_admin(): void
     {
-        // The primary admin is user id 1 — the first row created here.
-        $primary = User::factory()->admin()->create();
+        // MySQL does not rewind AUTO_INCREMENT after test rollbacks.
+        $primary = User::factory()->admin()->create(['id' => 1]);
         $admin = User::factory()->admin()->create();
-        $this->assertSame(1, $primary->id);
         $media = Media::factory()->for($primary)->approved()->create();
         $report = Report::factory()->targeting($media)->create(['reporter_user_id' => User::factory()->approved()->create()->id]);
 

@@ -250,9 +250,9 @@ class AccountLifecycleTest extends TestCase
 
     public function test_primary_admin_cannot_self_delete(): void
     {
-        // The first user is id 1, which is always treated as the primary admin.
-        $primary = User::factory()->approved()->create(['is_admin' => true]);
-        $this->assertSame(1, $primary->id);
+        // MySQL does not rewind AUTO_INCREMENT when a test transaction rolls
+        // back, so primary-admin tests must declare the protected id.
+        $primary = User::factory()->approved()->create(['id' => 1, 'is_admin' => true]);
 
         $this->actingAs($primary)->postJson('/api/account/delete')->assertForbidden();
         $this->assertFalse($primary->refresh()->trashed());
