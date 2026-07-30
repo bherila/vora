@@ -5,6 +5,7 @@ import { toast, Toaster } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
+import { MuteButton } from '@/components/mute-button';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ReportButton } from '@/components/report-button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +37,7 @@ export interface PersonaProfileData {
   interests: PersonaInterest[];
   viewer_favorited: boolean;
   can_report: boolean;
+  viewer_muted: boolean;
 }
 
 interface PersonaProfileViewProps {
@@ -189,6 +191,12 @@ export function PersonaProfileView({ persona, viewAs = null }: PersonaProfileVie
                     {followData?.viewer_is_following ? 'Following' : followPending ? 'Following…' : 'Follow'}
                   </Button>
                   <FavoriteButton type="character" id={persona.id} initialFavorited={persona.viewer_favorited} />
+                  <MuteButton
+                    type="character"
+                    id={persona.id}
+                    displayName={persona.display_name}
+                    initialMuted={persona.viewer_muted}
+                  />
                   {persona.can_report && <ReportButton type="character" id={persona.id} variant="ghost" />}
                 </>
               )}

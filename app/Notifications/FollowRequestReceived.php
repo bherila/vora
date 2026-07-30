@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\FollowRequest;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -13,12 +14,17 @@ class FollowRequestReceived extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;
+    use SuppressesMutedActor;
 
     public function __construct(private readonly FollowRequest $followRequest) {}
 
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
+        if ($this->actorIsMuted($notifiable, $this->followRequest->requester_id)) {
+            return [];
+        }
+
         return $this->deliveryChannels($notifiable, 'notify_follow_request');
     }
 

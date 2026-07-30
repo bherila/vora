@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\StoryAuthor;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
@@ -13,12 +14,17 @@ class CoAuthorInviteAccepted extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
     use Queueable;
+    use SuppressesMutedActor;
 
     public function __construct(private readonly StoryAuthor $storyAuthor) {}
 
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
+        if ($this->actorIsMuted($notifiable, $this->storyAuthor->user_id)) {
+            return [];
+        }
+
         return $this->deliveryChannels($notifiable, 'notify_co_author_invite_accepted');
     }
 

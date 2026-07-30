@@ -12,6 +12,7 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Support\Collection;
 
@@ -88,7 +89,11 @@ class SideRailService
             ->whereNotIn('id', $this->separatePersonaOwnerIdsInTrail($viewer))
             ->with(['profilePicture', 'interestRatings' => fn ($query) => $query
                 ->whereNull('character_id')
-                ->where('level', '>', 0)])
+                ->where('level', '>', 0)]);
+
+        MuteGraph::excludeMutedIdentities($users, $viewer->id, 'users.id');
+
+        $users = $users
             ->get();
         $canView = $this->profileGate->canViewMany($viewer, $users);
         $interestCount = $viewerInterestIds->count();

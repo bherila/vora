@@ -8,6 +8,7 @@ use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Support\FollowGraph;
+use App\Support\MuteGraph;
 use App\Support\Onboarding;
 use App\Support\PostPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -51,7 +52,7 @@ class FeedController extends Controller
         // opt-in, and unknown values must not silently widen membership.
         $scope = $request->query('scope') === 'mixed' ? 'mixed' : 'following';
 
-        $posts = Post::query()
+        $query = Post::query()
             // Membership: the viewer's own posts plus posts from accounts they
             // follow, expressed as a correlated subquery so the query stays
             // page-sized regardless of how many accounts the viewer follows.
@@ -84,7 +85,16 @@ class FeedController extends Controller
             // owner the per-record policies would now reject.
             ->whereHas('user', fn (Builder $query) => $query->active()->whereNotNull('approved_at'))
             ->viewableBy($viewer)
-            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable']);
+
+        // Mutes are viewer-side exact-identity filters. Apply them in SQL before
+        // cursor pagination: filtering a returned keyset page would create short
+        // pages and make feed behavior depend on where muted rows land.
+        if ($viewerId !== null) {
+            MuteGraph::excludeMutedIdentities($query, (int) $viewerId, 'posts.user_id', 'posts.character_id');
+        }
+
+        $posts = $query
             ->withEngagementCounts($viewer)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
