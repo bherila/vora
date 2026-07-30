@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { Avatar } from '@/components/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -127,7 +128,15 @@ interface NotificationPayload {
   notify_favorite: boolean;
 }
 
-const SETTINGS_TABS = ['account', 'notifications', 'security', 'data'] as const;
+interface MutedIdentity {
+  type: 'user' | 'character';
+  id: number;
+  display_name: string;
+  avatar_url: string | null;
+  profile_url: string;
+}
+
+const SETTINGS_TABS = ['account', 'notifications', 'privacy', 'security', 'data'] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 function tabFromUrl(): SettingsTab {
@@ -252,6 +261,9 @@ export function UserSettingsPage() {
   const [dataError, setDataError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [mutedIdentities, setMutedIdentities] = useState<MutedIdentity[]>([]);
+  const [mutesLoading, setMutesLoading] = useState(false);
+  const [mutesError, setMutesError] = useState('');
 
   useEffect(() => {
     const supported = isWebPushSupported();
@@ -291,6 +303,28 @@ export function UserSettingsPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'privacy') return;
+
+    let active = true;
+    setMutesLoading(true);
+    setMutesError('');
+    fetchWrapper.get('/api/mutes')
+      .then((response) => {
+        if (active) setMutedIdentities((response as { data: MutedIdentity[] }).data);
+      })
+      .catch((error) => {
+        if (active) setMutesError(typeof error === 'string' ? error : 'Could not load muted identities.');
+      })
+      .finally(() => {
+        if (active) setMutesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     const handlePopState = (): void => setActiveTab(tabFromUrl());
@@ -374,6 +408,18 @@ export function UserSettingsPage() {
 
   const handleExportAccount = (): void => {
     window.location.href = '/api/account/export';
+  };
+
+  const unmute = async (identity: MutedIdentity): Promise<void> => {
+    setMutesError('');
+    try {
+      await fetchWrapper.delete('/api/mutes', { type: identity.type, id: identity.id });
+      setMutedIdentities((current) => current.filter(
+        (item) => item.type !== identity.type || item.id !== identity.id,
+      ));
+    } catch (error) {
+      setMutesError(typeof error === 'string' ? error : 'Could not unmute this identity.');
+    }
   };
 
   const handleEnablePush = async (): Promise<void> => {
@@ -476,10 +522,11 @@ export function UserSettingsPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList
           aria-label="Settings sections"
-          className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4"
+          className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5"
         >
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="privacy">Privacy</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="data">Data &amp; account</TabsTrigger>
         </TabsList>
@@ -647,6 +694,46 @@ export function UserSettingsPage() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy">
+          <Card>
+            <CardHeader>
+              <CardTitle>Muted accounts and personas</CardTitle>
+              <CardDescription>
+                Muted identities stay able to view and interact with you. You stop seeing that exact identity in feeds and listings, and they are not notified.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {mutesError && <Alert variant="destructive"><AlertDescription>{mutesError}</AlertDescription></Alert>}
+              {mutesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading muted identities…</p>
+              ) : mutedIdentities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">You have not muted anyone.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {mutedIdentities.map((identity) => (
+                    <li key={`${identity.type}:${identity.id}`} className="flex items-center justify-between gap-3 p-3">
+                      <a className="flex min-w-0 items-center gap-3 underline-offset-4 hover:underline" href={identity.profile_url}>
+                        <Avatar name={identity.display_name} src={identity.avatar_url} sizeClassName="h-10 w-10" />
+                        <span className="truncate">{identity.display_name}</span>
+                        {identity.type === 'character' && <span className="text-xs text-muted-foreground">Persona</span>}
+                      </a>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Unmute ${identity.display_name}`}
+                        onClick={() => void unmute(identity)}
+                      >
+                        Unmute
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

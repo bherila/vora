@@ -10,6 +10,7 @@ use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Models\Media;
+use App\Models\Mute;
 use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
@@ -406,6 +407,10 @@ class ProfileController extends Controller
             ->with('post:id,ulid,body')
             ->latest()
             ->get();
+        $mutes = Mute::query()
+            ->where('user_id', $user->id)
+            ->latest()
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -519,6 +524,11 @@ class ProfileController extends Controller
                     'level' => $rating->level,
                 ])->values(),
                 'recently_visited' => $recentProfiles->cards($user),
+                'mutes' => $mutes->map(fn (Mute $mute): array => [
+                    'muted_user_id' => $mute->muted_user_id,
+                    'muted_character_id' => $mute->muted_character_id,
+                    'created_at' => $mute->created_at?->toIso8601String(),
+                ])->values(),
                 'notifications' => $user->notifications()->latest()->get()->map(fn ($notification): array => [
                     'id' => $notification->id,
                     'type' => $notification->data['type'] ?? $notification->type,

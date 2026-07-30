@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MuteGraph;
 use App\Support\PaginationMeta;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,9 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $paginator = $request->user()->notifications()->paginate((int) config('media.page_size', 24));
+        $query = $request->user()->notifications()->getQuery();
+        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
+        $paginator = $query->paginate((int) config('media.page_size', 24));
 
         return response()->json([
             'success' => true,
@@ -28,9 +31,12 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): JsonResponse
     {
+        $query = $request->user()->unreadNotifications()->getQuery();
+        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
+
         return response()->json([
             'success' => true,
-            'data' => ['count' => $request->user()->unreadNotifications()->count()],
+            'data' => ['count' => $query->count()],
         ]);
     }
 
@@ -48,7 +54,9 @@ class NotificationController extends Controller
 
     public function markAllRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $query = $request->user()->unreadNotifications()->getQuery();
+        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
+        $query->get()->markAsRead();
 
         return response()->json(['success' => true]);
     }

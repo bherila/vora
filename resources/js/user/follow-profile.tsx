@@ -7,6 +7,7 @@ import { SideRailLayout } from '@/components/app-side-rail';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
+import { MuteButton } from '@/components/mute-button';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ProtectedImage } from '@/components/protected-image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -49,6 +50,7 @@ interface ProfileData {
   can_follow_back: boolean;
   characters: CharacterRef[];
   viewer_favorited?: boolean;
+  viewer_muted: boolean;
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
@@ -425,6 +427,13 @@ export function FollowProfilePage() {
             ) : isPreview ? null : (
               <div className="flex items-center gap-2">
                 {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
+                <MuteButton
+                  type="user"
+                  id={profile.id}
+                  displayName={profile.display_name}
+                  initialMuted={profile.viewer_muted}
+                  onChanged={(muted) => setProfile((current) => current ? { ...current, viewer_muted: muted } : current)}
+                />
                 {!hasActiveRequest ? (
                   <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
                 ) : (

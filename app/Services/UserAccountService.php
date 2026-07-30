@@ -50,12 +50,15 @@ class UserAccountService
             // Notifications about this user's actions live in other users' rows as
             // a denormalized JSON snapshot (actor_id/actor_name). Erasure must
             // remove that PII too, like the privacy audit trail's actor handling.
-            DB::table('notifications')->where('data->actor_id', $user->id)->delete();
+            $characterIds = $user->characters()->withTrashed()->pluck('id');
+            DB::table('notifications')
+                ->where('data->actor_id', $user->id)
+                ->orWhereIn('data->actor_character_id', $characterIds)
+                ->delete();
 
             // Bulk character deletion bypasses the Character `deleting` hook, so
             // explicitly remove the polymorphic story "involves" tags pointing at
             // this user and their characters (these have no FK to cascade).
-            $characterIds = $user->characters()->withTrashed()->pluck('id');
             StoryInvolvement::query()
                 ->where('involvable_type', 'character')
                 ->whereIn('involvable_id', $characterIds)
