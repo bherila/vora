@@ -186,6 +186,14 @@ jobs:
             image: mysql:8.0
             driver: mysql
             health_command: mysqladmin ping --host=localhost --user=root --password=vora_ci_root_password
+          # Production runs MariaDB 10.6 (verified on the cPanel host:
+          # 10.6.27-MariaDB). That line is the gate that matters today.
+          - label: MariaDB 10.6
+            image: mariadb:10.6
+            driver: mariadb
+            health_command: mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password
+          # 10.6 reaches end of life in July 2026, so the host is expected to
+          # move to the next LTS. Keep 10.11 green ahead of that upgrade.
           - label: MariaDB 10.11
             image: mariadb:10.11
             driver: mariadb
