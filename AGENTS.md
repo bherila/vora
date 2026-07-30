@@ -19,7 +19,8 @@ Never run `npm`, `npm ci`, or `npx` in this repo.
 - **UI primitives**: shadcn-style local components built on Base UI, not Radix UI.
 - **Package manager**: pnpm — never use npm or npx directly.
 - **Database**: SQLite in development and by default in tests (in-memory);
-  CI also gates backend changes against an isolated MySQL 8.0 service container.
+  CI also gates backend changes against isolated MySQL 8.0 and MariaDB 10.11
+  service containers.
 - **Dependency management**: Composer (PHP) + pnpm (JS). Do not mix.
 - **Docs**: README.md is the human-facing project overview; AGENTS.md is the
   agent contract; TESTING.AGENTS.md owns validation details; CLAUDE.md should
@@ -56,10 +57,10 @@ composer test
 2. When explicitly requested, use SQLite only: `php artisan migrate --database=sqlite --no-interaction`.
 3. For schema dumps: `php artisan schema:dump --database=sqlite` — never use `--prune`.
 4. Local and developer test runs must use SQLite in-memory.
-5. The only MySQL test target is the isolated service container in the CI
-   `mysql` job. It must use the dedicated `vora_ci` database and credentials
-   defined in the workflow and must never point at a shared or production
-   database.
+5. The only MySQL and MariaDB test targets are the isolated service containers
+   in the CI `sql` matrix. They must use the dedicated `vora_ci` database and
+   credentials defined in the workflow and must never point at a shared or
+   production database.
 
 ## Laravel conventions
 

@@ -6,7 +6,7 @@ namespace Tests;
  * Base TestCase for all feature tests.
  *
  * Extends SafeTestCase, which restricts local tests to SQLite in-memory and
- * permits MySQL only for the isolated CI service container.
+ * permits MySQL and MariaDB only for their isolated CI service containers.
  *
  * Usage:
  *   - Feature tests should extend this class
