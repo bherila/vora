@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Follow;
 use App\Enums\Audience;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Story\AuthorshipInviteController;
+use App\Models\Block;
 use App\Models\Character;
 use App\Models\Favorite;
 use App\Models\FollowRequest;
@@ -360,6 +361,11 @@ class FollowController extends Controller
             'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $current),
             'follow_request' => $this->followRequestPayload($followRequest),
             'viewer_muted' => ! $isSelf && MuteGraph::isMutedIdentity($current->id, $user->id, null),
+            'viewer_block_id' => ! $isSelf ? Block::query()
+                ->where('blocker_id', $current->id)
+                ->where('blocked_user_id', $user->id)
+                ->whereNull('blocked_character_id')
+                ->value('id') : null,
         ];
 
         if (! $this->gate->canView($current, $user)) {

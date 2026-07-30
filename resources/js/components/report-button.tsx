@@ -42,6 +42,12 @@ interface ReportButtonProps {
   label?: string;
   size?: 'default' | 'sm';
   variant?: 'outline' | 'ghost';
+  open?: boolean;
+  showTrigger?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSubmitted?: () => void;
+  onCancelled?: () => void;
+  onFailed?: () => void;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -53,11 +59,34 @@ function getErrorMessage(err: unknown): string {
  * files an abuse report against the given media item, story, or post. Reusable
  * across every surface that shows reportable content.
  */
-export function ReportButton({ type, id, label = 'Report', size = 'sm', variant = 'outline' }: ReportButtonProps) {
-  const [open, setOpen] = useState(false);
+export function ReportButton({
+  type,
+  id,
+  label = 'Report',
+  size = 'sm',
+  variant = 'outline',
+  open: controlledOpen,
+  showTrigger = true,
+  onOpenChange,
+  onSubmitted,
+  onCancelled,
+  onFailed,
+}: ReportButtonProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [details, setDetails] = useState('');
   const [busy, setBusy] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+
+  const setOpen = (next: boolean): void => {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const cancel = (): void => {
+    setOpen(false);
+    onCancelled?.();
+  };
 
   const submit = async (): Promise<void> => {
     if (reason === '') {
@@ -76,20 +105,34 @@ export function ReportButton({ type, id, label = 'Report', size = 'sm', variant 
       setOpen(false);
       setReason('');
       setDetails('');
+      onSubmitted?.();
     } catch (err) {
       toast.error(getErrorMessage(err));
+      if (onFailed) {
+        setOpen(false);
+        onFailed();
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
-      <DialogTrigger asChild>
-        <Button type="button" size={size} variant={variant}>
-          <Flag className="h-4 w-4" aria-hidden="true" /> {label}
-        </Button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (busy) return;
+        if (next) setOpen(true);
+        else cancel();
+      }}
+    >
+      {showTrigger && (
+        <DialogTrigger asChild>
+          <Button type="button" size={size} variant={variant}>
+            <Flag className="h-4 w-4" aria-hidden="true" /> {label}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Report this content</DialogTitle>
@@ -123,7 +166,7 @@ export function ReportButton({ type, id, label = 'Report', size = 'sm', variant 
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={cancel} disabled={busy}>Cancel</Button>
           <Button type="button" onClick={() => void submit()} disabled={busy}>{busy ? 'Submitting…' : 'Submit report'}</Button>
         </DialogFooter>
       </DialogContent>

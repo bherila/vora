@@ -5,11 +5,13 @@ import { Toaster } from 'sonner';
 
 import { SideRailLayout } from '@/components/app-side-rail';
 import { Avatar } from '@/components/avatar';
+import { BlockButton } from '@/components/block-button';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
 import { MuteButton } from '@/components/mute-button';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ProtectedImage } from '@/components/protected-image';
+import { ReportButton } from '@/components/report-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,6 +53,7 @@ interface ProfileData {
   characters: CharacterRef[];
   viewer_favorited?: boolean;
   viewer_muted: boolean;
+  viewer_block_id: number | null;
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
@@ -434,6 +437,14 @@ export function FollowProfilePage() {
                   initialMuted={profile.viewer_muted}
                   onChanged={(muted) => setProfile((current) => current ? { ...current, viewer_muted: muted } : current)}
                 />
+                <BlockButton
+                  type="user"
+                  id={profile.id}
+                  displayName={profile.display_name}
+                  initialBlockId={profile.viewer_block_id}
+                  onChanged={(blockId) => setProfile((current) => current ? { ...current, viewer_block_id: blockId } : current)}
+                />
+                <ReportButton type="user" id={profile.id} variant="ghost" />
                 {!hasActiveRequest ? (
                   <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
                 ) : (

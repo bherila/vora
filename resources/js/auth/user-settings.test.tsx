@@ -134,15 +134,15 @@ describe('UserSettingsPage', () => {
 
   it('lists exact muted identities in Privacy and uses target-specific unmute controls', async () => {
     window.history.replaceState({}, '', '/user/settings?tab=privacy');
-    get.mockResolvedValue({
-      data: [{
+    get.mockImplementation(async (url) => ({
+      data: url === '/api/mutes' ? [{
         type: 'character',
         id: 9,
         display_name: 'Kira',
         avatar_url: null,
         profile_url: '/c/01KIRA',
-      }],
-    });
+      }] : [],
+    }));
 
     render(<UserSettingsPage />);
 
@@ -154,6 +154,42 @@ describe('UserSettingsPage', () => {
       id: 9,
     }));
     expect(screen.queryByText('Kira')).toBeNull();
+  });
+
+  it('shows the exact blocked persona with its date and a target-specific unblock control', async () => {
+    window.history.replaceState({}, '', '/user/settings?tab=privacy');
+    get.mockImplementation(async (url) => ({
+      data: url === '/api/blocks' ? [{
+        block_id: 42,
+        type: 'character',
+        id: 9,
+        display_name: 'Kira',
+        avatar_url: null,
+        blocked_at: '2026-07-29T12:00:00Z',
+      }] : [],
+    }));
+
+    render(<UserSettingsPage />);
+
+    expect(await screen.findByText('Kira')).toBeInTheDocument();
+    expect(screen.getByText('Persona')).toBeInTheDocument();
+    expect(screen.getByText(/^Blocked \d/)).toBeInTheDocument();
+    expect(screen.queryByText('Owner Sentinel')).toBeNull();
+    expect(screen.getByText(/follow relationships removed by blocking are not restored/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unblock Kira' }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('/api/blocks/42'));
+    expect(screen.queryByText('Kira')).toBeNull();
+  });
+
+  it('keeps blocking discoverable with an empty state', async () => {
+    window.history.replaceState({}, '', '/user/settings?tab=privacy');
+
+    render(<UserSettingsPage />);
+
+    expect(await screen.findByText('You have not blocked anyone.')).toBeInTheDocument();
+    expect(screen.getByText('Blocked accounts and personas')).toBeInTheDocument();
   });
 
   it('uses a wrapping mobile-safe tab grid', () => {

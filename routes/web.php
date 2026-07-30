@@ -171,6 +171,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/api/identity', [IdentityController::class, 'update']);
     Route::get('/api/side-rail', [SideRailController::class, 'show']);
     Route::delete('/api/side-rail/history', [SideRailController::class, 'clearHistory']);
+    Route::get('/api/blocks', [BlockController::class, 'index']);
     Route::delete('/api/blocks/{block}', [BlockController::class, 'destroy']);
     // Keep the retired characters index pointed at the profile for old bookmarks;
     // create/edit use the dedicated persona editor routes below.

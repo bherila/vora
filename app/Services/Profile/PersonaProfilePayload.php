@@ -2,6 +2,7 @@
 
 namespace App\Services\Profile;
 
+use App\Models\Block;
 use App\Models\Character;
 use App\Models\Favorite;
 use App\Models\InterestRating;
@@ -42,6 +43,11 @@ class PersonaProfilePayload
             'can_report' => $allowMutations && ! $isOwner,
             'viewer_muted' => $allowMutations && ! $isOwner
                 && MuteGraph::isMutedIdentity($viewer->id, $character->user_id, $character->id),
+            'viewer_block_id' => $allowMutations && ! $isOwner ? Block::query()
+                ->where('blocker_id', $viewer->id)
+                ->where('blocked_user_id', $character->user_id)
+                ->where('blocked_character_id', $character->id)
+                ->value('id') : null,
         ];
     }
 
