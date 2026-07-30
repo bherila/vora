@@ -14,13 +14,17 @@
 - **Mounting data contract**: Blade views pass IDs via `data-*` (examples in [resources/views/company.blade.php](resources/views/company.blade.php) and [resources/views/ownership-interest.blade.php](resources/views/ownership-interest.blade.php)); ensure new pages keep this pattern so scripts can read integers and hydrate.
 - **UI/formatting conventions**: Money/percent helpers live in [resources/js/lib/currency.ts](resources/js/lib/currency.ts). UI uses shadcn/Radix components under `resources/js/components/ui`. Mermaids use loose security level to allow click-through to company routes.
 - **Build/test workflow**: Install with `composer install && pnpm install`; copy `.env` then `php artisan key:generate` and migrate. Dev: `composer dev` (spawns artisan serve, queue listener, pail logs, Vite via `npx concurrently`) or run `php artisan serve` and `pnpm dev` separately. Tests: `composer test` (PHPUnit) and `pnpm test` (Jest via ts-jest). Build: `pnpm build` (Vite) with inputs from [vite.config.ts](vite.config.ts).
-- **PHP Testing Safety**: Tests ALWAYS use SQLite in-memory database, never MySQL. This is enforced by:
+- **PHP Testing Safety**: Local and developer tests always use SQLite in-memory.
+  CI additionally gates backend changes against its isolated MySQL 8.0 service
+  container; that job must never target a shared or production database. This
+  is enforced by:
   1. `phpunit.xml` sets `DB_CONNECTION=sqlite` and `DB_DATABASE=:memory:`
-  2. `Tests\SafeTestCase` (extended by `Tests\TestCase`) verifies SQLite is active at runtime and throws a RuntimeException if MySQL or another database is detected
+  2. `Tests\SafeTestCase` (extended by `Tests\TestCase`) accepts MySQL only with
+     the CI marker, loopback host, and fixed `vora_ci` database and username
   
   When writing tests:
   - Feature tests should extend `Tests\TestCase` (which extends `SafeTestCase`)
-  - Use `RefreshDatabase` trait freely - it only affects SQLite in-memory
+  - Use `RefreshDatabase` trait freely - it only affects an approved isolated target
   - Unit tests can extend `PHPUnit\Framework\TestCase` directly (no database access)
   - Run tests with `composer test` or `php artisan test`
   
@@ -37,7 +41,7 @@
       
       public function test_example(): void
       {
-          // Safe to use database - always SQLite in-memory
+          // Safe to use database - always an approved isolated target
           $user = User::factory()->create();
           $this->actingAs($user)->get('/dashboard')->assertOk();
       }
