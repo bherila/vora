@@ -8,7 +8,11 @@ import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { readInitialData } from '@/initialData';
 
 export function FeedPage() {
-  const onboarding = readInitialData<{ feedOnboarding?: OnboardingData | null }>().feedOnboarding ?? null;
+  const initialData = readInitialData<{
+    feedHasFollowing?: boolean;
+    feedOnboarding?: OnboardingData | null;
+  }>();
+  const onboarding = initialData.feedOnboarding ?? null;
 
   return (
     <div className={`${BROWSING_PAGE_WIDTH} px-4`}>
@@ -18,7 +22,10 @@ export function FeedPage() {
             <h1 className="text-2xl font-bold">Feed</h1>
             <p className="text-muted-foreground">Posts shared with you.</p>
           </div>
-          <FeedView onboarding={onboarding} />
+          <FeedView
+            hasFollowing={initialData.feedHasFollowing ?? false}
+            onboarding={onboarding}
+          />
         </div>
       </SideRailLayout>
       <Toaster position="top-right" richColors closeButton />

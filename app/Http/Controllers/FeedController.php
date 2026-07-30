@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Audience;
 use App\Enums\ModerationStatus;
+use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
@@ -32,6 +33,10 @@ class FeedController extends Controller
         return view('feed', [
             'initialData' => [
                 'feedOnboarding' => Onboarding::payload($request->user()),
+                'feedHasFollowing' => FollowRequest::query()
+                    ->where('requester_id', $request->user()->id)
+                    ->where('status', FollowRequest::STATUS_ACCEPTED)
+                    ->exists(),
             ],
         ]);
     }

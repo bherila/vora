@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import { communityApi } from './api';
 import { OnboardingChecklist, type OnboardingData } from './OnboardingChecklist';
@@ -9,6 +14,8 @@ import { PostComposer } from './PostComposer';
 import type { CommunityPost, FeedScope } from './types';
 
 interface FeedViewProps {
+  /** Whether an accepted account- or persona-scoped follow can populate Following. */
+  hasFollowing: boolean;
   /** First-run checklist state; hidden when null/undefined. */
   onboarding?: OnboardingData | null;
 }
@@ -41,8 +48,11 @@ function replaceScopeInLocation(scope: FeedScope): void {
  * in the page URL so a reload restores it, while every cursor request carries
  * the same scope independently.
  */
-export function FeedView({ onboarding = null }: FeedViewProps) {
-  const [scope, setScope] = useState<FeedScope>(scopeFromLocation);
+export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
+  const followingDisabled = !hasFollowing;
+  const [scope, setScope] = useState<FeedScope>(
+    () => followingDisabled ? 'mixed' : scopeFromLocation(),
+  );
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +89,12 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
   }, []);
 
   useEffect(() => {
+    if (followingDisabled) {
+      replaceScopeInLocation('mixed');
+    }
+  }, [followingDisabled]);
+
+  useEffect(() => {
     void load(scope);
 
     return () => {
@@ -87,6 +103,7 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
   }, [load, scope]);
 
   const selectScope = (nextScope: FeedScope): void => {
+    if (followingDisabled && nextScope === 'following') return;
     if (nextScope === scope) return;
 
     // Do not leave the previous membership's posts labelled as the newly
@@ -124,24 +141,51 @@ export function FeedView({ onboarding = null }: FeedViewProps) {
           type="button"
           variant={scope === 'mixed' ? 'default' : 'outline'}
           aria-pressed={scope === 'mixed'}
-          className="h-auto justify-start whitespace-normal px-4 py-3 text-left"
+          className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
           onClick={() => selectScope('mixed')}
         >
           <span>
             <strong>Mixed</strong> — <span className="font-normal">public posts from everyone, plus the people and personas you follow.</span>
           </span>
         </Button>
-        <Button
-          type="button"
-          variant={scope === 'following' ? 'default' : 'outline'}
-          aria-pressed={scope === 'following'}
-          className="h-auto justify-start whitespace-normal px-4 py-3 text-left"
-          onClick={() => selectScope('following')}
-        >
-          <span>
-            <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
-          </span>
-        </Button>
+        {followingDisabled ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="block"
+                data-testid="following-disabled-tooltip-trigger"
+                tabIndex={0}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-pressed={false}
+                  className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
+                  disabled
+                >
+                  <span>
+                    <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
+                  </span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent role="tooltip" side="top">
+              you aren't following anyone yet.
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            type="button"
+            variant={scope === 'following' ? 'default' : 'outline'}
+            aria-pressed={scope === 'following'}
+            className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
+            onClick={() => selectScope('following')}
+          >
+            <span>
+              <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
+            </span>
+          </Button>
+        )}
       </div>
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
