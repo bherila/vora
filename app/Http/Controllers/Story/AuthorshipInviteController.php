@@ -7,6 +7,7 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Models\StoryAuthor;
 use App\Models\User;
 use App\Notifications\CoAuthorInviteAccepted;
+use App\Support\BlockGraph;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,9 +68,20 @@ class AuthorshipInviteController extends Controller
      */
     private function pendingInvitesFor(?int $userId): Builder
     {
-        return StoryAuthor::query()
+        $query = StoryAuthor::query()
             ->where('user_id', $userId)
             ->pendingForActiveOwner();
+
+        if ($userId !== null) {
+            $viewer = User::query()->find($userId);
+            if ($viewer instanceof User) {
+                $query->whereHas('story', function (Builder $stories) use ($viewer): void {
+                    BlockGraph::visibleTo($stories, $viewer, 'stories.user_id');
+                });
+            }
+        }
+
+        return $query;
     }
 
     public function accept(Request $request, StoryAuthor $storyAuthor): JsonResponse
@@ -84,6 +96,9 @@ class AuthorshipInviteController extends Controller
         // by an inactive account — mirror the follow-request inactive guard.
         $owner = $storyAuthor->story?->user;
         if (! $owner instanceof User || $owner->isDeactivated() || ! $owner->canLogin()) {
+            return response()->json(['success' => false, 'message' => 'Invitation unavailable.'], 404);
+        }
+        if (! BlockGraph::canViewIdentity($current, $owner->id)) {
             return response()->json(['success' => false, 'message' => 'Invitation unavailable.'], 404);
         }
 

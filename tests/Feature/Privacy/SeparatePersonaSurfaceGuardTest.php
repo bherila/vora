@@ -11,6 +11,7 @@ use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\Story;
 use App\Models\User;
+use App\Notifications\FollowedUserPosted;
 use App\Services\FileStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery\MockInterface;
@@ -349,5 +350,245 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.author.id', $owner->id)
             ->assertJsonPath('data.0.author.display_name', 'Owner Correlation Sentinel');
+    }
+
+    public function test_blocking_owner_leaves_every_separate_persona_surface_byte_identical(): void
+    {
+        $this->travelTo(now()->startOfSecond());
+        $fixture = $this->scenario();
+        $viewer = $fixture['viewer'];
+        $owner = $fixture['owner'];
+        $post = $fixture['post'];
+
+        (new NotifyFollowersOfPost($post))->handle();
+        $before = $this->personaSurfacePayloads($fixture, $viewer);
+
+        $this->actingAs($viewer)
+            ->postJson("/api/users/{$owner->id}/block")
+            ->assertCreated();
+
+        $this->assertSame($before, $this->personaSurfacePayloads($fixture, $viewer));
+    }
+
+    public function test_blocking_separate_persona_leaves_every_owner_surface_byte_identical(): void
+    {
+        $this->travelTo(now()->startOfSecond());
+        $fixture = $this->scenario();
+        $viewer = $fixture['viewer'];
+        $owner = $fixture['owner'];
+        $persona = $fixture['persona'];
+        $accountMedia = $fixture['account_media'];
+        $accountPost = Post::factory()->for($owner)->approved()->create([
+            'body' => 'Human account post',
+        ]);
+        PostComment::factory()->for($accountPost)->for($owner)->create([
+            'body' => 'Human account comment',
+        ]);
+        $accountStory = Story::factory()->for($owner)->readable()->create([
+            'title' => 'Human account story',
+        ]);
+        $viewer->notify(new FollowedUserPosted($accountPost));
+
+        $before = $this->ownerSurfacePayloads(
+            $viewer,
+            $owner,
+            $accountMedia,
+            $accountPost,
+            $accountStory,
+        );
+
+        $this->actingAs($viewer)
+            ->postJson("/api/characters/{$persona->id}/block")
+            ->assertCreated();
+
+        $this->assertSame(
+            $before,
+            $this->ownerSurfacePayloads(
+                $viewer,
+                $owner,
+                $accountMedia,
+                $accountPost,
+                $accountStory,
+            ),
+        );
+    }
+
+    public function test_denial_sweeps_the_pinned_persona_inventory_under_every_owned_identity(): void
+    {
+        $this->travelTo(now()->startOfSecond());
+        $fixture = $this->scenario();
+        $owner = $fixture['owner'];
+        $viewer = $fixture['viewer'];
+        $persona = $fixture['persona'];
+        $media = $fixture['media'];
+        $post = $fixture['post'];
+        $story = $fixture['story'];
+        $viewerPersonas = Character::factory()->count(2)->for($viewer)->create(['is_linked' => false]);
+
+        $this->actingAs($viewer)->postJson('/api/favorites', [
+            'type' => 'media',
+            'id' => $media->id,
+        ])->assertCreated();
+        (new NotifyFollowersOfPost($post))->handle();
+        $this->actingAs($viewer)->get("/c/{$persona->ulid}")->assertOk();
+
+        $this->actingAs($owner)
+            ->postJson("/api/users/{$viewer->id}/block")
+            ->assertCreated();
+
+        foreach ([null, ...$viewerPersonas->pluck('id')->all()] as $activeCharacterId) {
+            $this->actingAs($viewer)->withSession(
+                $activeCharacterId === null ? [] : ['active_character_id' => $activeCharacterId],
+            );
+
+            $surfaceStatuses = [
+                $this->get("/c/{$persona->ulid}")->status(),
+                $this->getJson("/api/c/{$persona->ulid}/media")->status(),
+                $this->getJson("/api/c/{$persona->ulid}/stories")->status(),
+                $this->getJson("/api/c/{$persona->ulid}/posts")->status(),
+                $this->getJson("/api/media/by-ulid/{$media->ulid}")->status(),
+                $this->getJson("/api/users/{$viewer->id}/favorites")
+                    ->assertOk()
+                    ->assertJsonMissing(['id' => $media->id])
+                    ->status(),
+                $this->getJson("/api/users/{$owner->id}/favorites")->status(),
+                $this->getJson("/api/posts/by-ulid/{$post->ulid}")->status(),
+                $this->get("/p/{$post->ulid}")->status(),
+                $this->getJson("/api/posts/{$post->id}/comments")->status(),
+                $this->getJson("/api/stories/by-ulid/{$story->ulid}")->status(),
+                $this->get("/s/{$story->ulid}")->status(),
+                $this->getJson("/api/characters/{$persona->id}/followers")->status(),
+                $this->getJson('/api/notifications')
+                    ->assertOk()
+                    ->assertJsonMissing(['actor_name' => $persona->display_name])
+                    ->status(),
+                $this->getJson('/api/notifications/unread-count')
+                    ->assertOk()
+                    ->assertJsonPath('data.count', 0)
+                    ->status(),
+                $this->getJson('/api/side-rail')
+                    ->assertOk()
+                    ->assertJsonMissing(['href' => "/c/{$persona->ulid}"])
+                    ->status(),
+            ];
+            $this->assertCount(self::VISITOR_SURFACE_COUNT, $surfaceStatuses);
+            $this->assertSame(
+                [404, 404, 404, 404, 404, 200, 404, 404, 404, 404, 404, 404, 404, 200, 200, 200],
+                $surfaceStatuses,
+            );
+
+            $favorite = $this->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])
+                ->assertNotFound();
+            $missingFavorite = $this->postJson('/api/favorites', ['type' => 'media', 'id' => 999999])
+                ->assertNotFound();
+            $report = $this->postJson('/api/reports', [
+                'type' => 'media',
+                'id' => $media->id,
+                'reason' => 'harassment',
+            ])->assertNotFound();
+            $missingReport = $this->postJson('/api/reports', [
+                'type' => 'media',
+                'id' => 999999,
+                'reason' => 'harassment',
+            ])->assertNotFound();
+            $this->assertSame($missingFavorite->json('message'), $favorite->json('message'));
+            $this->assertSame($missingReport->json('message'), $report->json('message'));
+            $this->postJson("/api/posts/{$post->id}/reactions")->assertNotFound();
+            $this->postJson("/api/posts/{$post->id}/comments", ['body' => 'blocked'])->assertNotFound();
+            $this->postJson("/api/users/{$owner->id}/follow-requests")->assertNotFound();
+            $this->postJson("/api/characters/{$persona->id}/follow")->assertNotFound();
+        }
+    }
+
+    /**
+     * @param  array{
+     *     owner: User,
+     *     viewer: User,
+     *     account_follower: User,
+     *     persona: Character,
+     *     media: Media,
+     *     account_media: Media,
+     *     post: Post,
+     *     story: Story
+     * }  $fixture
+     * @return array<string, string>
+     */
+    private function personaSurfacePayloads(array $fixture, User $viewer): array
+    {
+        $owner = $fixture['owner'];
+        $persona = $fixture['persona'];
+        $media = $fixture['media'];
+        $post = $fixture['post'];
+        $story = $fixture['story'];
+
+        $profileHtml = $this->actingAs($viewer)->get("/c/{$persona->ulid}")->assertOk()->getContent();
+        $postPage = $this->get("/p/{$post->ulid}")->assertOk()->getContent();
+        $storyPage = $this->get("/s/{$story->ulid}")->assertOk()->getContent();
+
+        $payloads = [
+            'persona profile' => json_encode($this->initialData($profileHtml)['personaProfile'], JSON_THROW_ON_ERROR),
+            'persona media list' => $this->getJson("/api/c/{$persona->ulid}/media")->assertOk()->getContent(),
+            'persona story list' => $this->getJson("/api/c/{$persona->ulid}/stories")->assertOk()->getContent(),
+            'persona post list' => $this->getJson("/api/c/{$persona->ulid}/posts")->assertOk()->getContent(),
+            'favorite create' => $this->postJson('/api/favorites', [
+                'type' => 'media',
+                'id' => $media->id,
+            ])->assertCreated()->getContent(),
+            'media detail' => $this->getJson("/api/media/by-ulid/{$media->ulid}")->assertOk()->getContent(),
+            'viewer favorites' => $this->getJson("/api/users/{$viewer->id}/favorites")->assertOk()->getContent(),
+            // The original correlation sweep checks the owner's favorites
+            // separately. It is an owner-account surface and correctly 404s
+            // after an account block, so use the persona's discovery listing
+            // for this byte-equality sweep of persona-reachable surfaces.
+            'persona discovery' => $this->getJson('/api/explore/personas')->assertOk()->getContent(),
+            'post detail API' => $this->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk()->getContent(),
+            'post detail page' => json_encode($this->initialData($postPage)['postView'], JSON_THROW_ON_ERROR),
+            'comments' => $this->getJson("/api/posts/{$post->id}/comments")->assertOk()->getContent(),
+            'story detail API' => $this->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk()->getContent(),
+            'story detail page' => json_encode($this->initialData($storyPage)['storyReader'], JSON_THROW_ON_ERROR),
+            'followers' => $this->getJson("/api/characters/{$persona->id}/followers")->assertOk()->getContent(),
+            'notifications' => $this->getJson('/api/notifications')->assertOk()->getContent(),
+            'side rail recently visited' => $this->getJson('/api/side-rail')->assertOk()->getContent(),
+        ];
+        $this->assertCount(self::VISITOR_SURFACE_COUNT, $payloads);
+
+        return $payloads;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function ownerSurfacePayloads(
+        User $viewer,
+        User $owner,
+        Media $media,
+        Post $post,
+        Story $story,
+    ): array {
+        $profileHtml = $this->actingAs($viewer)->get("/users/{$owner->id}")->assertOk()->getContent();
+        $postPage = $this->get("/p/{$post->ulid}")->assertOk()->getContent();
+        $storyPage = $this->get("/s/{$story->ulid}")->assertOk()->getContent();
+
+        $payloads = [
+            'owner profile' => json_encode($this->initialData($profileHtml)['followProfile'], JSON_THROW_ON_ERROR),
+            'owner counts' => $this->getJson("/api/users/{$owner->id}/content-counts")->assertOk()->getContent(),
+            'owner recent' => $this->getJson("/api/users/{$owner->id}/recent-content")->assertOk()->getContent(),
+            'owner media' => $this->getJson("/api/users/{$owner->id}/media")->assertOk()->getContent(),
+            'owner stories' => $this->getJson("/api/users/{$owner->id}/stories")->assertOk()->getContent(),
+            'owner posts' => $this->getJson("/api/users/{$owner->id}/posts")->assertOk()->getContent(),
+            'media detail' => $this->getJson("/api/media/by-ulid/{$media->ulid}")->assertOk()->getContent(),
+            'post detail API' => $this->getJson("/api/posts/by-ulid/{$post->ulid}")->assertOk()->getContent(),
+            'post detail page' => json_encode($this->initialData($postPage)['postView'], JSON_THROW_ON_ERROR),
+            'comments' => $this->getJson("/api/posts/{$post->id}/comments")->assertOk()->getContent(),
+            'story detail API' => $this->getJson("/api/stories/by-ulid/{$story->ulid}")->assertOk()->getContent(),
+            'story detail page' => json_encode($this->initialData($storyPage)['storyReader'], JSON_THROW_ON_ERROR),
+            'owner favorites' => $this->getJson("/api/users/{$owner->id}/favorites")->assertOk()->getContent(),
+            'people directory' => $this->getJson('/api/users')->assertOk()->getContent(),
+            'notifications' => $this->getJson('/api/notifications')->assertOk()->getContent(),
+            'side rail recently visited' => $this->getJson('/api/side-rail')->assertOk()->getContent(),
+        ];
+        $this->assertCount(self::VISITOR_SURFACE_COUNT, $payloads);
+
+        return $payloads;
     }
 }

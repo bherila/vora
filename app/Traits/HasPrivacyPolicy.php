@@ -6,8 +6,10 @@ use App\Enums\Audience;
 use App\Events\ContentPrivacySynced;
 use App\Models\AudienceMember;
 use App\Models\Character;
+use App\Models\Story;
 use App\Models\User;
 use App\Services\Privacy\PrivacyAuditor;
+use App\Support\BlockGraph;
 use App\Support\FollowGraph;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -81,6 +83,14 @@ trait HasPrivacyPolicy
             $query->whereNull($table.'.'.$this->getDeletedAtColumn());
         }
 
+        if ($viewer !== null) {
+            if ($this instanceof Story) {
+                BlockGraph::storiesVisibleTo($query, $viewer, $table);
+            } else {
+                BlockGraph::visibleTo($query, $viewer, $table.'.user_id', $characterColumn);
+            }
+        }
+
         return $query->where(function (Builder $q) use ($viewer, $table, $morph, $characterColumn): void {
             // No authenticated viewer sees nothing — content is never served to
             // guests (mirrors isViewableBy(null) === false). This keeps the scope
@@ -140,12 +150,20 @@ trait HasPrivacyPolicy
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
-    public function scopeDiscoverable(Builder $query): Builder
+    public function scopeDiscoverable(Builder $query, ?User $viewer = null): Builder
     {
         $table = $this->getTable();
 
         if (method_exists($this, 'getDeletedAtColumn')) {
             $query->whereNull($table.'.'.$this->getDeletedAtColumn());
+        }
+
+        if ($viewer !== null) {
+            if ($this instanceof Story) {
+                BlockGraph::storiesVisibleTo($query, $viewer, $table);
+            } else {
+                BlockGraph::visibleTo($query, $viewer, $table.'.user_id', $this->followCharacterColumn($table));
+            }
         }
 
         return $query->where($table.'.audience', Audience::Everyone->value)
@@ -168,6 +186,13 @@ trait HasPrivacyPolicy
         }
 
         if ($viewer === null) {
+            return false;
+        }
+
+        $blockAllows = $this instanceof Story
+            ? BlockGraph::canViewStory($viewer, $this)
+            : BlockGraph::canViewIdentity($viewer, $this->user_id, $this->followCharacterId());
+        if (! $blockAllows) {
             return false;
         }
 

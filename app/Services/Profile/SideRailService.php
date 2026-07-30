@@ -12,6 +12,7 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
+use App\Support\BlockGraph;
 use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Support\Collection;
@@ -37,6 +38,16 @@ class SideRailService
                         ->whereNull('recipient_character_id')
                         ->where('status', FollowRequest::STATUS_PENDING)
                         ->whereHas('requester', fn ($query) => $query->active())
+                        ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
+                            $blocks,
+                            'follow_requests.requester_id',
+                            $viewer->id,
+                        ))
+                        ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
+                            $blocks,
+                            'follow_requests.requester_id',
+                            $viewer->id,
+                        ))
                         ->count(),
                     'href' => route('users.follow-requests', [], false),
                 ],
@@ -90,9 +101,8 @@ class SideRailService
             ->with(['profilePicture', 'interestRatings' => fn ($query) => $query
                 ->whereNull('character_id')
                 ->where('level', '>', 0)]);
-
+        BlockGraph::visibleTo($users, $viewer, 'users.id');
         MuteGraph::excludeMutedIdentities($users, $viewer->id, 'users.id');
-
         $users = $users
             ->get();
         $canView = $this->profileGate->canViewMany($viewer, $users);

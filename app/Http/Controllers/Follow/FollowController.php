@@ -20,6 +20,7 @@ use App\Services\Profile\PersonaProfilePayload;
 use App\Services\Profile\ProfileContentQueries;
 use App\Services\Profile\RecentProfileTrail;
 use App\Support\ActiveIdentity;
+use App\Support\BlockGraph;
 use App\Support\CharacterPresenter;
 use App\Support\FollowGraph;
 use App\Support\MuteGraph;
@@ -65,7 +66,7 @@ class FollowController extends Controller
     private function directoryPersonasPayload(Request $request): array
     {
         $query = Character::query()
-            ->discoverable()
+            ->discoverable($request->user())
             ->whereHas('user', fn ($q) => $q->active()->whereNotNull('approved_at'))
             ->with('profilePicture')
             ->orderBy('display_name');
@@ -96,6 +97,9 @@ class FollowController extends Controller
         }
         if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             abort(404);
+        }
+        if (! BlockGraph::canViewIdentity($current, $user->id)) {
+            abort(404, 'Not found.');
         }
 
         $profile = $this->profilePayload($current, $user);
@@ -246,6 +250,9 @@ class FollowController extends Controller
     {
         $current = $request->user();
         $query = User::query()->whereKeyNot($current?->id)->whereNotNull('approved_at')->active();
+        if ($current instanceof User) {
+            BlockGraph::visibleTo($query, $current, 'users.id');
+        }
 
         if ($current instanceof User) {
             MuteGraph::excludeMutedIdentities($query, $current->id, 'users.id');
@@ -318,6 +325,9 @@ class FollowController extends Controller
             return response()->json(['success' => true, 'data' => $this->profilePayload($viewer, $user)]);
         }
         if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
+            return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
+        }
+        if (! BlockGraph::canViewIdentity($current, $user->id)) {
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 404);
         }
 
@@ -438,6 +448,9 @@ class FollowController extends Controller
         if (! $current instanceof User || $current->is($user) || ! $this->isDiscoverable($user)) {
             return response()->json(['success' => false, 'message' => 'You cannot follow this user.'], 422);
         }
+        if (! BlockGraph::canViewIdentity($current, $user->id)) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
 
         // A persona edge to this owner does not subsume the human request.
         $followRequest = FollowRequest::query()
@@ -536,7 +549,17 @@ class FollowController extends Controller
             // Public output must stay fail-closed even if a legacy/imported row
             // violates the write endpoints' self-follow rejection.
             ->where('requester_id', '!=', $character->user_id)
-            ->whereHas('requester', fn ($query) => $query->active());
+            ->whereHas('requester', fn ($query) => $query->active())
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
+                $blocks,
+                'follow_requests.requester_id',
+                $current->id,
+            ))
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
+                $blocks,
+                'follow_requests.requester_id',
+                $current->id,
+            ));
 
         MuteGraph::excludeMutedIdentities(
             $followers,
@@ -597,6 +620,16 @@ class FollowController extends Controller
             ->where('recipient_id', $current?->id)
             ->whereNull('recipient_character_id')
             ->where('status', FollowRequest::STATUS_PENDING)
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
+                $blocks,
+                'follow_requests.requester_id',
+                (int) $current?->id,
+            ))
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
+                $blocks,
+                'follow_requests.requester_id',
+                (int) $current?->id,
+            ))
             ->latest()
             ->get();
 
@@ -632,6 +665,16 @@ class FollowController extends Controller
             ->where('recipient_id', $request->user()?->id)
             ->whereNull('recipient_character_id')
             ->where('status', FollowRequest::STATUS_PENDING)
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
+                $blocks,
+                'follow_requests.requester_id',
+                (int) $request->user()?->id,
+            ))
+            ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
+                $blocks,
+                'follow_requests.requester_id',
+                (int) $request->user()?->id,
+            ))
             ->count()]]);
     }
 
@@ -660,6 +703,9 @@ class FollowController extends Controller
         // isActive() covers the deactivated + disabled states.
         $requester = $followRequest->requester;
         if ($requester === null || ! $requester->isActive()) {
+            return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
+        }
+        if (! BlockGraph::canViewIdentity($current, $requester->id)) {
             return response()->json(['success' => false, 'message' => 'Follow request unavailable.'], 404);
         }
 

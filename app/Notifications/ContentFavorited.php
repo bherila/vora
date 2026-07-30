@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\User;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\HasDatabaseActor;
 use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -18,6 +19,7 @@ use NotificationChannels\WebPush\WebPushMessage;
 class ContentFavorited extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
+    use HasDatabaseActor;
     use Queueable;
     use SuppressesMutedActor;
 
@@ -53,6 +55,12 @@ class ContentFavorited extends Notification implements ShouldQueue
             'item_label' => $this->itemLabel,
             'url' => $this->itemUrl,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->withDatabaseActor($this->toArray($notifiable), $this->actor->id);
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

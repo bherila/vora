@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\FollowRequest;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\HasDatabaseActor;
 use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -13,6 +14,7 @@ use NotificationChannels\WebPush\WebPushMessage;
 class FollowRequestReceived extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
+    use HasDatabaseActor;
     use Queueable;
     use SuppressesMutedActor;
 
@@ -42,6 +44,12 @@ class FollowRequestReceived extends Notification implements ShouldQueue
             'follow_request_id' => $this->followRequest->id,
             'url' => '/users/follow-requests',
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->withDatabaseActor($this->toArray($notifiable), $this->followRequest->requester_id);
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

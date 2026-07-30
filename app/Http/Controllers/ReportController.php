@@ -8,6 +8,7 @@ use App\Models\Report;
 use App\Models\User;
 use App\Notifications\AbuseReportFiled;
 use App\Services\Favorites\FavoriteService;
+use App\Support\BlockGraph;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Notification;
 
@@ -27,6 +28,9 @@ class ReportController extends Controller
         $item = $this->favorites->resolve($request->validated('type'), (int) $request->validated('id'));
 
         if ($item === null) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+        if (! BlockGraph::canViewModelIdentity($user, $item)) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 

@@ -9,6 +9,7 @@ use App\Notifications\ContentFavorited;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
+use App\Support\BlockGraph;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -31,6 +32,9 @@ class FavoriteController extends Controller
         $item = $this->favorites->resolve($request->validated('type'), (int) $request->validated('id'));
 
         if ($item === null) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
+        if (! BlockGraph::canViewModelIdentity($user, $item)) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -89,6 +93,10 @@ class FavoriteController extends Controller
     public function index(Request $request, User $user): JsonResponse
     {
         $viewer = $this->viewAs->viewerFor($request, $user);
+
+        if ($viewer instanceof User && ! BlockGraph::canViewIdentity($viewer, $user->id)) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
 
         if (! $viewer instanceof User || ! $this->profileGate->canView($viewer, $user)) {
             return response()->json(['success' => false, 'message' => 'Profile unavailable.'], 403);

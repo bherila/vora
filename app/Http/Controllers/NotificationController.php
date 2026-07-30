@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Support\BlockGraph;
 use App\Support\MuteGraph;
 use App\Support\PaginationMeta;
 use Illuminate\Http\JsonResponse;
@@ -16,8 +18,10 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = $request->user()->notifications()->getQuery();
-        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
+        $viewer = $request->user();
+        $query = $viewer->notifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        MuteGraph::excludeMutedNotifications($query, $viewer->id);
         $paginator = $query->paginate((int) config('media.page_size', 24));
 
         return response()->json([
@@ -31,8 +35,10 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): JsonResponse
     {
-        $query = $request->user()->unreadNotifications()->getQuery();
-        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
+        $viewer = $request->user();
+        $query = $viewer->unreadNotifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        MuteGraph::excludeMutedNotifications($query, $viewer->id);
 
         return response()->json([
             'success' => true,
@@ -42,7 +48,11 @@ class NotificationController extends Controller
 
     public function markRead(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user()->notifications()->whereKey($id)->first();
+        $viewer = $request->user();
+        $query = $viewer->notifications()->getQuery()->whereKey($id);
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        MuteGraph::excludeMutedNotifications($query, $viewer->id);
+        $notification = $query->first();
         if ($notification === null) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
@@ -54,9 +64,11 @@ class NotificationController extends Controller
 
     public function markAllRead(Request $request): JsonResponse
     {
-        $query = $request->user()->unreadNotifications()->getQuery();
-        MuteGraph::excludeMutedNotifications($query, $request->user()->id);
-        $query->get()->markAsRead();
+        $viewer = $request->user();
+        $query = $viewer->unreadNotifications()->getQuery();
+        BlockGraph::notificationsVisibleTo($query, $viewer);
+        MuteGraph::excludeMutedNotifications($query, $viewer->id);
+        $query->update(['read_at' => now()]);
 
         return response()->json(['success' => true]);
     }
@@ -68,6 +80,7 @@ class NotificationController extends Controller
     {
         /** @var array<string, mixed> $data */
         $data = $notification->data;
+        unset($data['_actor_user_id'], $data['_actor_character_id']);
 
         return [
             'id' => $notification->id,

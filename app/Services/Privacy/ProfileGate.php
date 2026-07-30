@@ -6,6 +6,7 @@ use App\Enums\Audience;
 use App\Models\AudienceMember;
 use App\Models\FollowRequest;
 use App\Models\User;
+use App\Support\BlockGraph;
 use App\Support\FollowGraph;
 use Illuminate\Support\Collection;
 
@@ -27,6 +28,10 @@ class ProfileGate
 
         if ($viewer->id === $target->id || $viewer->isAdmin()) {
             return true;
+        }
+
+        if (! BlockGraph::canViewIdentity($viewer, $target->id)) {
+            return false;
         }
 
         return match ($target->profile_audience) {
@@ -52,26 +57,33 @@ class ProfileGate
             return $targets->mapWithKeys(fn (User $target): array => [$target->id => true])->all();
         }
 
+        $targetIds = $targets->pluck('id');
         $following = FollowRequest::query()
             ->where('requester_id', $viewer->id)
+            ->whereIn('recipient_id', $targetIds)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
-            // Human profiles only accept account-scoped edges.
             ->whereNull('recipient_character_id')
             ->pluck('recipient_id')->flip();
         $followers = FollowRequest::query()
             ->where('recipient_id', $viewer->id)
+            ->whereIn('requester_id', $targetIds)
             ->where('status', FollowRequest::STATUS_ACCEPTED)
-            // The follow-back leg of a human mutual is account-scoped too.
             ->whereNull('recipient_character_id')
             ->pluck('requester_id')->flip();
         $granted = AudienceMember::query()
             ->where('privacyable_type', (new User)->getMorphClass())
             ->where('user_id', $viewer->id)
+            ->whereIn('privacyable_id', $targetIds)
             ->pluck('privacyable_id')->flip();
+        $blocked = BlockGraph::hiddenAccountIds($viewer, $targets);
 
-        return $targets->mapWithKeys(function (User $target) use ($viewer, $following, $followers, $granted): array {
+        return $targets->mapWithKeys(function (User $target) use ($viewer, $following, $followers, $granted, $blocked): array {
             if ($target->id === $viewer->id) {
                 return [$target->id => true];
+            }
+
+            if ($blocked->has($target->id)) {
+                return [$target->id => false];
             }
 
             $ok = match ($target->profile_audience) {

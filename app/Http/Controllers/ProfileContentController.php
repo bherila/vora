@@ -12,6 +12,7 @@ use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\ProfileContentQueries;
+use App\Support\BlockGraph;
 use App\Support\PaginationMeta;
 use App\Support\PostPresenter;
 use App\Support\StoryPresenter;
@@ -206,6 +207,10 @@ class ProfileContentController extends Controller
         $viewer = $this->viewAs->viewerFor($request, $user);
         $isSelf = $viewer instanceof User && $viewer->id === $user->id;
         $discoverable = $user->approved_at !== null && $user->isActive();
+
+        if ($viewer instanceof User && ! BlockGraph::canViewIdentity($viewer, $user->id)) {
+            abort(404, 'Not found.');
+        }
 
         if (! $viewer instanceof User || (! $isSelf && (! $discoverable || ! $this->gate->canView($viewer, $user)))) {
             abort(403, 'Profile unavailable.');

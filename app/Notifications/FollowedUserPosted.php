@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Post;
 use App\Notifications\Concerns\DeliversWebPush;
+use App\Notifications\Concerns\HasDatabaseActor;
 use App\Notifications\Concerns\SuppressesMutedActor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,6 +18,7 @@ use NotificationChannels\WebPush\WebPushMessage;
 class FollowedUserPosted extends Notification implements ShouldQueue
 {
     use DeliversWebPush;
+    use HasDatabaseActor;
     use Queueable;
     use SuppressesMutedActor;
 
@@ -70,6 +72,16 @@ class FollowedUserPosted extends Notification implements ShouldQueue
         }
 
         return $data;
+    }
+
+    /** @return array<string, mixed> */
+    public function toDatabase(object $notifiable): array
+    {
+        return $this->withDatabaseActor(
+            $this->toArray($notifiable),
+            $this->post->user_id,
+            $this->post->character_id,
+        );
     }
 
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage

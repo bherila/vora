@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ModerationStatus;
+use App\Support\BlockGraph;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
 use Illuminate\Database\Eloquent\Builder;
@@ -50,6 +51,10 @@ class PostComment extends Model
      */
     public function scopeVisibleTo(Builder $query, ?User $viewer): Builder
     {
+        if ($viewer instanceof User) {
+            BlockGraph::commentsVisibleTo($query, $viewer);
+        }
+
         return $query->where(function (Builder $outer) use ($viewer): void {
             $outer->where(function (Builder $inner): void {
                 $inner->where('moderation_status', ModerationStatus::Approved->value)

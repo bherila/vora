@@ -120,6 +120,17 @@ class Character extends Model
     }
 
     /**
+     * Blocks that explicitly name this persona. They survive soft deletion so
+     * restoring a persona cannot silently undo a user's safety choice.
+     *
+     * @return HasMany<Block, $this>
+     */
+    public function identityBlocks(): HasMany
+    {
+        return $this->hasMany(Block::class, 'blocked_character_id');
+    }
+
+    /**
      * Per-character interest overrides. Only consulted when
      * {@see static::$inherit_interests} is false; otherwise the character falls
      * back to the owning user's profile interest ratings.
