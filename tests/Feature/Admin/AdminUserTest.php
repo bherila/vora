@@ -13,17 +13,17 @@ class AdminUserTest extends TestCase
 
     private function admin(): User
     {
-        // First created user has id 1 (always admin); make a non-id-1 admin actor
-        // so user-id-1 protections are exercised separately.
-        User::factory()->admin()->create(); // id 1
+        // MySQL does not rewind AUTO_INCREMENT after test rollbacks, so declare
+        // the protected primary-admin id explicitly.
+        User::factory()->admin()->create(['id' => 1]);
 
-        return User::factory()->admin()->create(); // id 2, the actor
+        return User::factory()->admin()->create();
     }
 
     #[Test]
     public function test_non_admin_cannot_reach_admin_pages_or_api(): void
     {
-        User::factory()->admin()->create(); // occupy id 1 (always-admin)
+        User::factory()->admin()->create(['id' => 1]);
         $user = User::factory()->approved()->create(); // a genuine non-admin
 
         $this->actingAs($user)->get('/admin/users')->assertForbidden();
@@ -33,7 +33,7 @@ class AdminUserTest extends TestCase
     #[Test]
     public function test_pending_or_disabled_admin_cannot_reach_admin_api(): void
     {
-        User::factory()->admin()->create(); // occupy id 1 (always-admin)
+        User::factory()->admin()->create(['id' => 1]);
 
         // is_admin is set but the account is not through the access model yet.
         $pendingAdmin = User::factory()->admin()->state(['approved_at' => null])->create();
@@ -169,7 +169,7 @@ class AdminUserTest extends TestCase
     #[Test]
     public function test_admin_cannot_disable_self_or_primary_admin(): void
     {
-        $admin = $this->admin(); // id 2
+        $admin = $this->admin();
 
         $this->actingAs($admin)->patchJson("/api/admin/users/{$admin->id}", ['is_disabled' => true])->assertForbidden();
         $this->actingAs($admin)->patchJson('/api/admin/users/1', ['is_disabled' => true])->assertForbidden();

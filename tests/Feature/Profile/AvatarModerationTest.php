@@ -40,6 +40,7 @@ class AvatarModerationTest extends TestCase
     {
         $this->mockSignedUrls();
 
+        User::factory()->admin()->create(['id' => 1]);
         $viewer = User::factory()->approved()->create();
         $target = $this->userWithAvatar(approved: false);
 
@@ -54,13 +55,17 @@ class AvatarModerationTest extends TestCase
     {
         $this->mockSignedUrls();
 
+        User::factory()->admin()->create(['id' => 1]);
         $viewer = User::factory()->approved()->create();
         $target = $this->userWithAvatar(approved: true);
 
         $response = $this->actingAs($viewer)->getJson('/api/users')->assertOk();
 
         $entry = collect($response->json('data'))->firstWhere('id', $target->id);
-        $this->assertSame('AVATAR_URL_TOKEN', $entry['avatar_url']);
+        $this->assertSame(
+            "/api/media/by-ulid/{$target->profilePicture->ulid}/asset/original",
+            $entry['avatar_url'],
+        );
     }
 
     public function test_owner_sees_their_own_pending_avatar(): void

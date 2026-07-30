@@ -9,8 +9,8 @@ use Tests\TestCase;
  * Example feature test demonstrating safe database usage.
  *
  * This test uses RefreshDatabase, which will run migrations on each test.
- * Because we enforce SQLite in-memory via SafeTestCase, this is safe
- * and will never accidentally affect a MySQL database.
+ * SafeTestCase permits only SQLite in-memory or the isolated CI MySQL service,
+ * so RefreshDatabase can never accidentally affect a shared database.
  */
 class ExampleTest extends TestCase
 {
@@ -27,20 +27,28 @@ class ExampleTest extends TestCase
     }
 
     /**
-     * Test that we are using SQLite in-memory database.
+     * Test that we are using an approved isolated test database.
      *
      * This test verifies our safety mechanism is working.
      */
-    public function test_database_is_sqlite_in_memory(): void
+    public function test_database_is_an_approved_isolated_target(): void
     {
-        $this->assertEquals('sqlite', $this->getDatabaseDriver());
-        $this->assertEquals(':memory:', $this->getDatabaseName());
+        if ($this->getDatabaseDriver() === 'sqlite') {
+            $this->assertSame(':memory:', $this->getDatabaseName());
+
+            return;
+        }
+
+        $this->assertSame('mysql', $this->getDatabaseDriver());
+        $this->assertSame('vora_ci', $this->getDatabaseName());
+        $this->assertTrue(filter_var(env('CI', false), FILTER_VALIDATE_BOOL));
+        $this->assertTrue(filter_var(env('VORA_MYSQL_CI', false), FILTER_VALIDATE_BOOL));
     }
 
     /**
      * Test that database tables can be created via migrations.
      *
-     * This confirms RefreshDatabase is working with SQLite.
+     * This confirms RefreshDatabase works with each approved backend.
      */
     public function test_migrations_create_expected_tables(): void
     {

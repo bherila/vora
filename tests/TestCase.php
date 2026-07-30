@@ -5,8 +5,8 @@ namespace Tests;
 /**
  * Base TestCase for all feature tests.
  *
- * Extends SafeTestCase which enforces SQLite in-memory database usage,
- * ensuring tests never accidentally connect to MySQL (even if .env has credentials).
+ * Extends SafeTestCase, which restricts local tests to SQLite in-memory and
+ * permits MySQL only for the isolated CI service container.
  *
  * Usage:
  *   - Feature tests should extend this class
@@ -20,7 +20,7 @@ namespace Tests;
  *
  *       public function test_something(): void
  *       {
- *           // Database is guaranteed to be SQLite in-memory
+ *           // Database is guaranteed to be an isolated test target
  *           $user = User::factory()->create();
  *           // ...
  *       }

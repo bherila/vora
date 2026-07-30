@@ -7,63 +7,87 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * SafeTestCase - A base test class that enforces SQLite usage.
+ * SafeTestCase - A base test class that enforces isolated test database usage.
  *
- * This class provides safety guarantees that tests will NEVER accidentally
- * connect to a production MySQL database, even if .env contains MySQL credentials.
+ * Local tests are restricted to SQLite in-memory. The CI-only MySQL job may use
+ * its loopback service container and dedicated database credentials.
  *
  * The phpunit.xml file sets DB_CONNECTION=sqlite and DB_DATABASE=:memory:,
  * but this class adds runtime verification as an additional safety layer.
  *
  * Usage:
  *   - Feature tests should extend Tests\TestCase (which extends this class)
- *   - Use the RefreshDatabase trait freely - it will only affect SQLite in-memory
+ *   - Use the RefreshDatabase trait freely; this guard runs before it
  */
 abstract class SafeTestCase extends BaseTestCase
 {
+    private const MYSQL_CI_DATABASE = 'vora_ci';
+
+    private const MYSQL_CI_USERNAME = 'vora_ci';
+
     /**
      * Boot the testing helper traits and verify database safety.
      */
     protected function setUpTraits(): array
     {
-        $this->assertDatabaseIsSafeSqlite();
+        $this->assertDatabaseIsSafe();
 
         return parent::setUpTraits();
     }
 
     /**
-     * Assert that the database connection is SQLite in-memory.
+     * Assert that the database connection is an approved isolated test target.
      *
-     * This is a critical safety check that prevents tests from accidentally
-     * running against a MySQL database (which could contain production data).
+     * MySQL is deliberately asymmetric with the local default: it is permitted
+     * only in CI, only with the explicit workflow marker, and only against the
+     * loopback service container's fixed database and username. This prevents
+     * environment credentials from silently redirecting a destructive test.
      *
-     * @throws RuntimeException if not using SQLite in-memory database
+     * @throws RuntimeException if the configured database is not safe for tests
      */
-    protected function assertDatabaseIsSafeSqlite(): void
+    protected function assertDatabaseIsSafe(): void
     {
         $connection = DB::connection();
         $driverName = $connection->getDriverName();
         $database = $connection->getDatabaseName();
 
-        if ($driverName !== 'sqlite') {
-            throw new RuntimeException(
-                "SAFETY ERROR: Tests must use SQLite, but '{$driverName}' connection is active. ".
-                "This could lead to accidentally modifying a production database!\n\n".
-                "Ensure phpunit.xml contains:\n".
-                "  <env name=\"DB_CONNECTION\" value=\"sqlite\"/>\n".
-                "  <env name=\"DB_DATABASE\" value=\":memory:\"/>\n\n".
-                'And run tests with: composer test (or php artisan test)'
-            );
+        if ($driverName === 'sqlite' && $database === ':memory:') {
+            return;
         }
 
-        if ($database !== ':memory:') {
+        $host = (string) $connection->getConfig('host');
+        $username = (string) $connection->getConfig('username');
+        $isCi = filter_var(env('CI', false), FILTER_VALIDATE_BOOL);
+        $isMysqlCi = filter_var(env('VORA_MYSQL_CI', false), FILTER_VALIDATE_BOOL);
+        $isLoopback = in_array($host, ['127.0.0.1', 'localhost'], true);
+
+        if (
+            $driverName === 'mysql'
+            && $isCi
+            && $isMysqlCi
+            && $isLoopback
+            && $database === self::MYSQL_CI_DATABASE
+            && $username === self::MYSQL_CI_USERNAME
+        ) {
+            return;
+        }
+
+        if ($driverName === 'sqlite') {
             throw new RuntimeException(
-                "SAFETY ERROR: Tests must use in-memory SQLite, but database is '{$database}'.\n\n".
+                "SAFETY ERROR: Local tests must use in-memory SQLite, but database is '{$database}'.\n\n".
                 "Using a file-based database could persist test data unexpectedly.\n".
                 "Ensure phpunit.xml contains:\n".
                 '  <env name="DB_DATABASE" value=":memory:"/>'
             );
         }
+
+        throw new RuntimeException(
+            "SAFETY ERROR: '{$driverName}' tests are not targeting the isolated CI MySQL service.\n\n".
+            "Local tests must use SQLite in-memory. MySQL tests require CI=true,\n".
+            'VORA_MYSQL_CI=true, host 127.0.0.1 or localhost, database '.
+            self::MYSQL_CI_DATABASE.', and username '.self::MYSQL_CI_USERNAME.".\n".
+            'Shared and production databases must never be used for tests.'
+        );
     }
 
     /**
