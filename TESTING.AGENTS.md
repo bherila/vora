@@ -36,9 +36,9 @@ php artisan test --filter="some_specific_test"
 Before finalizing, broaden to the full backend gate.
 
 SQLite in-memory is the default for every local and developer test run. CI also
-runs the backend gate against the MySQL 8.0 `mysql` service container defined in
-`.github/workflows/ci.yml`; that job is intentionally additional coverage, not
-a replacement for SQLite.
+runs the backend gate against MySQL 8.0 and MariaDB 10.11 service containers in
+the `sql` matrix defined in `.github/workflows/ci.yml`; those jobs are
+intentionally additional coverage, not a replacement for SQLite.
 
 ## Database safety
 
@@ -50,7 +50,7 @@ php artisan schema:dump --database=sqlite
 ```
 
 Never use `--prune`. Tests must use SQLite in-memory and must never run against a production or shared database.
-The sole exception is the CI-only MySQL job, which is guarded to accept only its
-loopback service container, dedicated `vora_ci` database, and dedicated CI
-credentials. Never reuse that job configuration to target a shared or
-production database.
+The sole exceptions are the CI-only MySQL and MariaDB jobs, which are guarded
+to accept only their loopback service containers, dedicated `vora_ci` database,
+matching engine marker, and dedicated CI credentials. Never reuse those job
+configurations to target a shared or production database.

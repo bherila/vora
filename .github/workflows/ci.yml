@@ -172,32 +172,49 @@ jobs:
           ./vendor/bin/pint --test
           composer test
 
-  mysql:
-    name: Backend tests (MySQL 8.0)
+  sql:
+    name: Backend tests (${{ matrix.label }})
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: MySQL 8.0
+            image: mysql:8.0
+            driver: mysql
+            health_command: mysqladmin ping --host=localhost --user=root --password=vora_ci_root_password
+          - label: MariaDB 10.11
+            image: mariadb:10.11
+            driver: mariadb
+            health_command: mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password
     services:
-      mysql:
-        image: mysql:8.0
+      database:
+        image: ${{ matrix.image }}
         env:
           MYSQL_DATABASE: vora_ci
           MYSQL_USER: vora_ci
           MYSQL_PASSWORD: vora_ci_password
           MYSQL_ROOT_PASSWORD: vora_ci_root_password
+          MARIADB_DATABASE: vora_ci
+          MARIADB_USER: vora_ci
+          MARIADB_PASSWORD: vora_ci_password
+          MARIADB_ROOT_PASSWORD: vora_ci_root_password
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping --host=localhost --user=root --password=vora_ci_root_password"
+          --health-cmd="${{ matrix.health_command }}"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
     env:
       CI: 'true'
-      VORA_MYSQL_CI: 'true'
+      VORA_MYSQL_CI: ${{ matrix.driver == 'mysql' }}
+      VORA_MARIADB_CI: ${{ matrix.driver == 'mariadb' }}
       DB_URL: ''
-      DB_CONNECTION: mysql
+      DB_CONNECTION: ${{ matrix.driver }}
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_DATABASE: vora_ci
@@ -233,7 +250,7 @@ jobs:
 
   result:
     name: CI result
-    needs: [changes, test, migrations, mysql]
+    needs: [changes, test, migrations, sql]
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -248,7 +265,7 @@ jobs:
           if [[ "${{ needs.migrations.result }}" == "failure" || "${{ needs.migrations.result }}" == "cancelled" ]]; then
             exit 1
           fi
-          if [[ "${{ needs.mysql.result }}" == "failure" || "${{ needs.mysql.result }}" == "cancelled" ]]; then
+          if [[ "${{ needs.sql.result }}" == "failure" || "${{ needs.sql.result }}" == "cancelled" ]]; then
             exit 1
           fi
           echo "Required checks passed or no code paths changed."

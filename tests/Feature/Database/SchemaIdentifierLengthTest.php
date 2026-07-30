@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * SQLite accepts identifiers of any length while MySQL rejects anything over
- * 64 characters. An over-long index name therefore passed the default SQLite
- * suite and then failed a production migration. This guard now runs against
- * both the default SQLite schema and the CI-only MySQL schema.
+ * SQLite accepts identifiers of any length while MySQL and MariaDB reject
+ * anything over 64 characters. An over-long index name therefore passed the
+ * default SQLite suite and then failed a production migration. This guard now
+ * runs against SQLite and both CI SQL engines.
  *
  * Laravel derives index names from the table plus every indexed column, so wide
  * composite indexes on long table names overflow easily. Name those explicitly.
@@ -56,7 +56,7 @@ class SchemaIdentifierLengthTest extends TestCase
      */
     private function schemaObjects(): array
     {
-        if (DB::connection()->getDriverName() === 'mysql') {
+        if ($this->usesInformationSchema()) {
             return DB::select(
                 <<<'SQL'
                     SELECT table_name AS name, 'table' AS type, table_name AS tbl_name
@@ -78,7 +78,7 @@ class SchemaIdentifierLengthTest extends TestCase
      */
     private function schemaColumns(): array
     {
-        if (DB::connection()->getDriverName() === 'mysql') {
+        if ($this->usesInformationSchema()) {
             return DB::select(
                 <<<'SQL'
                     SELECT column_name AS name, table_name AS tbl_name
@@ -97,5 +97,10 @@ class SchemaIdentifierLengthTest extends TestCase
         }
 
         return $columns;
+    }
+
+    private function usesInformationSchema(): bool
+    {
+        return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
     }
 }

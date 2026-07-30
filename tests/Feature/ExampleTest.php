@@ -9,8 +9,8 @@ use Tests\TestCase;
  * Example feature test demonstrating safe database usage.
  *
  * This test uses RefreshDatabase, which will run migrations on each test.
- * SafeTestCase permits only SQLite in-memory or the isolated CI MySQL service,
- * so RefreshDatabase can never accidentally affect a shared database.
+ * SafeTestCase permits only SQLite in-memory or an isolated CI SQL service, so
+ * RefreshDatabase can never accidentally affect a shared database.
  */
 class ExampleTest extends TestCase
 {
@@ -39,10 +39,12 @@ class ExampleTest extends TestCase
             return;
         }
 
-        $this->assertSame('mysql', $this->getDatabaseDriver());
+        $driver = $this->getDatabaseDriver();
+        $this->assertContains($driver, ['mysql', 'mariadb']);
         $this->assertSame('vora_ci', $this->getDatabaseName());
         $this->assertTrue(filter_var(env('CI', false), FILTER_VALIDATE_BOOL));
-        $this->assertTrue(filter_var(env('VORA_MYSQL_CI', false), FILTER_VALIDATE_BOOL));
+        $marker = $driver === 'mysql' ? 'VORA_MYSQL_CI' : 'VORA_MARIADB_CI';
+        $this->assertTrue(filter_var(env($marker, false), FILTER_VALIDATE_BOOL));
     }
 
     /**
