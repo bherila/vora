@@ -166,7 +166,7 @@ class BlockingPrivacyTest extends TestCase
 
     public function test_admin_bypasses_blocks_for_profiles_content_and_batch_gates(): void
     {
-        $admin = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
         $alice = User::factory()->approved()->create();
         $media = Media::factory()->for($alice)->approved()->create();
         Block::query()->create([
