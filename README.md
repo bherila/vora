@@ -111,7 +111,7 @@ this cron entry in cPanel, replacing the account name and application directory
 with the deployed values while keeping the production PHP binary explicit:
 
 ```cron
-* * * * * /opt/cpanel/ea-php83/root/usr/bin/php /home/CPANEL_USER/vora/artisan schedule:run >> /home/CPANEL_USER/vora/storage/logs/scheduler.log 2>&1
+* * * * * /opt/cpanel/ea-php85/root/usr/bin/php /home/CPANEL_USER/laravel/artisan schedule:run >> /home/CPANEL_USER/laravel/storage/logs/scheduler.log 2>&1
 ```
 
 The scheduler runs a short database worker for `chat-notifications,default` in
@@ -120,7 +120,7 @@ Supervisor, Horizon, Reverb, or persistent daemon is required. Verify the cron
 is active after every deployment (and after cPanel/PHP changes) with:
 
 ```bash
-/opt/cpanel/ea-php83/root/usr/bin/php /home/CPANEL_USER/vora/artisan ops:queue-health
+/opt/cpanel/ea-php85/root/usr/bin/php /home/CPANEL_USER/laravel/artisan ops:queue-health
 ```
 
 That diagnostic reports scheduler-heartbeat freshness, the age and count of

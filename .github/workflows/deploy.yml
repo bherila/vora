@@ -124,3 +124,17 @@ jobs:
           curl --fail-with-body --silent --show-error \
             --retry 4 --retry-delay 3 --retry-all-errors --max-time 15 \
             https://macrophile.me/up
+
+      - name: Verify scheduler and queue health
+        run: |
+          for attempt in 1 2 3 4; do
+            if ssh -o StrictHostKeyChecking=yes \
+              ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
+              "cd ~/laravel && /opt/cpanel/ea-php85/root/usr/bin/php artisan ops:queue-health --json"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              sleep 20
+            fi
+          done
+          exit 1
