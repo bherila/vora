@@ -40,11 +40,10 @@ class ExampleTest extends TestCase
         }
 
         $driver = $this->getDatabaseDriver();
-        $this->assertContains($driver, ['mysql', 'mariadb']);
+        $this->assertSame('mariadb', $driver);
         $this->assertSame('vora_ci', $this->getDatabaseName());
         $this->assertTrue(filter_var(env('CI', false), FILTER_VALIDATE_BOOL));
-        $marker = $driver === 'mysql' ? 'VORA_MYSQL_CI' : 'VORA_MARIADB_CI';
-        $this->assertTrue(filter_var(env($marker, false), FILTER_VALIDATE_BOOL));
+        $this->assertTrue(filter_var(env('VORA_MARIADB_CI', false), FILTER_VALIDATE_BOOL));
     }
 
     /**

@@ -173,39 +173,16 @@ jobs:
           composer test
 
   sql:
-    name: Backend tests (${{ matrix.label }})
+    name: Backend tests (MariaDB 10.6)
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: MySQL 8.0
-            image: mysql:8.0
-            driver: mysql
-            health_command: mysqladmin ping --host=localhost --user=root --password=vora_ci_root_password
-          # Production runs MariaDB 10.6 (verified on the cPanel host:
-          # 10.6.27-MariaDB). That line is the gate that matters today.
-          - label: MariaDB 10.6
-            image: mariadb:10.6
-            driver: mariadb
-            health_command: mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password
-          # 10.6 reaches end of life in July 2026, so the host is expected to
-          # move to the next LTS. Keep 10.11 green ahead of that upgrade.
-          - label: MariaDB 10.11
-            image: mariadb:10.11
-            driver: mariadb
-            health_command: mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password
     services:
       database:
-        image: ${{ matrix.image }}
+        # Production runs 10.6.27-MariaDB on the cPanel host.
+        image: mariadb:10.6
         env:
-          MYSQL_DATABASE: vora_ci
-          MYSQL_USER: vora_ci
-          MYSQL_PASSWORD: vora_ci_password
-          MYSQL_ROOT_PASSWORD: vora_ci_root_password
           MARIADB_DATABASE: vora_ci
           MARIADB_USER: vora_ci
           MARIADB_PASSWORD: vora_ci_password
@@ -213,16 +190,15 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="${{ matrix.health_command }}"
+          --health-cmd="mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
     env:
       CI: 'true'
-      VORA_MYSQL_CI: ${{ matrix.driver == 'mysql' }}
-      VORA_MARIADB_CI: ${{ matrix.driver == 'mariadb' }}
+      VORA_MARIADB_CI: 'true'
       DB_URL: ''
-      DB_CONNECTION: ${{ matrix.driver }}
+      DB_CONNECTION: mariadb
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_DATABASE: vora_ci

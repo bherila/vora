@@ -15,13 +15,12 @@
 - **UI/formatting conventions**: Money/percent helpers live in [resources/js/lib/currency.ts](resources/js/lib/currency.ts). UI uses shadcn/Radix components under `resources/js/components/ui`. Mermaids use loose security level to allow click-through to company routes.
 - **Build/test workflow**: Install with `composer install && pnpm install`; copy `.env` then `php artisan key:generate` and migrate. Dev: `composer dev` (spawns artisan serve, queue listener, pail logs, Vite via `npx concurrently`) or run `php artisan serve` and `pnpm dev` separately. Tests: `composer test` (PHPUnit) and `pnpm test` (Jest via ts-jest). Build: `pnpm build` (Vite) with inputs from [vite.config.ts](vite.config.ts).
 - **PHP Testing Safety**: Local and developer tests always use SQLite in-memory.
-  CI additionally gates backend changes against isolated MySQL 8.0 and MariaDB
-  10.11 service containers; those jobs must never target a shared or production
-  database. This is enforced by:
+  CI additionally gates backend changes against an isolated MariaDB 10.6
+  service container matching production; that job must never target a shared
+  or production database. This is enforced by:
   1. `phpunit.xml` sets `DB_CONNECTION=sqlite` and `DB_DATABASE=:memory:`
-  2. `Tests\SafeTestCase` (extended by `Tests\TestCase`) accepts either SQL
-     engine only with its matching CI marker, loopback host, and fixed `vora_ci`
-     database and username
+  2. `Tests\SafeTestCase` (extended by `Tests\TestCase`) accepts MariaDB only
+     with its CI marker, loopback host, and fixed `vora_ci` database and username
   
   When writing tests:
   - Feature tests should extend `Tests\TestCase` (which extends `SafeTestCase`)
