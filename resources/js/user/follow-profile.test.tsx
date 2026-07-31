@@ -51,6 +51,7 @@ function ownerInitialData(overrides: ProfileOverrides = {}, extra: Record<string
   return {
     followProfile: {
       id: 7,
+      public_id: '01PUBLICUSER00000000000000',
       is_self: true,
       display_name: 'Ben',
       avatar_url: null,
@@ -62,6 +63,7 @@ function ownerInitialData(overrides: ProfileOverrides = {}, extra: Record<string
       mutual_interests: [],
       follow_request: null,
       can_follow_back: false,
+      can_message: false,
       characters: overrides.characters ?? [],
     },
     profileEditable: null,
@@ -99,6 +101,7 @@ describe('FollowProfilePage (/me)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (fetchWrapper.post as jest.Mock).mockResolvedValue({});
     window.confirm = jest.fn(() => true);
   });
 
@@ -229,6 +232,7 @@ describe('FollowProfilePage (/me)', () => {
     expect(screen.queryByRole('button', { name: 'Follow Vex' })).toBeNull();
     expect(screen.queryByRole('button', { name: /save/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /report/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Message' })).toBeNull();
 
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith(
       '/api/c/01PERSONA/counts?view_as=follower',
@@ -236,6 +240,30 @@ describe('FollowProfilePage (/me)', () => {
     expect(fetchWrapper.get).toHaveBeenCalledWith(
       '/api/characters/5/followers?view_as=follower',
     );
+  });
+
+  it('offers messaging only for an eligible account profile', async () => {
+    const initial = ownerInitialData();
+    setInitialData({
+      ...initial,
+      followProfile: {
+        ...initial.followProfile as Record<string, unknown>,
+        is_self: false,
+        public_id: '01PUBLICRECIPIENT000000000',
+        can_message: true,
+        viewer_muted: false,
+        viewer_block_id: null,
+      },
+    });
+    (fetchWrapper.post as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    render(<FollowProfilePage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Message' }));
+
+    expect(fetchWrapper.post).toHaveBeenCalledWith('/api/chat/conversations', {
+      recipient_id: '01PUBLICRECIPIENT000000000',
+    });
+    expect(screen.getByRole('button', { name: 'Message' })).toBeDisabled();
   });
 
   it('shows bio and pronouns in the header', async () => {

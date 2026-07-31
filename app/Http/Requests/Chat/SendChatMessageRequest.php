@@ -22,7 +22,12 @@ class SendChatMessageRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_message_id' => ['required', 'ulid'],
+            'client_message_id' => [
+                'required',
+                'string',
+                'max:36',
+                'regex:/^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i',
+            ],
             'body' => ['required', 'string', 'max:5000'],
         ];
     }

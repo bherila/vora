@@ -14,6 +14,7 @@ use App\Models\InterestRating;
 use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
+use App\Services\Chat\ChatGate;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
@@ -36,6 +37,7 @@ class FollowController extends Controller
 {
     public function __construct(
         private readonly ProfileGate $gate,
+        private readonly ChatGate $chatGate,
         private readonly MediaResponseService $mediaResponder,
         private readonly ProfileContentQueries $contentQueries,
         private readonly ActiveIdentity $activeIdentity,
@@ -356,6 +358,7 @@ class FollowController extends Controller
         // send / track a follow request.
         $base = [
             'id' => $user->id,
+            'public_id' => $user->public_ulid,
             'is_self' => $isSelf,
             'display_name' => $user->display_name ?: $user->name,
             'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $current),
@@ -366,6 +369,7 @@ class FollowController extends Controller
                 ->where('blocked_user_id', $user->id)
                 ->whereNull('blocked_character_id')
                 ->value('id') : null,
+            'can_message' => ! $isSelf && $this->chatGate->mayCreateOrSend($current, $user),
         ];
 
         if (! $this->gate->canView($current, $user)) {

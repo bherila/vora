@@ -168,6 +168,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::get('/messages/{conversation?}', [ChatController::class, 'page'])
+        ->where('conversation', '[0-9A-HJKMNP-TV-Z]{26}')
+        ->name('chat.index');
     Route::post('/api/onboarding/dismiss', [OnboardingController::class, 'dismiss']);
     Route::post('/api/identity', [IdentityController::class, 'update']);
     Route::get('/api/side-rail', [SideRailController::class, 'show']);

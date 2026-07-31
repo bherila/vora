@@ -57,11 +57,15 @@
       // never includes invites the inbox hides (owner since gone inactive).
       $__authorshipInviteCount = $__isAuthenticated ? $__currentUser->storyAuthorships()->pendingForActiveOwner()->count() : 0;
       $__requestCount = $__followRequestCount + $__authorshipInviteCount;
+      $__chatUnreadCount = $__isAuthenticated && $__currentUser->isApproved() && $__currentUser->isActive()
+        ? app(\App\Services\Chat\ChatInbox::class)->unreadCount($__currentUser)
+        : 0;
       $__navItems = array_values(array_filter([
         // Guests see the marketing home; logged-in users land on the feed, so
         // "Home" would just be a redirect — drop it from the authed nav.
         $__isAuthenticated ? null : ['label' => 'Home', 'href' => route('home', [], false)],
         $__isAuthenticated ? ['label' => 'Feed', 'href' => route('feed', [], false)] : null,
+        $__isAuthenticated ? ['label' => 'Messages', 'href' => route('chat.index', [], false), 'badge' => $__chatUnreadCount] : null,
         // The profile (/me) hosts the user's media, stories, characters, posts,
         // and favorites.
         $__isAuthenticated ? ['label' => 'Profile', 'href' => route('me', [], false)] : null,

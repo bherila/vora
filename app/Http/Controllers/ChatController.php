@@ -7,11 +7,10 @@ use App\Http\Requests\Chat\ListChatConversationsRequest;
 use App\Http\Requests\Chat\ListChatMessagesRequest;
 use App\Http\Requests\Chat\ReadChatMessageRequest;
 use App\Http\Requests\Chat\SendChatMessageRequest;
-use App\Models\ChatConversation;
 use App\Models\ChatMessage;
-use App\Models\ChatParticipant;
 use App\Models\User;
 use App\Services\Chat\ChatGate;
+use App\Services\Chat\ChatInbox;
 use App\Services\Chat\ChatService;
 use App\Support\ChatCursor;
 use App\Support\ChatPresenter;
@@ -21,6 +20,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class ChatController extends Controller
 {
@@ -28,9 +28,15 @@ class ChatController extends Controller
 
     public function __construct(
         private readonly ChatGate $gate,
+        private readonly ChatInbox $inbox,
         private readonly ChatService $chat,
         private readonly ChatPresenter $presenter,
     ) {}
+
+    public function page(): View
+    {
+        return view('chat.index');
+    }
 
     public function index(ListChatConversationsRequest $request): JsonResponse
     {
@@ -105,17 +111,10 @@ class ChatController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         $viewer = $request->user();
-        $visibleConversationIds = $this->gate
-            ->constrainVisibleConversations(ChatConversation::query(), $viewer)
-            ->select('chat_conversations.id');
-        $count = ChatParticipant::query()
-            ->where('user_id', $viewer->id)
-            ->whereIn('conversation_id', $visibleConversationIds)
-            ->sum('unread_count');
 
         return response()->json([
             'success' => true,
-            'data' => ['count' => (int) $count],
+            'data' => ['count' => $this->inbox->unreadCount($viewer)],
         ]);
     }
 
