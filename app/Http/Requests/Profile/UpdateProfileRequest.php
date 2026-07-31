@@ -44,6 +44,7 @@ class UpdateProfileRequest extends FormRequest
             'notify_co_author_invite' => ['sometimes', 'boolean'],
             'notify_co_author_invite_accepted' => ['sometimes', 'boolean'],
             'notify_favorite' => ['sometimes', 'boolean'],
+            'notify_message' => ['sometimes', 'boolean'],
             'email' => [
                 'sometimes',
                 'required',

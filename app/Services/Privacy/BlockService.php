@@ -29,6 +29,7 @@ class BlockService
             if ($block->wasRecentlyCreated) {
                 $this->auditBlock($block, BlockAuditLog::ACTION_BLOCKED);
                 $this->severFollows($block);
+                $this->touchChatSync($block->blocker_id, $block->blocked_user_id);
             }
 
             return $block;
@@ -50,6 +51,7 @@ class BlockService
 
             $this->auditBlock($block, BlockAuditLog::ACTION_UNBLOCKED);
             $block->delete();
+            $this->touchChatSync($block->blocker_id, $block->blocked_user_id);
 
             return true;
         });
@@ -60,6 +62,7 @@ class BlockService
         DB::transaction(function () use ($block): void {
             $this->auditBlock($block, BlockAuditLog::ACTION_UNBLOCKED);
             $block->delete();
+            $this->touchChatSync($block->blocker_id, $block->blocked_user_id);
         });
     }
 
@@ -110,5 +113,12 @@ class BlockService
             'blocked_character_id' => $block->blocked_character_id,
             'action' => $action,
         ]);
+    }
+
+    private function touchChatSync(int $firstUserId, int $secondUserId): void
+    {
+        User::query()
+            ->whereIn('id', [$firstUserId, $secondUserId])
+            ->increment('chat_sync_version');
     }
 }

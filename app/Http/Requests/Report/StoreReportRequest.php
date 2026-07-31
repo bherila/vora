@@ -26,8 +26,15 @@ class StoreReportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => ['required', Rule::in(['media', 'story', 'post', 'character', 'user'])],
-            'id' => ['required', 'integer', 'min:1'],
+            'type' => ['required', Rule::in(['media', 'story', 'post', 'character', 'user', 'chat_message'])],
+            'id' => [
+                'required',
+                Rule::when(
+                    $this->input('type') === 'chat_message',
+                    ['string', 'size:26', 'regex:/^[0-9A-HJKMNP-TV-Z]{26}$/i'],
+                    ['integer', 'min:1'],
+                ),
+            ],
             'reason' => ['required', Rule::in(ReportReason::values())],
             'details' => ['nullable', 'string', 'max:2000'],
         ];

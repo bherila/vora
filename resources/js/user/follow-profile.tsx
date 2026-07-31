@@ -39,6 +39,7 @@ interface CharacterRef { id: number; display_name: string; avatar_url?: string |
 interface FollowRequestState { status: string; can_retry: boolean; }
 interface ProfileData {
   id: number;
+  public_id: string;
   is_self: boolean;
   display_name: string;
   avatar_url?: string | null;
@@ -50,6 +51,7 @@ interface ProfileData {
   mutual_interests: Interest[];
   follow_request: FollowRequestState | null;
   can_follow_back: boolean;
+  can_message: boolean;
   characters: CharacterRef[];
   viewer_favorited?: boolean;
   viewer_muted: boolean;
@@ -297,6 +299,7 @@ export function FollowProfilePage() {
   const [profileCharacters, setProfileCharacters] = useState<CharacterRecord[]>(getProfileCharacters);
   const [identityCounts] = useState<IdentityCounts | null>(getIdentityCounts);
   const [message, setMessage] = useState('');
+  const [startingMessage, setStartingMessage] = useState(false);
   const [error, setError] = useState('');
   const { activeIdentityId } = useIdentityStore();
   const previewIdentity = useRef(getHydratedActiveIdentity());
@@ -347,6 +350,21 @@ export function FollowProfilePage() {
       loadProfile();
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Unable to send follow request.');
+    }
+  };
+
+  const startMessage = async (): Promise<void> => {
+    if (!profile) return;
+    setError('');
+    setStartingMessage(true);
+    try {
+      const response = await fetchWrapper.post('/api/chat/conversations', {
+        recipient_id: profile.public_id,
+      }) as { data: { id: string } };
+      window.location.assign(`/messages/${encodeURIComponent(response.data.id)}`);
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Unable to start a conversation.');
+      setStartingMessage(false);
     }
   };
 
@@ -429,6 +447,11 @@ export function FollowProfilePage() {
               </div>
             ) : isPreview ? null : (
               <div className="flex items-center gap-2">
+                {profile.can_message && (
+                  <Button variant="outline" disabled={startingMessage} onClick={() => void startMessage()}>
+                    <MessageSquare className="h-4 w-4" aria-hidden="true" /> Message
+                  </Button>
+                )}
                 {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
                 <MuteButton
                   type="user"

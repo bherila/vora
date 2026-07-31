@@ -25,6 +25,7 @@ class Report extends Model
         'reportable_id',
         'reason',
         'details',
+        'evidence',
         'status',
         'reviewed_by_user_id',
         'reviewed_at',
@@ -40,6 +41,7 @@ class Report extends Model
             'reason' => ReportReason::class,
             'status' => ReportStatus::class,
             'reviewed_at' => 'datetime',
+            'evidence' => 'array',
         ];
     }
 

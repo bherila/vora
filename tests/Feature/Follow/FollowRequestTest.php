@@ -38,6 +38,30 @@ class FollowRequestTest extends TestCase
             ->assertJsonMissing(['name' => 'Hidden']);
     }
 
+    public function test_profile_exposes_message_action_only_for_mutual_account_follows(): void
+    {
+        $current = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+
+        $this->actingAs($current)->getJson("/api/users/{$other->id}")
+            ->assertOk()
+            ->assertJsonPath('data.public_id', $other->public_ulid)
+            ->assertJsonPath('data.can_message', false);
+
+        foreach ([[$current, $other], [$other, $current]] as [$requester, $recipient]) {
+            FollowRequest::query()->create([
+                'requester_id' => $requester->id,
+                'recipient_id' => $recipient->id,
+                'status' => FollowRequest::STATUS_ACCEPTED,
+                'responded_at' => now(),
+            ]);
+        }
+
+        $this->getJson("/api/users/{$other->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_message', true);
+    }
+
     public function test_directory_sorts_users_by_interest_match_score(): void
     {
         $current = User::factory()->approved()->create();

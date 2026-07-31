@@ -37,15 +37,18 @@ class NavbarHydrationTest extends TestCase
         $this->assertTrue($navbar['authenticated']);
         $this->assertSame([
             'Feed',
+            'Messages',
             'Profile',
             'Explore',
             'People',
             'Requests',
         ], array_column($navbar['navItems'], 'label'));
         $this->assertSame('/feed', $navbar['navItems'][0]['href']);
-        $this->assertSame('/me', $navbar['navItems'][1]['href']);
-        $this->assertSame('/users/follow-requests', $navbar['navItems'][4]['href']);
-        $this->assertSame(0, $navbar['navItems'][4]['badge']);
+        $this->assertSame('/messages', $navbar['navItems'][1]['href']);
+        $this->assertSame(0, $navbar['navItems'][1]['badge']);
+        $this->assertSame('/me', $navbar['navItems'][2]['href']);
+        $this->assertSame('/users/follow-requests', $navbar['navItems'][5]['href']);
+        $this->assertSame(0, $navbar['navItems'][5]['badge']);
         // Persona-free users retain the existing direct avatar/profile link and
         // the exact pre-switcher account menu.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);

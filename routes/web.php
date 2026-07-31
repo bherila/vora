@@ -19,6 +19,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\FeedController;
@@ -139,6 +140,7 @@ Route::middleware('auth')->group(function () {
             'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
             'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
             'notify_favorite' => (bool) $user->notify_favorite,
+            'notify_message' => (bool) $user->notify_message,
             'web_push_public_key' => config('webpush.vapid.public_key'),
             'web_push_subscription_count' => $user->pushSubscriptions()->count(),
             'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),
@@ -167,12 +169,26 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::get('/messages/{conversation?}', [ChatController::class, 'page'])
+        ->where('conversation', '[0-9A-HJKMNP-TV-Z]{26}')
+        ->name('chat.index');
     Route::post('/api/onboarding/dismiss', [OnboardingController::class, 'dismiss']);
     Route::post('/api/identity', [IdentityController::class, 'update']);
     Route::get('/api/side-rail', [SideRailController::class, 'show']);
     Route::delete('/api/side-rail/history', [SideRailController::class, 'clearHistory']);
     Route::get('/api/blocks', [BlockController::class, 'index']);
     Route::delete('/api/blocks/{block}', [BlockController::class, 'destroy']);
+    Route::prefix('api/chat')->group(function () {
+        Route::get('/sync', [ChatController::class, 'sync']);
+        Route::get('/unread-count', [ChatController::class, 'unreadCount']);
+        Route::get('/conversations', [ChatController::class, 'index']);
+        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
+        Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
+        Route::post('/conversations/{conversation}/messages', [ChatController::class, 'send'])
+            ->middleware('throttle:60,1');
+        Route::post('/conversations/{conversation}/read', [ChatController::class, 'markRead']);
+    });
     // Keep the retired characters index pointed at the profile for old bookmarks;
     // create/edit use the dedicated persona editor routes below.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');

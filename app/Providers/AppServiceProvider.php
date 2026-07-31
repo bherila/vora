@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Events\ContentPrivacySynced;
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\Character;
+use App\Models\ChatMessage;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostComment;
@@ -90,6 +91,7 @@ class AppServiceProvider extends ServiceProvider
         Relation::morphMap([
             'user' => User::class,
             'character' => Character::class,
+            'chat_message' => ChatMessage::class,
         ]);
 
         View::composer('layouts.app', function ($view): void {
