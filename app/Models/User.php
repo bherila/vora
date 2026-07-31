@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class User extends Authenticatable implements MustVerifyEmail
@@ -22,6 +23,13 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasPushSubscriptions;
     use Notifiable;
     use SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user): void {
+            $user->public_ulid ??= (string) Str::ulid();
+        });
+    }
 
     /**
      * Mass-assignable attributes. Privilege/approval columns are intentionally
@@ -102,6 +110,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'notify_co_author_invite' => 'boolean',
             'notify_co_author_invite_accepted' => 'boolean',
             'notify_favorite' => 'boolean',
+            'chat_sync_version' => 'integer',
         ];
     }
 
@@ -388,6 +397,18 @@ class User extends Authenticatable implements MustVerifyEmail
     public function blocksReceived(): HasMany
     {
         return $this->hasMany(Block::class, 'blocked_user_id');
+    }
+
+    /** @return HasMany<ChatParticipant, $this> */
+    public function chatParticipations(): HasMany
+    {
+        return $this->hasMany(ChatParticipant::class);
+    }
+
+    /** @return HasMany<ChatMessage, $this> */
+    public function sentChatMessages(): HasMany
+    {
+        return $this->hasMany(ChatMessage::class, 'sender_user_id');
     }
 
     /**
