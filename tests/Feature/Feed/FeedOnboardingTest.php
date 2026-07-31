@@ -23,7 +23,8 @@ class FeedOnboardingTest extends TestCase
         User::factory()->approved()->create();
         $user = User::factory()->approved()->create();
 
-        $onboarding = $this->onboarding($user);
+        $payload = $this->initialData($user);
+        $onboarding = $payload['feedOnboarding'];
 
         $this->assertSame([
             'display_name' => $user->display_name,
@@ -35,6 +36,7 @@ class FeedOnboardingTest extends TestCase
                 'has_posted' => false,
             ],
         ], $onboarding);
+        $this->assertFalse($payload['feedHasFollowing']);
     }
 
     public function test_onboarding_disappears_once_every_step_is_complete(): void
@@ -73,7 +75,10 @@ class FeedOnboardingTest extends TestCase
         // First post.
         Post::factory()->for($user)->approved()->create();
 
-        $this->assertNull($this->onboarding($user));
+        $payload = $this->initialData($user);
+
+        $this->assertNull($payload['feedOnboarding']);
+        $this->assertTrue($payload['feedHasFollowing']);
     }
 
     public function test_persona_only_follow_does_not_complete_human_following_step(): void
@@ -90,7 +95,10 @@ class FeedOnboardingTest extends TestCase
             'responded_at' => now(),
         ]);
 
-        $this->assertFalse($this->onboarding($user)['steps']['is_following']);
+        $payload = $this->initialData($user);
+
+        $this->assertFalse($payload['feedOnboarding']['steps']['is_following']);
+        $this->assertTrue($payload['feedHasFollowing']);
     }
 
     public function test_persona_is_exposed_as_optional_context_without_changing_required_progress(): void
@@ -129,6 +137,21 @@ class FeedOnboardingTest extends TestCase
      */
     private function onboarding(User $user): ?array
     {
+        $payload = $this->initialData($user);
+
+        /** @var array<string, mixed>|null $onboarding */
+        $onboarding = $payload['feedOnboarding'] ?? null;
+
+        return $onboarding;
+    }
+
+    /**
+     * Parse the data hydrated into the standalone feed page.
+     *
+     * @return array<string, mixed>
+     */
+    private function initialData(User $user): array
+    {
         $html = $this->actingAs($user)->get('/feed')->assertOk()->getContent();
         preg_match('/<script id="initial-data"[^>]*>\s*(.*?)\s*<\/script>/s', (string) $html, $matches);
         $this->assertArrayHasKey(1, $matches, 'initial-data script not found');
@@ -136,9 +159,6 @@ class FeedOnboardingTest extends TestCase
         /** @var array<string, mixed> $payload */
         $payload = json_decode($matches[1], true, 512, JSON_THROW_ON_ERROR);
 
-        /** @var array<string, mixed>|null $onboarding */
-        $onboarding = $payload['feedOnboarding'] ?? null;
-
-        return $onboarding;
+        return $payload;
     }
 }

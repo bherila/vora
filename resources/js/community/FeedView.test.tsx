@@ -49,7 +49,7 @@ describe('FeedView', () => {
   it('defaults missing and invalid URL scope values to Following', async () => {
     window.history.replaceState({}, '', '/feed?scope=unexpected');
 
-    render(<FeedView />);
+    render(<FeedView hasFollowing />);
 
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null));
     expect(screen.getByRole('button', { name: /Following/ })).toHaveAttribute('aria-pressed', 'true');
@@ -57,7 +57,7 @@ describe('FeedView', () => {
   });
 
   it('switches to Mixed with the exact explanatory copy and stores the opt-in in the URL', async () => {
-    render(<FeedView />);
+    render(<FeedView hasFollowing />);
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null));
 
     fireEvent.click(screen.getByRole('button', { name: /Mixed/ }));
@@ -71,7 +71,7 @@ describe('FeedView', () => {
   it('removes the opt-in query when switching back to Following', async () => {
     window.history.replaceState({}, '', '/feed?scope=mixed');
 
-    render(<FeedView />);
+    render(<FeedView hasFollowing />);
     await waitFor(() => expect(feed).toHaveBeenCalledWith('mixed', null));
 
     fireEvent.click(screen.getByRole('button', { name: /Following/ }));
@@ -86,11 +86,29 @@ describe('FeedView', () => {
       .mockResolvedValueOnce(response({ next_cursor: 'next page' }))
       .mockResolvedValueOnce(response());
 
-    render(<FeedView />);
+    render(<FeedView hasFollowing />);
 
     const loadMore = await screen.findByRole('button', { name: 'Load more' });
     fireEvent.click(loadMore);
 
     await waitFor(() => expect(feed).toHaveBeenLastCalledWith('mixed', 'next page'));
+  });
+
+  it('locks users without follows to Mixed and explains why Following is disabled', async () => {
+    window.history.replaceState({}, '', '/feed?scope=following');
+
+    render(<FeedView hasFollowing={false} />);
+
+    await waitFor(() => expect(feed).toHaveBeenCalledWith('mixed', null));
+    expect(feed).not.toHaveBeenCalledWith('following', null);
+    expect(screen.getByRole('button', { name: /Mixed/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Following/ })).toBeDisabled();
+    expect(window.location.search).toBe('?scope=mixed');
+
+    fireEvent.mouseEnter(screen.getByTestId('following-disabled-tooltip-trigger'));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      "you aren't following anyone yet.",
+    );
   });
 });
