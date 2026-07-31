@@ -172,6 +172,7 @@ export function OwnerMediaManager({ userId, identity, characters, lastInterestId
       ) : (
         <MediaGrid
           items={listing.items}
+          thumbnailSize="large"
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           renderActions={(item) => (

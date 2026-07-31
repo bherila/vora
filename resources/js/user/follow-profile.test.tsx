@@ -105,18 +105,20 @@ describe('FollowProfilePage (/me)', () => {
     window.confirm = jest.fn(() => true);
   });
 
-  it('uses the wide browsing container and a desktop summary/content split', async () => {
+  it('uses the full browsing width with a responsive summary and action layout', async () => {
     setInitialData(ownerInitialData());
     render(<FollowProfilePage />);
 
     await waitFor(() => expect(screen.getByTestId('owner-media-manager')).toBeInTheDocument());
 
-    const page = document.querySelector('[data-page-width="browsing"]');
-    expect(page).toHaveClass('max-w-7xl');
+    const page = document.querySelector('[data-page-width="full-browsing"]');
+    expect(page).toHaveClass('w-full');
+    expect(page).not.toHaveClass('max-w-7xl');
     expect(screen.getByRole('complementary', { name: 'Account overview' })).toBeInTheDocument();
     expect(page?.querySelector('[data-profile-layout="summary-and-content"]')).toHaveClass(
       'lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]',
     );
+    expect(page?.querySelector('[data-profile-actions]')).toHaveClass('flex-wrap');
   });
 
   it('renders a persona-free owner with no persona affordances beyond the single quiet entry point', async () => {
@@ -258,7 +260,9 @@ describe('FollowProfilePage (/me)', () => {
     (fetchWrapper.post as jest.Mock).mockImplementation(() => new Promise(() => undefined));
 
     render(<FollowProfilePage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Message' }));
+    const messageButton = await screen.findByRole('button', { name: 'Message' });
+    expect(messageButton.parentElement).toHaveClass('flex-wrap');
+    fireEvent.click(messageButton);
 
     expect(fetchWrapper.post).toHaveBeenCalledWith('/api/chat/conversations', {
       recipient_id: '01PUBLICRECIPIENT000000000',
