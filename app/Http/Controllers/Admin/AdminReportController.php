@@ -6,11 +6,13 @@ use App\Enums\ReportStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminActOnReportRequest;
 use App\Models\Character;
+use App\Models\ChatMessage;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Report;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Chat\ChatState;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -21,6 +23,8 @@ use Illuminate\View\View;
 
 class AdminReportController extends Controller
 {
+    public function __construct(private readonly ChatState $chatState) {}
+
     /**
      * Map of report-type aliases to their model classes.
      *
@@ -32,6 +36,7 @@ class AdminReportController extends Controller
         'post' => Post::class,
         'character' => Character::class,
         'user' => User::class,
+        'chat_message' => ChatMessage::class,
     ];
 
     /**
@@ -94,6 +99,9 @@ class AdminReportController extends Controller
         // suspending or placing that user on legal hold.
         if ($action === 'delete_item' && $item instanceof User) {
             return response()->json(['success' => false, 'message' => 'Use an account action for a reported user.'], 422);
+        }
+        if ($action === 'delete_item' && $report->reportable_type === 'chat_message') {
+            return response()->json(['success' => false, 'message' => 'Use an account action for a reported message.'], 422);
         }
 
         // Guard account-scoped actions: never the acting admin or the primary
@@ -169,6 +177,8 @@ class AdminReportController extends Controller
             'resolution' => $report->resolution,
             'created_at' => $report->created_at?->toIso8601String(),
             'reviewed_at' => $report->reviewed_at?->toIso8601String(),
+            'evidence' => $report->evidence,
+            'adjacent_context' => $item instanceof ChatMessage ? $this->adjacentChatContext($item) : [],
             'reporter' => $report->reporter instanceof User ? [
                 'id' => $report->reporter->id,
                 'display_name' => $report->reporter->display_name ?: $report->reporter->name,
@@ -180,7 +190,7 @@ class AdminReportController extends Controller
             ] : null,
             'reportable' => $item instanceof Model ? [
                 'type' => $alias,
-                'id' => $item->getKey(),
+                'id' => $item instanceof ChatMessage ? $item->ulid : $item->getKey(),
                 'label' => $this->labelFor($item),
                 'href' => $this->hrefFor($alias, $item),
                 'deleted' => $this->isTrashed($item),
@@ -212,7 +222,9 @@ class AdminReportController extends Controller
             $query->withTrashed();
         }
 
-        if ($class !== User::class) {
+        if ($class === ChatMessage::class) {
+            $query->with(['sender', 'conversation']);
+        } elseif ($class !== User::class) {
             $query->with('user');
         }
 
@@ -238,6 +250,7 @@ class AdminReportController extends Controller
             'ban_reason' => $notes,
             'ban_hides_content' => true,
         ])->save();
+        $this->chatState->touchUserAndPeers($owner);
     }
 
     /**
@@ -267,6 +280,9 @@ class AdminReportController extends Controller
     {
         if ($item instanceof User) {
             return $item;
+        }
+        if ($item instanceof ChatMessage) {
+            return $item->sender;
         }
 
         $owner = $item->getAttribute('user');
@@ -302,6 +318,9 @@ class AdminReportController extends Controller
         if ($item instanceof User) {
             return $item->display_name ?: $item->name;
         }
+        if ($item instanceof ChatMessage) {
+            return 'Private message';
+        }
 
         return 'Reported item';
     }
@@ -313,6 +332,9 @@ class AdminReportController extends Controller
         }
         if ($item instanceof Character) {
             return "/users/{$item->user_id}";
+        }
+        if ($item instanceof ChatMessage) {
+            return "/messages/{$item->conversation?->ulid}";
         }
 
         $prefix = match ($alias) {
@@ -329,5 +351,37 @@ class AdminReportController extends Controller
     private function isTrashed(Model $item): bool
     {
         return method_exists($item, 'trashed') && $item->trashed();
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function adjacentChatContext(ChatMessage $reported): array
+    {
+        $before = ChatMessage::query()
+            ->where('conversation_id', $reported->conversation_id)
+            ->where('id', '<', $reported->id)
+            ->latest('id')
+            ->limit(2)
+            ->get()
+            ->reverse();
+        $after = ChatMessage::query()
+            ->where('conversation_id', $reported->conversation_id)
+            ->where('id', '>', $reported->id)
+            ->oldest('id')
+            ->limit(2)
+            ->get();
+
+        return $before->concat([$reported])->concat($after)
+            ->map(fn (ChatMessage $message): array => [
+                'message_id' => $message->ulid,
+                'body' => $message->body,
+                'sent_at' => $message->created_at?->toIso8601String(),
+                'sender' => [
+                    'id' => $message->sender_public_ulid,
+                    'display_name' => $message->sender_public_name,
+                ],
+                'reported' => $message->id === $reported->id,
+            ])
+            ->values()
+            ->all();
     }
 }

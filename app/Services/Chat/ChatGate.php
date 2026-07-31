@@ -26,6 +26,8 @@ final class ChatGate
             || ! $recipient->isApproved()
             || ! $sender->isActive()
             || ! $recipient->isActive()
+            || $sender->isBanned()
+            || $recipient->isBanned()
             || ! FollowGraph::mutual($sender->id, $recipient->id)) {
             return false;
         }

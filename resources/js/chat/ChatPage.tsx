@@ -10,6 +10,7 @@ import {
 } from '@/chat/useAdaptivePolling';
 import { Avatar } from '@/components/avatar';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
+import { ReportButton } from '@/components/report-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -440,6 +441,9 @@ export function ChatPage() {
                             <p className={`mt-1 text-[11px] ${message.is_mine ? 'text-background/70' : 'text-muted-foreground'}`}>
                               {displayTime(message.created_at)}{message.is_mine ? ` · ${message.local_status === 'pending' ? 'Sending' : message.local_status === 'failed' ? 'Failed' : 'Sent'}` : ''}
                             </p>
+                            {!message.is_mine && message.local_status !== 'pending' && (
+                              <ReportButton type="chat_message" id={message.id} label="Report message" variant="ghost" />
+                            )}
                             {message.local_status === 'failed' && message.client_message_id && (
                               <Button
                                 type="button"

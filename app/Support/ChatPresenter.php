@@ -27,7 +27,7 @@ final class ChatPresenter
 
         return [
             'id' => $conversation->ulid,
-            'other_user' => $other instanceof User ? [
+            'other_user' => $other instanceof User && $other->isActive() && ! $other->isBanned() ? [
                 'id' => $other->public_ulid,
                 'display_name' => $other->display_name ?: $other->name,
                 'avatar_url' => UserPresenter::avatarUrl($other, $this->mediaResponder, $viewer),

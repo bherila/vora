@@ -14,6 +14,7 @@ use App\Models\Mute;
 use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
+use App\Services\Chat\ChatState;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
@@ -30,6 +31,7 @@ class ProfileController extends Controller
         private readonly MediaUploadService $uploads,
         private readonly MediaResponseService $responder,
         private readonly MediaService $media,
+        private readonly ChatState $chatState,
     ) {}
 
     public function storeProfilePicture(StoreProfilePictureRequest $request): JsonResponse
@@ -138,6 +140,7 @@ class ProfileController extends Controller
 
         $user->deactivated_at = now();
         $user->save();
+        $this->chatState->touchUserAndPeers($user);
 
         return response()->json(['success' => true, 'message' => 'Account deactivated.']);
     }
@@ -153,6 +156,7 @@ class ProfileController extends Controller
         if ($user instanceof User && $user->isDeactivated()) {
             $user->deactivated_at = null;
             $user->save();
+            $this->chatState->touchUserAndPeers($user);
         }
 
         return redirect('/');
@@ -201,6 +205,7 @@ class ProfileController extends Controller
         }
 
         $recentProfiles->clear($user);
+        $this->chatState->touchUserAndPeers($user);
         $user->delete();
 
         Auth::logout();
@@ -332,6 +337,7 @@ class ProfileController extends Controller
             'notify_co_author_invite',
             'notify_co_author_invite_accepted',
             'notify_favorite',
+            'notify_message',
         ] as $pref) {
             if (array_key_exists($pref, $data)) {
                 $user->{$pref} = (bool) $data[$pref];
@@ -371,6 +377,7 @@ class ProfileController extends Controller
                 'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
                 'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
                 'notify_favorite' => (bool) $user->notify_favorite,
+                'notify_message' => (bool) $user->notify_message,
             ],
         ]);
     }

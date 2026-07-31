@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Chat;
 
+use App\Jobs\DeliverChatMessageNotification;
 use App\Models\Block;
 use App\Models\Character;
 use App\Models\ChatConversation;
@@ -70,7 +71,7 @@ class ChatCoreTest extends TestCase
         );
     }
 
-    public function test_send_is_synchronous_durable_and_idempotent_without_queue_work(): void
+    public function test_send_is_synchronously_durable_and_queues_only_one_best_effort_wakeup(): void
     {
         Queue::fake();
         [$alice, $ben] = $this->mutualUsers();
@@ -89,7 +90,7 @@ class ChatCoreTest extends TestCase
         $this->assertNotNull($conversation->fresh()->last_message_at);
         $this->assertSame(2, $alice->fresh()->chat_sync_version);
         $this->assertSame(2, $ben->fresh()->chat_sync_version);
-        Queue::assertNothingPushed();
+        Queue::assertPushed(DeliverChatMessageNotification::class, 1);
     }
 
     public function test_reusing_an_idempotency_key_for_different_content_is_rejected(): void

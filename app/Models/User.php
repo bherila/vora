@@ -61,6 +61,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'notify_co_author_invite',
         'notify_co_author_invite_accepted',
         'notify_favorite',
+        'notify_message',
         'profile_picture_media_id',
     ];
 
@@ -110,6 +111,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'notify_co_author_invite' => 'boolean',
             'notify_co_author_invite_accepted' => 'boolean',
             'notify_favorite' => 'boolean',
+            'notify_message' => 'boolean',
             'chat_sync_version' => 'integer',
         ];
     }

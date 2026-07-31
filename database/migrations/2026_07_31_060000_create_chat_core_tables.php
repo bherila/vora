@@ -45,6 +45,8 @@ return new class extends Migration
             $table->ulid('ulid')->unique();
             $table->foreignId('conversation_id')->constrained('chat_conversations')->cascadeOnDelete();
             $table->foreignId('sender_user_id')->constrained('users')->cascadeOnDelete();
+            $table->char('sender_public_ulid', 26);
+            $table->string('sender_public_name');
             $table->string('client_message_id', 36);
             $table->text('body');
             $table->timestamps();

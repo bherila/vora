@@ -20,6 +20,14 @@ class ChatMessageFactory extends Factory
             'sender_user_id' => fn (array $attributes): int => ChatConversation::query()
                 ->findOrFail($attributes['conversation_id'])
                 ->lower_user_id,
+            'sender_public_ulid' => fn (array $attributes): string => ChatConversation::query()
+                ->findOrFail($attributes['conversation_id'])
+                ->lowerUser
+                ->public_ulid,
+            'sender_public_name' => fn (array $attributes): string => ChatConversation::query()
+                ->findOrFail($attributes['conversation_id'])
+                ->lowerUser
+                ->display_name,
             'client_message_id' => (string) Str::ulid(),
             'body' => fake()->sentence(),
         ];

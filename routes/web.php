@@ -140,6 +140,7 @@ Route::middleware('auth')->group(function () {
             'notify_co_author_invite' => (bool) $user->notify_co_author_invite,
             'notify_co_author_invite_accepted' => (bool) $user->notify_co_author_invite_accepted,
             'notify_favorite' => (bool) $user->notify_favorite,
+            'notify_message' => (bool) $user->notify_message,
             'web_push_public_key' => config('webpush.vapid.public_key'),
             'web_push_subscription_count' => $user->pushSubscriptions()->count(),
             'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),

@@ -2,6 +2,7 @@
 
 namespace App\Services\Chat;
 
+use App\Jobs\DeliverChatMessageNotification;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\ChatParticipant;
@@ -113,6 +114,8 @@ final class ChatService
                     'ulid' => (string) Str::ulid(),
                     'conversation_id' => $lockedConversation->id,
                     'sender_user_id' => $sender->id,
+                    'sender_public_ulid' => $sender->public_ulid,
+                    'sender_public_name' => $sender->display_name ?: $sender->name,
                     'client_message_id' => $clientMessageId,
                     'body' => $body,
                     'created_at' => $sentAt,
@@ -138,6 +141,8 @@ final class ChatService
                 User::query()
                     ->whereIn('id', [$sender->id, $recipient->id])
                     ->increment('chat_sync_version');
+
+                DeliverChatMessageNotification::dispatch($message->ulid)->afterCommit();
 
                 return $message;
             }, 3);

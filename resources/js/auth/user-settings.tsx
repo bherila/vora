@@ -52,6 +52,7 @@ interface UserSettingsInitialPayload {
   notify_co_author_invite?: boolean | null;
   notify_co_author_invite_accepted?: boolean | null;
   notify_favorite?: boolean | null;
+  notify_message?: boolean | null;
   web_push_public_key?: string | null;
   web_push_subscription_count?: number | null;
   can_manage_interests?: boolean | null;
@@ -81,6 +82,7 @@ interface UserSettingsInitialData {
   notify_co_author_invite: boolean;
   notify_co_author_invite_accepted: boolean;
   notify_favorite: boolean;
+  notify_message: boolean;
   web_push_public_key: string;
   web_push_subscription_count: number;
   can_manage_interests: boolean;
@@ -109,6 +111,7 @@ interface UserSettingsResponse {
     notify_co_author_invite: boolean;
     notify_co_author_invite_accepted: boolean;
     notify_favorite: boolean;
+    notify_message: boolean;
   };
 }
 
@@ -126,6 +129,7 @@ interface NotificationPayload {
   notify_co_author_invite: boolean;
   notify_co_author_invite_accepted: boolean;
   notify_favorite: boolean;
+  notify_message: boolean;
 }
 
 interface MutedIdentity {
@@ -178,6 +182,7 @@ function emptyInitialData(): UserSettingsInitialData {
     notify_co_author_invite: true,
     notify_co_author_invite_accepted: true,
     notify_favorite: true,
+    notify_message: true,
     web_push_public_key: '',
     web_push_subscription_count: 0,
     can_manage_interests: false,
@@ -209,6 +214,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     notify_co_author_invite: payload.notify_co_author_invite ?? true,
     notify_co_author_invite_accepted: payload.notify_co_author_invite_accepted ?? true,
     notify_favorite: payload.notify_favorite ?? true,
+    notify_message: payload.notify_message ?? true,
     web_push_public_key: payload.web_push_public_key ?? '',
     web_push_subscription_count: payload.web_push_subscription_count ?? 0,
     can_manage_interests: payload.can_manage_interests ?? false,
@@ -248,6 +254,7 @@ export function UserSettingsPage() {
   const [notifyCoAuthorInvite, setNotifyCoAuthorInvite] = useState(initialData.notify_co_author_invite);
   const [notifyCoAuthorInviteAccepted, setNotifyCoAuthorInviteAccepted] = useState(initialData.notify_co_author_invite_accepted);
   const [notifyFavorite, setNotifyFavorite] = useState(initialData.notify_favorite);
+  const [notifyMessage, setNotifyMessage] = useState(initialData.notify_message);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
   const [pushSubscribed, setPushSubscribed] = useState(false);
@@ -388,6 +395,7 @@ export function UserSettingsPage() {
     setNotifyCoAuthorInvite(data.notify_co_author_invite);
     setNotifyCoAuthorInviteAccepted(data.notify_co_author_invite_accepted);
     setNotifyFavorite(data.notify_favorite);
+    setNotifyMessage(data.notify_message);
   };
 
   // Settings owns only account + security + notifications now; identity fields
@@ -404,6 +412,7 @@ export function UserSettingsPage() {
     notify_co_author_invite: notifyCoAuthorInvite,
     notify_co_author_invite_accepted: notifyCoAuthorInviteAccepted,
     notify_favorite: notifyFavorite,
+    notify_message: notifyMessage,
   });
 
   const handleDeactivateAccount = async (): Promise<void> => {
@@ -687,6 +696,10 @@ export function UserSettingsPage() {
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyFavorite} onChange={(event) => setNotifyFavorite(event.target.checked)} />
                     Notify me when someone saves my content
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={notifyMessage} onChange={(event) => setNotifyMessage(event.target.checked)} />
+                    Notify me when I receive a private message
                   </label>
                   <p className="text-xs text-muted-foreground">
                     Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.

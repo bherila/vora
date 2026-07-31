@@ -4,12 +4,16 @@ namespace App\Services;
 
 use App\Models\AudienceMember;
 use App\Models\Character;
+use App\Models\ChatConversation;
+use App\Models\ChatMessage;
+use App\Models\ChatParticipant;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\Story;
 use App\Models\StoryInvolvement;
 use App\Models\User;
+use App\Services\Chat\ChatState;
 use App\Services\Media\MediaService;
 use Illuminate\Support\Facades\DB;
 
@@ -18,7 +22,10 @@ use Illuminate\Support\Facades\DB;
  */
 class UserAccountService
 {
-    public function __construct(private readonly MediaService $media) {}
+    public function __construct(
+        private readonly MediaService $media,
+        private readonly ChatState $chatState,
+    ) {}
 
     /**
      * Permanently delete a user and everything they own: all media (gallery +
@@ -37,8 +44,31 @@ class UserAccountService
         }
 
         DB::transaction(function () use ($user): void {
+            $this->chatState->touchUserAndPeers($user);
+            $conversationIds = ChatParticipant::query()
+                ->where('user_id', $user->id)
+                ->pluck('conversation_id');
+            $conversationUlids = ChatConversation::query()
+                ->whereIn('id', $conversationIds)
+                ->pluck('ulid');
+            $messageUlids = ChatMessage::query()
+                ->whereIn('conversation_id', $conversationIds)
+                ->pluck('ulid');
+            $wakeupKeys = $messageUlids->concat($conversationUlids);
+            foreach ($wakeupKeys->chunk(100) as $wakeupKeyChunk) {
+                DB::table('jobs')
+                    ->where('queue', 'chat-notifications')
+                    ->where(function ($jobs) use ($wakeupKeyChunk): void {
+                        foreach ($wakeupKeyChunk as $wakeupKey) {
+                            $jobs->orWhere('payload', 'like', '%'.$wakeupKey.'%');
+                        }
+                    })
+                    ->delete();
+            }
+
             $user->interestRatings()->delete();
             $user->pushSubscriptions()->delete();
+            $user->notifications()->delete();
 
             // audience_members has no FK to its polymorphic target, and
             // force-deleting the user cascades stories/media at the DB level
@@ -53,6 +83,7 @@ class UserAccountService
             $characterIds = $user->characters()->withTrashed()->pluck('id');
             DB::table('notifications')
                 ->where('data->actor_id', $user->id)
+                ->orWhere('data->_actor_user_id', $user->id)
                 ->orWhereIn('data->actor_character_id', $characterIds)
                 ->delete();
 

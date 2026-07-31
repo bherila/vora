@@ -104,6 +104,30 @@ php artisan config:cache
 
 See `.github/workflows/deploy.yml` for the current production deployment flow.
 
+### Shared cPanel scheduler and queue
+
+The production cPanel account must run Laravel's scheduler once per minute. Add
+this cron entry in cPanel, replacing the account name and application directory
+with the deployed values while keeping the production PHP binary explicit:
+
+```cron
+* * * * * /opt/cpanel/ea-php83/root/usr/bin/php /home/CPANEL_USER/vora/artisan schedule:run >> /home/CPANEL_USER/vora/storage/logs/scheduler.log 2>&1
+```
+
+The scheduler runs a short database worker for `chat-notifications,default` in
+that priority order. It exits when empty or after about 50 seconds; no Redis,
+Supervisor, Horizon, Reverb, or persistent daemon is required. Verify the cron
+is active after every deployment (and after cPanel/PHP changes) with:
+
+```bash
+/opt/cpanel/ea-php83/root/usr/bin/php /home/CPANEL_USER/vora/artisan ops:queue-health
+```
+
+That diagnostic reports scheduler-heartbeat freshness, the age and count of
+pending jobs in both queues, and failed-job history. `--json` is available for
+monitoring. A stale or missing heartbeat exits nonzero even when the schedule is
+defined correctly in source.
+
 ## License
 
 Private - All rights reserved

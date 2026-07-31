@@ -15,6 +15,8 @@ class ChatMessage extends Model
         'ulid',
         'conversation_id',
         'sender_user_id',
+        'sender_public_ulid',
+        'sender_public_name',
         'client_message_id',
         'body',
     ];

@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\AdminLegalHoldRequest;
 use App\Http\Requests\Admin\AdminUserUpdateRequest;
 use App\Models\InviteGrant;
 use App\Models\User;
+use App\Services\Chat\ChatState;
 use App\Services\InviteService;
 use App\Services\UserAccountService;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,7 @@ class AdminUserController extends Controller
     public function __construct(
         private readonly UserAccountService $accounts,
         private readonly InviteService $invites,
+        private readonly ChatState $chatState,
     ) {}
 
     /**
@@ -133,7 +135,11 @@ class AdminUserController extends Controller
             $user->birth_date = $data['birth_date'];
         }
 
+        $stateChanged = $user->isDirty('is_disabled');
         $user->save();
+        if ($stateChanged) {
+            $this->chatState->touchUserAndPeers($user);
+        }
 
         return response()->json(['success' => true, 'data' => $this->present($user)]);
     }
@@ -158,6 +164,7 @@ class AdminUserController extends Controller
             'ban_reason' => $data['reason'] ?? null,
             'ban_hides_content' => (bool) ($data['hide_content'] ?? false),
         ])->save();
+        $this->chatState->touchUserAndPeers($user);
 
         return response()->json(['success' => true, 'data' => $this->present($user)]);
     }
@@ -175,6 +182,7 @@ class AdminUserController extends Controller
             'ban_appeal_message' => null,
             'ban_appeal_at' => null,
         ])->save();
+        $this->chatState->touchUserAndPeers($user);
 
         return response()->json(['success' => true, 'data' => $this->present($user)]);
     }
@@ -254,6 +262,7 @@ class AdminUserController extends Controller
     {
         if ($user->trashed()) {
             $user->restore();
+            $this->chatState->touchUserAndPeers($user);
         }
 
         return response()->json(['success' => true, 'data' => $this->present($user)]);

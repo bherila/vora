@@ -21,8 +21,8 @@ interface ReportOwner {
 }
 
 interface Reportable {
-  type: 'media' | 'story' | 'post';
-  id: number;
+  type: 'media' | 'story' | 'post' | 'character' | 'user' | 'chat_message';
+  id: number | string;
   label: string;
   href: string | null;
   deleted: boolean;
@@ -41,6 +41,20 @@ interface AdminReport {
   reporter: { id: number; display_name: string; email: string | null } | null;
   reviewer: { id: number; display_name: string } | null;
   reportable: Reportable | null;
+  evidence: {
+    body: string;
+    sent_at: string | null;
+    conversation_id: string;
+    message_id: string;
+    sender: { id: string; display_name: string };
+  } | null;
+  adjacent_context: Array<{
+    message_id: string;
+    body: string;
+    sent_at: string | null;
+    sender: { id: string; display_name: string };
+    reported: boolean;
+  }>;
 }
 
 interface PagedReports {
@@ -201,6 +215,27 @@ function AdminReportsPage() {
 
                   {report.details && <p className="rounded-md bg-muted px-3 py-2">{report.details}</p>}
 
+                  {report.evidence && (
+                    <section className="space-y-2 rounded-md border border-border p-3" aria-label="Reported message evidence">
+                      <p className="font-medium">Reported message from {report.evidence.sender.display_name}</p>
+                      <p className="whitespace-pre-wrap break-words">{report.evidence.body}</p>
+                      <p className="text-xs text-muted-foreground">Sent {formatDate(report.evidence.sent_at)}</p>
+                      {report.adjacent_context.length > 1 && (
+                        <details>
+                          <summary className="cursor-pointer text-xs text-muted-foreground">Show bounded adjacent context</summary>
+                          <ol className="mt-2 space-y-2 border-l border-border pl-3">
+                            {report.adjacent_context.map((message) => (
+                              <li key={message.message_id} className={message.reported ? 'font-medium' : ''}>
+                                <span className="text-xs text-muted-foreground">{message.sender.display_name} · {formatDate(message.sent_at)}</span>
+                                <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
+                      )}
+                    </section>
+                  )}
+
                   <p className="text-xs text-muted-foreground">
                     Reported by {report.reporter?.display_name ?? 'unknown'} · {formatDate(report.created_at)}
                   </p>
@@ -221,7 +256,7 @@ function AdminReportsPage() {
                         <Button type="button" size="sm" variant="outline" onClick={() => void act(report, 'dismiss')} disabled={isBusy}>
                           {ACTION_LABELS.dismiss}
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void act(report, 'delete_item')} disabled={isBusy || !item}>
+                        <Button type="button" size="sm" variant="outline" onClick={() => void act(report, 'delete_item')} disabled={isBusy || !item || item.type === 'chat_message'}>
                           {ACTION_LABELS.delete_item}
                         </Button>
                         <Button type="button" size="sm" variant="destructive" onClick={() => void act(report, 'suspend_owner')} disabled={isBusy || !owner}>

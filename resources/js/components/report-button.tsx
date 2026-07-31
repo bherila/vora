@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 
-export type ReportableType = 'media' | 'story' | 'post' | 'character' | 'user';
+export type ReportableType = 'media' | 'story' | 'post' | 'character' | 'user' | 'chat_message';
 
 /**
  * Reasons mirror the App\Enums\ReportReason cases (keep in sync). Ordered by
@@ -37,7 +37,7 @@ const REPORT_REASONS: Array<{ value: string; label: string }> = [
 
 interface ReportButtonProps {
   type: ReportableType;
-  id: number;
+  id: number | string;
   /** Override the trigger label (defaults to "Report"). */
   label?: string;
   size?: 'default' | 'sm';
