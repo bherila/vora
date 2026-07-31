@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * SQLite accepts identifiers of any length while MySQL and MariaDB reject
- * anything over 64 characters. An over-long index name therefore passed the
- * default SQLite suite and then failed a production migration. This guard now
- * runs against SQLite and both CI SQL engines.
+ * SQLite accepts identifiers of any length while MariaDB rejects anything over
+ * 64 characters. An over-long index name therefore passed the default SQLite
+ * suite and then failed a production migration. This guard runs against local
+ * SQLite and the CI MariaDB service.
  *
  * Laravel derives index names from the table plus every indexed column, so wide
  * composite indexes on long table names overflow easily. Name those explicitly.
@@ -19,15 +19,15 @@ class SchemaIdentifierLengthTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** MySQL's hard limit on table, column, and index identifiers. */
-    private const MYSQL_MAX_IDENTIFIER_LENGTH = 64;
+    /** MariaDB's hard limit on table, column, and index identifiers. */
+    private const MAX_IDENTIFIER_LENGTH = 64;
 
-    public function test_no_schema_identifier_exceeds_the_mysql_limit(): void
+    public function test_no_schema_identifier_exceeds_the_mariadb_limit(): void
     {
         $offenders = [];
 
         foreach ($this->schemaObjects() as $object) {
-            if (strlen((string) $object->name) > self::MYSQL_MAX_IDENTIFIER_LENGTH) {
+            if (strlen((string) $object->name) > self::MAX_IDENTIFIER_LENGTH) {
                 $offenders[] = sprintf(
                     '%s "%s" on table "%s" is %d characters',
                     $object->type,
@@ -39,13 +39,13 @@ class SchemaIdentifierLengthTest extends TestCase
         }
 
         foreach ($this->schemaColumns() as $column) {
-            if (strlen((string) $column->name) > self::MYSQL_MAX_IDENTIFIER_LENGTH) {
+            if (strlen((string) $column->name) > self::MAX_IDENTIFIER_LENGTH) {
                 $offenders[] = sprintf('column "%s" on table "%s" is %d characters', $column->name, $column->tbl_name, strlen((string) $column->name));
             }
         }
 
         $this->assertSame([], $offenders, implode("\n", array_merge(
-            ['Identifiers longer than '.self::MYSQL_MAX_IDENTIFIER_LENGTH.' characters fail on MySQL but pass on SQLite:'],
+            ['Identifiers longer than '.self::MAX_IDENTIFIER_LENGTH.' characters fail on MariaDB but pass on SQLite:'],
             $offenders,
             ['', 'Pass an explicit short name as the second argument to unique()/index().'],
         )));
@@ -101,6 +101,6 @@ class SchemaIdentifierLengthTest extends TestCase
 
     private function usesInformationSchema(): bool
     {
-        return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+        return DB::connection()->getDriverName() === 'mariadb';
     }
 }
