@@ -19,6 +19,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ExploreController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\FeedController;
@@ -173,6 +174,17 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::delete('/api/side-rail/history', [SideRailController::class, 'clearHistory']);
     Route::get('/api/blocks', [BlockController::class, 'index']);
     Route::delete('/api/blocks/{block}', [BlockController::class, 'destroy']);
+    Route::prefix('api/chat')->group(function () {
+        Route::get('/sync', [ChatController::class, 'sync']);
+        Route::get('/unread-count', [ChatController::class, 'unreadCount']);
+        Route::get('/conversations', [ChatController::class, 'index']);
+        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
+        Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
+        Route::post('/conversations/{conversation}/messages', [ChatController::class, 'send'])
+            ->middleware('throttle:60,1');
+        Route::post('/conversations/{conversation}/read', [ChatController::class, 'markRead']);
+    });
     // Keep the retired characters index pointed at the profile for old bookmarks;
     // create/edit use the dedicated persona editor routes below.
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');

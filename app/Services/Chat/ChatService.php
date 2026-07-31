@@ -30,10 +30,13 @@ final class ChatService
 
         try {
             return DB::transaction(function () use ($lowerUserId, $higherUserId): ChatConversation {
+                $createdAt = now();
                 $conversation = ChatConversation::query()->create([
                     'ulid' => (string) Str::ulid(),
                     'lower_user_id' => $lowerUserId,
                     'higher_user_id' => $higherUserId,
+                    'created_at' => $createdAt,
+                    'updated_at' => $createdAt,
                 ]);
 
                 ChatParticipant::query()->insert([
@@ -41,17 +44,23 @@ final class ChatService
                         'conversation_id' => $conversation->id,
                         'user_id' => $lowerUserId,
                         'unread_count' => 0,
-                        'created_at' => now(),
-                        'updated_at' => now(),
+                        'last_activity_at' => $createdAt,
+                        'created_at' => $createdAt,
+                        'updated_at' => $createdAt,
                     ],
                     [
                         'conversation_id' => $conversation->id,
                         'user_id' => $higherUserId,
                         'unread_count' => 0,
-                        'created_at' => now(),
-                        'updated_at' => now(),
+                        'last_activity_at' => $createdAt,
+                        'created_at' => $createdAt,
+                        'updated_at' => $createdAt,
                     ],
                 ]);
+
+                User::query()
+                    ->whereIn('id', [$lowerUserId, $higherUserId])
+                    ->increment('chat_sync_version');
 
                 return $conversation;
             }, 3);

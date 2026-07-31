@@ -87,8 +87,8 @@ class ChatCoreTest extends TestCase
         $this->assertSame(0, $this->participant($conversation, $alice)->unread_count);
         $this->assertSame(1, $this->participant($conversation, $ben)->unread_count);
         $this->assertNotNull($conversation->fresh()->last_message_at);
-        $this->assertSame(1, $alice->fresh()->chat_sync_version);
-        $this->assertSame(1, $ben->fresh()->chat_sync_version);
+        $this->assertSame(2, $alice->fresh()->chat_sync_version);
+        $this->assertSame(2, $ben->fresh()->chat_sync_version);
         Queue::assertNothingPushed();
     }
 
@@ -168,8 +168,8 @@ class ChatCoreTest extends TestCase
 
         $this->assertTrue($gate->mayRead($alice, $conversation));
         $this->assertTrue($gate->mayRead($ben, $conversation));
-        $this->assertSame(2, $alice->fresh()->chat_sync_version);
-        $this->assertSame(2, $ben->fresh()->chat_sync_version);
+        $this->assertSame(3, $alice->fresh()->chat_sync_version);
+        $this->assertSame(3, $ben->fresh()->chat_sync_version);
     }
 
     public function test_admin_has_no_ambient_private_conversation_access(): void
