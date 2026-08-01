@@ -12,6 +12,12 @@ final class QueueHealthCommand extends Command
 {
     public const HEARTBEAT_KEY = 'operations:scheduler-heartbeat';
 
+    public const MAX_HEARTBEAT_AGE_SECONDS = 180;
+
+    public const MAX_QUEUE_AGE_SECONDS = 300;
+
+    public const MAX_FAILED_JOBS = 0;
+
     protected $signature = 'ops:queue-health {--json : Emit machine-readable JSON}';
 
     protected $description = 'Report scheduler freshness and database queue backlog health';
@@ -21,21 +27,47 @@ final class QueueHealthCommand extends Command
         try {
             $heartbeat = Cache::get(self::HEARTBEAT_KEY);
             $heartbeatAt = is_string($heartbeat) ? Carbon::parse($heartbeat) : null;
-            $heartbeatAge = $heartbeatAt?->diffInSeconds(now());
+            $heartbeatAge = $heartbeatAt === null
+                ? null
+                : (int) floor($heartbeatAt->diffInSeconds(now()));
             $queues = collect(['chat-notifications', 'default'])->mapWithKeys(function (string $queue): array {
                 $createdAt = DB::table('jobs')->where('queue', $queue)->min('created_at');
+                $oldestAge = $createdAt === null ? null : max(0, now()->timestamp - (int) $createdAt);
 
                 return [$queue => [
                     'pending' => DB::table('jobs')->where('queue', $queue)->count(),
-                    'oldest_age_seconds' => $createdAt === null ? null : max(0, now()->timestamp - (int) $createdAt),
+                    'oldest_age_seconds' => $oldestAge,
+                    'stale' => $oldestAge !== null && $oldestAge > self::MAX_QUEUE_AGE_SECONDS,
                 ]];
             })->all();
             $failedCount = DB::table('failed_jobs')->count();
             $recentFailure = DB::table('failed_jobs')->max('failed_at');
-            $healthy = $heartbeatAge !== null && $heartbeatAge <= 180;
+            $violations = [];
+
+            if ($heartbeatAge === null || $heartbeatAge > self::MAX_HEARTBEAT_AGE_SECONDS) {
+                $violations[] = 'scheduler_heartbeat_stale';
+            }
+
+            foreach ($queues as $queue => $health) {
+                if ($health['stale']) {
+                    $violations[] = "queue_{$queue}_stale";
+                }
+            }
+
+            if ($failedCount > self::MAX_FAILED_JOBS) {
+                $violations[] = 'failed_jobs_present';
+            }
+
+            $healthy = $violations === [];
 
             $payload = [
                 'healthy' => $healthy,
+                'violations' => $violations,
+                'thresholds' => [
+                    'heartbeat_max_age_seconds' => self::MAX_HEARTBEAT_AGE_SECONDS,
+                    'queue_max_age_seconds' => self::MAX_QUEUE_AGE_SECONDS,
+                    'failed_jobs_max_count' => self::MAX_FAILED_JOBS,
+                ],
                 'scheduler' => [
                     'last_heartbeat_at' => $heartbeatAt?->toIso8601String(),
                     'age_seconds' => $heartbeatAge,
