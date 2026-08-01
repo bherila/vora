@@ -40,6 +40,12 @@ This fails the deployment immediately when any database column required by the
 persona models is missing. The assertion complements `/up`: the health endpoint
 can stay green when reads degrade but persona writes cannot succeed.
 
+`queue-health.yml` also connects through the `prod` environment every ten
+minutes and runs `ops:queue-health --json`. This keeps scheduler, stale queue,
+and failed-job problems visible between deployments. A failing check requires
+inspection of the cPanel cron and `storage/logs/scheduler.log`; failed jobs must
+be investigated before they are retried or removed.
+
 ## Migration amendments (CI guard)
 
 `ci.yml` fails a pull request that **modifies** an existing file under

@@ -1,0 +1,35 @@
+name: Production Queue Health
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-queue-health
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Check scheduler and queues
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    environment: prod
+
+    steps:
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Check production queue health
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes \
+            "${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}" \
+            "cd ~/laravel && /opt/cpanel/ea-php85/root/usr/bin/php artisan ops:queue-health --json"
