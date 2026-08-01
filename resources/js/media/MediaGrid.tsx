@@ -7,6 +7,8 @@ import { safeInternalUrl } from '@/security/dom-url';
 
 interface MediaGridProps {
   items: MediaItem[];
+  /** Use fewer columns when the surrounding surface should emphasize previews. */
+  thumbnailSize?: 'standard' | 'large';
   /** Optional per-item action buttons (e.g. delete) rendered in the card footer. */
   renderActions?: (item: MediaItem) => ReactNode;
   getHref?: (item: MediaItem) => string | null;
@@ -19,8 +21,18 @@ interface MediaGridProps {
  * signed thumbnail/poster (never the full original or the HLS stream) so a page
  * of media stays cheap; the full item loads only on the single-media view.
  */
-export function MediaGrid({ items, renderActions, getHref = (item) => `/m/${item.ulid}`, selectedIds = [], onSelectionChange }: MediaGridProps) {
+export function MediaGrid({
+  items,
+  thumbnailSize = 'standard',
+  renderActions,
+  getHref = (item) => `/m/${item.ulid}`,
+  selectedIds = [],
+  onSelectionChange,
+}: MediaGridProps) {
   const selected = new Set(selectedIds);
+  const gridColumns = thumbnailSize === 'large'
+    ? 'sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+    : 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5';
   const toggle = (item: MediaItem, checked: boolean): void => {
     if (checked) {
       onSelectionChange?.([...selectedIds, item.id]);
@@ -30,7 +42,7 @@ export function MediaGrid({ items, renderActions, getHref = (item) => `/m/${item
   };
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" data-layout="media-grid">
+    <div className={`grid gap-4 ${gridColumns}`} data-layout="media-grid">
       {items.map((item) => (
         <MediaCard
           key={item.id}

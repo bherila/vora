@@ -60,6 +60,10 @@ it('keeps bulk management while removing single-item Edit and Delete from grid t
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Open Gallery item' })).toHaveAttribute('href', '/m/01HZX5MEDIA');
+  expect(document.querySelector('[data-layout="media-grid"]')).toHaveClass(
+    'lg:grid-cols-3',
+    '2xl:grid-cols-4',
+  );
 
   fireEvent.click(screen.getByRole('button', { name: 'Select visible' }));
   const editSelected = screen.getByRole('button', { name: 'Edit selected' });

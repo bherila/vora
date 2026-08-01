@@ -40,6 +40,16 @@ describe('MediaGrid visitor fallbacks', () => {
     );
   });
 
+  it('uses fewer columns for larger profile thumbnails', () => {
+    render(<MediaGrid items={[visitorItem()]} thumbnailSize="large" />);
+
+    expect(document.querySelector('[data-layout="media-grid"]')).toHaveClass(
+      'sm:grid-cols-2',
+      'lg:grid-cols-3',
+      '2xl:grid-cols-4',
+    );
+  });
+
   it('uses neutral copy when the visitor payload has no title or filename', () => {
     render(<MediaGrid items={[visitorItem()]} />);
 

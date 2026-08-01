@@ -9,7 +9,7 @@ import { BlockButton } from '@/components/block-button';
 import { FavoriteButton } from '@/components/favorite-button';
 import { HelpHint } from '@/components/help-hint';
 import { MuteButton } from '@/components/mute-button';
-import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
+import { BROWSING_PAGE_WIDTH, FULL_BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ProtectedImage } from '@/components/protected-image';
 import { ReportButton } from '@/components/report-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -409,7 +409,7 @@ export function FollowProfilePage() {
   };
 
   return (
-    <div className={`${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} data-page-width="browsing">
+    <div className={`${FULL_BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} data-page-width="full-browsing">
       {viewAs && <ViewAsBanner viewAs={viewAs} />}
       {!profile.is_self && <a className="text-sm underline underline-offset-4" href="/users">← Browse people</a>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -422,60 +422,58 @@ export function FollowProfilePage() {
         >
         <div className="min-w-0 space-y-4">
           <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-4">
-              <Avatar name={profile.display_name} src={profile.avatar_url} sizeClassName="h-16 w-16" />
-              <div className="min-w-0">
-                <CardTitle className="truncate">
-                  {profile.display_name}
-                  {profile.pronouns && <span className="ml-2 text-sm font-normal text-muted-foreground">{profile.pronouns}</span>}
-                </CardTitle>
-                {(profile.user_type || profile.gender) && (
-                  <CardDescription className="mt-1 flex flex-wrap gap-2">
-                    {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
-                    {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
-                  </CardDescription>
-                )}
-              </div>
+        <CardHeader className="space-y-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={profile.display_name} src={profile.avatar_url} sizeClassName="h-16 w-16" />
+            <div className="min-w-0">
+              <CardTitle className="truncate">
+                {profile.display_name}
+                {profile.pronouns && <span className="ml-2 text-sm font-normal text-muted-foreground">{profile.pronouns}</span>}
+              </CardTitle>
+              {(profile.user_type || profile.gender) && (
+                <CardDescription className="mt-1 flex flex-wrap gap-2">
+                  {profile.user_type && <Badge variant="outline">{profile.user_type}</Badge>}
+                  {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
+                </CardDescription>
+              )}
             </div>
-            {profile.is_self ? (
-              <div className="flex gap-2">
-                {editable && <Button onClick={() => setEditOpen(true)}>Edit profile</Button>}
-                <Button variant="outline" asChild><a href="/user/settings">Account settings</a></Button>
-                <ViewAsControl />
-              </div>
-            ) : isPreview ? null : (
-              <div className="flex items-center gap-2">
-                {profile.can_message && (
-                  <Button variant="outline" disabled={startingMessage} onClick={() => void startMessage()}>
-                    <MessageSquare className="h-4 w-4" aria-hidden="true" /> Message
-                  </Button>
-                )}
-                {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
-                <MuteButton
-                  type="user"
-                  id={profile.id}
-                  displayName={profile.display_name}
-                  initialMuted={profile.viewer_muted}
-                  onChanged={(muted) => setProfile((current) => current ? { ...current, viewer_muted: muted } : current)}
-                />
-                <BlockButton
-                  type="user"
-                  id={profile.id}
-                  displayName={profile.display_name}
-                  initialBlockId={profile.viewer_block_id}
-                  onChanged={(blockId) => setProfile((current) => current ? { ...current, viewer_block_id: blockId } : current)}
-                />
-                <ReportButton type="user" id={profile.id} variant="ghost" />
-                {!hasActiveRequest ? (
-                  <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
-                ) : (
-                  <span className="text-sm text-muted-foreground">Request: <strong>{profile.follow_request?.status}</strong></span>
-                )}
-              </div>
-            )}
           </div>
+          {profile.is_self ? (
+            <div className="flex flex-wrap items-center gap-2" data-profile-actions>
+              {editable && <Button onClick={() => setEditOpen(true)}>Edit profile</Button>}
+              <Button variant="outline" asChild><a href="/user/settings">Account settings</a></Button>
+              <ViewAsControl />
+            </div>
+          ) : isPreview ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              {profile.can_message && (
+                <Button variant="outline" disabled={startingMessage} onClick={() => void startMessage()}>
+                  <MessageSquare className="h-4 w-4" aria-hidden="true" /> Message
+                </Button>
+              )}
+              {!profile.restricted && <FavoriteButton type="user" id={profile.id} initialFavorited={profile.viewer_favorited ?? false} />}
+              <MuteButton
+                type="user"
+                id={profile.id}
+                displayName={profile.display_name}
+                initialMuted={profile.viewer_muted}
+                onChanged={(muted) => setProfile((current) => current ? { ...current, viewer_muted: muted } : current)}
+              />
+              <BlockButton
+                type="user"
+                id={profile.id}
+                displayName={profile.display_name}
+                initialBlockId={profile.viewer_block_id}
+                onChanged={(blockId) => setProfile((current) => current ? { ...current, viewer_block_id: blockId } : current)}
+              />
+              <ReportButton type="user" id={profile.id} variant="ghost" />
+              {!hasActiveRequest ? (
+                <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
+              ) : (
+                <span className="text-sm text-muted-foreground">Request: <strong>{profile.follow_request?.status}</strong></span>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-5">
           {profile.restricted ? (
