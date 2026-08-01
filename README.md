@@ -126,9 +126,9 @@ is active after every deployment (and after cPanel/PHP changes) with:
 That diagnostic reports scheduler-heartbeat freshness, the age and count of
 pending jobs in both queues, and failed-job history. `--json` is available for
 monitoring. It exits nonzero when the heartbeat is older than three minutes, a
-queued job is older than five minutes, or any failed job exists. The scheduled
-GitHub Actions watchdog runs it every ten minutes, so these failures remain
-visible even when no deployment is in progress.
+queued job is older than five minutes, or any failed job exists. The deployment
+workflow runs this check after each release; operators can also run it manually
+when diagnosing the cPanel scheduler or database queues.
 
 ## License
 
