@@ -2,9 +2,11 @@
 
 namespace App\Support;
 
+use App\Enums\RestrictionCapability;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 
 /**
  * Serializes the small, public identity slice of a User — id, display name, and
@@ -61,6 +63,12 @@ class UserPresenter
     public static function pictureUrl(?Media $picture, ?MediaResponseService $responder, ?User $viewer = null): ?string
     {
         if (! $picture instanceof Media || $responder === null) {
+            return null;
+        }
+
+        if ($viewer instanceof User
+            && $picture->user_id !== $viewer->id
+            && app(RestrictionGate::class)->denies($viewer, RestrictionCapability::MediaView)) {
             return null;
         }
 

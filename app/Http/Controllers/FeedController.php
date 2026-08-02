@@ -79,7 +79,12 @@ class FeedController extends Controller
 
         return [
             'data' => collect($posts->items())
-                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer, $this->mediaResponder))
+                ->map(fn (Post $post): array => PostPresenter::view(
+                    $post,
+                    $viewer,
+                    $this->mediaResponder,
+                    canViewNonOwnedMedia: $this->feeds->canViewNonOwnedMedia($viewer),
+                ))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),
         ];

@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RestrictionCapability;
 use App\Models\Character;
 use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\PersonaProfilePayload;
 use App\Services\Profile\ProfileContentQueries;
@@ -42,6 +44,7 @@ class CharacterProfileController extends Controller
         private readonly PersonaProfilePayload $profilePayload,
         private readonly ViewAsContext $viewAs,
         private readonly RecentProfileTrail $recentProfiles,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     public function page(Request $request, string $ulid): View
@@ -111,6 +114,7 @@ class CharacterProfileController extends Controller
                     $viewer,
                     $this->responder,
                     allowMutations: $this->viewAs->mode() === null,
+                    canViewNonOwnedMedia: ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView),
                 ))
                 ->all(),
             'meta' => PaginationMeta::from($paginator),

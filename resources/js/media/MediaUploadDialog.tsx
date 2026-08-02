@@ -5,6 +5,7 @@ import { AudienceField } from '@/community/AudienceField';
 import { InterestPicker } from '@/components/interest-picker';
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
+import { RestrictionNotice } from '@/components/restriction-notice';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -27,6 +28,7 @@ import {
   saveMultipartSession,
   uploadMultipartFile,
 } from '@/media/upload';
+import { activeRestriction } from '@/restrictions';
 
 /** A character the upload can be associated with (privacy is inherited from it). */
 export interface CharacterOption {
@@ -179,6 +181,7 @@ export function MediaUploadDialog({
   triggerSize = 'default',
   triggerVariant = 'default',
 }: MediaUploadDialogProps) {
+  const uploadRestriction = activeRestriction('media.upload');
   const activeIdentityId = useActiveIdentityId();
   const resolvedDefaultCharacterId = defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
   const [open, setOpen] = useState(false);
@@ -349,6 +352,10 @@ export function MediaUploadDialog({
       uploadAbortRef.current = null;
     }
   };
+
+  if (uploadRestriction) {
+    return <RestrictionNotice restriction={uploadRestriction} />;
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!uploading) setOpen(next); }}>

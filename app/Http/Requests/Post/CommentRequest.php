@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Post;
 
+use App\Enums\RestrictionCapability;
+use App\Services\Moderation\RestrictionGate;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CommentRequest extends FormRequest
@@ -19,7 +21,7 @@ class CommentRequest extends FormRequest
         // that would reveal the post exists.
         abort_unless($user->can('view', $this->route('post')), 404, 'Not found.');
 
-        return true;
+        return ! app(RestrictionGate::class)->denies($user, RestrictionCapability::CommentCreate);
     }
 
     /**

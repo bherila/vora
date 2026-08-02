@@ -6,7 +6,7 @@ use App\Enums\RestrictionCapability;
 use App\Services\Moderation\RestrictionGate;
 use Illuminate\Foundation\Http\FormRequest;
 
-class InitMultipartMediaUploadRequest extends FormRequest
+class CompleteMediaUploadRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,9 +16,7 @@ class InitMultipartMediaUploadRequest extends FormRequest
             && ! app(RestrictionGate::class)->denies($user, RestrictionCapability::MediaUpload);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [];

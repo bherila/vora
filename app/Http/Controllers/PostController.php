@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RestrictionCapability;
 use App\Http\Requests\Post\StorePostRequest;
 use App\Models\Post;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\PostService;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +19,7 @@ class PostController extends Controller
     public function __construct(
         private readonly PostService $posts,
         private readonly MediaResponseService $mediaResponder,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     /**
@@ -46,7 +49,7 @@ class PostController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $posts->map(fn (Post $post): array => PostPresenter::view($post, $user, $this->mediaResponder))->values(),
+            'data' => $posts->map(fn (Post $post): array => $this->present($post, $user))->values(),
         ]);
     }
 
@@ -71,7 +74,7 @@ class PostController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => PostPresenter::view($post, $user, $this->mediaResponder),
+            'data' => $this->present($post, $user),
         ], 201);
     }
 
@@ -96,7 +99,19 @@ class PostController extends Controller
 
         $post->load(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable']);
 
-        return PostPresenter::view($post, $request->user(), $this->mediaResponder);
+        return $this->present($post, $request->user());
+    }
+
+    /** @return array<string, mixed> */
+    private function present(Post $post, ?User $viewer): array
+    {
+        return PostPresenter::view(
+            $post,
+            $viewer,
+            $this->mediaResponder,
+            canViewNonOwnedMedia: ! ($viewer instanceof User)
+                || ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView),
+        );
     }
 
     public function destroy(Request $request, Post $post): JsonResponse

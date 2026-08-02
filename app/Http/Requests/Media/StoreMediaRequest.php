@@ -3,8 +3,10 @@
 namespace App\Http\Requests\Media;
 
 use App\Enums\MediaType;
+use App\Enums\RestrictionCapability;
 use App\Http\Requests\Concerns\ValidatesAudience;
 use App\Models\Character;
+use App\Services\Moderation\RestrictionGate;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,7 +19,10 @@ class StoreMediaRequest extends FormRequest
     {
         $user = $this->user();
 
-        return $user !== null && $user->isApproved() && $user->canLogin();
+        return $user !== null
+            && $user->isApproved()
+            && $user->canLogin()
+            && ! app(RestrictionGate::class)->denies($user, RestrictionCapability::MediaUpload);
     }
 
     /**

@@ -3,7 +3,9 @@
 namespace App\Http\Requests\Character;
 
 use App\Enums\MediaType;
+use App\Enums\RestrictionCapability;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
+use App\Services\Moderation\RestrictionGate;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -11,7 +13,10 @@ class StoreCharacterProfilePictureRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+
+        return $user !== null
+            && ! app(RestrictionGate::class)->denies($user, RestrictionCapability::MediaUpload);
     }
 
     /** @return array<string, mixed> */

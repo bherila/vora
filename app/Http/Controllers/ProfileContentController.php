@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RestrictionCapability;
 use App\Models\Character;
 use App\Models\Media;
 use App\Models\Post;
@@ -9,6 +10,7 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
 use App\Services\Profile\ProfileContentQueries;
@@ -41,6 +43,7 @@ class ProfileContentController extends Controller
         private readonly FavoriteService $favorites,
         private readonly ProfileContentQueries $queries,
         private readonly ViewAsContext $viewAs,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     public function media(Request $request, User $user): JsonResponse
@@ -82,6 +85,7 @@ class ProfileContentController extends Controller
                     $viewer,
                     $this->responder,
                     allowMutations: $this->viewAs->mode() === null,
+                    canViewNonOwnedMedia: ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView),
                 ))
                 ->all(),
             'meta' => PaginationMeta::from($paginator),

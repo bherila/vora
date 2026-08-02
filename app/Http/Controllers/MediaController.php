@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
+use App\Enums\RestrictionCapability;
 use App\Http\Requests\Media\AbortMultipartMediaUploadRequest;
 use App\Http\Requests\Media\BulkMediaRequest;
 use App\Http\Requests\Media\BulkUpdateMediaRequest;
+use App\Http\Requests\Media\CompleteMediaUploadRequest;
 use App\Http\Requests\Media\CompleteMultipartMediaUploadRequest;
 use App\Http\Requests\Media\InitMultipartMediaUploadRequest;
 use App\Http\Requests\Media\ListMediaRequest;
@@ -25,6 +27,7 @@ use App\Services\Media\MediaDuplicateService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Support\MediaFilter;
 use App\Support\UserPresenter;
@@ -45,6 +48,7 @@ class MediaController extends Controller
         private readonly MediaResponseService $responder,
         private readonly PrivacyAuditor $auditor,
         private readonly FavoriteService $favorites,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     /**
@@ -252,7 +256,7 @@ class MediaController extends Controller
     /**
      * Confirm an upload finished; verifies the object landed in storage.
      */
-    public function complete(Request $request, Media $media): JsonResponse
+    public function complete(CompleteMediaUploadRequest $request, Media $media): JsonResponse
     {
         $this->authorizeOr404('complete', $media);
 
@@ -282,6 +286,7 @@ class MediaController extends Controller
     public function show(Request $request, Media $media): JsonResponse
     {
         $this->authorizeOr404('viewById', $media);
+        $this->denyRestrictedNonOwnerView($request, $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -313,6 +318,7 @@ class MediaController extends Controller
             abort(404, 'Not found.');
         }
         $this->authorizeOr404('view', $media);
+        $this->denyRestrictedNonOwnerView($request, $media);
         $viewer = $request->user();
         $isOwnerOrAdmin = $viewer instanceof User
             && ($media->user_id === $viewer->id || $viewer->isAdmin());
@@ -548,6 +554,7 @@ class MediaController extends Controller
     public function streamHls(Request $request, Media $media, string $path = 'master.m3u8'): Response|RedirectResponse|JsonResponse
     {
         $this->authorizeOr404('view', $media);
+        $this->denyRestrictedNonOwnerView($request, $media);
 
         if (! $media->isGalleryMedia()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
@@ -591,6 +598,16 @@ class MediaController extends Controller
         $this->auditPlayback($request, $media, 'hls_segment_redirect', $path);
 
         return redirect()->away($url, 302);
+    }
+
+    private function denyRestrictedNonOwnerView(Request $request, Media $media): void
+    {
+        $viewer = $request->user();
+        if ($viewer instanceof User
+            && $media->user_id !== $viewer->id
+            && $this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {
+            abort(403, 'Your account is restricted from viewing media.');
+        }
     }
 
     /**

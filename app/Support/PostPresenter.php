@@ -30,6 +30,7 @@ class PostPresenter
         ?User $viewer,
         ?MediaResponseService $mediaResponder = null,
         bool $allowMutations = true,
+        bool $canViewNonOwnedMedia = true,
     ): array {
         return [
             'id' => $post->id,
@@ -46,8 +47,8 @@ class PostPresenter
             'author' => $post->character_id === null
                 ? self::author($post->user, $mediaResponder, $viewer)
                 : null,
-            'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
-            'attachments' => self::attachments($post, $viewer),
+            'as_character' => self::asCharacter($post, $viewer, $mediaResponder, $canViewNonOwnedMedia),
+            'attachments' => self::attachments($post, $viewer, $canViewNonOwnedMedia),
             'context_interest' => $post->contextInterest === null ? null : [
                 'name' => $post->contextInterest->name,
                 'slug' => $post->contextInterest->slug,
@@ -124,8 +125,12 @@ class PostPresenter
      *
      * @return array<string, mixed>|null
      */
-    private static function asCharacter(Post $post, ?User $viewer, ?MediaResponseService $mediaResponder): ?array
-    {
+    private static function asCharacter(
+        Post $post,
+        ?User $viewer,
+        ?MediaResponseService $mediaResponder,
+        bool $canViewNonOwnedMedia,
+    ): ?array {
         $character = $post->character;
         if ($character === null) {
             return null;
@@ -149,7 +154,8 @@ class PostPresenter
         // An unreviewed persona avatar is shown only to its owner, matching the
         // user-avatar moderation gate in UserPresenter::pictureUrl.
         $showAvatar = $avatar instanceof Media && $mediaResponder !== null
-            && ($avatar->isApprovedContent() || $avatar->user_id === $viewer?->id);
+            && ($avatar->isApprovedContent() || $avatar->user_id === $viewer?->id)
+            && ($canViewNonOwnedMedia || $avatar->user_id === $viewer?->id);
 
         return [
             'id' => $character->id,
@@ -162,14 +168,19 @@ class PostPresenter
     /**
      * @return list<array<string, mixed>>
      */
-    private static function attachments(Post $post, ?User $viewer): array
+    private static function attachments(Post $post, ?User $viewer, bool $canViewNonOwnedMedia): array
     {
         if (! $post->relationLoaded('attachments')) {
             return [];
         }
 
         return $post->attachments
-            ->map(fn (PostAttachment $attachment): ?array => self::attachment($post, $attachment->attachable, $viewer))
+            ->map(fn (PostAttachment $attachment): ?array => self::attachment(
+                $post,
+                $attachment->attachable,
+                $viewer,
+                $canViewNonOwnedMedia,
+            ))
             ->filter()
             ->values()
             ->all();
@@ -178,11 +189,21 @@ class PostPresenter
     /**
      * @return array<string, mixed>|null
      */
-    private static function attachment(Post $post, ?Model $attachable, ?User $viewer): ?array
-    {
+    private static function attachment(
+        Post $post,
+        ?Model $attachable,
+        ?User $viewer,
+        bool $canViewNonOwnedMedia,
+    ): ?array {
         // Null when the target was deleted out from under the attachment, or when
         // the intersection rule hides a privacy-controlled item from this viewer.
         if ($attachable === null || ! self::canSee($attachable, $viewer)) {
+            return null;
+        }
+
+        if ($attachable instanceof Media
+            && ! $canViewNonOwnedMedia
+            && $attachable->user_id !== $viewer?->id) {
             return null;
         }
 
