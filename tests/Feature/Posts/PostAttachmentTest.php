@@ -66,11 +66,12 @@ class PostAttachmentTest extends TestCase
             'attachments' => [
                 ['type' => 'media', 'id' => $media->id],
             ],
-            'context_interest_id' => $interest->id,
+            'context_interest_slug' => $interest->slug,
         ]);
 
         $response->assertCreated()->assertJsonCount(1, 'data.attachments')
             ->assertJsonPath('data.context_interest.slug', 'hiking');
+        $response->assertJsonMissingPath('data.context_interest.id');
         $post = Post::query()->firstOrFail();
         $this->assertSame(1, $post->attachments()->count());
         $this->assertSame($interest->id, $post->context_interest_id);

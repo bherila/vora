@@ -169,6 +169,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::get('/interests/{interest}', [InterestController::class, 'show'])->name('interests.show');
     Route::get('/messages/{conversation?}', [ChatController::class, 'page'])
         ->where('conversation', '[0-9A-HJKMNP-TV-Z]{26}')
         ->name('chat.index');
@@ -392,8 +393,8 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);
-    Route::put('/interests/{interest}', [AdminInterestController::class, 'update']);
-    Route::delete('/interests/{interest}', [AdminInterestController::class, 'destroy']);
+    Route::put('/interests/{interest:id}', [AdminInterestController::class, 'update']);
+    Route::delete('/interests/{interest:id}', [AdminInterestController::class, 'destroy']);
     Route::get('/interest-requests', [AdminInterestController::class, 'apiRequestIndex']);
     Route::put('/interest-requests/{interestRequest}', [AdminInterestController::class, 'updateRequest']);
     Route::delete('/interest-requests/{interestRequest}', [AdminInterestController::class, 'destroyRequest']);

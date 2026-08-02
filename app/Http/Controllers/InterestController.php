@@ -6,6 +6,7 @@ use App\Http\Requests\Interest\BatchRateInterestRequest;
 use App\Http\Requests\Interest\RequestInterestRequest;
 use App\Http\Requests\Interest\SetInterestInheritanceRequest;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\InterestRating;
 use App\Models\InterestRequest;
@@ -13,9 +14,21 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class InterestController extends Controller
 {
+    public function show(Request $request, Interest $interest): View
+    {
+        return view('interests.show', ['initialData' => [
+            'interest' => ['name' => $interest->name, 'slug' => $interest->slug, 'description' => $interest->description],
+            'feedHasFollowing' => FollowRequest::query()
+                ->where('requester_id', $request->user()?->id)
+                ->where('status', FollowRequest::STATUS_ACCEPTED)
+                ->exists(),
+        ]]);
+    }
+
     /**
      * JSON list of interests with the ratings for a target profile. The target
      * is the logged-in user, or one of their characters when `character_id` is
@@ -59,6 +72,7 @@ class InterestController extends Controller
             ->map(fn (Interest $interest): array => [
                 'id' => $interest->id,
                 'name' => $interest->name,
+                'slug' => $interest->slug,
                 'description' => $interest->description,
                 'parent_interest_id' => $interest->parent_interest_id,
                 'rating' => $ratings->has($interest->id) ? (int) $ratings[$interest->id] : null,

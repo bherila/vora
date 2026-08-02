@@ -22,6 +22,16 @@ jest.mock('@/fetchWrapper', () => ({
         return Promise.resolve({ success: true, data: [{ id: 17, display_name: 'Kira' }] });
       }
 
+      if (url === '/api/interests') {
+        return Promise.resolve({
+          success: true,
+          data: [
+            { id: 1, name: 'Hiking', slug: 'hiking' },
+            { id: 2, name: 'Books', slug: 'books' },
+          ],
+        });
+      }
+
       return Promise.resolve({ success: true, data: [] });
     }),
   },
@@ -46,5 +56,18 @@ describe('PostComposer identity default', () => {
     await waitFor(() => expect(communityApi.createPost).toHaveBeenCalledWith(expect.objectContaining({
       character_id: 17,
     })));
+  });
+
+  it('updates the seeded context when the general-feed filter changes', async () => {
+    const { rerender } = render(
+      <PostComposer onCreated={jest.fn()} contextInterest={{ name: 'Hiking', slug: 'hiking' }} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /In Hiking/i }));
+    await waitFor(() => expect(screen.getByLabelText('Interest context')).toHaveValue('hiking'));
+
+    rerender(<PostComposer onCreated={jest.fn()} contextInterest={{ name: 'Books', slug: 'books' }} />);
+
+    expect(screen.getByLabelText('Interest context')).toHaveValue('books');
+    expect(screen.getByLabelText('Interest context')).not.toBeDisabled();
   });
 });

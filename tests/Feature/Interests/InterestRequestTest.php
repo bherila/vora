@@ -87,6 +87,29 @@ class InterestRequestTest extends TestCase
     }
 
     #[Test]
+    public function interest_slug_is_immutable_when_renamed(): void
+    {
+        $admin = $this->admin();
+        $interest = Interest::query()->create(['name' => 'Science Fiction']);
+
+        $this->actingAs($admin)->putJson("/api/admin/interests/{$interest->id}", [
+            'name' => 'Speculative Fiction',
+            'description' => null,
+            'parent_interest_id' => null,
+        ])->assertOk();
+
+        $this->assertSame('science-fiction', $interest->fresh()->slug);
+        $this->actingAs($admin)
+            ->get('/interests/science-fiction')
+            ->assertOk()
+            ->assertViewHas('initialData', fn (array $data): bool => $data['interest'] === [
+                'name' => 'Speculative Fiction',
+                'slug' => 'science-fiction',
+                'description' => null,
+            ]);
+    }
+
+    #[Test]
     public function admin_can_reject_interest_request(): void
     {
         $admin = $this->admin();

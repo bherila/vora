@@ -240,6 +240,11 @@ export function PostCard({ post: initialPost, expanded = false, readOnly = false
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {post.context_interest && (
+          <a href={`/interests/${post.context_interest.slug}`}>
+            <Badge variant="secondary">{post.context_interest.name}</Badge>
+          </a>
+        )}
         <p className="whitespace-pre-wrap text-sm leading-6">{post.body}</p>
         {post.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">

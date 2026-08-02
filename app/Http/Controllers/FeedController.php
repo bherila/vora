@@ -2,18 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Audience;
-use App\Enums\ModerationStatus;
 use App\Models\FollowRequest;
+use App\Models\Interest;
 use App\Models\Post;
-use App\Models\User;
 use App\Services\Media\MediaResponseService;
-use App\Support\FollowGraph;
-use App\Support\MuteGraph;
+use App\Services\Post\FeedQueryService;
 use App\Support\Onboarding;
 use App\Support\PostPresenter;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -26,10 +21,18 @@ use Illuminate\View\View;
  */
 class FeedController extends Controller
 {
-    public function __construct(private readonly MediaResponseService $mediaResponder) {}
+    public function __construct(
+        private readonly MediaResponseService $mediaResponder,
+        private readonly FeedQueryService $feeds,
+    ) {}
 
     public function page(Request $request): View
     {
+        $interest = $request->query('interest');
+        if ($interest !== null && (! is_string($interest) || ! Interest::query()->where('slug', $interest)->exists())) {
+            abort(404, 'Not found.');
+        }
+
         return view('feed', [
             'initialData' => [
                 'feedOnboarding' => Onboarding::payload($request->user()),
@@ -37,6 +40,13 @@ class FeedController extends Controller
                     ->where('requester_id', $request->user()->id)
                     ->where('status', FollowRequest::STATUS_ACCEPTED)
                     ->exists(),
+                'feedInterests' => Interest::query()
+                    ->orderBy('name')
+                    ->get(['name', 'slug'])
+                    ->map(fn (Interest $item): array => [
+                        'name' => $item->name,
+                        'slug' => $item->slug,
+                    ]),
             ],
         ]);
     }
@@ -52,54 +62,16 @@ class FeedController extends Controller
     private function payload(Request $request): array
     {
         $viewer = $request->user();
-        $viewerId = $viewer?->id;
         // Following is the settled safe default. Mixed must remain an explicit
         // opt-in, and unknown values must not silently widen membership.
         $scope = $request->query('scope') === 'mixed' ? 'mixed' : 'following';
-
-        $query = Post::query()
-            // Membership: the viewer's own posts plus posts from accounts they
-            // follow, expressed as a correlated subquery so the query stays
-            // page-sized regardless of how many accounts the viewer follows.
-            ->where(function (Builder $query) use ($viewerId, $scope): void {
-                $query->where('posts.user_id', $viewerId)
-                    ->orWhereExists(function (QueryBuilder $sub) use ($viewerId): void {
-                        FollowGraph::constrainViewerFollowsOwner(
-                            $sub,
-                            'posts.user_id',
-                            (int) $viewerId,
-                            'posts.character_id',
-                        );
-                    });
-
-                if ($scope === 'mixed') {
-                    $query->orWhere(function (Builder $public): void {
-                        $public->where('posts.audience', Audience::Everyone->value)
-                            ->where('posts.discoverable', true);
-                    });
-                }
-            })
-            // The viewer always sees their own posts; everyone else's must have
-            // passed review.
-            ->where(function (Builder $query) use ($viewerId): void {
-                $query->where('posts.user_id', $viewerId)
-                    ->orWhere('posts.moderation_status', ModerationStatus::Approved->value);
-            })
-            // Hide posts from accounts that have since deactivated, been
-            // disabled, or deleted — the feed must not become a bypass for an
-            // owner the per-record policies would now reject.
-            ->whereHas('user', fn (Builder $query) => $query->active()->whereNotNull('approved_at'))
-            ->viewableBy($viewer)
-            ->with(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable']);
-
-        // Mutes are viewer-side exact-identity filters. Apply them in SQL before
-        // cursor pagination: filtering a returned keyset page would create short
-        // pages and make feed behavior depend on where muted rows land.
-        if ($viewerId !== null) {
-            MuteGraph::excludeMutedIdentities($query, (int) $viewerId, 'posts.user_id', 'posts.character_id');
+        $interest = $request->query('interest');
+        $context = is_string($interest) ? Interest::query()->where('slug', $interest)->first() : null;
+        if ($interest !== null && $context === null) {
+            abort(404, 'Not found.');
         }
 
-        $posts = $query
+        $posts = $this->feeds->build($viewer, $scope, $context)
             ->withEngagementCounts($viewer)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -107,7 +79,7 @@ class FeedController extends Controller
 
         return [
             'data' => collect($posts->items())
-                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer instanceof User ? $viewer : null, $this->mediaResponder))
+                ->map(fn (Post $post): array => PostPresenter::view($post, $viewer, $this->mediaResponder))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),
         ];

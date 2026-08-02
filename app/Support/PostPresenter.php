@@ -49,7 +49,6 @@ class PostPresenter
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
             'context_interest' => $post->contextInterest === null ? null : [
-                'id' => $post->contextInterest->id,
                 'name' => $post->contextInterest->name,
                 'slug' => $post->contextInterest->slug,
             ],

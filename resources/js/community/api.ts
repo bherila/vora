@@ -8,15 +8,17 @@ export interface PostInput {
   discoverable: boolean;
   audience_user_ids: number[];
   character_id: number | null;
+  context_interest_slug: string | null;
   attachments: Array<{ type: string; id: number }>;
 }
 
 export const communityApi = {
   dismissOnboarding: (): Promise<{ success: boolean }> =>
     fetchWrapper.post('/api/onboarding/dismiss', {}) as Promise<{ success: boolean }>,
-  feed: (scope: FeedScope, cursor?: string | null): Promise<FeedResponse> => {
+  feed: (scope: FeedScope, cursor?: string | null, interest?: string | null): Promise<FeedResponse> => {
     const params = new URLSearchParams({ scope });
     if (cursor) params.set('cursor', cursor);
+    if (interest) params.set('interest', interest);
 
     return fetchWrapper.get(`/api/feed?${params.toString()}`) as Promise<FeedResponse>;
   },

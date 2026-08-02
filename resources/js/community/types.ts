@@ -42,12 +42,19 @@ export interface CommunityPost {
   author: PostAuthor | null;
   as_character: CharacterRef | null;
   attachments: PostAttachment[];
+  context_interest: InterestRef | null;
   reaction_count: number;
   viewer_reacted: boolean;
   comment_count: number;
   created_at: string | null;
   /** Whether the current viewer may report this post (not the author). */
   can_report?: boolean;
+}
+
+export interface InterestRef {
+  name: string;
+  slug: string;
+  description?: string | null;
 }
 
 export interface PostComment {
