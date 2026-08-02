@@ -4,8 +4,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 import { MediaUploadDialog } from './MediaUploadDialog';
 
+let mockRestrictions: Array<{ capability: string; label: string; reason: string | null; expires_at: string | null }> = [];
+
 jest.mock('@/initialData', () => ({
   readInitialData: () => ({
+    restrictions: mockRestrictions,
     navbar: {
       activeIdentityId: 17,
       identities: [
@@ -28,11 +31,27 @@ const characters = [{
 
 describe('MediaUploadDialog identity and announcement defaults', () => {
   beforeEach(() => {
+    mockRestrictions = [];
     globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
       text: async () => '{"data":[]}',
     } as Response);
+  });
+
+  it('replaces the upload control with a transparent restriction notice', () => {
+    mockRestrictions = [{
+      capability: 'media.upload',
+      label: 'Media uploads',
+      reason: 'Unsafe uploads',
+      expires_at: null,
+    }];
+
+    render(<MediaUploadDialog characters={characters} lastInterestIds={[]} onUploaded={jest.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Upload media' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Media uploads restricted/)).toBeInTheDocument();
+    expect(screen.getByText(/Unsafe uploads/)).toBeInTheDocument();
   });
 
   it('opens with the server-hydrated active identity selected', () => {

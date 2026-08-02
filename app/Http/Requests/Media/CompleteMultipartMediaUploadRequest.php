@@ -2,13 +2,18 @@
 
 namespace App\Http\Requests\Media;
 
+use App\Enums\RestrictionCapability;
+use App\Services\Moderation\RestrictionGate;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CompleteMultipartMediaUploadRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+
+        return $user !== null
+            && ! app(RestrictionGate::class)->denies($user, RestrictionCapability::MediaUpload);
     }
 
     /**

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RestrictionCapability;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
+use App\Services\Moderation\RestrictionGate;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -15,7 +17,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class MediaAssetController extends Controller
 {
-    public function __construct(private readonly FileStorageService $storage) {}
+    public function __construct(
+        private readonly FileStorageService $storage,
+        private readonly RestrictionGate $restrictions,
+    ) {}
 
     public function show(Request $request, string $ulid, string $variant): StreamedResponse
     {
@@ -24,6 +29,11 @@ class MediaAssetController extends Controller
         abort_unless($media instanceof Media && $media->isReady(), 404, 'Not found.');
 
         $viewer = $request->user();
+        if ($viewer instanceof User
+            && $media->user_id !== $viewer->id
+            && $this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {
+            abort(403, 'Your account is restricted from viewing media.');
+        }
         $isOwnerOrAdmin = $viewer instanceof User
             && ($viewer->id === $media->user_id || $viewer->isAdmin());
 

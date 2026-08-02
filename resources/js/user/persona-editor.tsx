@@ -5,6 +5,7 @@ import { AudienceField } from '@/community/AudienceField';
 import { Avatar } from '@/components/avatar';
 import { READING_PAGE_WIDTH } from '@/components/page-width';
 import { ProfileOptionButtonGroup } from '@/components/profile-option-fields';
+import { RestrictionNotice } from '@/components/restriction-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import { type Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, USER_TYPE_OPTIONS } from '@/profile-options';
+import { activeRestriction } from '@/restrictions';
 
 export interface CharacterRecord {
   id: number;
@@ -171,6 +173,7 @@ export function PersonaEditorPage({
   initialCharacter,
   navigate = (href) => window.location.assign(href),
 }: PersonaEditorPageProps) {
+  const uploadRestriction = activeRestriction('media.upload');
   const hydrated = initialCharacter === undefined
     ? readInitialData<{ personaEditor?: { character?: CharacterRecord | null } }>().personaEditor?.character ?? null
     : initialCharacter;
@@ -367,10 +370,14 @@ export function PersonaEditorPage({
             <div className="space-y-4 border-t border-border pt-4">
               <div className="flex items-center gap-3">
                 <Avatar name={current.display_name} src={current.profile_picture?.thumbnail_url ?? current.profile_picture?.url} sizeClassName="h-14 w-14" />
-                <div className="space-y-1">
-                  <Label htmlFor={`character-picture-${current.id}`}>Profile picture</Label>
-                  <Input id={`character-picture-${current.id}`} type="file" accept="image/*" disabled={uploading} onChange={(event) => void handleProfilePicture(event.target.files?.[0] ?? null)} />
-                </div>
+                {uploadRestriction ? (
+                  <RestrictionNotice restriction={uploadRestriction} />
+                ) : (
+                  <div className="space-y-1">
+                    <Label htmlFor={`character-picture-${current.id}`}>Profile picture</Label>
+                    <Input id={`character-picture-${current.id}`} type="file" accept="image/*" disabled={uploading} onChange={(event) => void handleProfilePicture(event.target.files?.[0] ?? null)} />
+                  </div>
+                )}
               </div>
               <CharacterInterestsEditor
                 characterId={current.id}

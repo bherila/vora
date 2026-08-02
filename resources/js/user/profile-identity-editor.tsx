@@ -5,6 +5,7 @@ import { AudienceField } from '@/community/AudienceField';
 import { FileDropzone } from '@/components/media/FileDropzone';
 import { UploadProgress } from '@/components/media/UploadProgress';
 import { ProfileOptionButtonGroup, ProfileOptionCheckboxGroup } from '@/components/profile-option-fields';
+import { RestrictionNotice } from '@/components/restriction-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import { InterestRatingList, type RatableInterest } from '@/interests/interest-r
 import { type Audience } from '@/lib/audience';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
+import { activeRestriction } from '@/restrictions';
 
 export interface ProfileEditable {
   name: string;
@@ -72,6 +74,7 @@ function selectionsToPayload(values: string[]): string[] | null {
  * there is no parallel validation.
  */
 export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEditorProps) {
+  const uploadRestriction = activeRestriction('media.upload');
   const [displayName, setDisplayName] = useState(editable.display_name);
   const [bio, setBio] = useState(editable.bio ?? '');
   const [pronouns, setPronouns] = useState(editable.pronouns ?? '');
@@ -223,14 +226,18 @@ export function ProfileIdentityEditor({ editable, onSaved }: ProfileIdentityEdit
         </div>
         {pictureError && <Alert variant="destructive"><AlertDescription>{pictureError}</AlertDescription></Alert>}
         {pictureMessage && <Alert><AlertDescription>{pictureMessage}</AlertDescription></Alert>}
-        <FileDropzone
-          accept="image/*"
-          files={[]}
-          label="Drop a profile image here"
-          onFilesChange={(nextFiles) => void onPictureChange(nextFiles)}
-          disabled={pictureUploading}
-          helperText="Select one image. Drag and drop here, or click to browse."
-        />
+        {uploadRestriction ? (
+          <RestrictionNotice restriction={uploadRestriction} />
+        ) : (
+          <FileDropzone
+            accept="image/*"
+            files={[]}
+            label="Drop a profile image here"
+            onFilesChange={(nextFiles) => void onPictureChange(nextFiles)}
+            disabled={pictureUploading}
+            helperText="Select one image. Drag and drop here, or click to browse."
+          />
+        )}
         {pictureUploading && (
           <UploadProgress label="Uploading profile picture…" progress={pictureProgress} onCancel={() => pictureAbortRef.current?.abort()} />
         )}

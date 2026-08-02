@@ -18,6 +18,7 @@ use App\Services\Chat\ChatState;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Profile\RecentProfileTrail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -237,10 +238,30 @@ class ProfileController extends Controller
     }
 
     /**
+     * Scoped restrictions leave the app usable, but their subject can inspect
+     * the sanction and use the same appeal endpoint as a banned account.
+     */
+    public function restrictionsPage(Request $request, RestrictionGate $restrictions): RedirectResponse|View
+    {
+        $user = $request->user();
+        if (! $user instanceof User || $restrictions->activeFor($user)->isEmpty()) {
+            return redirect('/');
+        }
+
+        return view('auth.restricted', [
+            'initialData' => ['restrictionAppeal' => [
+                'restrictions' => $restrictions->subjectPayload($user),
+                'appeal_message' => $user->ban_appeal_message,
+                'appeal_at' => $user->ban_appeal_at?->toIso8601String(),
+            ]],
+        ]);
+    }
+
+    /**
      * Banned user's appeal to the admin. Stored on the account and surfaced in
      * the admin users UI; reachable while banned (see EnsureNotBanned).
      */
-    public function appeal(BanAppealRequest $request): JsonResponse
+    public function appeal(BanAppealRequest $request, RestrictionGate $restrictions): JsonResponse
     {
         $user = $request->user();
 
@@ -248,8 +269,8 @@ class ProfileController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        if (! $user->isBanned()) {
-            return response()->json(['success' => false, 'message' => 'Your account is not banned.'], 422);
+        if (! $user->isBanned() && $restrictions->activeFor($user)->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Your account has no active sanction to appeal.'], 422);
         }
 
         $user->forceFill([
@@ -402,6 +423,7 @@ class ProfileController extends Controller
             'receivedFollowRequests.requester:id,display_name,name',
             'profileAudienceMembers',
             'interestRatings.interest:id,name',
+            'restrictions',
         ]);
 
         $comments = PostComment::query()
@@ -450,6 +472,13 @@ class ProfileController extends Controller
                     'notify_follow_request' => (bool) $user->notify_follow_request,
                     'notify_follow_accepted' => (bool) $user->notify_follow_accepted,
                 ],
+                'restrictions' => $user->restrictions->map(fn ($restriction): array => [
+                    'capability' => $restriction->capability->value,
+                    'reason' => $restriction->reason,
+                    'expires_at' => $restriction->expires_at?->toIso8601String(),
+                    'lifted_at' => $restriction->lifted_at?->toIso8601String(),
+                    'created_at' => $restriction->created_at?->toIso8601String(),
+                ])->values(),
                 'characters' => $user->characters->map(fn ($character): array => [
                     'id' => $character->id,
                     'display_name' => $character->display_name,

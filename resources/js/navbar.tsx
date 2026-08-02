@@ -2,10 +2,13 @@ import { createRoot } from 'react-dom/client';
 
 import type { AccountMenu, GuestMenuItem, NavbarBrand, NavLink, NavMenu } from '@/components/navbar';
 import Navbar from '@/components/navbar';
+import { RestrictionBanners } from '@/components/restriction-banners';
 import { hydrateIdentityStore, type IdentityOption } from '@/identity';
 import { readInitialData } from '@/initialData';
+import type { ActiveRestriction } from '@/restrictions';
 
 interface NavbarInitialData {
+  restrictions?: ActiveRestriction[];
   navbar?: {
     brand?: NavbarBrand;
     authenticated?: boolean;
@@ -33,4 +36,10 @@ if (mount) {
       guestMenuItems={navbar?.guestMenuItems ?? []}
     />,
   );
+}
+
+const restrictionMount = document.getElementById('restriction-banners');
+if (restrictionMount) {
+  const { restrictions } = readInitialData<NavbarInitialData>();
+  createRoot(restrictionMount).render(<RestrictionBanners restrictions={restrictions ?? []} />);
 }

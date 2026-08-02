@@ -58,6 +58,20 @@ interface AdminUser {
   legal_hold_note: string | null;
   referrer_user_id: number | null;
   referrer_display_name: string | null;
+  restrictions: AdminRestriction[];
+}
+
+type RestrictionCapability = 'media.upload' | 'media.view' | 'comment.create';
+
+interface AdminRestriction {
+  id: number;
+  capability: RestrictionCapability;
+  label: string;
+  reason: string | null;
+  expires_at: string | null;
+  lifted_at: string | null;
+  created_at: string | null;
+  active: boolean;
 }
 
 function getCsrfToken() {
@@ -92,7 +106,7 @@ async function patchUser(id: number, body: Record<string, unknown>) {
   return response.json() as Promise<{ success: boolean }>;
 }
 
-function AdminUsersPage() {
+export function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,6 +127,11 @@ function AdminUsersPage() {
   const [issueTarget, setIssueTarget] = useState<AdminUser | null>(null);
   const [issueQuantity, setIssueQuantity] = useState('1');
   const [issueExpiryDays, setIssueExpiryDays] = useState('');
+  // Capability restriction dialog.
+  const [restrictionTarget, setRestrictionTarget] = useState<AdminUser | null>(null);
+  const [restrictionCapability, setRestrictionCapability] = useState<RestrictionCapability>('media.upload');
+  const [restrictionReason, setRestrictionReason] = useState('');
+  const [restrictionExpiry, setRestrictionExpiry] = useState('');
 
   const loadUsers = async () => {
     setLoading(true);
@@ -360,6 +379,44 @@ function AdminUsersPage() {
     }
   };
 
+  const beginRestriction = (user: AdminUser) => {
+    setRestrictionTarget(user);
+    setRestrictionCapability('media.upload');
+    setRestrictionReason('');
+    setRestrictionExpiry('');
+  };
+
+  const submitRestriction = async () => {
+    if (!restrictionTarget) return;
+
+    setActionLoading(restrictionTarget.id);
+    try {
+      await fetchWrapper.post(`/api/admin/users/${restrictionTarget.id}/restrictions`, {
+        capability: restrictionCapability,
+        reason: restrictionReason.trim() || null,
+        expires_at: restrictionExpiry || null,
+      });
+      setRestrictionTarget(null);
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to restrict user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const liftRestriction = async (user: AdminUser, restriction: AdminRestriction) => {
+    setActionLoading(user.id);
+    try {
+      await fetchWrapper.delete(`/api/admin/users/${user.id}/restrictions/${restriction.id}`, {});
+      await loadUsers();
+    } catch (err) {
+      setError(typeof err === 'string' ? err : 'Failed to lift restriction.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Admin — Users</h1>
@@ -421,6 +478,9 @@ function AdminUsersPage() {
                       <Badge variant="destructive">{user.ban_hides_content ? 'Banned (hidden)' : 'Banned'}</Badge>
                     )}
                     {user.is_on_legal_hold && <Badge variant="destructive">Legal Hold</Badge>}
+                    {user.restrictions.filter((restriction) => restriction.active).map((restriction) => (
+                      <Badge key={restriction.id} variant="destructive">Restricted: {restriction.label}</Badge>
+                    ))}
                     {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
                     {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
                     <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
@@ -433,6 +493,25 @@ function AdminUsersPage() {
                       <span className="font-medium">Appeal:</span> {user.ban_appeal_message}
                     </p>
                   )}
+                  {user.restrictions.filter((restriction) => restriction.active).map((restriction) => (
+                    <div key={restriction.id} className="mt-2 max-w-xs text-xs text-muted-foreground">
+                      <p>
+                        <span className="font-medium">{restriction.label}:</span>{' '}
+                        {restriction.reason ?? 'No reason provided.'}
+                        {restriction.expires_at ? ` Expires ${new Date(restriction.expires_at).toLocaleString()}.` : ' No expiry.'}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-1"
+                        disabled={actionLoading === user.id}
+                        onClick={() => void liftRestriction(user, restriction)}
+                      >
+                        Lift {restriction.label}
+                      </Button>
+                    </div>
+                  ))}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {new Date(user.created_at).toLocaleDateString()}
@@ -453,6 +532,15 @@ function AdminUsersPage() {
                             Approve
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoading === user.id}
+                          onClick={() => beginRestriction(user)}
+                          data-test="admin-users-restrict"
+                        >
+                          Restrict
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -753,6 +841,51 @@ function AdminUsersPage() {
               data-test="admin-users-issue-confirm"
             >
               Issue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={restrictionTarget !== null} onOpenChange={(open) => { if (!open) setRestrictionTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restrict capability</DialogTitle>
+            <DialogDescription>
+              Restrict a single capability for <strong>{restrictionTarget?.display_name ?? restrictionTarget?.name}</strong>. The reason and expiry are shown to the user.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="restriction-capability">Capability</Label>
+              <select
+                id="restriction-capability"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={restrictionCapability}
+                onChange={(event) => setRestrictionCapability(event.target.value as RestrictionCapability)}
+              >
+                <option value="media.upload">Media uploads</option>
+                <option value="media.view">Media viewing</option>
+                <option value="comment.create">Commenting</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="restriction-reason">Reason (shown to the user)</Label>
+              <Textarea id="restriction-reason" rows={4} value={restrictionReason} onChange={(event) => setRestrictionReason(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="restriction-expiry">Expires at (optional)</Label>
+              <Input id="restriction-expiry" type="datetime-local" value={restrictionExpiry} onChange={(event) => setRestrictionExpiry(event.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestrictionTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => void submitRestriction()}
+              disabled={actionLoading === restrictionTarget?.id}
+              data-test="admin-users-restrict-confirm"
+            >
+              Apply restriction
             </Button>
           </DialogFooter>
         </DialogContent>

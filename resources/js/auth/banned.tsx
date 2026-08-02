@@ -142,6 +142,9 @@ function BannedPage() {
               You can also remove your account from public view or delete it entirely.
             </p>
             <div className="flex flex-col gap-2">
+              <Button type="button" variant="outline" asChild>
+                <a href="/api/account/export">Download my data</a>
+              </Button>
               <Button type="button" variant="outline" onClick={() => void deactivate()} disabled={busy}>
                 Deactivate account
               </Button>

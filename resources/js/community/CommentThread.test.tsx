@@ -5,6 +5,8 @@ import { CommentThread } from '@/community/CommentThread';
 import type { PostComment } from '@/community/types';
 
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+let mockRestrictions: Array<{ capability: string; label: string; reason: string | null; expires_at: string | null }> = [];
+jest.mock('@/initialData', () => ({ readInitialData: () => ({ restrictions: mockRestrictions }) }));
 
 function comment(id: number, overrides: Partial<PostComment> = {}): PostComment {
   return {
@@ -30,10 +32,33 @@ function setVisibility(visibilityState: DocumentVisibilityState): void {
 
 describe('CommentThread', () => {
   beforeEach(() => {
+    mockRestrictions = [];
     jest.useFakeTimers();
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
     setOnline(true);
     setVisibility('visible');
+  });
+
+  it('keeps comments and deletion available while hiding create and reply controls', async () => {
+    mockRestrictions = [{
+      capability: 'comment.create',
+      label: 'Commenting',
+      reason: 'Repeated abuse',
+      expires_at: null,
+    }];
+    jest.spyOn(communityApi, 'comments').mockResolvedValue({
+      changed: true,
+      etag: '"restricted"',
+      data: [comment(1, { can_delete: true })],
+    });
+
+    render(<CommentThread postId={10} initialCount={1} />);
+
+    expect(await screen.findByText('Comment 1')).toBeInTheDocument();
+    expect(screen.getByTitle('Delete comment')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Write a comment')).not.toBeInTheDocument();
+    expect(screen.getByText(/Commenting restricted/)).toBeInTheDocument();
   });
 
   afterEach(() => {

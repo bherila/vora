@@ -2,6 +2,7 @@
 
 namespace App\Services\Favorites;
 
+use App\Enums\RestrictionCapability;
 use App\Models\Character;
 use App\Models\Favorite;
 use App\Models\Media;
@@ -9,6 +10,7 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\ProfileGate;
 use App\Support\UserPresenter;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +43,7 @@ class FavoriteService
     public function __construct(
         private readonly MediaResponseService $responder,
         private readonly ProfileGate $profileGate,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     /**
@@ -64,6 +67,12 @@ class FavoriteService
      */
     public function canViewerSee(User $viewer, Model $item): bool
     {
+        if ($item instanceof Media
+            && $item->user_id !== $viewer->id
+            && $this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {
+            return false;
+        }
+
         return match (true) {
             $item instanceof Media,
             $item instanceof Post,

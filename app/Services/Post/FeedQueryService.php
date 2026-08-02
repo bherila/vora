@@ -4,9 +4,12 @@ namespace App\Services\Post;
 
 use App\Enums\Audience;
 use App\Enums\ModerationStatus;
+use App\Enums\RestrictionCapability;
 use App\Models\Interest;
+use App\Models\Media;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\Moderation\RestrictionGate;
 use App\Support\FollowGraph;
 use App\Support\MuteGraph;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,6 +17,10 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 
 class FeedQueryService
 {
+    public function __construct(
+        private readonly RestrictionGate $restrictions,
+    ) {}
+
     /** @return Builder<Post> */
     public function build(User $viewer, string $scope, ?Interest $interest = null): Builder
     {
@@ -46,6 +53,23 @@ class FeedQueryService
 
         MuteGraph::excludeMutedIdentities($query, $viewerId, 'posts.user_id', 'posts.character_id');
 
+        if (! $this->canViewNonOwnedMedia($viewer)) {
+            $mediaMorph = (new Media)->getMorphClass();
+            // Keep this before cursorPaginate: post-filtering a keyset page
+            // produces short pages and leaks where restricted media landed.
+            $query->where(function (Builder $query) use ($viewerId, $mediaMorph): void {
+                $query->where('posts.user_id', $viewerId)
+                    ->orWhereDoesntHave('attachments', function (Builder $attachments) use ($mediaMorph): void {
+                        $attachments->where('attachable_type', $mediaMorph);
+                    });
+            });
+        }
+
         return $query;
+    }
+
+    public function canViewNonOwnedMedia(User $viewer): bool
+    {
+        return ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView);
     }
 }

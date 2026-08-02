@@ -4,6 +4,11 @@ import { type CharacterRecord, PersonaEditorPage } from '@/user/persona-editor';
 
 const mockPost = jest.fn();
 const mockPatch = jest.fn();
+let mockRestrictions: Array<{ capability: string; label: string; reason: string | null; expires_at: string | null }> = [];
+
+jest.mock('@/initialData', () => ({
+  readInitialData: () => ({ restrictions: mockRestrictions }),
+}));
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
@@ -64,8 +69,23 @@ describe('PersonaEditorPage', () => {
   });
 
   beforeEach(() => {
+    mockRestrictions = [];
     mockPost.mockReset();
     mockPatch.mockReset();
+  });
+
+  it('replaces the persona picture picker when media uploads are restricted', () => {
+    mockRestrictions = [{
+      capability: 'media.upload',
+      label: 'Media uploads',
+      reason: 'Safety review',
+      expires_at: null,
+    }];
+
+    renderEditor(EDITING);
+
+    expect(screen.queryByLabelText('Profile picture')).not.toBeInTheDocument();
+    expect(screen.getByText(/Media uploads restricted/)).toBeInTheDocument();
   });
 
   it('preserves the settled Linked and Separate copy without gendered pronouns', () => {

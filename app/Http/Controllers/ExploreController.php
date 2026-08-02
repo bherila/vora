@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
+use App\Enums\RestrictionCapability;
 use App\Enums\StoryStatus;
 use App\Http\Requests\Media\ListMediaRequest;
 use App\Models\Character;
@@ -13,6 +14,7 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
+use App\Services\Moderation\RestrictionGate;
 use App\Support\CharacterPresenter;
 use App\Support\MediaFilter;
 use App\Support\MuteGraph;
@@ -38,6 +40,7 @@ class ExploreController extends Controller
     public function __construct(
         private readonly MediaResponseService $responder,
         private readonly FavoriteService $favorites,
+        private readonly RestrictionGate $restrictions,
     ) {}
 
     /**
@@ -116,6 +119,9 @@ class ExploreController extends Controller
             ->latest();
 
         if ($request->user() instanceof User) {
+            if ($this->restrictions->denies($request->user(), RestrictionCapability::MediaView)) {
+                $query->where('media.user_id', $request->user()->id);
+            }
             MuteGraph::excludeMutedIdentities(
                 $query,
                 $request->user()->id,

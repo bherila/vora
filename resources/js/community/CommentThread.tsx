@@ -3,10 +3,12 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
+import { RestrictionNotice } from '@/components/restriction-notice';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { COMMENT_THREAD_POLL_MS, useAdaptivePolling } from '@/lib/useAdaptivePolling';
+import { activeRestriction } from '@/restrictions';
 
 import { CommentApiError, communityApi } from './api';
 import type { PostComment } from './types';
@@ -23,6 +25,7 @@ function formatDate(value: string | null): string {
 }
 
 export function CommentThread({ postId, initialCount, enabled = true }: CommentThreadProps) {
+  const commentRestriction = activeRestriction('comment.create');
   const [comments, setComments] = useState<PostComment[]>([]);
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<PostComment | null>(null);
@@ -130,7 +133,7 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
         </div>
         {comment.can_delete && <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDelete(comment)} title="Delete comment"><Trash2 className="h-4 w-4" /></Button>}
       </div>
-      {!reply && !comment.deleted && <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>Reply</Button>}
+      {!reply && !comment.deleted && !commentRestriction && <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>Reply</Button>}
       {!reply && repliesFor(comment.id).map((child) => row(child, true))}
     </div>
   );
@@ -150,11 +153,15 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
       {loading ? <p className="text-sm text-muted-foreground">Loading comments...</p> : comments.length === 0
         ? <p className="text-sm text-muted-foreground">{initialCount === 0 ? 'No comments yet.' : 'No visible comments.'}</p>
         : <div className="space-y-3">{roots.map((comment) => row(comment))}</div>}
-      <form className="space-y-2" onSubmit={(event) => void submit(event)}>
-        {replyTo && <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"><span>Replying to {replyTo.author?.display_name ?? 'comment'}</span><Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(null)}>Cancel</Button></div>}
-        <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment" rows={3} />
-        <Button type="submit" disabled={saving || body.trim().length === 0}>{saving ? 'Posting...' : 'Post comment'}</Button>
-      </form>
+      {commentRestriction ? (
+        <RestrictionNotice restriction={commentRestriction} />
+      ) : (
+        <form className="space-y-2" onSubmit={(event) => void submit(event)}>
+          {replyTo && <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"><span>Replying to {replyTo.author?.display_name ?? 'comment'}</span><Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(null)}>Cancel</Button></div>}
+          <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment" rows={3} />
+          <Button type="submit" disabled={saving || body.trim().length === 0}>{saving ? 'Posting...' : 'Post comment'}</Button>
+        </form>
+      )}
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this comment?</AlertDialogTitle><AlertDialogDescription>Your contribution will be removed. Replies by other people will remain.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => void confirmDelete()}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>

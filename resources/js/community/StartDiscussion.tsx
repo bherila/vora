@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { RestrictionNotice } from '@/components/restriction-notice';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { activeRestriction } from '@/restrictions';
 
 export interface CanonicalPostRef {
   id: number;
@@ -31,9 +33,18 @@ function errorMessage(error: unknown): string {
 }
 
 export function StartDiscussion({ endpoint, onStarted }: StartDiscussionProps) {
+  const commentRestriction = activeRestriction('comment.create');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const trimmedBody = body.trim();
+
+  if (commentRestriction) {
+    return (
+      <section className="mx-auto w-full max-w-3xl" aria-label="Start discussion">
+        <RestrictionNotice restriction={commentRestriction} />
+      </section>
+    );
+  }
 
   const submit = async (): Promise<void> => {
     if (trimmedBody === '' || busy) {

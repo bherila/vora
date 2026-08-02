@@ -310,6 +310,17 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Full restriction history. Use RestrictionGate for active capability
+     * checks so every caller shares expiry semantics and request caching.
+     *
+     * @return HasMany<UserRestriction, $this>
+     */
+    public function restrictions(): HasMany
+    {
+        return $this->hasMany(UserRestriction::class);
+    }
+
+    /**
      * The "specific people" allowlist for this user's profile, reusing the shared
      * polymorphic audience_members table with the User as the privacyable.
      *

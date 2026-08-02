@@ -4,6 +4,7 @@ namespace App\Services\Profile;
 
 use App\Enums\MediaPurpose;
 use App\Enums\ModerationStatus;
+use App\Enums\RestrictionCapability;
 use App\Enums\StoryStatus;
 use App\Models\Character;
 use App\Models\Media;
@@ -11,6 +12,7 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use App\Models\User;
+use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\ProfileGate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -27,6 +29,8 @@ use Illuminate\Support\Collection;
  */
 class ProfileContentQueries
 {
+    public function __construct(private readonly RestrictionGate $restrictions) {}
+
     /**
      * @return Builder<Media>
      */
@@ -37,6 +41,10 @@ class ProfileContentQueries
             ->where('purpose', MediaPurpose::Gallery->value)
             ->where('upload_status', 'ready')
             ->viewableBy($viewer);
+
+        if ($this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {
+            $query->where('media.user_id', $viewer->id);
+        }
 
         $this->scopeToIdentity($query, $character);
         $this->hideUnapprovedFromOthers($query, $viewer, $user);
