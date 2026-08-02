@@ -151,7 +151,7 @@ class PostCommentTest extends TestCase
             ->assertOk()->assertJsonCount(2, 'data');
     }
 
-    public function test_delete_is_limited_to_author_post_owner_and_admin(): void
+    public function test_delete_is_limited_to_author_and_post_owner_not_admin(): void
     {
         // Spacer takes id 1 so the post owner is not auto-admin.
         User::factory()->create();
@@ -167,7 +167,7 @@ class PostCommentTest extends TestCase
         $this->actingAs($stranger)->deleteJson($url($c = $make()))->assertNotFound();
         $this->actingAs($commenter)->deleteJson($url($c))->assertOk(); // author
         $this->actingAs($owner)->deleteJson($url($make()))->assertOk(); // post owner
-        $this->actingAs($admin)->deleteJson($url($make()))->assertOk(); // admin
+        $this->actingAs($admin)->deleteJson($url($make()))->assertNotFound(); // admin uses moderation instead
     }
 
     public function test_comment_payload_exposes_can_delete_per_viewer(): void

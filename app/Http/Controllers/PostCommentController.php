@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\PostCommentedOn;
 use App\Services\Media\MediaResponseService;
 use App\Support\PostCommentPresenter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -32,8 +33,49 @@ class PostCommentController extends Controller
         $post->loadMissing('character.profilePicture');
 
         $comments = $post->comments()
+            ->withTrashed()
             ->with(['user:id,name,display_name,profile_picture_media_id', 'user.profilePicture'])
-            ->threadVisibleTo($viewer)
+            ->where(function (Builder $query) use ($viewer): void {
+                $query->threadVisibleTo($viewer)
+                    ->orWhere(function (Builder $tombstone) use ($viewer): void {
+                        $tombstone
+                            // Owner removal is transparent even for a leaf or a
+                            // reply, provided its thread position is reachable.
+                            ->where(function (Builder $removed) use ($viewer): void {
+                                $removed->tombstoneVisibleTo($viewer)
+                                    ->whereNotNull('removed_at')
+                                    ->where(function (Builder $position) use ($viewer): void {
+                                        $position->whereNull('parent_id')
+                                            ->orWhereHas('parentWithTrashed', function (Builder $parent) use ($viewer): void {
+                                                $parent->where(function (Builder $reachable) use ($viewer): void {
+                                                    $reachable->visibleTo($viewer)
+                                                        ->orWhere(function (Builder $parentTombstone) use ($viewer): void {
+                                                            $parentTombstone->tombstoneVisibleTo($viewer)
+                                                                ->where(fn (Builder $state): Builder => $state
+                                                                    ->whereNotNull('removed_at')
+                                                                    ->orWhereNotNull('deleted_at'));
+                                                        });
+                                                });
+                                            });
+                                    });
+                            })
+                            // Author deletion is gone entirely unless a root is
+                            // still needed to hold another user's reply in place.
+                            ->orWhere(function (Builder $deleted) use ($viewer): void {
+                                $deleted->tombstoneVisibleTo($viewer)
+                                    ->whereNotNull('deleted_at')
+                                    ->whereNull('parent_id')
+                                    ->whereHas('replies', function (Builder $replies) use ($viewer): void {
+                                        $replies->where(function (Builder $visible) use ($viewer): void {
+                                            $visible->threadVisibleTo($viewer)
+                                                ->orWhere(function (Builder $removedReply) use ($viewer): void {
+                                                    $removedReply->tombstoneVisibleTo($viewer)->whereNotNull('removed_at');
+                                                });
+                                        });
+                                    });
+                            });
+                    });
+            })
             ->orderBy('created_at')
             ->get();
 
@@ -44,8 +86,14 @@ class PostCommentController extends Controller
                 // keep the delete-policy check from re-querying the post per row.
                 $comment->setRelation('post', $post);
 
-                return PostCommentPresenter::view($comment, $this->mediaResponder, $viewer)
-                    + ['can_delete' => $viewer !== null && Gate::forUser($viewer)->allows('delete', $comment)];
+                if ($comment->trashed() || $comment->removed_at !== null) {
+                    return PostCommentPresenter::tombstone($comment);
+                }
+
+                return PostCommentPresenter::view($comment, $this->mediaResponder, $viewer) + [
+                    'can_delete' => $viewer !== null && (Gate::forUser($viewer)->allows('delete', $comment)
+                        || Gate::forUser($viewer)->allows('removeFromPost', $comment)),
+                ];
             })->values(),
         ]);
     }
@@ -90,9 +138,14 @@ class PostCommentController extends Controller
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
-        $this->authorizeOr404('delete', $comment);
-
-        $comment->delete();
+        $user = $request->user();
+        if ($user !== null && Gate::forUser($user)->allows('delete', $comment)) {
+            $comment->delete();
+        } elseif ($user !== null && Gate::forUser($user)->allows('removeFromPost', $comment)) {
+            $comment->forceFill(['removed_by_user_id' => $user->id, 'removed_at' => now()])->save();
+        } else {
+            abort(404, 'Not found.');
+        }
 
         return response()->json(['success' => true, 'message' => 'Comment deleted.']);
     }

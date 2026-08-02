@@ -78,16 +78,16 @@ export function CommentThread({ postId, initialCount }: CommentThreadProps) {
     <div key={comment.id} className={reply ? 'ml-4 rounded-md border border-border p-3' : 'space-y-2 rounded-md border border-border p-3'}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-2">
-          <Avatar name={comment.author?.display_name ?? 'Deleted user'} src={comment.author?.avatar_url} sizeClassName="h-7 w-7" />
+          <Avatar name={comment.deleted ? 'Deleted comment' : comment.author?.display_name ?? 'Deleted user'} src={comment.author?.avatar_url} sizeClassName="h-7 w-7" />
           <div className="min-w-0">
-            <p className="text-sm font-medium">{comment.author?.display_name ?? 'Deleted user'}</p>
-            <p className="whitespace-pre-wrap text-sm">{comment.body}</p>
+            <p className="text-sm font-medium">{comment.deleted ? 'Deleted comment' : comment.author?.display_name ?? 'Deleted user'}</p>
+            {!comment.deleted && <p className="whitespace-pre-wrap text-sm">{comment.body}</p>}
             <p className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</p>
           </div>
         </div>
         {comment.can_delete && <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDelete(comment)} title="Delete comment"><Trash2 className="h-4 w-4" /></Button>}
       </div>
-      {!reply && <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>Reply</Button>}
+      {!reply && !comment.deleted && <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>Reply</Button>}
       {!reply && repliesFor(comment.id).map((child) => row(child, true))}
     </div>
   );

@@ -69,10 +69,10 @@ class PostComment extends Model
     public function scopeVisibleTo(Builder $query, ?User $viewer): Builder
     {
         if ($viewer instanceof User) {
-            BlockGraph::commentsVisibleTo($query, $viewer);
+            BlockGraph::commentsVisibleTo($query, $viewer, $query->getModel()->getTable());
         }
 
-        return $query->where(function (Builder $outer) use ($viewer): void {
+        return $query->whereNull($query->qualifyColumn('deleted_at'))->where(function (Builder $outer) use ($viewer): void {
             $outer->where(function (Builder $inner): void {
                 $inner->where('moderation_status', ModerationStatus::Approved->value)
                     ->whereHas('user', fn (Builder $u) => $u->active());
@@ -81,7 +81,27 @@ class PostComment extends Model
             if ($viewer !== null) {
                 $outer->orWhere('user_id', $viewer->id);
             }
-        });
+        })->whereNull('removed_at');
+    }
+
+    /**
+     * Neutral tombstones expose no author or body, but their existence must
+     * still obey moderation, account-state, and block visibility. Keeping this
+     * in one scope prevents a removed/deleted OR branch from bypassing #173's
+     * identity graph.
+     *
+     * @param  Builder<PostComment>  $query
+     * @return Builder<PostComment>
+     */
+    public function scopeTombstoneVisibleTo(Builder $query, ?User $viewer): Builder
+    {
+        if ($viewer instanceof User) {
+            BlockGraph::commentsVisibleTo($query, $viewer, $query->getModel()->getTable());
+        }
+
+        return $query
+            ->where('moderation_status', ModerationStatus::Approved->value)
+            ->whereHas('user', fn (Builder $user): Builder => $user->active());
     }
 
     /**
@@ -101,7 +121,11 @@ class PostComment extends Model
             ->visibleTo($viewer)
             ->where(function (Builder $outer) use ($viewer): void {
                 $outer->whereNull('parent_id')
-                    ->orWhereHas('parent', fn (Builder $parent) => $parent->visibleTo($viewer));
+                    ->orWhereHas('parent', fn (Builder $parent) => $parent->visibleTo($viewer))
+                    ->orWhereHas('parentWithTrashed', function (Builder $parent) use ($viewer): void {
+                        $parent->tombstoneVisibleTo($viewer)
+                            ->where(fn (Builder $state) => $state->whereNotNull('deleted_at')->orWhereNotNull('removed_at'));
+                    });
             });
     }
 
@@ -127,6 +151,12 @@ class PostComment extends Model
     public function parent(): BelongsTo
     {
         return $this->belongsTo(PostComment::class, 'parent_id');
+    }
+
+    /** @return BelongsTo<PostComment, $this> */
+    public function parentWithTrashed(): BelongsTo
+    {
+        return $this->belongsTo(PostComment::class, 'parent_id')->withTrashed();
     }
 
     /**

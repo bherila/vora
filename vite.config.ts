@@ -23,6 +23,7 @@ export default defineConfig({
                 'resources/js/auth/user-settings.tsx',
                 'resources/js/auth/banned.tsx',
                 'resources/js/user/invites.tsx',
+                'resources/js/user/activity.tsx',
                 'resources/js/admin/users.tsx',
                 'resources/js/admin/invites.tsx',
                 'resources/js/admin/waitlist.tsx',

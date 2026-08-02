@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
@@ -170,6 +171,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::get('/me/activity', [ActivityController::class, 'page'])->name('activity.index');
+    Route::get('/api/me/activity', [ActivityController::class, 'index'])->name('activity.api.index');
+    Route::delete('/api/me/activity/comments/{ulid}', [ActivityController::class, 'destroyComment'])
+        ->name('activity.comments.destroy');
     Route::get('/interests/{interest}', [InterestController::class, 'show'])->name('interests.show');
     Route::get('/messages/{conversation?}', [ChatController::class, 'page'])
         ->where('conversation', '[0-9A-HJKMNP-TV-Z]{26}')

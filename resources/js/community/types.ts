@@ -59,10 +59,12 @@ export interface InterestRef {
 
 export interface PostComment {
   id: number;
+  ulid: string;
   parent_id: number | null;
-  body: string;
+  body: string | null;
   author: PostAuthor | null;
   created_at: string | null;
+  deleted: boolean;
   can_delete?: boolean;
 }
 
