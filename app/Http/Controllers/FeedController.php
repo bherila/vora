@@ -76,6 +76,7 @@ class FeedController extends Controller
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->cursorPaginate((int) config('media.page_size', 24));
+        $canViewNonOwnedMedia = $this->feeds->canViewNonOwnedMedia($viewer);
 
         return [
             'data' => collect($posts->items())
@@ -83,7 +84,7 @@ class FeedController extends Controller
                     $post,
                     $viewer,
                     $this->mediaResponder,
-                    canViewNonOwnedMedia: $this->feeds->canViewNonOwnedMedia($viewer),
+                    canViewNonOwnedMedia: $canViewNonOwnedMedia,
                 ))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),

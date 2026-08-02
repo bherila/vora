@@ -11,7 +11,7 @@ let mockRestrictions: Array<{ capability: string; label: string; reason: string 
 jest.mock('@/initialData', () => ({ readInitialData: () => ({ restrictions: mockRestrictions }) }));
 jest.mock('@/community/api', () => ({
   communityApi: {
-    comments: jest.fn(() => Promise.resolve([])),
+    comments: jest.fn(() => Promise.resolve({ changed: true, etag: '"post-card"', data: [] })),
     comment: jest.fn(),
     deleteComment: jest.fn(),
     react: jest.fn(),

@@ -24,7 +24,7 @@ class EnsureNotBanned
         'privacy',
         'terms',
         'pages.show',
-        // Added before #193 lands. Inert until its Your activity page exists.
+        // Self-service Activity remains reachable in every account state.
         'activity.index',
     ];
 
@@ -37,8 +37,7 @@ class EnsureNotBanned
         'api/account/delete',
         'api/account/appeal',
         'api/account/export',
-        // Added before #193 lands. Request::is supports these wildcards, which
-        // become active when its author-scoped activity routes are merged.
+        // Exact Activity page/API paths; deletion is method-scoped below.
         'me/activity',
         'api/me/activity',
     ];

@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Moderation;
 
+use App\Enums\Audience;
 use App\Enums\RestrictionCapability;
+use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostComment;
+use App\Models\Story;
 use App\Models\User;
 use App\Models\UserRestriction;
 use App\Services\Moderation\RestrictionGate;
@@ -166,6 +169,64 @@ class UserRestrictionTest extends TestCase
     }
 
     #[Test]
+    public function canonical_discussions_apply_restrictions_only_after_ordinary_content_authorization(): void
+    {
+        $this->admin();
+        $owner = User::factory()->approved()->create();
+        $mediaRestricted = User::factory()->approved()->create();
+        $commentRestricted = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create();
+        $privateMedia = Media::factory()->for($owner)->approved()->create([
+            'audience' => Audience::SpecificPeople,
+        ]);
+        $ownMedia = Media::factory()->for($mediaRestricted)->approved()->create();
+        $story = Story::factory()->for($owner)->published()->approved()->create();
+        UserRestriction::factory()->for($mediaRestricted)->capability(RestrictionCapability::MediaView)->create();
+        UserRestriction::factory()->for($commentRestricted)->capability(RestrictionCapability::CommentCreate)->create();
+
+        $this->actingAs($mediaRestricted)
+            ->postJson("/api/media/by-ulid/{$media->ulid}/discussion", ['body' => 'Blocked media discussion.'])
+            ->assertForbidden();
+        $this->assertSame(0, Post::query()->count());
+        $this->assertSame(0, PostComment::query()->count());
+
+        $this->actingAs($mediaRestricted)
+            ->postJson("/api/media/by-ulid/{$ownMedia->ulid}/discussion", ['body' => 'Own media discussion.'])
+            ->assertCreated();
+        $this->actingAs($mediaRestricted)
+            ->postJson("/api/stories/by-ulid/{$story->ulid}/discussion", ['body' => 'Stories remain available.'])
+            ->assertCreated();
+        $this->assertSame(2, Post::query()->count());
+        $this->assertSame(2, PostComment::query()->count());
+
+        $this->actingAs($commentRestricted)
+            ->postJson("/api/media/by-ulid/{$media->ulid}/discussion", ['body' => 'Commenting blocked.'])
+            ->assertForbidden();
+        $this->actingAs($commentRestricted)
+            ->postJson("/api/stories/by-ulid/{$story->ulid}/discussion", ['body' => 'Commenting blocked.'])
+            ->assertForbidden();
+
+        config(['app.debug' => false]);
+        $missingForMediaRestriction = $this->actingAs($mediaRestricted)
+            ->postJson('/api/media/by-ulid/01ARZ3NDEKTSV4RRFFQ69G5FAV/discussion', ['body' => 'Missing.'])
+            ->assertNotFound();
+        $hiddenForMediaRestriction = $this->actingAs($mediaRestricted)
+            ->postJson("/api/media/by-ulid/{$privateMedia->ulid}/discussion", ['body' => 'Hidden remains neutral.'])
+            ->assertNotFound();
+        $this->assertSame($missingForMediaRestriction->getContent(), $hiddenForMediaRestriction->getContent());
+
+        $missingForCommentRestriction = $this->actingAs($commentRestricted)
+            ->postJson('/api/media/by-ulid/01ARZ3NDEKTSV4RRFFQ69G5FAV/discussion', ['body' => 'Missing.'])
+            ->assertNotFound();
+        $hiddenForCommentRestriction = $this->actingAs($commentRestricted)
+            ->postJson("/api/media/by-ulid/{$privateMedia->ulid}/discussion", ['body' => 'Hidden remains neutral.'])
+            ->assertNotFound();
+        $this->assertSame($missingForCommentRestriction->getContent(), $hiddenForCommentRestriction->getContent());
+        $this->assertSame(2, Post::query()->count());
+        $this->assertSame(2, PostComment::query()->count());
+    }
+
+    #[Test]
     public function banned_user_can_download_export_even_under_legal_hold_but_cannot_delete_account(): void
     {
         $this->admin();
@@ -180,6 +241,28 @@ class UserRestrictionTest extends TestCase
     #[Test]
     public function banned_user_can_reach_activity_and_delete_their_own_posts_and_comments(): void
     {
-        $this->markTestSkipped('Requires the Your activity routes and author-scoped comment deletion from #193.');
+        $this->admin();
+        $user = User::factory()->approved()->create();
+        $other = User::factory()->approved()->create();
+        $ownPost = Post::factory()->for($user)->approved()->create(['body' => 'My removable post.']);
+        $otherPost = Post::factory()->for($other)->approved()->create();
+        $comment = PostComment::factory()->for($otherPost)->for($user)->create(['body' => 'My removable comment.']);
+        $user->forceFill(['banned_at' => now()])->save();
+
+        $this->actingAs($user)->get('/me/activity')->assertOk();
+        $this->actingAs($user)->getJson('/api/me/activity?type=posts')
+            ->assertOk()
+            ->assertJsonFragment(['ulid' => $ownPost->ulid]);
+        $this->actingAs($user)->getJson('/api/me/activity?type=comments')
+            ->assertOk()
+            ->assertJsonFragment(['ulid' => $comment->ulid]);
+
+        $this->actingAs($user)
+            ->deleteJson("/api/me/activity/comments/{$comment->ulid}")
+            ->assertOk();
+        $this->actingAs($user)->deleteJson("/api/posts/{$ownPost->id}")->assertOk();
+
+        $this->assertSoftDeleted('post_comments', ['id' => $comment->id]);
+        $this->assertSoftDeleted('posts', ['id' => $ownPost->id]);
     }
 }
