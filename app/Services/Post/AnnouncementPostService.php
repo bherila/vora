@@ -40,7 +40,12 @@ class AnnouncementPostService
 
             if ($locked->canonical_post_id !== null) {
                 $existing = Post::withTrashed()->lockForUpdate()->find($locked->canonical_post_id);
-                if ($existing !== null && ! $existing->trashed()) {
+                // Only posts this system created mirror the content's privacy.
+                // A user-authored post that merely claimed the canonical slot
+                // keeps the audience its author chose; PostService already
+                // clamped it against the attachment.
+                $systemOwned = $existing !== null && ($existing->is_announcement || $existing->is_feed_hidden);
+                if ($existing !== null && ! $existing->trashed() && $systemOwned) {
                     $available = $existing->is_announcement
                         ? $this->isPublishable($locked)
                         : $this->isDiscussionAvailable($locked);

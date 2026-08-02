@@ -487,4 +487,70 @@ class PostAttachmentTest extends TestCase
         $this->actingAs($author)->getJson("/api/posts/by-ulid/{$post->ulid}")
             ->assertOk()->assertJsonCount(1, 'data.attachments');
     }
+
+    /**
+     * A gallery post is the canonical discussion for every media it carries, so
+     * canonical_post_id must not be unique — that constraint reads backwards and
+     * failed the whole post on the second attachment.
+     */
+    public function test_a_post_can_carry_several_media_attachments(): void
+    {
+        $user = User::factory()->approved()->create();
+        $first = Media::factory()->for($user)->approved()->create();
+        $second = Media::factory()->for($user)->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'A gallery',
+            'attachments' => [
+                ['type' => 'media', 'id' => $first->id],
+                ['type' => 'media', 'id' => $second->id],
+            ],
+        ])->assertCreated()->assertJsonCount(2, 'data.attachments');
+
+        $post = Post::query()->latest('id')->first();
+        $this->assertSame($post->id, $first->fresh()->canonical_post_id);
+        $this->assertSame($post->id, $second->fresh()->canonical_post_id);
+    }
+
+    /**
+     * Claiming the canonical slot must not hand the attachment's privacy back to
+     * the post. The author picked Followers; the clamp can only narrow from
+     * there, never widen to the media's own Everyone audience.
+     */
+    public function test_attaching_wider_media_does_not_widen_the_authors_audience(): void
+    {
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->approved()
+            ->create(['audience' => Audience::Everyone, 'discoverable' => true]);
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Followers only, please',
+            'audience' => Audience::Followers->value,
+            'attachments' => [['type' => 'media', 'id' => $media->id]],
+        ])->assertCreated();
+
+        $post = Post::query()->latest('id')->first();
+        $this->assertSame(Audience::Followers, $post->audience);
+    }
+
+    /** Nor may a later privacy change on the media rewrite the author's post. */
+    public function test_widening_the_media_later_does_not_widen_the_post(): void
+    {
+        $user = User::factory()->approved()->create();
+        $media = Media::factory()->for($user)->approved()
+            ->create(['audience' => Audience::Followers]);
+
+        $this->actingAs($user)->postJson('/api/posts', [
+            'body' => 'Followers only',
+            'audience' => Audience::Followers->value,
+            'attachments' => [['type' => 'media', 'id' => $media->id]],
+        ])->assertCreated();
+
+        $post = Post::query()->latest('id')->first();
+        $discoverable = $post->discoverable;
+        $media->forceFill(['audience' => Audience::Everyone, 'discoverable' => true])->save();
+
+        $this->assertSame(Audience::Followers, $post->fresh()->audience);
+        $this->assertSame($discoverable, $post->fresh()->discoverable);
+    }
 }
