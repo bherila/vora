@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 
-import { useAdaptivePolling } from '@/chat/useAdaptivePolling';
+import { useAdaptivePolling } from '@/lib/useAdaptivePolling';
 
 function setOnline(online: boolean): void {
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: online });
@@ -74,5 +74,41 @@ describe('useAdaptivePolling', () => {
     await act(async () => { resolvePoll?.(); });
     await act(async () => { jest.advanceTimersByTime(100); });
     expect(onPoll).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds active pollers in a shared group and grants a released slot', async () => {
+    const polls = Array.from({ length: 4 }, () => jest.fn().mockResolvedValue(undefined));
+    const hooks = polls.map((onPoll) => renderHook(() => useAdaptivePolling({
+      enabled: true,
+      intervalMs: 100,
+      onPoll,
+      group: 'comments',
+      maxGroupPollers: 3,
+    })));
+
+    await act(async () => { jest.advanceTimersByTime(100); });
+    expect(polls.map((poll) => poll.mock.calls.length)).toEqual([1, 1, 1, 0]);
+
+    hooks[0]?.unmount();
+    await act(async () => { jest.advanceTimersByTime(100); });
+    expect(polls[3]).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not attach page listeners while disabled', () => {
+    const windowListener = jest.spyOn(window, 'addEventListener');
+    const documentListener = jest.spyOn(document, 'addEventListener');
+
+    renderHook(() => useAdaptivePolling({
+      enabled: false,
+      intervalMs: 100,
+      onPoll: jest.fn().mockResolvedValue(undefined),
+      group: 'comments',
+      maxGroupPollers: 3,
+    }));
+
+    expect(windowListener).not.toHaveBeenCalledWith('focus', expect.any(Function));
+    expect(windowListener).not.toHaveBeenCalledWith('online', expect.any(Function));
+    expect(documentListener).not.toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

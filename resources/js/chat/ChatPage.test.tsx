@@ -18,7 +18,7 @@ jest.mock('@/chat/api', () => ({
   },
 }));
 
-jest.mock('@/chat/useAdaptivePolling', () => ({
+jest.mock('@/lib/useAdaptivePolling', () => ({
   ACTIVE_THREAD_POLL_MS: 12_000,
   INBOX_POLL_MS: 45_000,
   useAdaptivePolling: jest.fn(() => ({ pollNow: jest.fn() })),

@@ -3,11 +3,6 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import { chatApi, ChatApiError } from '@/chat/api';
 import type { ChatConversation, ChatMessage } from '@/chat/types';
-import {
-  ACTIVE_THREAD_POLL_MS,
-  INBOX_POLL_MS,
-  useAdaptivePolling,
-} from '@/chat/useAdaptivePolling';
 import { Avatar } from '@/components/avatar';
 import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { ReportButton } from '@/components/report-button';
@@ -15,6 +10,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  ACTIVE_THREAD_POLL_MS,
+  INBOX_POLL_MS,
+  useAdaptivePolling,
+} from '@/lib/useAdaptivePolling';
 
 const CONVERSATION_PATH = /^\/messages\/([0-9A-HJKMNP-TV-Z]{26})$/i;
 

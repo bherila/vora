@@ -90,6 +90,7 @@ class Media extends Model
         'audience',
         'discoverable',
         'announce_on_approval',
+        'canonical_post_id',
     ];
 
     /**
@@ -131,6 +132,12 @@ class Media extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** @return BelongsTo<Post, $this> */
+    public function canonicalPost(): BelongsTo
+    {
+        return $this->belongsTo(Post::class, 'canonical_post_id');
     }
 
     /**

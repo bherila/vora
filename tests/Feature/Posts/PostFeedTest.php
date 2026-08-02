@@ -5,6 +5,7 @@ namespace Tests\Feature\Posts;
 use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\FollowRequest;
+use App\Models\Interest;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -237,5 +238,57 @@ class PostFeedTest extends TestCase
         $second = $this->actingAs($viewer)->getJson('/api/feed?scope=mixed&cursor='.$cursor)->assertOk();
         $this->assertCount(3, $second->json('data'));
         $this->assertNull($second->json('next_cursor'));
+    }
+
+    public function test_interest_filter_is_exact_private_and_cursor_paginated(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $author = User::factory()->approved()->create();
+        $parent = Interest::query()->create(['name' => 'Outdoors']);
+        $child = Interest::query()->create(['name' => 'Hiking', 'parent_interest_id' => $parent->id]);
+        $pageSize = (int) config('media.page_size', 24);
+
+        Post::factory()->for($author)->approved()->count($pageSize + 2)->create([
+            'context_interest_id' => $parent->id,
+        ]);
+        $childPost = Post::factory()->for($author)->approved()->create(['context_interest_id' => $child->id]);
+        $privatePost = Post::factory()->for($author)->approved()->audience(Audience::Followers)->create([
+            'context_interest_id' => $parent->id,
+        ]);
+
+        $first = $this->actingAs($viewer)->getJson('/api/feed?scope=mixed&interest='.$parent->slug)->assertOk();
+        $this->assertCount($pageSize, $first->json('data'));
+        $this->assertNotContains($childPost->ulid, collect($first->json('data'))->pluck('ulid'));
+        $this->assertNotContains($privatePost->ulid, collect($first->json('data'))->pluck('ulid'));
+
+        $second = $this->actingAs($viewer)->getJson('/api/feed?scope=mixed&interest='.$parent->slug.'&cursor='.$first->json('next_cursor'));
+        $second->assertOk();
+        $this->assertCount(2, $second->json('data'));
+    }
+
+    public function test_feed_page_hydrates_and_validates_the_interest_filter_by_opaque_slug(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $interest = Interest::query()->create(['name' => 'Hiking']);
+
+        $this->actingAs($viewer)
+            ->get('/feed?interest='.$interest->slug)
+            ->assertOk()
+            ->assertViewHas('initialData', function (array $data): bool {
+                $item = collect($data['feedInterests'])->firstWhere('slug', 'hiking');
+
+                return $item === ['name' => 'Hiking', 'slug' => 'hiking'];
+            });
+
+        $this->actingAs($viewer)->get('/feed?interest=missing')->assertNotFound();
+        $this->actingAs($viewer)->get('/feed?interest[]=hiking')->assertNotFound();
+    }
+
+    public function test_feed_hidden_posts_never_appear(): void
+    {
+        $viewer = User::factory()->approved()->create();
+        $hidden = Post::factory()->for($viewer)->approved()->create(['is_feed_hidden' => true]);
+
+        $this->assertNotContains($hidden->ulid, $this->feedUlids($viewer));
     }
 }

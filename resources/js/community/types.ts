@@ -1,7 +1,7 @@
 import type { Audience } from '@/lib/audience';
 import type { MediaItem } from '@/media/types';
 
-export type AttachmentType = 'character' | 'interest' | 'media' | 'story';
+export type AttachmentType = 'character' | 'media' | 'story';
 export type FeedScope = 'following' | 'mixed';
 
 export interface UserOption {
@@ -42,6 +42,7 @@ export interface CommunityPost {
   author: PostAuthor | null;
   as_character: CharacterRef | null;
   attachments: PostAttachment[];
+  context_interest: InterestRef | null;
   reaction_count: number;
   viewer_reacted: boolean;
   comment_count: number;
@@ -50,12 +51,20 @@ export interface CommunityPost {
   can_report?: boolean;
 }
 
+export interface InterestRef {
+  name: string;
+  slug: string;
+  description?: string | null;
+}
+
 export interface PostComment {
   id: number;
+  ulid: string;
   parent_id: number | null;
-  body: string;
+  body: string | null;
   author: PostAuthor | null;
   created_at: string | null;
+  deleted: boolean;
   can_delete?: boolean;
 }
 

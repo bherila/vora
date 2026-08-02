@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Post;
 
 use App\Http\Requests\Concerns\ValidatesAudience;
+use App\Models\Interest;
 use App\Services\Post\PostService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,7 @@ class StorePostRequest extends FormRequest
         return [
             'body' => ['required', 'string', 'max:2000'],
             'character_id' => ['nullable', 'integer'],
+            'context_interest_slug' => ['nullable', 'string', Rule::exists('interests', 'slug')],
             ...$this->audienceRules(['nullable']),
             'attachments' => ['nullable', 'array', 'max:4'],
             'attachments.*.type' => ['required', Rule::in(array_keys(PostService::ATTACHMENT_TYPES))],
@@ -41,6 +43,19 @@ class StorePostRequest extends FormRequest
         $value = $this->input('character_id');
 
         return $value === null ? null : (int) $value;
+    }
+
+    public function contextInterestId(): ?int
+    {
+        $value = $this->input('context_interest_slug');
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $id = Interest::query()->where('slug', $value)->value('id');
+
+        return $id === null ? null : (int) $id;
     }
 
     /**

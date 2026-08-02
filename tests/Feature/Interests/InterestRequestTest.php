@@ -87,6 +87,29 @@ class InterestRequestTest extends TestCase
     }
 
     #[Test]
+    public function interest_slug_is_immutable_when_renamed(): void
+    {
+        $admin = $this->admin();
+        $interest = Interest::query()->create(['name' => 'Science Fiction']);
+
+        $this->actingAs($admin)->putJson("/api/admin/interests/{$interest->id}", [
+            'name' => 'Speculative Fiction',
+            'description' => null,
+            'parent_interest_id' => null,
+        ])->assertOk();
+
+        $this->assertSame('science-fiction', $interest->fresh()->slug);
+        $this->actingAs($admin)
+            ->get('/interests/science-fiction')
+            ->assertOk()
+            ->assertViewHas('initialData', fn (array $data): bool => $data['interest'] === [
+                'name' => 'Speculative Fiction',
+                'slug' => 'science-fiction',
+                'description' => null,
+            ]);
+    }
+
+    #[Test]
     public function admin_can_reject_interest_request(): void
     {
         $admin = $this->admin();
@@ -147,5 +170,24 @@ class InterestRequestTest extends TestCase
             ->assertJsonPath('success', true);
 
         $this->assertDatabaseMissing('interest_requests', ['id' => $interestRequest->id]);
+    }
+
+    #[Test]
+    public function colliding_max_length_slugs_are_bounded_for_strict_sql_engines(): void
+    {
+        $admin = $this->admin();
+        $base = str_repeat('a', 254);
+
+        $this->actingAs($admin)->postJson('/api/admin/interests', [
+            'name' => $base.'!',
+        ])->assertOk();
+        $this->actingAs($admin)->postJson('/api/admin/interests', [
+            'name' => $base.'?',
+        ])->assertOk();
+
+        $slugs = Interest::query()->whereIn('name', [$base.'!', $base.'?'])->orderBy('id')->pluck('slug')->all();
+        $this->assertSame($base, $slugs[0]);
+        $this->assertSame(str_repeat('a', 253).'-2', $slugs[1]);
+        $this->assertSame([254, 255], array_map('strlen', $slugs));
     }
 }

@@ -20,6 +20,7 @@ const post: CommunityPost = {
     { type: 'media', id: 21, ulid: '01MEDIA', label: 'Portrait' },
     { type: 'story', id: 22, ulid: '01STORY', label: 'A tale' },
   ],
+  context_interest: null,
   reaction_count: 2,
   viewer_reacted: false,
   comment_count: 3,

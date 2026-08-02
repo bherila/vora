@@ -25,6 +25,21 @@ class PostCommentPresenter
         return self::payload($comment, self::publicAuthor($comment, $responder, $viewer));
     }
 
+    /** @return array<string, mixed> */
+    public static function tombstone(PostComment $comment): array
+    {
+        return [
+            'id' => $comment->id,
+            'ulid' => $comment->ulid,
+            'parent_id' => $comment->parent_id,
+            'body' => null,
+            'author' => null,
+            'deleted' => true,
+            'created_at' => $comment->created_at?->toIso8601String(),
+            'can_delete' => false,
+        ];
+    }
+
     /**
      * @param  array<string, mixed>|null  $author
      * @return array<string, mixed>
@@ -33,10 +48,12 @@ class PostCommentPresenter
     {
         return [
             'id' => $comment->id,
+            'ulid' => $comment->ulid,
             'parent_id' => $comment->parent_id,
             'body' => $comment->body,
             'author' => $author,
             'created_at' => $comment->created_at?->toIso8601String(),
+            'deleted' => false,
         ];
     }
 

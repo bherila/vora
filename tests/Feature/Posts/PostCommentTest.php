@@ -4,6 +4,7 @@ namespace Tests\Feature\Posts;
 
 use App\Enums\Audience;
 use App\Models\Character;
+use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
@@ -151,7 +152,7 @@ class PostCommentTest extends TestCase
             ->assertOk()->assertJsonCount(2, 'data');
     }
 
-    public function test_delete_is_limited_to_author_post_owner_and_admin(): void
+    public function test_delete_is_limited_to_author_and_post_owner_not_admin(): void
     {
         // Spacer takes id 1 so the post owner is not auto-admin.
         User::factory()->create();
@@ -167,7 +168,7 @@ class PostCommentTest extends TestCase
         $this->actingAs($stranger)->deleteJson($url($c = $make()))->assertNotFound();
         $this->actingAs($commenter)->deleteJson($url($c))->assertOk(); // author
         $this->actingAs($owner)->deleteJson($url($make()))->assertOk(); // post owner
-        $this->actingAs($admin)->deleteJson($url($make()))->assertOk(); // admin
+        $this->actingAs($admin)->deleteJson($url($make()))->assertNotFound(); // admin uses moderation instead
     }
 
     public function test_comment_payload_exposes_can_delete_per_viewer(): void
@@ -275,5 +276,95 @@ class PostCommentTest extends TestCase
 
         $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
             ->assertOk()->assertJsonPath('data.comment_count', 2);
+    }
+
+    public function test_comment_index_uses_viewer_scoped_etags_and_private_conditional_responses(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->create();
+
+        $initial = $this->actingAs($viewer)->getJson("/api/posts/{$post->id}/comments")->assertOk();
+        $etag = $initial->headers->get('ETag');
+        $this->assertNotNull($etag);
+        $this->assertSame('no-cache, private', $initial->headers->get('Cache-Control'));
+
+        $unchanged = $this->actingAs($viewer)
+            ->withHeader('If-None-Match', $etag)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertStatus(304);
+        $this->assertSame($etag, $unchanged->headers->get('ETag'));
+        $this->assertSame('no-cache, private', $unchanged->headers->get('Cache-Control'));
+        $this->assertSame('', $unchanged->getContent());
+
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/comments", ['body' => 'Revision change'])
+            ->assertCreated();
+        $changed = $this->actingAs($viewer)
+            ->withHeader('If-None-Match', $etag)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk();
+        $this->assertNotSame($etag, $changed->headers->get('ETag'));
+
+        $ownerEtag = $this->actingAs($owner)->getJson("/api/posts/{$post->id}/comments")->headers->get('ETag');
+        $this->assertNotSame($changed->headers->get('ETag'), $ownerEtag, 'ETags are scoped to the viewer');
+        $this->assertSame("/api/posts/{$post->id}/comments", route('posts.comments.index', ['post' => $post], false));
+        $route = app('router')->getRoutes()->getByName('posts.comments.index');
+        $this->assertNotNull($route);
+        $this->assertContains('throttle:120,1', $route->gatherMiddleware());
+    }
+
+    public function test_lost_parent_access_returns_forbidden_before_a_matching_etag(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($owner)->approved()->audience(Audience::Followers)->create();
+        $follow = FollowRequest::query()->create([
+            'requester_id' => $viewer->id,
+            'recipient_id' => $owner->id,
+            'status' => FollowRequest::STATUS_ACCEPTED,
+            'responded_at' => now(),
+        ]);
+        $etag = $this->actingAs($viewer)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertOk()
+            ->headers->get('ETag');
+
+        $follow->delete();
+
+        $this->actingAs($viewer)
+            ->withHeader('If-None-Match', $etag)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertForbidden();
+    }
+
+    public function test_comment_revision_changes_for_owner_remove_author_delete_and_admin_moderation(): void
+    {
+        User::factory()->create(); // keep the accounts under test non-admin
+        $owner = User::factory()->approved()->create();
+        $author = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $post = Post::factory()->for($owner)->approved()->create();
+
+        $ownerRemoved = PostComment::factory()->for($post)->for($author)->create();
+        $afterCreate = $post->fresh()->comment_revision;
+        $this->actingAs($owner)
+            ->deleteJson("/api/posts/{$post->id}/comments/{$ownerRemoved->id}")
+            ->assertOk();
+        $this->assertGreaterThan($afterCreate, $afterOwnerRemove = $post->fresh()->comment_revision);
+
+        $authorDeleted = PostComment::factory()->for($post)->for($author)->create();
+        $afterSecondCreate = $post->fresh()->comment_revision;
+        $this->actingAs($author)
+            ->deleteJson('/api/me/activity/comments/'.$authorDeleted->ulid)
+            ->assertOk();
+        $this->assertGreaterThan($afterSecondCreate, $afterAuthorDelete = $post->fresh()->comment_revision);
+
+        $moderated = PostComment::factory()->for($post)->for($author)->create();
+        $afterThirdCreate = $post->fresh()->comment_revision;
+        $this->actingAs($admin)->postJson("/api/admin/post-comments/{$moderated->id}/moderate", [
+            'action' => 'reject',
+        ])->assertOk();
+        $this->assertGreaterThan($afterThirdCreate, $post->fresh()->comment_revision);
+        $this->assertGreaterThan($afterOwnerRemove, $afterAuthorDelete);
     }
 }

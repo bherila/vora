@@ -39,7 +39,7 @@ class PostController extends Controller
 
         $posts = Post::query()
             ->where('user_id', $user?->id)
-            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable'])
             ->withEngagementCounts($user)
             ->latest()
             ->get();
@@ -64,9 +64,10 @@ class PostController extends Controller
             $request->audienceUserIds(),
             $request,
             $request->characterId(),
+            $request->contextInterestId(),
         );
 
-        $post->load(['user.profilePicture', 'character.profilePicture', 'attachments.attachable']);
+        $post->load(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable']);
 
         return response()->json([
             'success' => true,
@@ -93,7 +94,7 @@ class PostController extends Controller
         $post = Post::query()->where('ulid', $ulid)->withEngagementCounts($request->user())->first();
         $this->authorizeOr404('view', $post);
 
-        $post->load(['user.profilePicture', 'character.profilePicture', 'attachments.attachable']);
+        $post->load(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable']);
 
         return PostPresenter::view($post, $request->user(), $this->mediaResponder);
     }

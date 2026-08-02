@@ -51,6 +51,7 @@ class Story extends Model
         'discoverable',
         'announce_on_approval',
         'published_at',
+        'canonical_post_id',
     ];
 
     /**
@@ -81,6 +82,12 @@ class Story extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** @return BelongsTo<Post, $this> */
+    public function canonicalPost(): BelongsTo
+    {
+        return $this->belongsTo(Post::class, 'canonical_post_id');
     }
 
     /**

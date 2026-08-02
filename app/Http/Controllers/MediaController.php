@@ -357,6 +357,12 @@ class MediaController extends Controller
         }
         // Anyone signed in who isn't the owner can report the item for abuse.
         $payload['can_report'] = $viewer instanceof User && ! $isSelf;
+        $discussion = $media->canonicalPost;
+        $payload['canonical_post'] = $discussion === null ? null : [
+            'id' => $discussion->id,
+            'ulid' => $discussion->ulid,
+            'comment_count' => $discussion->comments()->threadVisibleTo($viewer)->count(),
+        ];
 
         return $payload;
     }

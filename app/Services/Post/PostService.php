@@ -24,7 +24,6 @@ use Illuminate\Validation\ValidationException;
 /**
  * Creates posts and their attachments, enforcing the ownership rule in one
  * place: a post may only attach a Character, Media, or Story the author owns.
- * Interest is a shared tag and needs no ownership check.
  */
 class PostService
 {
@@ -36,13 +35,9 @@ class PostService
      */
     public const ATTACHMENT_TYPES = [
         'character' => Character::class,
-        'interest' => Interest::class,
         'media' => Media::class,
         'story' => Story::class,
     ];
-
-    /** Attachment types the author must own. */
-    private const OWNED_TYPES = ['character', 'media', 'story'];
 
     public function __construct(private readonly PrivacyAuditor $auditor) {}
 
@@ -59,6 +54,7 @@ class PostService
         array $audienceUserIds,
         Request $request,
         ?int $characterId = null,
+        ?int $contextInterestId = null,
     ): Post {
         return DB::transaction(function () use (
             $author,
@@ -69,9 +65,11 @@ class PostService
             $audienceUserIds,
             $request,
             $characterId,
+            $contextInterestId,
         ): Post {
             $resolved = $this->resolveAttachments($author, $attachments);
             $character = $this->resolveCharacter($author, $characterId);
+            $this->validateContextInterest($contextInterestId);
             $this->assertAttachmentIdentitiesMatch($character, $resolved);
             $privacy = $this->clampPrivacy(
                 $author,
@@ -88,6 +86,7 @@ class PostService
                 'audience' => $privacy['audience']->value,
                 'discoverable' => $privacy['discoverable'],
                 'character_id' => $character?->id,
+                'context_interest_id' => $contextInterestId,
             ]);
             // Short posts publish immediately and are moderated reactively (an
             // admin can reject/take one down), rather than sitting in a
@@ -95,11 +94,16 @@ class PostService
             $post->moderation_status = ModerationStatus::Approved;
             $post->save();
 
-            foreach ($resolved as $model) {
+            foreach ($resolved as $position => $model) {
                 $post->attachments()->create([
                     'attachable_type' => $model->getMorphClass(),
                     'attachable_id' => $model->getKey(),
+                    'position' => $position,
                 ]);
+
+                if (($model instanceof Media || $model instanceof Story) && $model->canonical_post_id === null) {
+                    $model->forceFill(['canonical_post_id' => $post->id])->save();
+                }
             }
 
             $post->syncAudienceMembers($privacy['member_ids']);
@@ -267,7 +271,7 @@ class PostService
                 throw ValidationException::withMessages(["attachments.$i.id" => 'That attachment does not exist.']);
             }
 
-            if (in_array($type, self::OWNED_TYPES, true) && $model->user_id !== $author->id) {
+            if ($model->user_id !== $author->id) {
                 throw ValidationException::withMessages([
                     "attachments.$i.id" => 'You can only attach your own content.',
                 ]);
@@ -298,6 +302,15 @@ class PostService
         }
 
         return $resolved;
+    }
+
+    private function validateContextInterest(?int $interestId): void
+    {
+        if ($interestId !== null && ! Interest::query()->whereKey($interestId)->exists()) {
+            throw ValidationException::withMessages([
+                'context_interest_id' => 'That Interest does not exist.',
+            ]);
+        }
     }
 
     /**

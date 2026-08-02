@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { CommentThread } from '@/community/CommentThread';
+import { StartDiscussion } from '@/community/StartDiscussion';
 import { FavoriteButton } from '@/components/favorite-button';
 import { Markdown } from '@/components/Markdown';
 import { READING_PAGE_WIDTH } from '@/components/page-width';
@@ -16,13 +18,12 @@ function getInitialStory(): StoryReader | null {
 }
 
 function StoryReaderPage() {
-  const [story] = useState<StoryReader | null>(getInitialStory);
+  const [story, setStory] = useState<StoryReader | null>(getInitialStory);
   const error = 'This story is unavailable.';
 
   if (story === null) return <div className={`${READING_PAGE_WIDTH} px-4 py-10 text-sm text-destructive`}>{error}</div>;
 
   const authorNames = story.authors.map((a) => a.display_name).join(', ');
-
   return (
     <article className={`${READING_PAGE_WIDTH} space-y-6 px-4 py-10`}>
       <header className="space-y-2">
@@ -57,6 +58,18 @@ function StoryReaderPage() {
       </header>
 
       {story.type === 'cyoa' ? <CyoaPlayer story={story} /> : <Markdown source={story.body} />}
+      {story.canonical_post && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Discussion</h2>
+          <CommentThread postId={story.canonical_post.id} initialCount={story.canonical_post.comment_count} />
+        </section>
+      )}
+      {!story.canonical_post && (
+        <StartDiscussion
+          endpoint={`/api/stories/by-ulid/${encodeURIComponent(story.ulid)}/discussion`}
+          onStarted={(post) => setStory((current) => current === null ? current : { ...current, canonical_post: post })}
+        />
+      )}
       <Toaster position="top-right" richColors closeButton />
     </article>
   );

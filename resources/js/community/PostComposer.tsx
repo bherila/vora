@@ -15,21 +15,16 @@ import type { StorySummary } from '@/stories/types';
 
 import { communityApi } from './api';
 import { AudienceField } from './AudienceField';
-import type { AttachmentType, CharacterRef, CommunityPost } from './types';
+import type { AttachmentType, CharacterRef, CommunityPost, InterestRef } from './types';
+
+interface InterestsResponse {
+  success: boolean;
+  data: InterestRef[];
+}
 
 interface CharacterResponse {
   success: boolean;
   data: CharacterRef[];
-}
-
-interface InterestItem {
-  id: number;
-  name: string;
-}
-
-interface InterestsResponse {
-  success: boolean;
-  data: InterestItem[];
 }
 
 interface StoriesResponse {
@@ -45,11 +40,12 @@ interface SelectableAttachment {
 
 interface PostComposerProps {
   onCreated: (post: CommunityPost) => void;
+  contextInterest?: InterestRef | null;
+  lockContext?: boolean;
 }
 
 const ATTACHMENT_TYPES: Array<{ value: AttachmentType; label: string }> = [
   { value: 'character', label: 'Character' },
-  { value: 'interest', label: 'Interest' },
   { value: 'media', label: 'Media' },
   { value: 'story', label: 'Story' },
 ];
@@ -58,7 +54,7 @@ function getErrorMessage(err: unknown): string {
   return typeof err === 'string' ? err : 'Request failed.';
 }
 
-export function PostComposer({ onCreated }: PostComposerProps) {
+export function PostComposer({ onCreated, contextInterest = null, lockContext = false }: PostComposerProps) {
   const { activeIdentityId, identities } = useIdentityStore();
   const [body, setBody] = useState('');
   const [audience, setAudience] = useState<Audience>('everyone');
@@ -67,7 +63,8 @@ export function PostComposer({ onCreated }: PostComposerProps) {
   const [characters, setCharacters] = useState<CharacterRef[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [stories, setStories] = useState<StorySummary[]>([]);
-  const [interests, setInterests] = useState<InterestItem[]>([]);
+  const [interests, setInterests] = useState<InterestRef[]>(contextInterest ? [contextInterest] : []);
+  const [contextInterestSlug, setContextInterestSlug] = useState(contextInterest?.slug ?? '');
   const [characterId, setCharacterId] = useState<number | ''>(() => activeIdentityId ?? '');
   const [attachmentType, setAttachmentType] = useState<AttachmentType>('character');
   const [attachmentId, setAttachmentId] = useState<number | ''>('');
@@ -85,8 +82,10 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       if (persona) parts.push(`As ${persona.displayName}`);
     }
     if (attachments.length > 0) parts.push(`${attachments.length} attachment${attachments.length === 1 ? '' : 's'}`);
+    const context = interests.find((interest) => interest.slug === contextInterestSlug);
+    if (context) parts.push(`In ${context.name}`);
     return parts.join(' · ');
-  }, [audience, characterId, identities, attachments.length]);
+  }, [audience, characterId, identities, attachments.length, contextInterestSlug, interests]);
 
   useEffect(() => {
     let active = true;
@@ -115,12 +114,17 @@ export function PostComposer({ onCreated }: PostComposerProps) {
     setCharacterId(activeIdentityId ?? '');
   }, [activeIdentityId]);
 
+  // On the general feed the selected filter seeds, but does not lock, the
+  // composer context. Keep that seed current when the filter changes so a post
+  // cannot silently retain the previously browsed Interest.
+  useEffect(() => {
+    setContextInterestSlug(contextInterest?.slug ?? '');
+  }, [contextInterest?.slug]);
+
   const attachmentOptions = useMemo((): SelectableAttachment[] => {
     switch (attachmentType) {
       case 'character':
         return characters.map((character) => ({ type: 'character', id: character.id, label: character.display_name }));
-      case 'interest':
-        return interests.map((interest) => ({ type: 'interest', id: interest.id, label: interest.name }));
       case 'media':
         return media.map((item) => ({
           type: 'media',
@@ -132,7 +136,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       default:
         return [];
     }
-  }, [attachmentType, characters, interests, media, stories]);
+  }, [attachmentType, characters, media, stories]);
 
   const addAttachment = (): void => {
     if (attachmentId === '') return;
@@ -167,6 +171,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
         discoverable,
         audience_user_ids: audience === 'specific' ? audienceUserIds : [],
         character_id: characterId === '' ? null : characterId,
+        context_interest_slug: contextInterestSlug === '' ? null : contextInterestSlug,
         attachments: attachments.map((attachment) => ({ type: attachment.type, id: attachment.id })),
       });
       onCreated(created);
@@ -175,6 +180,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       setAudienceUserIds([]);
       setDiscoverable(true);
       setCharacterId(activeIdentityId ?? '');
+      if (!lockContext) setContextInterestSlug('');
       setAttachments([]);
       setShowOptions(false);
       toast.success('Post published.');
@@ -237,6 +243,19 @@ export function PostComposer({ onCreated }: PostComposerProps) {
                 <span>Discoverable when the audience allows it</span>
               </label>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="post-interest-context">Interest context</Label>
+            <select
+              id="post-interest-context"
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              value={contextInterestSlug}
+              onChange={(event) => setContextInterestSlug(event.target.value)}
+              disabled={saving || lockContext}
+            >
+              <option value="">No Interest context</option>
+              {interests.map((interest) => <option key={interest.slug} value={interest.slug}>{interest.name}</option>)}
+            </select>
           </div>
           <div className="space-y-2 rounded-md border border-border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">

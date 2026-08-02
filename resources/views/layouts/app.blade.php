@@ -101,6 +101,7 @@
         'profileHref' => route('me', [], false),
         'items' => array_values(array_filter([
           empty($__identities) ? null : ['type' => 'link', 'label' => 'Profile', 'href' => route('me', [], false)],
+          ['type' => 'link', 'label' => 'Your activity', 'href' => route('activity.index', [], false)],
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
           ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],

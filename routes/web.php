@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
+use App\Http\Controllers\CanonicalDiscussionController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
 use App\Http\Controllers\ChatController;
@@ -169,6 +171,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // The retired dashboard forwards old bookmarks and route callers to the feed.
     Route::get('/dashboard', fn () => redirect()->route('feed'))->name('dashboard');
     Route::get('/feed', [FeedController::class, 'page'])->name('feed');
+    Route::get('/me/activity', [ActivityController::class, 'page'])->name('activity.index');
+    Route::get('/api/me/activity', [ActivityController::class, 'index'])->name('activity.api.index');
+    Route::delete('/api/me/activity/comments/{ulid}', [ActivityController::class, 'destroyComment'])
+        ->name('activity.comments.destroy');
+    Route::get('/interests/{interest}', [InterestController::class, 'show'])->name('interests.show');
     Route::get('/messages/{conversation?}', [ChatController::class, 'page'])
         ->where('conversation', '[0-9A-HJKMNP-TV-Z]{26}')
         ->name('chat.index');
@@ -329,7 +336,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{post}', [PostController::class, 'destroy']);
         Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
         Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
-        Route::get('/{post}/comments', [PostCommentController::class, 'index']);
+        Route::get('/{post}/comments', [PostCommentController::class, 'index'])
+            ->middleware('throttle:120,1')
+            ->name('posts.comments.index');
         Route::post('/{post}/comments', [PostCommentController::class, 'store']);
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });
@@ -338,6 +347,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/p/{ulid}', [PostController::class, 'viewPage'])->name('posts.view');
 
     Route::get('/api/feed', [FeedController::class, 'index']);
+    Route::post('/api/media/by-ulid/{ulid}/discussion', [CanonicalDiscussionController::class, 'media'])
+        ->name('media.discussion.start');
+    Route::post('/api/stories/by-ulid/{ulid}/discussion', [CanonicalDiscussionController::class, 'story'])
+        ->name('stories.discussion.start');
 
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
@@ -392,8 +405,8 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
     Route::post('/interests', [AdminInterestController::class, 'store']);
-    Route::put('/interests/{interest}', [AdminInterestController::class, 'update']);
-    Route::delete('/interests/{interest}', [AdminInterestController::class, 'destroy']);
+    Route::put('/interests/{interest:id}', [AdminInterestController::class, 'update']);
+    Route::delete('/interests/{interest:id}', [AdminInterestController::class, 'destroy']);
     Route::get('/interest-requests', [AdminInterestController::class, 'apiRequestIndex']);
     Route::put('/interest-requests/{interestRequest}', [AdminInterestController::class, 'updateRequest']);
     Route::delete('/interest-requests/{interestRequest}', [AdminInterestController::class, 'destroyRequest']);

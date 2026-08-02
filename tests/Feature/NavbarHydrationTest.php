@@ -49,12 +49,12 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame('/me', $navbar['navItems'][2]['href']);
         $this->assertSame('/users/follow-requests', $navbar['navItems'][5]['href']);
         $this->assertSame(0, $navbar['navItems'][5]['badge']);
-        // Persona-free users retain the existing direct avatar/profile link and
-        // the exact pre-switcher account menu.
+        // Persona-free users retain the direct avatar/profile link.
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
         $this->assertNull($navbar['accountMenu']['avatarUrl']);
         $this->assertSame('/me', $navbar['accountMenu']['profileHref']);
-        $this->assertSame(['Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
+        $this->assertSame(['Your activity', 'Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
+        $this->assertSame('/me/activity', $navbar['accountMenu']['items'][0]['href']);
         $this->assertSame([], $navbar['guestMenuItems']);
     }
 
@@ -66,8 +66,9 @@ class NavbarHydrationTest extends TestCase
         $payload = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
         $items = $payload['navbar']['accountMenu']['items'];
 
-        $this->assertSame(['Profile', 'Settings', 'Invites', 'Log out'], array_column($items, 'label'));
+        $this->assertSame(['Profile', 'Your activity', 'Settings', 'Invites', 'Log out'], array_column($items, 'label'));
         $this->assertSame('/me', $items[0]['href']);
+        $this->assertSame('/me/activity', $items[1]['href']);
     }
 
     public function test_admin_navbar_menu_is_hydrated_from_blade(): void

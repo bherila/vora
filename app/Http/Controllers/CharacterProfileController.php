@@ -98,7 +98,7 @@ class CharacterProfileController extends Controller
         [$character, $viewer] = $this->resolveCharacter($request, $ulid);
 
         $paginator = $this->queries->posts($character->user, $viewer, $character)
-            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable'])
             ->withEngagementCounts($viewer)
             ->latest()
             ->paginate((int) config('media.page_size', 24));

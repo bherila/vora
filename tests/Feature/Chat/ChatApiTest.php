@@ -206,10 +206,11 @@ class ChatApiTest extends TestCase
         $etag = $initial->headers->get('ETag');
         $this->assertNotNull($etag);
 
-        $this->actingAs($ben)
+        $unchanged = $this->actingAs($ben)
             ->withHeader('If-None-Match', $etag)
             ->getJson('/api/chat/sync')
             ->assertStatus(304);
+        $this->assertSame('no-cache, private', $unchanged->headers->get('Cache-Control'));
 
         $service->send($alice, $conversation, (string) Str::ulid(), 'Wake up later');
 

@@ -98,7 +98,10 @@ class ChatController extends Controller
         $etag = '"'.$token.'"';
 
         if ($request->header('If-None-Match') === $etag) {
-            return response()->json(status: 304)->withHeaders(['ETag' => $etag]);
+            return response()->json(status: 304)->withHeaders([
+                'ETag' => $etag,
+                'Cache-Control' => 'private, no-cache',
+            ]);
         }
 
         return response()->json([

@@ -7,18 +7,17 @@ use App\Models\User;
 
 class PostCommentPolicy
 {
-    public function before(User $user, string $ability): ?bool
-    {
-        return $user->isAdmin() ? true : null;
-    }
-
     /**
-     * A comment may be removed by its author or by the owner of the post it is on
-     * (admins via before()).
+     * Authors delete their own contribution. Post-owner moderation is a distinct
+     * recorded action exposed through removeFromPost().
      */
     public function delete(User $user, PostComment $comment): bool
     {
-        return $comment->user_id === $user->id
-            || $comment->post->user_id === $user->id;
+        return $comment->user_id === $user->id;
+    }
+
+    public function removeFromPost(User $user, PostComment $comment): bool
+    {
+        return $comment->post->user_id === $user->id && $comment->user_id !== $user->id;
     }
 }

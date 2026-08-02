@@ -24,6 +24,7 @@ class AdminInterestStoreRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('interests', 'name')],
+            'slug' => ['nullable', 'string', 'max:255', 'alpha_dash:ascii', Rule::unique('interests', 'slug')],
             'description' => ['nullable', 'string', 'max:1000'],
             'parent_interest_id' => ['nullable', 'integer', Rule::exists('interests', 'id')],
         ];

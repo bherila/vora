@@ -333,31 +333,34 @@ final class BlockGraph
      * @param  EloquentBuilder<*>  $query
      * @return EloquentBuilder<*>
      */
-    public static function commentsVisibleTo(EloquentBuilder $query, User $viewer): EloquentBuilder
-    {
+    public static function commentsVisibleTo(
+        EloquentBuilder $query,
+        User $viewer,
+        string $commentTable = 'post_comments',
+    ): EloquentBuilder {
         if ($viewer->isAdmin()) {
             return $query;
         }
 
         $query->whereNotExists(fn (QueryBuilder $blocks) => self::constrainDenied(
             $blocks,
-            'post_comments.user_id',
+            $commentTable.'.user_id',
             $viewer->id,
         ));
 
-        return $query->whereNotExists(function (QueryBuilder $blocks) use ($viewer): void {
+        return $query->whereNotExists(function (QueryBuilder $blocks) use ($viewer, $commentTable): void {
             $blocks->from('blocks as comment_hide_blocks')
                 ->where('comment_hide_blocks.blocker_id', $viewer->id)
-                ->whereColumn('comment_hide_blocks.blocked_user_id', 'post_comments.user_id')
-                ->whereExists(function (QueryBuilder $post): void {
+                ->whereColumn('comment_hide_blocks.blocked_user_id', $commentTable.'.user_id')
+                ->whereExists(function (QueryBuilder $post) use ($commentTable): void {
                     $post->selectRaw('1')
                         ->from('posts as comment_posts')
-                        ->whereColumn('comment_posts.id', 'post_comments.post_id')
-                        ->where(function (QueryBuilder $identity): void {
-                            $identity->where(function (QueryBuilder $publicCluster): void {
-                                $publicCluster->where(function (QueryBuilder $outerIdentity): void {
+                        ->whereColumn('comment_posts.id', $commentTable.'.post_id')
+                        ->where(function (QueryBuilder $identity) use ($commentTable): void {
+                            $identity->where(function (QueryBuilder $publicCluster) use ($commentTable): void {
+                                $publicCluster->where(function (QueryBuilder $outerIdentity) use ($commentTable): void {
                                     $outerIdentity
-                                        ->whereColumn('comment_posts.user_id', '!=', 'post_comments.user_id')
+                                        ->whereColumn('comment_posts.user_id', '!=', $commentTable.'.user_id')
                                         ->orWhereNull('comment_posts.character_id')
                                         ->orWhereExists(function (QueryBuilder $outerCharacter): void {
                                             self::constrainLinkedCharacter(
@@ -378,9 +381,9 @@ final class BlockGraph
                                             );
                                         });
                                 });
-                            })->orWhere(function (QueryBuilder $exactPersona): void {
+                            })->orWhere(function (QueryBuilder $exactPersona) use ($commentTable): void {
                                 $exactPersona
-                                    ->whereColumn('comment_posts.user_id', 'post_comments.user_id')
+                                    ->whereColumn('comment_posts.user_id', $commentTable.'.user_id')
                                     ->whereColumn(
                                         'comment_hide_blocks.blocked_character_id',
                                         'comment_posts.character_id',

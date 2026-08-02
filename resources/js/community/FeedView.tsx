@@ -11,13 +11,17 @@ import { communityApi } from './api';
 import { OnboardingChecklist, type OnboardingData } from './OnboardingChecklist';
 import { PostCard } from './PostCard';
 import { PostComposer } from './PostComposer';
-import type { CommunityPost, FeedScope } from './types';
+import type { CommunityPost, FeedScope, InterestRef } from './types';
 
 interface FeedViewProps {
   /** Whether an accepted account- or persona-scoped follow can populate Following. */
   hasFollowing: boolean;
   /** First-run checklist state; hidden when null/undefined. */
   onboarding?: OnboardingData | null;
+  /** Locked context on a dedicated Interest page. */
+  interest?: InterestRef | null;
+  /** Selectable contexts on the general feed. */
+  interests?: InterestRef[];
 }
 
 function scopeFromLocation(): FeedScope {
@@ -42,13 +46,39 @@ function replaceScopeInLocation(scope: FeedScope): void {
   );
 }
 
+function interestFromLocation(): string {
+  return new URLSearchParams(window.location.search).get('interest') ?? '';
+}
+
+function replaceInterestInLocation(slug: string): void {
+  const url = new URL(window.location.href);
+
+  if (slug === '') {
+    url.searchParams.delete('interest');
+  } else {
+    url.searchParams.set('interest', slug);
+  }
+
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 /**
  * The cross-author timeline with a composer. Following preserves the focused
  * timeline; Mixed explicitly adds public discovery. The selected scope is kept
  * in the page URL so a reload restores it, while every cursor request carries
  * the same scope independently.
  */
-export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
+export function FeedView({ hasFollowing, onboarding = null, interest = null, interests = [] }: FeedViewProps) {
+  const contextLocked = interest !== null;
+  const [selectedInterestSlug, setSelectedInterestSlug] = useState(
+    () => interest?.slug ?? interestFromLocation(),
+  );
+  const interestSlug = interest?.slug ?? (selectedInterestSlug === '' ? null : selectedInterestSlug);
+  const selectedInterest = interest ?? interests.find((item) => item.slug === selectedInterestSlug) ?? null;
   const followingDisabled = !hasFollowing;
   const [scope, setScope] = useState<FeedScope>(
     () => followingDisabled ? 'mixed' : scopeFromLocation(),
@@ -71,7 +101,7 @@ export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
     }
     setError('');
     try {
-      const response = await communityApi.feed(selectedScope, cursor);
+      const response = await communityApi.feed(selectedScope, cursor, interestSlug);
       if (requestSequence !== requestSequenceRef.current) return;
 
       setPosts((current) => cursor ? [...current, ...response.data] : response.data);
@@ -86,7 +116,7 @@ export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
         setLoadingMore(false);
       }
     }
-  }, []);
+  }, [interestSlug]);
 
   useEffect(() => {
     if (followingDisabled) {
@@ -115,6 +145,18 @@ export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
     setLoading(true);
     replaceScopeInLocation(nextScope);
     setScope(nextScope);
+  };
+
+  const selectInterest = (slug: string): void => {
+    if (contextLocked || slug === selectedInterestSlug) return;
+
+    requestSequenceRef.current += 1;
+    setPosts([]);
+    setNextCursor(null);
+    setError('');
+    setLoading(true);
+    replaceInterestInLocation(slug);
+    setSelectedInterestSlug(slug);
   };
 
   // Auto-load the next page when the sentinel scrolls into view. The Load more
@@ -187,11 +229,33 @@ export function FeedView({ hasFollowing, onboarding = null }: FeedViewProps) {
           </Button>
         )}
       </div>
+      {!contextLocked && interests.length > 0 && (
+        <label className="grid gap-1 text-sm" htmlFor="feed-interest-filter">
+          <span>Filter by Interest</span>
+          <select
+            id="feed-interest-filter"
+            className="rounded-md border border-input bg-background px-3 py-2"
+            value={selectedInterestSlug}
+            onChange={(event) => selectInterest(event.target.value)}
+          >
+            <option value="">All Interests</option>
+            {interests.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}
+          </select>
+        </label>
+      )}
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
           Every post has an audience. New posts default to Everyone; open Audience, persona &amp; attachments to choose who can see yours.
         </p>
-        <PostComposer onCreated={(post) => setPosts((current) => [post, ...current])} />
+        <PostComposer
+          contextInterest={selectedInterest}
+          lockContext={contextLocked}
+          onCreated={(post) => {
+            if (interestSlug === null || post.context_interest?.slug === interestSlug) {
+              setPosts((current) => [post, ...current]);
+            }
+          }}
+        />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (

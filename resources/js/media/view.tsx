@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
 import { AudienceField } from '@/community/AudienceField';
+import { CommentThread } from '@/community/CommentThread';
+import { StartDiscussion } from '@/community/StartDiscussion';
 import { Avatar } from '@/components/avatar';
 import { FavoriteButton } from '@/components/favorite-button';
 import { ReportButton } from '@/components/report-button';
@@ -214,6 +216,18 @@ export function MediaViewPage() {
       </p>
       {item.interests.length > 0 && (
         <p className="text-sm text-muted-foreground">{item.interests.map((i) => i.name).join(', ')}</p>
+      )}
+      {item.canonical_post && (
+        <section className="mx-auto w-full max-w-3xl">
+          <h2 className="mb-3 text-lg font-semibold">Discussion</h2>
+          <CommentThread postId={item.canonical_post.id} initialCount={item.canonical_post.comment_count} />
+        </section>
+      )}
+      {!item.canonical_post && (
+        <StartDiscussion
+          endpoint={`/api/media/by-ulid/${encodeURIComponent(item.ulid)}/discussion`}
+          onStarted={(post) => setItem((current) => current === null ? current : { ...current, canonical_post: post })}
+        />
       )}
 
       {editable && (
