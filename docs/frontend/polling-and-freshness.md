@@ -10,15 +10,14 @@ seconds is acceptable everywhere it is currently used.
 
 ## Use the existing hook
 
-There is one poller. It lives at `resources/js/chat/useAdaptivePolling.ts` today
-and moves to `resources/js/lib/useAdaptivePolling.ts` with #193, when a second
-surface starts using it. It already handles:
+There is one poller: `resources/js/lib/useAdaptivePolling.ts`. It handles:
 
 - pausing when the document is hidden or the browser is offline;
 - immediate refresh on regained focus, visibility, and reconnect;
 - non-overlapping requests (a poll in flight blocks the next);
 - jitter, so many clients do not synchronize;
-- exponential backoff on failure, capped, resetting on success.
+- exponential backoff on failure, capped, resetting on success;
+- bounding concurrent pollers by `group` / `maxGroupPollers`.
 
 **Do not write a second poller.** If a surface needs behaviour the hook lacks,
 extend the hook.
@@ -36,7 +35,7 @@ Interval constants live beside the hook. Current cadences:
 | Surface | Constant | Interval |
 | --- | --- | --- |
 | Active chat thread | `ACTIVE_THREAD_POLL_MS` | 12s |
-| Comment thread (#193) | `COMMENT_THREAD_POLL_MS` | 20s |
+| Comment thread | `COMMENT_THREAD_POLL_MS` | 20s |
 | Chat inbox | `INBOX_POLL_MS` | 45s |
 
 ## Poll narrowly
@@ -44,7 +43,9 @@ Interval constants live beside the hook. Current cadences:
 Only poll what the user is actually looking at. An expanded thread polls; a
 collapsed one does not. A surface with many potentially-pollable cards must not
 multiply requests — bound the number of concurrent pollers to the ones the user
-has actually opened or interacted with.
+has actually opened or interacted with. A feed page can hold dozens of comment
+threads, so they share a `group` capped at three live pollers; the rest stay
+mounted and refresh on interaction.
 
 Set `enabled: false` rather than unmounting-and-remounting to pause.
 
@@ -84,6 +85,14 @@ Rules:
 Store the revision as a monotonic counter on the row that owns the resource
 (`users.chat_sync_version`, `posts.comment_revision`). Do not derive it from
 `MAX(updated_at)` — that costs the query you are trying to avoid.
+
+A counter on the owning row tracks changes to the *resource*, not changes to the
+**viewer's relationship** to it. Blocking an author, or that author's account
+being disabled, alters what the payload should contain without touching the
+counter, so an open thread can hold a valid ETag over stale rows until it
+remounts. Acceptable today because those actions navigate. If a surface ever
+needs to survive them in place, fold the viewer-side input into the ETag rather
+than bumping every post's counter.
 
 ## Stop on inaccessible
 

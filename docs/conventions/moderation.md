@@ -49,12 +49,30 @@ These are independent levers, not a ladder:
 | Banned | `banned_at`, `ban_reason`, `banned_by_user_id` | Stays logged in; `EnsureNotBanned` gates to the ban notice, appeal, deactivate, delete |
 | Ban hides content | `ban_hides_content` | Optional. Off = memorialized, on = content hidden |
 | Legal hold | `legal_hold_at` | Admin-only. Blocks account **deletion** regardless of ban |
-| Scoped restriction | `user_restrictions` | Per-capability, does not remove the account — see #194 |
+| Scoped restriction | `user_restrictions` | Per-capability, does not remove the account |
 
 `User::active()` and `User::scopeActive()` encode the composite "is this account
 currently presentable" rule. Query through them rather than re-deriving the
 condition, or a new surface becomes a bypass for a state the per-record policies
 would reject.
+
+## Scoped restrictions
+
+`App\Enums\RestrictionCapability` withdraws one capability without removing the
+account: `media.upload`, `media.view`, `comment.create`. Rules that hold for all
+of them:
+
+- **Historical, never destructive.** Lifting sets `lifted_at` /
+  `lifted_by_user_id`; rows are not deleted. Expiry is evaluated on read
+  (`UserRestriction::scopeActive`) — there is no scheduler on shared hosting.
+- **Enforce at every layer independently.** `media.view` filters the query
+  *and* gates the asset and HLS routes. Query-layer filtering alone is bypassed
+  by requesting the object URL directly.
+- **A restriction never touches the user's own content.** Their media stays
+  visible to them and stays in their export.
+- Go through `RestrictionGate`, which memoizes per user per request.
+
+Restrictions are transparent to their subject — see below.
 
 ## Self-service data access survives every state
 
