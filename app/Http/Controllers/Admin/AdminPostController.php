@@ -29,7 +29,7 @@ class AdminPostController extends Controller
         $admin = $request->user();
 
         $paginator = Post::query()
-            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user', 'character.profilePicture', 'contextInterest', 'attachments.attachable'])
             ->withAdminEngagementCounts($admin)
             ->when(in_array($status, ModerationStatus::values(), true), function (Builder $q) use ($status): void {
                 $q->where('moderation_status', $status);
@@ -66,7 +66,7 @@ class AdminPostController extends Controller
 
         $post = Post::query()
             ->whereKey($post->id)
-            ->with(['user', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user', 'character.profilePicture', 'contextInterest', 'attachments.attachable'])
             ->withAdminEngagementCounts($admin)
             ->firstOrFail();
 

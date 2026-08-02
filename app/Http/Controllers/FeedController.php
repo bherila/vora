@@ -90,7 +90,7 @@ class FeedController extends Controller
             // owner the per-record policies would now reject.
             ->whereHas('user', fn (Builder $query) => $query->active()->whereNotNull('approved_at'))
             ->viewableBy($viewer)
-            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable']);
+            ->with(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable']);
 
         // Mutes are viewer-side exact-identity filters. Apply them in SQL before
         // cursor pagination: filtering a returned keyset page would create short

@@ -26,6 +26,7 @@ class StorePostRequest extends FormRequest
         return [
             'body' => ['required', 'string', 'max:2000'],
             'character_id' => ['nullable', 'integer'],
+            'context_interest_id' => ['nullable', 'integer', Rule::exists('interests', 'id')],
             ...$this->audienceRules(['nullable']),
             'attachments' => ['nullable', 'array', 'max:4'],
             'attachments.*.type' => ['required', Rule::in(array_keys(PostService::ATTACHMENT_TYPES))],
@@ -39,6 +40,13 @@ class StorePostRequest extends FormRequest
     public function characterId(): ?int
     {
         $value = $this->input('character_id');
+
+        return $value === null ? null : (int) $value;
+    }
+
+    public function contextInterestId(): ?int
+    {
+        $value = $this->input('context_interest_id');
 
         return $value === null ? null : (int) $value;
     }

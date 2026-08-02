@@ -55,7 +55,7 @@ class PostAttachmentTest extends TestCase
         ]);
     }
 
-    public function test_user_can_attach_their_own_media_and_an_interest(): void
+    public function test_user_can_attach_their_own_media_in_an_interest_context(): void
     {
         $user = User::factory()->approved()->create();
         $media = Media::factory()->for($user)->approved()->create();
@@ -65,12 +65,15 @@ class PostAttachmentTest extends TestCase
             'body' => 'Look at this',
             'attachments' => [
                 ['type' => 'media', 'id' => $media->id],
-                ['type' => 'interest', 'id' => $interest->id],
             ],
+            'context_interest_id' => $interest->id,
         ]);
 
-        $response->assertCreated()->assertJsonCount(2, 'data.attachments');
-        $this->assertSame(2, Post::query()->firstOrFail()->attachments()->count());
+        $response->assertCreated()->assertJsonCount(1, 'data.attachments')
+            ->assertJsonPath('data.context_interest.slug', 'hiking');
+        $post = Post::query()->firstOrFail();
+        $this->assertSame(1, $post->attachments()->count());
+        $this->assertSame($interest->id, $post->context_interest_id);
     }
 
     public function test_cannot_attach_another_users_media(): void

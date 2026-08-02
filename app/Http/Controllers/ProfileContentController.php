@@ -69,7 +69,7 @@ class ProfileContentController extends Controller
         $viewer = $this->authorizeProfile($request, $user);
 
         $paginator = $this->queries->posts($user, $viewer, $character)
-            ->with(['user.profilePicture', 'character.profilePicture', 'attachments.attachable'])
+            ->with(['user.profilePicture', 'character.profilePicture', 'contextInterest', 'attachments.attachable'])
             ->withEngagementCounts($viewer)
             ->latest()
             ->paginate((int) config('media.page_size', 24));

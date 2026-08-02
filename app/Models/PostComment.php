@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 /**
  * A reply on a {@see Post}. Flat with one optional level of threading via
@@ -22,11 +24,12 @@ class PostComment extends Model
     use HasFactory;
     use Moderatable;
     use SerializesDatesAsLocal;
+    use SoftDeletes;
 
     /**
      * @var list<string>
      */
-    protected $fillable = ['post_id', 'user_id', 'parent_id', 'body'];
+    protected $fillable = ['post_id', 'user_id', 'parent_id', 'body', 'removed_by_user_id', 'removed_at'];
 
     /**
      * @return array<string, string>
@@ -36,7 +39,21 @@ class PostComment extends Model
         return [
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
+            'removed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (PostComment $comment): void {
+            $comment->ulid ??= (string) Str::ulid();
+        });
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function removedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'removed_by_user_id');
     }
 
     /**

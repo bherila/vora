@@ -22,16 +22,6 @@ interface CharacterResponse {
   data: CharacterRef[];
 }
 
-interface InterestItem {
-  id: number;
-  name: string;
-}
-
-interface InterestsResponse {
-  success: boolean;
-  data: InterestItem[];
-}
-
 interface StoriesResponse {
   success: boolean;
   data: StorySummary[];
@@ -49,7 +39,6 @@ interface PostComposerProps {
 
 const ATTACHMENT_TYPES: Array<{ value: AttachmentType; label: string }> = [
   { value: 'character', label: 'Character' },
-  { value: 'interest', label: 'Interest' },
   { value: 'media', label: 'Media' },
   { value: 'story', label: 'Story' },
 ];
@@ -67,7 +56,6 @@ export function PostComposer({ onCreated }: PostComposerProps) {
   const [characters, setCharacters] = useState<CharacterRef[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [stories, setStories] = useState<StorySummary[]>([]);
-  const [interests, setInterests] = useState<InterestItem[]>([]);
   const [characterId, setCharacterId] = useState<number | ''>(() => activeIdentityId ?? '');
   const [attachmentType, setAttachmentType] = useState<AttachmentType>('character');
   const [attachmentId, setAttachmentId] = useState<number | ''>('');
@@ -95,15 +83,13 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       fetchWrapper.get('/api/characters') as Promise<CharacterResponse>,
       fetchWrapper.get('/api/media') as Promise<PagedResponse<MediaItem>>,
       fetchWrapper.get('/api/stories') as Promise<StoriesResponse>,
-      fetchWrapper.get('/api/interests') as Promise<InterestsResponse>,
     ]).then((results) => {
       if (!active) return;
 
-      const [characterResult, mediaResult, storyResult, interestResult] = results;
+      const [characterResult, mediaResult, storyResult] = results;
       if (characterResult.status === 'fulfilled') setCharacters(characterResult.value.data);
       if (mediaResult.status === 'fulfilled') setMedia(mediaResult.value.data);
       if (storyResult.status === 'fulfilled') setStories(storyResult.value.data);
-      if (interestResult.status === 'fulfilled') setInterests(interestResult.value.data);
     });
 
     return () => {
@@ -119,8 +105,6 @@ export function PostComposer({ onCreated }: PostComposerProps) {
     switch (attachmentType) {
       case 'character':
         return characters.map((character) => ({ type: 'character', id: character.id, label: character.display_name }));
-      case 'interest':
-        return interests.map((interest) => ({ type: 'interest', id: interest.id, label: interest.name }));
       case 'media':
         return media.map((item) => ({
           type: 'media',
@@ -132,7 +116,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
       default:
         return [];
     }
-  }, [attachmentType, characters, interests, media, stories]);
+  }, [attachmentType, characters, media, stories]);
 
   const addAttachment = (): void => {
     if (attachmentId === '') return;

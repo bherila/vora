@@ -10,7 +10,6 @@ use App\Jobs\NotifyFollowersOfPost;
 use App\Models\Character;
 use App\Models\Media;
 use App\Models\Post;
-use App\Models\PostAttachment;
 use App\Models\Story;
 use App\Models\StoryAuthor;
 use Illuminate\Database\Eloquent\Model;
@@ -33,16 +32,14 @@ class AnnouncementPostService
         }
 
         $post = DB::transaction(function () use ($content): ?Post {
-            // Serialize approval/publication races on the content itself, then
-            // recheck attachments only after acquiring that lock.
+            // Serialize approval/publication races on the content itself.
             $locked = $content::withTrashed()
                 ->whereKey($content->getKey())
                 ->lockForUpdate()
                 ->first() ?? $content;
 
-            $attachment = $this->announcementAttachmentFor($locked);
-            if ($attachment !== null) {
-                $existing = Post::withTrashed()->lockForUpdate()->find($attachment->post_id);
+            if ($locked->canonical_post_id !== null) {
+                $existing = Post::withTrashed()->lockForUpdate()->find($locked->canonical_post_id);
                 if ($existing !== null && ! $existing->trashed()) {
                     if ($this->isPublishable($locked)) {
                         $this->copyPrivacy($existing, $locked);
@@ -51,12 +48,16 @@ class AnnouncementPostService
                     }
                 }
 
-                return null;
+                if ($existing?->trashed()) {
+                    $locked->forceFill(['canonical_post_id' => null])->save();
+                } else {
+                    return null;
+                }
             }
 
             // A user already shared this item manually. That is its one feed
             // announcement; approving it must not add a duplicate post.
-            if ($this->anyAttachmentFor($locked) !== null || ! $this->isPublishable($locked)) {
+            if (! $this->isPublishable($locked)) {
                 return null;
             }
 
@@ -74,7 +75,9 @@ class AnnouncementPostService
             $post->attachments()->create([
                 'attachable_type' => $locked->getMorphClass(),
                 'attachable_id' => $locked->getKey(),
+                'position' => 0,
             ]);
+            $locked->forceFill(['canonical_post_id' => $post->id])->save();
             $this->copyPrivacy($post, $locked);
 
             return $post;
@@ -105,7 +108,7 @@ class AnnouncementPostService
             && ! $this->ownerUsesSeparatePersona($content);
     }
 
-    private function copyPrivacy(Post $post, Media|Story $content): void
+    public function copyPrivacy(Post $post, Media|Story $content): void
     {
         $attributes = [
             'audience' => $content->audience,
@@ -168,24 +171,5 @@ class AnnouncementPostService
         $character = Character::withTrashed()->find($ownerAuthor->character_id);
 
         return $character === null || ! $character->is_linked;
-    }
-
-    private function announcementAttachmentFor(Media|Story $content): ?PostAttachment
-    {
-        return PostAttachment::query()
-            ->where('attachable_type', $content->getMorphClass())
-            ->where('attachable_id', $content->getKey())
-            ->whereHas('post', fn ($query) => $query->where('is_announcement', true))
-            ->oldest('id')
-            ->first();
-    }
-
-    private function anyAttachmentFor(Media|Story $content): ?PostAttachment
-    {
-        return PostAttachment::query()
-            ->where('attachable_type', $content->getMorphClass())
-            ->where('attachable_id', $content->getKey())
-            ->oldest('id')
-            ->first();
     }
 }

@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
- * A polymorphic attachment on a {@see Post}: a link to a Character, Interest,
- * Media, or Story the author owns (Interest is a shared tag). Mirrors the
+ * A polymorphic attachment on a {@see Post}: a link to a Character, Media, or
+ * Story the author owns. Mirrors the
  * {@see StoryInvolvement} pattern.
  */
 class PostAttachment extends Model
@@ -23,6 +23,8 @@ class PostAttachment extends Model
         'post_id',
         'attachable_type',
         'attachable_id',
+        'position',
+        'position',
     ];
 
     /**

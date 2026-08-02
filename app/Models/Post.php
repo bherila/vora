@@ -17,8 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * A short text post — the building block of the follower feed. Reuses the shared
  * privacy (audience/discoverable) and admin-review plumbing, exactly like Media
- * and Story, plus a polymorphic attachment to a Character, Interest, Media, or
- * Story the author owns.
+ * and Story, plus content attachments and an optional Interest context.
  */
 class Post extends Model
 {
@@ -39,6 +38,9 @@ class Post extends Model
         'audience',
         'discoverable',
         'is_announcement',
+        'context_interest_id',
+        'is_feed_hidden',
+        'comment_revision',
     ];
 
     /**
@@ -50,6 +52,8 @@ class Post extends Model
             'audience' => Audience::class,
             'discoverable' => 'boolean',
             'is_announcement' => 'boolean',
+            'is_feed_hidden' => 'boolean',
+            'comment_revision' => 'integer',
             'moderation_status' => ModerationStatus::class,
             'moderated_at' => 'datetime',
         ];
@@ -74,12 +78,28 @@ class Post extends Model
         return $this->belongsTo(Character::class);
     }
 
+    /** @return BelongsTo<Interest, $this> */
+    public function contextInterest(): BelongsTo
+    {
+        return $this->belongsTo(Interest::class, 'context_interest_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Post $post): void {
+            if (! $post->isForceDeleting()) {
+                Media::query()->where('canonical_post_id', $post->id)->update(['canonical_post_id' => null]);
+                Story::query()->where('canonical_post_id', $post->id)->update(['canonical_post_id' => null]);
+            }
+        });
+    }
+
     /**
      * @return HasMany<PostAttachment, $this>
      */
     public function attachments(): HasMany
     {
-        return $this->hasMany(PostAttachment::class);
+        return $this->hasMany(PostAttachment::class)->orderBy('position')->orderBy('id');
     }
 
     /**

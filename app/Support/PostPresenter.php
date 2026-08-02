@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Enums\StoryStatus;
 use App\Models\Character;
-use App\Models\Interest;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostAttachment;
@@ -49,6 +48,11 @@ class PostPresenter
                 : null,
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder),
             'attachments' => self::attachments($post, $viewer),
+            'context_interest' => $post->contextInterest === null ? null : [
+                'id' => $post->contextInterest->id,
+                'name' => $post->contextInterest->name,
+                'slug' => $post->contextInterest->slug,
+            ],
             'reaction_count' => self::reactionCount($post),
             'viewer_reacted' => self::viewerReacted($post, $viewer),
             'comment_count' => (int) ($post->comments_count ?? $post->comments()->count()),
@@ -204,7 +208,6 @@ class PostPresenter
 
         return match (true) {
             $attachable instanceof Character => ['type' => 'character', 'id' => $attachable->id, 'label' => $attachable->display_name],
-            $attachable instanceof Interest => ['type' => 'interest', 'id' => $attachable->id, 'label' => $attachable->name],
             $attachable instanceof Media => ['type' => 'media', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'media_type' => $attachable->type->value, 'label' => $attachable->title],
             $attachable instanceof Story => ['type' => 'story', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'label' => $attachable->title],
             default => null,

@@ -133,6 +133,7 @@ class AdminInterestController extends Controller
     public function store(AdminInterestStoreRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $data['slug'] = $this->uniqueSlug($data['slug'] ?? $data['name']);
 
         $interest = Interest::query()->create($data);
 
@@ -205,6 +206,7 @@ class AdminInterestController extends Controller
 
                 Interest::query()->create([
                     'name' => $interestRequest->name,
+                    'slug' => $this->uniqueSlug($interestRequest->name),
                     'description' => $interestRequest->description,
                     'parent_interest_id' => $interestRequest->parent_interest_id,
                 ]);
@@ -259,5 +261,10 @@ class AdminInterestController extends Controller
             'success' => true,
             'message' => 'Interest request rejected.',
         ]);
+    }
+
+    private function uniqueSlug(string $value): string
+    {
+        return Interest::generateUniqueSlug($value);
     }
 }

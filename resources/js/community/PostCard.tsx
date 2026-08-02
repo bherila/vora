@@ -43,8 +43,6 @@ function attachmentLabel(attachment: PostAttachment): string {
   switch (attachment.type) {
     case 'character':
       return `Character: ${attachment.label}`;
-    case 'interest':
-      return `Interest: ${attachment.label}`;
     case 'media':
       return `Media: ${attachment.label}`;
     case 'story':

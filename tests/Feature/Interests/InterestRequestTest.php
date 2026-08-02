@@ -148,4 +148,23 @@ class InterestRequestTest extends TestCase
 
         $this->assertDatabaseMissing('interest_requests', ['id' => $interestRequest->id]);
     }
+
+    #[Test]
+    public function colliding_max_length_slugs_are_bounded_for_strict_sql_engines(): void
+    {
+        $admin = $this->admin();
+        $base = str_repeat('a', 254);
+
+        $this->actingAs($admin)->postJson('/api/admin/interests', [
+            'name' => $base.'!',
+        ])->assertOk();
+        $this->actingAs($admin)->postJson('/api/admin/interests', [
+            'name' => $base.'?',
+        ])->assertOk();
+
+        $slugs = Interest::query()->whereIn('name', [$base.'!', $base.'?'])->orderBy('id')->pluck('slug')->all();
+        $this->assertSame($base, $slugs[0]);
+        $this->assertSame(str_repeat('a', 253).'-2', $slugs[1]);
+        $this->assertSame([254, 255], array_map('strlen', $slugs));
+    }
 }
