@@ -26,15 +26,33 @@ partial index that guards an invariant on SQLite guards nothing in production.
 a unique index, which expresses "at most one" exactly:
 
 ```php
-// "a media item has at most one canonical discussion post"
-$table->foreignId('canonical_post_id')->nullable()
-    ->constrained('posts')->nullOnDelete();
-$table->unique('canonical_post_id');
+// "a user has at most one pending email-change token"
+$table->string('pending_email_token')->nullable();
+$table->unique('pending_email_token');
 ```
 
 Rows that do not participate hold `NULL` and do not collide. Rows that do
 participate are unique. No filtered index, no application-level guard, no engine
 divergence.
+
+### Check which direction you are constraining
+
+A nullable foreign key already says "this row points at **at most one** parent" —
+that is what a single-valued column means. Adding `unique()` to it does not
+reinforce that; it asserts the *converse*, that no two rows may point at the same
+parent. Two different statements, and the one you get for free is usually the one
+you wanted.
+
+`media.canonical_post_id` shipped with a unique index meant to express "a media
+item has at most one canonical discussion post". The column said that already.
+What `unique` added was "a post is canonical for at most one media item" — false
+for a gallery post, which carries several media and is the canonical discussion
+for all of them. Creating one raised an integrity violation and 500'd the
+request. See #198.
+
+Before reaching for `unique` on a foreign key, say the constraint out loud in the
+*parent's* voice. If that sentence is not one you want to enforce, you want a
+plain index.
 
 Corollary: **do not model "at most one of N" with an `is_primary` boolean on a
 pivot table.** "At most one true per group" is precisely the partial unique index

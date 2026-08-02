@@ -1,10 +1,5 @@
 # Posts, discussions, and Interest contexts
 
-> **Status.** The Post-as-discussion-root model, one-level replies, and privacy
-> clamping are built. Interest contexts, canonical media/story discussions,
-> tombstones, *Your activity*, and comment polling land with #193 — sections
-> below mark which. The contracts themselves are settled either way.
-
 ## Post is the single discussion root
 
 There is one discussion model. `Post` is it. There are no separate
@@ -17,8 +12,8 @@ Every discussion in the product is comments on a Post:
 | Conversation | Representation |
 | --- | --- |
 | Standalone update | Post with no context and no attachments |
-| Interest post | Post with a primary Interest context (#193) |
-| Media/story discussion | The content's **canonical** Post (#193) |
+| Interest post | Post with a primary Interest context |
+| Media/story discussion | The content's **canonical** Post |
 | Direct message | The chat system — separate, see `ChatConversation` |
 
 Chat and posts are genuinely different systems. Do not merge them.
@@ -54,12 +49,21 @@ Two things that are *not* attachments and must not be modelled as such:
   character's profile card*. Different relationships, both valid, never merged.
 - **Topic.** An Interest is not content payload — it has no owner, no privacy
   policy, and no identity. It is the post's *context*, carried by
-  `posts.context_interest_id` (#193), not by an attachment row.
+  `posts.context_interest_id`, not by an attachment row.
 
 A post may carry several media attachments ordered by `position`; the clamp
 already intersects N policies correctly, so galleries need no new model.
 
-## Interest as context (#193)
+**The clamp is the final word on a post's audience.** Nothing downstream of
+`PostService::clampPrivacy` may reassign the audience of a post a user wrote —
+not attachment approval, not a later privacy change on attached content. Only
+posts this codebase generates on the user's behalf (the feed announcement and
+the lazy discussion post) mirror their content's privacy, because they have no
+author-chosen audience of their own. See
+`AnnouncementPostService::synchronize`, and #198 for what breaks when that
+distinction is lost.
+
+## Interest as context
 
 An Interest is a **place a post is made in**, not a decorative tag.
 
@@ -68,7 +72,11 @@ An Interest is a **place a post is made in**, not a decorative tag.
   [schema-portability.md](../conventions/schema-portability.md#do-not-use-partial-or-filtered-unique-indexes)
   for why this is a column and not a pivot with an `is_primary` flag.
 - Interests are addressed by an **immutable slug**, generated at creation and
-  never regenerated on rename, so links survive.
+  never regenerated on rename, so links survive. The slug is also the only
+  Interest identifier that crosses the wire: routes bind on it
+  (`Interest::getRouteKeyName`), and the post API reads and writes
+  `context_interest_slug`. `context_interest_id` is internal storage — see
+  [schema-portability.md](../conventions/schema-portability.md#opaque-public-identifiers).
 - Filtering is **exact-Interest only**. A post in a child Interest does not
   appear under its parent.
 - The Interest page and the main feed share one query builder. They must not
@@ -76,11 +84,14 @@ An Interest is a **place a post is made in**, not a decorative tag.
 - **Interest context never grants access** — see
   [privacy-and-visibility.md](../conventions/privacy-and-visibility.md#context-never-grants-access).
 
-## Canonical media/story discussions (#193)
+## Canonical media/story discussions
 
 Each media or story item has **at most one** canonical discussion Post, held as
-`canonical_post_id` on the content with a plain nullable unique index. The feed
-announcement card and the content detail page resolve to the same thread.
+`canonical_post_id` on the content. The column being single-valued *is* the
+invariant — it needs no unique index, and adding one asserts the converse
+("one post is canonical for at most one item"), which a gallery post rightly
+violates. The feed announcement card and the content detail page resolve to the
+same thread.
 
 - First claim wins. `AnnouncementPostService` creates it on approval when
   announcements are on; a manual share claims it first if there is one.
@@ -90,9 +101,11 @@ announcement card and the content detail page resolve to the same thread.
 - A second post attaching the same content is a valid post — it just is not
   canonical. This deliberately leaves room for reshare without letting a reshare
   fragment the discussion.
+- A gallery post is the canonical discussion for **every** item it carries. One
+  post, one thread, several media.
 - Attached-content privacy continues to clamp the discussion's visibility.
 
-## Author-scoped control (#193)
+## Author-scoped control
 
 Losing access to a discussion must not strand what you wrote there. *Your
 activity* lists a user's own posts, comments, and replies **queried by authorship
