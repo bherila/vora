@@ -1,13 +1,34 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const ACTIVE_THREAD_POLL_MS = 12_000;
+export const COMMENT_THREAD_POLL_MS = 20_000;
 export const INBOX_POLL_MS = 45_000;
 const MAX_BACKOFF_MULTIPLIER = 8;
+
+interface PollGroupEntry {
+  setGranted: (granted: boolean) => void;
+}
+
+const pollGroups = new Map<string, Map<symbol, PollGroupEntry>>();
+
+function rebalanceGroup(group: string, maximum: number): void {
+  const entries = pollGroups.get(group);
+  if (!entries) return;
+
+  let index = 0;
+  entries.forEach((entry) => {
+    entry.setGranted(index < maximum);
+    index += 1;
+  });
+}
 
 interface AdaptivePollingOptions {
   enabled: boolean;
   intervalMs: number;
   onPoll: () => Promise<void>;
+  /** Optional shared capacity pool for many simultaneously mounted surfaces. */
+  group?: string;
+  maxGroupPollers?: number;
 }
 
 interface AdaptivePollingResult {
@@ -18,6 +39,8 @@ export function useAdaptivePolling({
   enabled,
   intervalMs,
   onPoll,
+  group,
+  maxGroupPollers = 1,
 }: AdaptivePollingOptions): AdaptivePollingResult {
   const callbackRef = useRef(onPoll);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -25,10 +48,39 @@ export function useAdaptivePolling({
   const failuresRef = useRef(0);
   const mountedRef = useRef(false);
   const executeRef = useRef<() => void>(() => undefined);
+  const slotIdRef = useRef(Symbol('adaptive-poller'));
+  const [slotGranted, setSlotGranted] = useState(group === undefined);
 
   useEffect(() => {
     callbackRef.current = onPoll;
   }, [onPoll]);
+
+  useEffect(() => {
+    if (group === undefined) {
+      setSlotGranted(true);
+      return;
+    }
+
+    const entries = pollGroups.get(group) ?? new Map<symbol, PollGroupEntry>();
+    pollGroups.set(group, entries);
+    const slotId = slotIdRef.current;
+
+    if (enabled) {
+      entries.set(slotId, { setGranted: setSlotGranted });
+    } else {
+      entries.delete(slotId);
+      setSlotGranted(false);
+    }
+    rebalanceGroup(group, maxGroupPollers);
+
+    return () => {
+      entries.delete(slotId);
+      if (entries.size === 0) pollGroups.delete(group);
+      else rebalanceGroup(group, maxGroupPollers);
+    };
+  }, [enabled, group, maxGroupPollers]);
+
+  const effectiveEnabled = enabled && slotGranted;
 
   const clearTimer = useCallback((): void => {
     if (timeoutRef.current !== null) {
@@ -38,12 +90,20 @@ export function useAdaptivePolling({
   }, []);
 
   const canPoll = useCallback((): boolean => (
-    enabled
+    effectiveEnabled
     && document.visibilityState !== 'hidden'
     && navigator.onLine !== false
-  ), [enabled]);
+  ), [effectiveEnabled]);
 
   useEffect(() => {
+    if (!effectiveEnabled) {
+      mountedRef.current = false;
+      executeRef.current = (): void => undefined;
+      clearTimer();
+
+      return;
+    }
+
     mountedRef.current = true;
 
     const schedule = (): void => {
@@ -96,7 +156,7 @@ export function useAdaptivePolling({
       window.removeEventListener('offline', resume);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [canPoll, clearTimer, intervalMs]);
+  }, [canPoll, clearTimer, effectiveEnabled, intervalMs]);
 
   return { pollNow: useCallback((): void => executeRef.current(), []) };
 }

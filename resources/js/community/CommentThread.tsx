@@ -1,18 +1,20 @@
 import { Trash2 } from 'lucide-react';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Avatar } from '@/components/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { COMMENT_THREAD_POLL_MS, useAdaptivePolling } from '@/lib/useAdaptivePolling';
 
-import { communityApi } from './api';
+import { CommentApiError, communityApi } from './api';
 import type { PostComment } from './types';
 
 interface CommentThreadProps {
   postId: number;
   initialCount: number;
+  enabled?: boolean;
 }
 
 function formatDate(value: string | null): string {
@@ -20,26 +22,63 @@ function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-export function CommentThread({ postId, initialCount }: CommentThreadProps) {
+export function CommentThread({ postId, initialCount, enabled = true }: CommentThreadProps) {
   const [comments, setComments] = useState<PostComment[]>([]);
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<PostComment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PostComment | null>(null);
+  const [accessible, setAccessible] = useState(true);
+  const etagRef = useRef<string | null>(null);
 
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = false): Promise<void> => {
+    if (showLoading) setLoading(true);
     try {
-      setComments(await communityApi.comments(postId));
-    } catch (err) {
-      toast.error(typeof err === 'string' ? err : 'Could not load comments.');
+      const response = await communityApi.comments(postId, etagRef.current);
+      etagRef.current = response.etag;
+      if (response.changed) setComments(response.data ?? []);
+    } catch (error) {
+      if (error instanceof CommentApiError && [401, 403, 404].includes(error.status)) {
+        etagRef.current = null;
+        setComments([]);
+        setAccessible(false);
+        return;
+      }
+      throw error;
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [postId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    etagRef.current = null;
+    setComments([]);
+    setAccessible(true);
+  }, [postId]);
+
+  useEffect(() => {
+    if (!enabled || !accessible) return;
+    void load(true).catch((error: unknown) => {
+      toast.error(typeof error === 'string' ? error : 'Could not load comments.');
+    });
+  }, [accessible, enabled, load]);
+
+  useAdaptivePolling({
+    enabled: enabled && accessible,
+    intervalMs: COMMENT_THREAD_POLL_MS,
+    onPoll: load,
+    group: 'comment-threads',
+    maxGroupPollers: 3,
+  });
+
+  const refreshAfterMutation = async (): Promise<void> => {
+    try {
+      await load();
+    } catch {
+      toast.error('Your change was saved, but comments could not be refreshed.');
+    }
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -51,6 +90,10 @@ export function CommentThread({ postId, initialCount }: CommentThreadProps) {
       setComments((current) => [...current, created]);
       setBody('');
       setReplyTo(null);
+      // Refresh directly rather than through the bounded poll slot: a fourth
+      // open feed card may not own a scheduled slot, but its local write must
+      // still reconcile immediately.
+      await refreshAfterMutation();
     } catch (err) {
       toast.error(typeof err === 'string' ? err : 'Could not add comment.');
     } finally {
@@ -64,8 +107,8 @@ export function CommentThread({ postId, initialCount }: CommentThreadProps) {
     setPendingDelete(null);
     try {
       await communityApi.deleteComment(postId, comment.id);
-      await load();
       toast.success('Comment deleted.');
+      await refreshAfterMutation();
     } catch (err) {
       toast.error(typeof err === 'string' ? err : 'Could not delete comment.');
     }
@@ -91,6 +134,16 @@ export function CommentThread({ postId, initialCount }: CommentThreadProps) {
       {!reply && repliesFor(comment.id).map((child) => row(child, true))}
     </div>
   );
+
+  if (!enabled) return null;
+
+  if (!accessible) {
+    return (
+      <div className="border-t border-border pt-4">
+        <p className="text-sm text-muted-foreground">Comments are no longer available.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 border-t border-border pt-4">

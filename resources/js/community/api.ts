@@ -2,6 +2,19 @@ import { fetchWrapper } from '@/fetchWrapper';
 
 import type { CommunityPost, Envelope, FeedResponse, FeedScope, PostComment } from './types';
 
+export class CommentApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'CommentApiError';
+  }
+}
+
+export interface CommentThreadResponse {
+  changed: boolean;
+  etag: string | null;
+  data?: PostComment[];
+}
+
 export interface PostInput {
   body: string;
   audience: string;
@@ -30,8 +43,26 @@ export const communityApi = {
     fetchWrapper.post(`/api/posts/${postId}/reactions`, { type: 'like' }).then((r) => (r as Envelope<{ reaction_count: number; viewer_reacted: boolean }>).data),
   unreact: (postId: number): Promise<{ reaction_count: number; viewer_reacted: boolean }> =>
     fetchWrapper.delete(`/api/posts/${postId}/reactions`, { type: 'like' }).then((r) => (r as Envelope<{ reaction_count: number; viewer_reacted: boolean }>).data),
-  comments: (postId: number): Promise<PostComment[]> =>
-    fetchWrapper.get(`/api/posts/${postId}/comments`).then((r) => (r as Envelope<PostComment[]>).data),
+  comments: async (postId: number, etag: string | null = null): Promise<CommentThreadResponse> => {
+    const response = await fetch(`/api/posts/${postId}/comments`, {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(etag ? { 'If-None-Match': etag } : {}),
+      },
+    });
+
+    if (response.status === 304) {
+      return { changed: false, etag: response.headers.get('ETag') ?? etag };
+    }
+    if (!response.ok) {
+      throw new CommentApiError(response.statusText || 'Could not refresh comments.', response.status);
+    }
+
+    const payload = await response.json() as Envelope<PostComment[]>;
+    return { changed: true, etag: response.headers.get('ETag'), data: payload.data };
+  },
   comment: (postId: number, body: string, parentId: number | null = null): Promise<PostComment> =>
     fetchWrapper.post(`/api/posts/${postId}/comments`, { body, parent_id: parentId }).then((r) => (r as Envelope<PostComment>).data),
   deleteComment: (postId: number, commentId: number): Promise<void> =>

@@ -27,9 +27,26 @@ class PostCommentController extends Controller
 
     public function index(Request $request, Post $post): JsonResponse
     {
-        $this->authorizeOr404('view', $post);
+        // Unlike click-driven reads, a polled thread explicitly answers 403 when
+        // access is lost so the client can clear stale state and stop polling.
+        abort_unless($request->user()?->can('view', $post), 403, 'Forbidden.');
 
         $viewer = $request->user();
+        $token = hash_hmac(
+            'sha256',
+            $post->id.':'.$post->comment_revision.':'.$viewer->id,
+            (string) config('app.key'),
+        );
+        $etag = '"'.$token.'"';
+        $headers = [
+            'ETag' => $etag,
+            'Cache-Control' => 'private, no-cache',
+        ];
+
+        if ($request->header('If-None-Match') === $etag) {
+            return response()->json(status: 304)->withHeaders($headers);
+        }
+
         $post->loadMissing('character.profilePicture');
 
         $comments = $post->comments()
@@ -95,7 +112,7 @@ class PostCommentController extends Controller
                         || Gate::forUser($viewer)->allows('removeFromPost', $comment)),
                 ];
             })->values(),
-        ]);
+        ])->withHeaders($headers);
     }
 
     public function store(CommentRequest $request, Post $post): JsonResponse

@@ -336,7 +336,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::delete('/{post}', [PostController::class, 'destroy']);
         Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
         Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
-        Route::get('/{post}/comments', [PostCommentController::class, 'index']);
+        Route::get('/{post}/comments', [PostCommentController::class, 'index'])
+            ->middleware('throttle:120,1')
+            ->name('posts.comments.index');
         Route::post('/{post}/comments', [PostCommentController::class, 'store']);
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });

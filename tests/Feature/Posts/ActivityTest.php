@@ -46,7 +46,7 @@ class ActivityTest extends TestCase
         $otherComment = PostComment::factory()->for($post)->for($charlie)->create();
 
         $follow->delete();
-        $this->actingAs($bob)->getJson("/api/posts/{$post->id}/comments")->assertNotFound();
+        $this->actingAs($bob)->getJson("/api/posts/{$post->id}/comments")->assertForbidden();
 
         $commentResponse = $this->actingAs($bob)->getJson('/api/me/activity?type=comments')->assertOk();
         $commentResponse->assertJsonCount(1, 'data');

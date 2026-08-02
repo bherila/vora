@@ -48,6 +48,22 @@ class PostComment extends Model
         static::creating(function (PostComment $comment): void {
             $comment->ulid ??= (string) Str::ulid();
         });
+        static::created(function (PostComment $comment): void {
+            self::bumpPostRevision($comment);
+        });
+        static::deleted(function (PostComment $comment): void {
+            self::bumpPostRevision($comment);
+        });
+        static::updated(function (PostComment $comment): void {
+            if ($comment->wasChanged(['moderation_status', 'removed_at'])) {
+                self::bumpPostRevision($comment);
+            }
+        });
+    }
+
+    private static function bumpPostRevision(PostComment $comment): void
+    {
+        Post::query()->whereKey($comment->post_id)->increment('comment_revision');
     }
 
     /** @return BelongsTo<User, $this> */

@@ -473,7 +473,7 @@ class SeparatePersonaSurfaceGuardTest extends TestCase
             ];
             $this->assertCount(self::VISITOR_SURFACE_COUNT, $surfaceStatuses);
             $this->assertSame(
-                [404, 404, 404, 404, 404, 200, 404, 404, 404, 404, 404, 404, 404, 200, 200, 200],
+                [404, 404, 404, 404, 404, 200, 404, 404, 404, 403, 404, 404, 404, 200, 200, 200],
                 $surfaceStatuses,
             );
 
