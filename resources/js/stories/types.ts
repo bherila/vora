@@ -108,6 +108,7 @@ export interface StoryReader {
   favorite_count?: number;
   /** Whether the current viewer may report this story (not the author). */
   can_report?: boolean;
+  canonical_post?: { id: number; ulid: string; comment_count: number } | null;
 }
 
 export interface StoryDiscoveryItem {

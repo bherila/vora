@@ -60,6 +60,7 @@ class StoryController extends Controller
         $this->authorizeOr404('view', $story);
 
         $viewer = request()->user();
+        $discussion = $story->canonicalPost;
 
         return view('stories.show', ['initialData' => [
             'storyReader' => StoryPresenter::readerView($this->stories->loadForPresentation($story)) + [
@@ -68,6 +69,11 @@ class StoryController extends Controller
                     && $this->favorites->favoritedIdsFor($viewer, 'story', [$story->id]) !== [],
                 // Anyone signed in who isn't the author can report the story.
                 'can_report' => $viewer instanceof User && $story->user_id !== $viewer->id,
+                'canonical_post' => $discussion === null ? null : [
+                    'id' => $discussion->id,
+                    'ulid' => $discussion->ulid,
+                    'comment_count' => $discussion->comments()->threadVisibleTo($viewer)->count(),
+                ],
             ],
         ]]);
     }

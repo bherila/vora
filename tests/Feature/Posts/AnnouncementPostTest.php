@@ -9,8 +9,10 @@ use App\Models\Character;
 use App\Models\FollowRequest;
 use App\Models\Media;
 use App\Models\Post;
+use App\Models\PostComment;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Post\CanonicalDiscussionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -58,6 +60,65 @@ class AnnouncementPostTest extends TestCase
         $media->approve($admin);
 
         $this->assertSame(0, Post::query()->count());
+    }
+
+    public function test_unannounced_media_lazily_gets_one_hidden_canonical_discussion(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create(['announce_on_approval' => false]);
+        $service = app(CanonicalDiscussionService::class);
+
+        $first = $service->resolveFor($media);
+        $second = $service->resolveFor($media->fresh());
+
+        $this->assertTrue($first->is($second));
+        $this->assertTrue($first->is_feed_hidden);
+        $this->assertFalse($first->is_announcement);
+        $this->assertSame($first->id, $media->fresh()->canonical_post_id);
+        $this->actingAs($owner)->getJson('/api/feed?scope=mixed')->assertJsonMissing(['ulid' => $first->ulid]);
+    }
+
+    public function test_declined_announcement_is_created_only_when_discussion_starts(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create(['announce_on_approval' => false]);
+
+        $this->assertNull($media->fresh()->canonical_post_id);
+
+        $this->actingAs($owner)->postJson('/api/media/by-ulid/'.$media->ulid.'/discussion', [
+            'body' => '',
+        ])->assertUnprocessable();
+
+        $this->assertNull($media->fresh()->canonical_post_id);
+        $this->assertSame(0, Post::query()->count());
+        $this->assertSame(0, PostComment::query()->count());
+
+        $started = $this->actingAs($owner)->postJson('/api/media/by-ulid/'.$media->ulid.'/discussion', [
+            'body' => 'This is worth discussing.',
+        ])->assertCreated();
+
+        $this->assertSame($started->json('data.post.id'), $media->fresh()->canonical_post_id);
+        $this->assertDatabaseHas('post_comments', [
+            'post_id' => $started->json('data.post.id'),
+            'user_id' => $owner->id,
+            'body' => 'This is worth discussing.',
+            'parent_id' => null,
+        ]);
+        $this->assertSame(1, $started->json('data.post.comment_count'));
+    }
+
+    public function test_announced_content_detail_resolves_the_existing_canonical_discussion(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $admin = User::factory()->admin()->create();
+        $story = Story::factory()->for($owner)->published()->create(['announce_on_approval' => true]);
+        $story->approve($admin);
+        $announcement = Post::query()->sole();
+
+        $resolved = app(CanonicalDiscussionService::class)->resolveFor($story->fresh());
+
+        $this->assertTrue($announcement->is($resolved));
+        $this->assertSame($announcement->id, $story->fresh()->canonical_post_id);
     }
 
     public function test_pending_media_cannot_be_manually_attached_to_suppress_its_later_announcement(): void

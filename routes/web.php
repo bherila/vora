@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
+use App\Http\Controllers\CanonicalDiscussionController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
 use App\Http\Controllers\ChatController;
@@ -339,6 +340,10 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/p/{ulid}', [PostController::class, 'viewPage'])->name('posts.view');
 
     Route::get('/api/feed', [FeedController::class, 'index']);
+    Route::post('/api/media/by-ulid/{ulid}/discussion', [CanonicalDiscussionController::class, 'media'])
+        ->name('media.discussion.start');
+    Route::post('/api/stories/by-ulid/{ulid}/discussion', [CanonicalDiscussionController::class, 'story'])
+        ->name('stories.discussion.start');
 
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);

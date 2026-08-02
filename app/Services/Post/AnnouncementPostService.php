@@ -41,7 +41,10 @@ class AnnouncementPostService
             if ($locked->canonical_post_id !== null) {
                 $existing = Post::withTrashed()->lockForUpdate()->find($locked->canonical_post_id);
                 if ($existing !== null && ! $existing->trashed()) {
-                    if ($this->isPublishable($locked)) {
+                    $available = $existing->is_announcement
+                        ? $this->isPublishable($locked)
+                        : $this->isDiscussionAvailable($locked);
+                    if ($available) {
                         $this->copyPrivacy($existing, $locked);
                     } else {
                         $this->hide($existing);
@@ -106,6 +109,17 @@ class AnnouncementPostService
 
         return $content->status === StoryStatus::Published
             && ! $this->ownerUsesSeparatePersona($content);
+    }
+
+    private function isDiscussionAvailable(Media|Story $content): bool
+    {
+        if ($content->trashed() || ! $content->isApprovedContent()) {
+            return false;
+        }
+
+        return $content instanceof Media
+            ? $content->purpose === MediaPurpose::Gallery && $content->isReady()
+            : $content->status === StoryStatus::Published;
     }
 
     public function copyPrivacy(Post $post, Media|Story $content): void

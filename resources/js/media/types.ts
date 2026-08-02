@@ -76,6 +76,7 @@ export interface MediaItem {
   can_report?: boolean;
   /** Owner-management shape; its absence is the visitor authorization boundary. */
   editable?: EditableMedia;
+  canonical_post?: { id: number; ulid: string; comment_count: number } | null;
 }
 
 /** The uploader of a single media item, used to frame the detail page. */
