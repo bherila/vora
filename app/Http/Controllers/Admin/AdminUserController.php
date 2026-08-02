@@ -42,7 +42,7 @@ class AdminUserController extends Controller
 
         $users = User::query()
             ->withTrashed()
-            ->with('referredByInvite.inviter:id,display_name')
+            ->with(['referredByInvite.inviter:id,display_name', 'restrictions'])
             ->orderByDesc('id')
             ->get()
             ->map(fn (User $u): array => $this->present($u, $balances[$u->id] ?? 0));
@@ -313,6 +313,19 @@ class AdminUserController extends Controller
             'legal_hold_note' => $user->legal_hold_note,
             'referrer_user_id' => $referrer?->id,
             'referrer_display_name' => $referrer?->display_name,
+            'restrictions' => $user->restrictions
+                ->sortByDesc('id')
+                ->map(fn ($restriction): array => [
+                    'id' => $restriction->id,
+                    'capability' => $restriction->capability->value,
+                    'label' => $restriction->capability->label(),
+                    'reason' => $restriction->reason,
+                    'expires_at' => $restriction->expires_at?->toIso8601String(),
+                    'lifted_at' => $restriction->lifted_at?->toIso8601String(),
+                    'created_at' => $restriction->created_at?->toIso8601String(),
+                    'active' => $restriction->isActive(),
+                ])
+                ->values(),
         ];
     }
 

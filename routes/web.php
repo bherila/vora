@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminStaticPageController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminUserRestrictionController;
 use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
@@ -157,6 +158,7 @@ Route::middleware('auth')->group(function () {
     // Reachable while banned (exempt in EnsureNotBanned) so the user can appeal,
     // deactivate, delete, or sign out.
     Route::get('/account/banned', [ProfileController::class, 'bannedPage'])->name('account.banned');
+    Route::get('/account/restrictions', [ProfileController::class, 'restrictionsPage'])->name('account.restrictions');
     Route::post('/api/account/appeal', [ProfileController::class, 'appeal'])->name('account.appeal');
 
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
@@ -390,6 +392,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);
     Route::post('/users/{user}/unban', [AdminUserController::class, 'unban']);
     Route::post('/users/{user}/legal-hold', [AdminUserController::class, 'legalHold']);
+    Route::get('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'index']);
+    Route::post('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'store']);
+    Route::delete('/users/{user}/restrictions/{restriction}', [AdminUserRestrictionController::class, 'destroy']);
     Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites']);
     // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();

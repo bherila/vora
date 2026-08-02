@@ -20,6 +20,9 @@
     @php
       $__currentUser = auth()->user();
       $__isAuthenticated = ! is_null($__currentUser);
+      $__restrictions = $__isAuthenticated && \Illuminate\Support\Facades\Schema::hasTable('user_restrictions')
+        ? app(\App\Services\Moderation\RestrictionGate::class)->subjectPayload($__currentUser)
+        : [];
       $__mediaResponder = $__isAuthenticated ? app(\App\Services\Media\MediaResponseService::class) : null;
       $__accountAvatarUrl = $__isAuthenticated
         ? \App\Support\UserPresenter::avatarUrl($__currentUser, $__mediaResponder, $__currentUser)
@@ -111,7 +114,7 @@
         ['label' => 'Log in', 'href' => route('login', [], false), 'variant' => 'link'],
         ['label' => 'Sign up', 'href' => route('register', [], false), 'variant' => 'primary'],
       ];
-      $__payload = ['navbar' => [
+      $__payload = ['restrictions' => $__restrictions, 'navbar' => [
         'brand' => ['label' => config('app.name'), 'href' => route('home', [], false)],
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
@@ -133,6 +136,7 @@
     <header class="site-header border-b border-gray-200 dark:border-[#3E3E3A]{{ empty($__identities) ? ' h-14' : '' }}">
       <div id="navbar"></div>
     </header>
+    <div id="restriction-banners"></div>
 
     <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
       @yield('content')

@@ -24,6 +24,8 @@ class EnsureNotBanned
         'privacy',
         'terms',
         'pages.show',
+        // Added before #193 lands. Inert until its Your activity page exists.
+        'activity.index',
     ];
 
     /**
@@ -34,6 +36,11 @@ class EnsureNotBanned
         'api/account/deactivate',
         'api/account/delete',
         'api/account/appeal',
+        'api/account/export',
+        // Added before #193 lands. Request::is supports these wildcards, which
+        // become active when its author-scoped activity routes are merged.
+        'me/activity',
+        'api/me/activity',
     ];
 
     public function handle(Request $request, Closure $next): Response
@@ -64,6 +71,18 @@ class EnsureNotBanned
             if ($request->is($path)) {
                 return true;
             }
+        }
+
+        // A banned author may remove their own post, but this narrowly exempts
+        // only DELETE /api/posts/{post}; it does not reopen reactions/comments.
+        if ($request->isMethod('DELETE')
+            && $request->is('api/me/activity/comments/*')) {
+            return true;
+        }
+
+        if ($request->isMethod('DELETE')
+            && preg_match('#^api/posts/[^/]+$#', $request->path()) === 1) {
+            return true;
         }
 
         return false;
