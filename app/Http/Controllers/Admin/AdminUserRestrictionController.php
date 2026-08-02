@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\UserRestriction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 class AdminUserRestrictionController extends Controller
 {
@@ -24,17 +26,32 @@ class AdminUserRestrictionController extends Controller
 
     public function store(StoreUserRestrictionRequest $request, User $user): JsonResponse
     {
-        $restriction = $user->restrictions()->create([
-            'capability' => RestrictionCapability::from($request->validated('capability')),
-            'restricted_by_user_id' => $request->user()?->id,
-            'reason' => $request->validated('reason'),
-            'expires_at' => $request->validated('expires_at'),
-        ]);
+        $capability = RestrictionCapability::from($request->validated('capability'));
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->present($restriction),
-        ], 201);
+        return DB::transaction(function () use ($request, $user, $capability): JsonResponse {
+            // Restriction history prevents a database uniqueness constraint, so
+            // serialize changes for this user before enforcing one active row.
+            User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($user->restrictions()->active()->where('capability', $capability->value)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An active restriction already exists for this capability.',
+                ], Response::HTTP_CONFLICT);
+            }
+
+            $restriction = $user->restrictions()->create([
+                'capability' => $capability,
+                'restricted_by_user_id' => $request->user()?->id,
+                'reason' => $request->validated('reason'),
+                'expires_at' => $request->validated('expires_at'),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $this->present($restriction),
+            ], Response::HTTP_CREATED);
+        });
     }
 
     public function destroy(Request $request, User $user, UserRestriction $restriction): JsonResponse

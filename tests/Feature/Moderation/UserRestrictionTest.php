@@ -56,6 +56,43 @@ class UserRestrictionTest extends TestCase
     }
 
     #[Test]
+    public function admin_cannot_create_overlapping_active_restrictions_for_the_same_capability(): void
+    {
+        $admin = $this->admin();
+        $target = User::factory()->approved()->create();
+        $endpoint = "/api/admin/users/{$target->id}/restrictions";
+        $payload = ['capability' => RestrictionCapability::MediaUpload->value];
+
+        $firstId = (int) $this->actingAs($admin)->postJson($endpoint, $payload)
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->actingAs($admin)->postJson($endpoint, $payload)
+            ->assertConflict()
+            ->assertJson([
+                'success' => false,
+                'message' => 'An active restriction already exists for this capability.',
+            ]);
+        $this->actingAs($admin)->postJson($endpoint, [
+            'capability' => RestrictionCapability::CommentCreate->value,
+        ])->assertCreated();
+
+        $this->actingAs($admin)->deleteJson("{$endpoint}/{$firstId}")->assertOk();
+        $afterLiftId = (int) $this->actingAs($admin)->postJson($endpoint, $payload)
+            ->assertCreated()
+            ->json('data.id');
+
+        UserRestriction::query()->findOrFail($afterLiftId)->forceFill([
+            'expires_at' => now()->subSecond(),
+        ])->save();
+
+        $this->actingAs($admin)->postJson($endpoint, $payload)->assertCreated();
+
+        $this->assertSame(3, $target->restrictions()->where('capability', $payload['capability'])->count());
+        $this->assertSame(1, $target->restrictions()->active()->where('capability', $payload['capability'])->count());
+    }
+
+    #[Test]
     public function expiry_is_evaluated_on_read_without_admin_action(): void
     {
         $this->admin();
