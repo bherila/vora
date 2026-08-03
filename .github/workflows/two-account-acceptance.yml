@@ -1,0 +1,68 @@
+name: Two-account acceptance
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Discussion and activity journey
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        timeout-minutes: 4
+        run: |
+          composer install --no-interaction --prefer-dist &
+          composer_pid=$!
+          pnpm install --frozen-lockfile &
+          pnpm_pid=$!
+          wait "$composer_pid"; composer_status=$?
+          wait "$pnpm_pid"; pnpm_status=$?
+          test "$composer_status" -eq 0 -a "$pnpm_status" -eq 0
+
+      - name: Prepare Laravel environment
+        run: cp .env.example .env && php artisan key:generate --no-interaction --force
+
+      - name: Run two-account backend journey
+        run: php artisan test tests/Feature/Acceptance/TwoAccountDiscussionTest.php
+
+      - name: Run discussion and activity Jest tests
+        run: |
+          pnpm exec jest --runInBand \
+            resources/js/community/CommentThread.test.tsx \
+            resources/js/community/StartDiscussion.test.tsx \
+            resources/js/user/activity.test.tsx
