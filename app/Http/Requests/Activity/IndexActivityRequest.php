@@ -17,6 +17,7 @@ class IndexActivityRequest extends FormRequest
     {
         return [
             'type' => ['nullable', 'string', Rule::in(['posts', 'comments', 'replies'])],
+            'cursor' => ['nullable', 'string'],
         ];
     }
 }

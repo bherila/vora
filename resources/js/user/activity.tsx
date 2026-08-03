@@ -21,6 +21,7 @@ interface ActivityItem {
 
 interface ActivityResponse {
   data: ActivityItem[];
+  next_cursor: string | null;
 }
 
 const TYPES: Array<{ value: ActivityType; label: string }> = [
@@ -43,13 +44,16 @@ function statusLabel(status: ActivityItem['status']): string | null {
 export function ActivityPage() {
   const [type, setType] = useState<ActivityType>('posts');
   const [items, setItems] = useState<ActivityItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
       const response = await fetchWrapper.get(`/api/me/activity?type=${type}`) as ActivityResponse;
       setItems(response.data);
+      setCursor(response.next_cursor);
     } catch (error) {
       toast.error(typeof error === 'string' ? error : 'Could not load your activity.');
     } finally {
@@ -58,6 +62,21 @@ export function ActivityPage() {
   }, [type]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const loadMore = async (): Promise<void> => {
+    if (cursor === null) return;
+    setLoadingMore(true);
+    try {
+      const query = `type=${type}&cursor=${encodeURIComponent(cursor)}`;
+      const response = await fetchWrapper.get(`/api/me/activity?${query}`) as ActivityResponse;
+      setItems((current) => [...current, ...response.data]);
+      setCursor(response.next_cursor);
+    } catch (error) {
+      toast.error(typeof error === 'string' ? error : 'Could not load more activity.');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const deleteContribution = async (item: ActivityItem): Promise<void> => {
     try {
@@ -126,6 +145,11 @@ export function ActivityPage() {
               </article>
             );
           })}
+          {cursor !== null && (
+            <Button type="button" variant="outline" className="w-full" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </Button>
+          )}
         </div>
       )}
       <Toaster position="top-right" richColors closeButton />

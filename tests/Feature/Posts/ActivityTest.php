@@ -212,4 +212,48 @@ class ActivityTest extends TestCase
         $this->actingAs($user)->get('/feed')->assertSee('Your activity');
         $this->actingAs($user)->getJson('/api/me/activity?type=unknown')->assertUnprocessable();
     }
+
+    public function test_activity_paginates_by_cursor_without_repeating_or_dropping_items(): void
+    {
+        $user = User::factory()->approved()->create();
+        $size = (int) config('media.page_size', 24);
+        Post::factory()->for($user)->approved()->count($size + 5)->create();
+
+        $first = $this->actingAs($user)->getJson('/api/me/activity?type=posts')->assertOk();
+        $first->assertJsonCount($size, 'data');
+        $cursor = $first->json('next_cursor');
+        $this->assertIsString($cursor);
+
+        $second = $this->actingAs($user)
+            ->getJson('/api/me/activity?type=posts&cursor='.urlencode($cursor))
+            ->assertOk();
+        $second->assertJsonCount(5, 'data');
+        $this->assertNull($second->json('next_cursor'));
+
+        $ulids = array_merge(
+            array_column($first->json('data'), 'ulid'),
+            array_column($second->json('data'), 'ulid'),
+        );
+        $this->assertCount($size + 5, array_unique($ulids), 'no item is repeated across pages');
+    }
+
+    /**
+     * The lazy canonical post created for a user's own media is generated on
+     * their behalf, not written by them, so it must not appear in a listing of
+     * what they wrote.
+     */
+    public function test_system_generated_discussion_posts_are_not_listed_as_the_users_own(): void
+    {
+        $user = User::factory()->approved()->create();
+        Post::factory()->for($user)->approved()->create(['body' => 'Something I wrote']);
+        Post::factory()->for($user)->approved()->create([
+            'body' => 'Discuss this media.',
+            'is_feed_hidden' => true,
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/me/activity?type=posts')->assertOk();
+
+        $response->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.body', 'Something I wrote');
+    }
 }
