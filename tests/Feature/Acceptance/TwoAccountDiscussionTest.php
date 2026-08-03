@@ -94,7 +94,10 @@ class TwoAccountDiscussionTest extends TestCase
             collect($this->actingAs($bob)->getJson('/api/feed')->assertOk()->json('data'))->pluck('ulid'),
         );
         $this->actingAs($bob)->getJson("/api/posts/by-ulid/{$post->ulid}")->assertNotFound();
-        $this->actingAs($bob)->getJson("/api/posts/{$post->id}/comments")->assertForbidden();
+        $this->actingAs($bob)
+            ->withHeader('If-None-Match', $currentEtag)
+            ->getJson("/api/posts/{$post->id}/comments")
+            ->assertForbidden();
 
         $comments = $this->actingAs($bob)->getJson('/api/me/activity?type=comments')->assertOk();
         $comments->assertJsonCount(1, 'data')
