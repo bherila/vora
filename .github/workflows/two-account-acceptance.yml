@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   acceptance:
-    name: Discussion and activity journey
+    name: Two-account communication journey
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
 
@@ -57,12 +57,16 @@ jobs:
       - name: Prepare Laravel environment
         run: cp .env.example .env && php artisan key:generate --no-interaction --force
 
-      - name: Run two-account backend journey
-        run: php artisan test tests/Feature/Acceptance/TwoAccountDiscussionTest.php
+      - name: Run two-account backend journeys
+        run: |
+          php artisan test \
+            tests/Feature/Acceptance/TwoAccountDiscussionTest.php \
+            tests/Feature/Chat/ChatApiTest.php
 
-      - name: Run discussion and activity Jest tests
+      - name: Run communication and activity Jest tests
         run: |
           pnpm exec jest --runInBand \
+            resources/js/chat/ChatPage.test.tsx \
             resources/js/community/CommentThread.test.tsx \
             resources/js/community/StartDiscussion.test.tsx \
             resources/js/user/activity.test.tsx
