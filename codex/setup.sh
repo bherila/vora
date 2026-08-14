@@ -14,8 +14,10 @@ cleanup_paths=()
 cleanup() {
   local path
 
-  for path in "${cleanup_paths[@]}"; do
-    rm -f "$path"
+  for path in "${cleanup_paths[@]-}"; do
+    if [[ -n "$path" ]]; then
+      rm -f "$path"
+    fi
   done
 }
 
@@ -176,26 +178,16 @@ install_php_dependencies() {
     composer_args+=(--optimize-autoloader)
   fi
 
+  log "Checking PHP platform requirements"
+  composer check-platform-reqs --lock
+
   composer "${composer_args[@]}"
 }
 
 install_dependencies() {
-  local node_pid=""
-  local php_pid=""
-  local status=0
-
-  install_node_dependencies &
-  node_pid="$!"
-
-  install_php_dependencies &
-  php_pid="$!"
-
-  wait "$node_pid" || status="$?"
-  wait "$php_pid" || status="$?"
-
-  if [[ "$status" != "0" ]]; then
-    exit "$status"
-  fi
+  install_php_dependencies
+  ensure_pnpm
+  install_node_dependencies
 }
 
 prepare_laravel_environment() {
@@ -215,7 +207,6 @@ prepare_laravel_environment() {
 }
 
 ensure_composer
-ensure_pnpm
 configure_github_auth
 install_dependencies
 prepare_laravel_environment
