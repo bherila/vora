@@ -18,8 +18,8 @@ bash codex/maintenance.sh
 newer, Node.js, and either `pnpm` or Corepack. It uses tools already available
 on `PATH` when possible, installs Composer into `$HOME/.local/bin` only when
 missing, and activates pnpm through Corepack only when `pnpm` is missing. It
-then installs Node and PHP dependencies from the committed lockfiles in
-parallel.
+validates the locked PHP platform and installs Composer dependencies before the
+more verbose pnpm installation so PHP failures remain visible in Codex logs.
 
 For Laravel convenience, the script creates `.env` from `.env.example` when
 missing and generates an `APP_KEY` when the local environment does not already
