@@ -159,16 +159,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.5.2",
+            "version": "v0.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth.git",
-                "reference": "8cbae89b5cceb1a9fb000ac4bf75aff41d8dcefd"
+                "reference": "f5707cd42df725342c5926b6b762199b939a5b56"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth/zipball/8cbae89b5cceb1a9fb000ac4bf75aff41d8dcefd",
-                "reference": "8cbae89b5cceb1a9fb000ac4bf75aff41d8dcefd",
+                "url": "https://api.github.com/repos/bherila/auth/zipball/f5707cd42df725342c5926b6b762199b939a5b56",
+                "reference": "f5707cd42df725342c5926b6b762199b939a5b56",
                 "shasum": ""
             },
             "require": {
@@ -209,9 +209,9 @@
             "description": "Shared Laravel authentication services for BWH applications.",
             "support": {
                 "issues": "https://github.com/bherila/auth/issues",
-                "source": "https://github.com/bherila/auth/tree/v0.5.2"
+                "source": "https://github.com/bherila/auth/tree/v0.5.0"
             },
-            "time": "2026-08-15T06:21:58+00:00"
+            "time": "2026-06-14T00:53:17+00:00"
         },
         {
             "name": "brick/math",
@@ -8314,21 +8314,19 @@
         },
         {
             "name": "hamcrest/hamcrest-php",
-            "version": "v3.0.0",
+            "version": "v2.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/hamcrest/hamcrest-php.git",
-                "reference": "b61cd040da1a4925bc90a51c074f5297e7c0fa52"
+                "reference": "f8b1c0173b22fa6ec77a81fe63e5b01eba7e6487"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/hamcrest/hamcrest-php/zipball/b61cd040da1a4925bc90a51c074f5297e7c0fa52",
-                "reference": "b61cd040da1a4925bc90a51c074f5297e7c0fa52",
+                "url": "https://api.github.com/repos/hamcrest/hamcrest-php/zipball/f8b1c0173b22fa6ec77a81fe63e5b01eba7e6487",
+                "reference": "f8b1c0173b22fa6ec77a81fe63e5b01eba7e6487",
                 "shasum": ""
             },
             "require": {
-                "ext-ctype": "*",
-                "ext-dom": "*",
                 "php": "^7.4|^8.0"
             },
             "replace": {
@@ -8337,15 +8335,13 @@
                 "kodova/hamcrest-php": "*"
             },
             "require-dev": {
-                "phpstan/phpstan": "^2.1",
-                "phpstan/phpstan-phpunit": "^2.0",
                 "phpunit/php-file-iterator": "^1.4 || ^2.0 || ^3.0",
                 "phpunit/phpunit": "^4.8.36 || ^5.7 || ^6.5 || ^7.0 || ^8.0 || ^9.0"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-master": "3.0-dev"
+                    "dev-master": "2.1-dev"
                 }
             },
             "autoload": {
@@ -8363,9 +8359,9 @@
             ],
             "support": {
                 "issues": "https://github.com/hamcrest/hamcrest-php/issues",
-                "source": "https://github.com/hamcrest/hamcrest-php/tree/v3.0.0"
+                "source": "https://github.com/hamcrest/hamcrest-php/tree/v2.1.1"
             },
-            "time": "2026-03-17T11:56:53+00:00"
+            "time": "2025-04-30T06:54:44+00:00"
         },
         {
             "name": "laravel/pail",

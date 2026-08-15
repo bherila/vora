@@ -47,7 +47,7 @@
         "vite": "^8.1.5"
     },
     "dependencies": {
-        "@base-ui/react": "^1.7.0",
+        "@base-ui/react": "^1.6.0",
         "@hookform/resolvers": "^5.8.0",
         "blockhash-core": "^0.1.0",
         "bwh-auth": "0.2.0",
@@ -55,7 +55,7 @@
         "classnames": "^2.5.1",
         "clsx": "^2.1.1",
         "currency.js": "^2.0.4",
-        "hls.js": "^1.7.0",
+        "hls.js": "^1.6.16",
         "lodash": "^4.18.1",
         "lucide-react": "^0.577.0",
         "prop-types": "^15.8.1",
