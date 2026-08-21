@@ -62,6 +62,29 @@ composer test
    defined in the workflow and must never point at a shared or production
    database.
 
+## Pull request review
+
+Codex security review and Codex code review are separate products with separate
+quotas. Do not read a signal about one as a signal about the other.
+
+1. A bot comment reading "You have reached your Codex usage limits for security
+   reviews. Please try again later." is scoped to security reviews only. It says
+   nothing about code review availability. Disregard it when judging whether a
+   code review ran, and never report "no review" or "out of quota" on the
+   strength of it.
+2. Findings usually land as inline review comments, not issue comments, so
+   `gh pr view --json comments` does not show them. Check all three endpoints
+   before concluding that a review did not happen:
+
+   ```bash
+   gh api repos/<owner>/<repo>/issues/<n>/comments   # issue-level comments
+   gh api repos/<owner>/<repo>/pulls/<n>/reviews     # review submissions
+   gh api repos/<owner>/<repo>/pulls/<n>/comments    # inline review comments
+   ```
+3. An `eyes` reaction on the request comment means a review is in progress; it
+   can take 15 minutes or more to post. Absence of issue comments proves
+   nothing.
+
 ## Laravel conventions
 
 - Typed return types on all methods.
