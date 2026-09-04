@@ -170,7 +170,7 @@ class AuthFlowTest extends TestCase
 
         $this->postJson('/api/auth/two-factor/verify', [
             'attempt_token' => $attempt->token,
-            'code' => '999999', // allowed test code outside production
+            'code' => $attempt->code,
         ])->assertOk();
 
         $this->assertAuthenticatedAs($user);
