@@ -41,7 +41,9 @@ class ExampleTest extends TestCase
 
         $driver = $this->getDatabaseDriver();
         $this->assertSame('mariadb', $driver);
-        $this->assertSame('vora_ci', $this->getDatabaseName());
+        // Under `--parallel` Laravel gives each process its own database,
+        // `vora_ci_test_<token>`; sequentially it is plain `vora_ci`.
+        $this->assertMatchesRegularExpression('/^vora_ci(_test_\d+)?$/', $this->getDatabaseName());
         $this->assertTrue(filter_var(env('CI', false), FILTER_VALIDATE_BOOL));
         $this->assertTrue(filter_var(env('VORA_MARIADB_CI', false), FILTER_VALIDATE_BOOL));
     }

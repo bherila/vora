@@ -40,7 +40,7 @@ abstract class SafeTestCase extends BaseTestCase
      *
      * MariaDB is deliberately asymmetric with the local default: it is
      * permitted only in CI, only with its explicit workflow marker, and only
-     * against a loopback service container's fixed database and username. This
+     * against a loopback service container's own database and username. This
      * prevents environment credentials from silently redirecting a destructive
      * test.
      *
@@ -67,7 +67,7 @@ abstract class SafeTestCase extends BaseTestCase
             $isMariaDbCiTarget
             && $isCi
             && $isLoopback
-            && $database === self::SQL_CI_DATABASE
+            && $this->isApprovedCiDatabase($database)
             && $username === self::SQL_CI_USERNAME
         ) {
             return;
@@ -86,9 +86,40 @@ abstract class SafeTestCase extends BaseTestCase
             "SAFETY ERROR: '{$driverName}' tests are not targeting an isolated CI SQL service.\n\n".
             "Local tests must use SQLite in-memory. MariaDB tests require CI=true,\n".
             'VORA_MARIADB_CI=true, host 127.0.0.1 or localhost, database '.
-            self::SQL_CI_DATABASE.', and username '.self::SQL_CI_USERNAME.".\n".
+            self::SQL_CI_DATABASE.' (or '.self::SQL_CI_DATABASE.'_test_<n> under '.
+            '--parallel), and username '.self::SQL_CI_USERNAME.".\n".
             'Shared and production databases must never be used for tests.'
         );
+    }
+
+    /**
+     * Whether a MariaDB database name is one this CI job owns.
+     *
+     * Either exactly `vora_ci`, or one of the per-process databases Laravel
+     * derives from it when the suite runs with `--parallel`:
+     * `Illuminate\Testing\Concerns\TestDatabases::testDatabase()` appends
+     * `_test_<token>`, where the token is the parallel process number.
+     *
+     * The suffix is matched strictly -- digits only, anchored at both ends --
+     * so this admits `vora_ci_test_3` but rejects `vora_ci_test_prod`,
+     * `vora_ci_backup`, and any name with a different stem. Every other
+     * condition is unchanged: the connection must still carry the CI marker and
+     * the MariaDB engine marker, sit on loopback, and authenticate as the
+     * dedicated `vora_ci` user. Widening the name alone therefore cannot reach
+     * a shared or production host.
+     */
+    protected function isApprovedCiDatabase(string $database): bool
+    {
+        if ($database === self::SQL_CI_DATABASE) {
+            return true;
+        }
+
+        return preg_match(
+            // `\z`, not `$`: PCRE's `$` also matches immediately before a
+            // trailing newline, so `$` would admit "vora_ci_test_1\n".
+            '/^'.preg_quote(self::SQL_CI_DATABASE, '/').'_test_\d+\z/',
+            $database
+        ) === 1;
     }
 
     /**

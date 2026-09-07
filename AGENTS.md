@@ -49,6 +49,9 @@ pnpm run build
 # Backend checks
 ./vendor/bin/pint --test
 composer test
+
+# CI runs the MariaDB job with `composer test:parallel` (same suite, one
+# database per process). Local runs stay on the sequential command above.
 ```
 
 ## Database safety
@@ -58,9 +61,12 @@ composer test
 3. For schema dumps: `php artisan schema:dump --database=sqlite` — never use `--prune`.
 4. Local and developer test runs must use SQLite in-memory.
 5. The only MariaDB test target is the isolated service container in the CI
-   `sql` job. It must use the dedicated `vora_ci` database and credentials
-   defined in the workflow and must never point at a shared or production
-   database.
+   `sql` job. It must use the dedicated `vora_ci` database -- or, because that
+   job runs `--parallel`, one of the `vora_ci_test_<n>` databases Laravel
+   derives from it per process -- with the credentials defined in the workflow,
+   and must never point at a shared or production database. The accepted names
+   are pinned by `tests/Unit/DatabaseSafetyGuardTest.php`; widen them only with
+   a matching test.
 
 ## Pull request review
 
