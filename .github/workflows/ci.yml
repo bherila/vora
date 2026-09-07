@@ -101,10 +101,63 @@ jobs:
           fi
           echo "No existing migrations were modified."
 
-  test:
-    name: Changed-area checks
+  # Frontend and backend were one sequential job ("Changed-area checks"). On a PR
+  # touching both areas that job ran ~31s of shared setup, then 20s of frontend
+  # checks, then 32s of backend checks -- 90s, and the critical path. Split, each
+  # half pays its own (smaller) setup and they overlap, so the pair finishes in
+  # roughly the time the backend half alone used to take. The duplicated setup is
+  # free here: this repository is public, so runner minutes are not billed and
+  # latency is the only thing being optimised.
+  frontend:
+    name: Frontend checks
     needs: changes
+    # Deliberately also runs for backend-only changes: `pnpm run build` is the
+    # guard against a PHP change breaking the bundle (route/type generation
+    # feeding TypeScript), which is why the build step below was already gated
+    # this way. Only the type-check/lint/test trio is frontend-exclusive.
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        timeout-minutes: 4
+        run: pnpm install --frozen-lockfile
+
+      # Vite reads .env itself (loadEnv); no PHP is involved in `vite build`, so
+      # this job needs neither the PHP toolchain nor `artisan key:generate`.
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Build frontend assets
+        run: pnpm run build
+
+      - name: Frontend checks
+        if: needs.changes.outputs.frontend == 'true'
+        timeout-minutes: 5
+        run: |
+          pnpm exec concurrently --kill-others-on-fail --names "tsc,lint,jest" \
+            "pnpm run type-check" \
+            "pnpm run lint" \
+            "pnpm run test"
+
+  backend:
+    name: Backend checks (SQLite)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
 
@@ -120,23 +173,12 @@ jobs:
       - name: Verify PHP
         run: php --version
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: pnpm
-
-      # Keyed per job and per architecture. Both jobs previously shared the key
-      # `composer-<lock hash>` and run concurrently, so they raced to create it:
-      # every run logged `Cache not found for input keys` and then
-      # `Failed to save: Unable to reserve cache ... another job may be creating
-      # this cache`, and the cache never restored. Distinct keys let both save,
-      # and main's caches are then visible to every PR branch.
+      # Keyed per job and per architecture. The two Composer-using jobs
+      # previously shared the key `composer-<lock hash>` and run concurrently, so
+      # they raced to create it: every run logged `Cache not found for input
+      # keys` and then `Failed to save: Unable to reserve cache ... another job
+      # may be creating this cache`, and the cache never restored. Distinct keys
+      # let both save, and main's caches are then visible to every PR branch.
       - name: Cache Composer dependencies
         uses: actions/cache@v5
         with:
@@ -146,33 +188,12 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 4
-        run: |
-          composer install --no-interaction --prefer-dist &
-          composer_pid=$!
-          pnpm install --frozen-lockfile &
-          pnpm_pid=$!
-          wait "$composer_pid"; composer_status=$?
-          wait "$pnpm_pid"; pnpm_status=$?
-          test "$composer_status" -eq 0 -a "$pnpm_status" -eq 0
+        run: composer install --no-interaction --prefer-dist
 
-      - name: Prepare Laravel environment
-        run: cp .env.example .env && php artisan key:generate --no-interaction --force
-
-      - name: Build frontend assets
-        if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
-        run: pnpm run build
-
-      - name: Frontend checks
-        if: needs.changes.outputs.frontend == 'true'
-        timeout-minutes: 5
-        run: |
-          pnpm exec concurrently --kill-others-on-fail --names "tsc,lint,jest" \
-            "pnpm run type-check" \
-            "pnpm run lint" \
-            "pnpm run test"
-
+      # No `Prepare Laravel environment` step: phpunit.xml supplies what the
+      # suite needs, which the `sql` job below has always demonstrated by running
+      # `composer test` without one.
       - name: Backend checks
-        if: needs.changes.outputs.backend == 'true'
         timeout-minutes: 8
         run: |
           ./vendor/bin/pint --test
@@ -251,7 +272,7 @@ jobs:
 
   result:
     name: CI result
-    needs: [changes, test, migrations, sql]
+    needs: [changes, frontend, backend, migrations, sql]
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -260,7 +281,10 @@ jobs:
           if [[ "${{ needs.changes.result }}" == "failure" || "${{ needs.changes.result }}" == "cancelled" ]]; then
             exit 1
           fi
-          if [[ "${{ needs.test.result }}" == "failure" || "${{ needs.test.result }}" == "cancelled" ]]; then
+          if [[ "${{ needs.frontend.result }}" == "failure" || "${{ needs.frontend.result }}" == "cancelled" ]]; then
+            exit 1
+          fi
+          if [[ "${{ needs.backend.result }}" == "failure" || "${{ needs.backend.result }}" == "cancelled" ]]; then
             exit 1
           fi
           if [[ "${{ needs.migrations.result }}" == "failure" || "${{ needs.migrations.result }}" == "cancelled" ]]; then
