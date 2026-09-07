@@ -131,12 +131,18 @@ jobs:
           node-version: '24'
           cache: pnpm
 
+      # Keyed per job and per architecture. Both jobs previously shared the key
+      # `composer-<lock hash>` and run concurrently, so they raced to create it:
+      # every run logged `Cache not found for input keys` and then
+      # `Failed to save: Unable to reserve cache ... another job may be creating
+      # this cache`, and the cache never restored. Distinct keys let both save,
+      # and main's caches are then visible to every PR branch.
       - name: Cache Composer dependencies
         uses: actions/cache@v5
         with:
           path: vendor
-          key: composer-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-
+          key: composer-${{ runner.os }}-${{ runner.arch }}-checks-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ runner.arch }}-checks-
 
       - name: Install dependencies
         timeout-minutes: 4
@@ -189,11 +195,18 @@ jobs:
           MARIADB_ROOT_PASSWORD: vora_ci_root_password
         ports:
           - 3306:3306
+        # The container is usually accepting connections in a few seconds, but a
+        # 10s poll interval means the first probe cannot succeed before 10s and a
+        # single miss costs another 10s -- which is where ~21s of "Initialize
+        # containers" went. Poll fast after a short grace period instead. The
+        # ceiling is still generous: 5s + 10 x 3s = 35s, up from 5 x 10s = 50s
+        # only in the sense that it fails sooner on a genuinely broken container.
         options: >-
           --health-cmd="mariadb-admin ping --host=localhost --user=root --password=vora_ci_root_password"
-          --health-interval=10s
+          --health-start-period=5s
+          --health-interval=3s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
     env:
       CI: 'true'
       VORA_MARIADB_CI: 'true'
@@ -219,18 +232,22 @@ jobs:
         uses: actions/cache@v5
         with:
           path: vendor
-          key: composer-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-
+          key: composer-${{ runner.os }}-${{ runner.arch }}-sql-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ runner.arch }}-sql-
 
       - name: Install dependencies
         timeout-minutes: 4
         run: composer install --no-interaction --prefer-dist
 
-      - name: Backend checks
+      # Pint is formatting-only and database-independent, and the `test` job
+      # already runs it -- that job's condition (frontend || backend) is a
+      # superset of this one's (backend), so it always runs when this job does.
+      # The MariaDB suite itself is deliberately kept: per TESTING.AGENTS.md it
+      # is additional coverage against the engine production runs, not a
+      # replacement for the SQLite pass in `test`.
+      - name: Backend tests
         timeout-minutes: 10
-        run: |
-          ./vendor/bin/pint --test
-          composer test
+        run: composer test
 
   result:
     name: CI result
