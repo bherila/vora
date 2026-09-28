@@ -1,18 +1,16 @@
 # Codex Cloud Setup
 
-Use these checked-in scripts for Codex Cloud environment configuration.
-
-Setup script:
+Set **both** the setup script and the maintenance script in the Codex Cloud
+environment configuration to the same command:
 
 ```bash
 bash codex/setup.sh
 ```
 
-Maintenance setup script:
-
-```bash
-bash codex/maintenance.sh
-```
+Never paste a script into the environment settings: a pasted copy is untracked and
+untested, and drifts. `setup.sh` is idempotent, so the maintenance run (a cached
+container resuming on a newer commit) repeats it and only the dependency installs
+do any work.
 
 `setup.sh` assumes the Codex image already provides Bash, curl, PHP 8.3 or
 newer, Node.js, and either `pnpm` or Corepack. It uses tools already available
@@ -26,8 +24,13 @@ missing and generates an `APP_KEY` when the local environment does not already
 have one. It deliberately does not run migrations, schema dumps, production
 builds, or tests.
 
-`maintenance.sh` reuses the same setup path with Composer optimized autoloading
-enabled for the cached environment.
+It does not pass `--optimize-autoloader`: a dev container's classmap would go
+stale as a session adds and moves classes.
+
+Codex runs setup as root, so `setup.sh` exports `COMPOSER_ALLOW_SUPERUSER=1` and
+detaches stdin before any Composer call. Without that, Composer's
+`Continue as root/super user [yes]?` prompt blocks until the 3600-second startup
+timeout.
 
 ## Environment Variables
 
