@@ -15,10 +15,10 @@ do any work.
 `setup.sh` assumes the Codex image already provides Bash, curl, PHP 8.5 (the
 environment's configured runtime), Node.js, and either `pnpm` or Corepack. It
 uses tools already available on `PATH` when possible, installs Composer into
-`$HOME/.local/bin` only when
-missing, and activates pnpm through Corepack only when `pnpm` is missing. It
-validates the locked PHP platform and installs Composer dependencies before the
-more verbose pnpm installation so PHP failures remain visible in Codex logs.
+`$HOME/.local/bin` only when missing, and activates pnpm through Corepack only
+when `pnpm` is missing. It validates the locked PHP platform and installs
+Composer dependencies before the more verbose pnpm installation so PHP failures
+remain visible in Codex logs.
 
 For Laravel convenience, the script creates `.env` from `.env.example` when
 missing and generates an `APP_KEY` when the local environment does not already
