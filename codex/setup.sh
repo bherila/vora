@@ -34,6 +34,12 @@ SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 export CI="${CI:-1}"
+# Codex runs setup as root, and Composer then asks "Continue as root/super user
+# [yes]?" on every invocation (even --version) and blocks on stdin until the
+# 3600-second startup timeout. Allow root explicitly, and detach stdin so any
+# future prompt fails fast instead of hanging.
+export COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_NO_INTERACTION=1
+exec </dev/null
 export PATH="$HOME/.local/bin:$PATH"
 
 cd "$REPO_ROOT"
@@ -173,10 +179,6 @@ install_php_dependencies() {
     --prefer-dist
     --no-progress
   )
-
-  if [[ "${CODEX_COMPOSER_OPTIMIZE_AUTOLOADER:-0}" == "1" ]]; then
-    composer_args+=(--optimize-autoloader)
-  fi
 
   log "Checking PHP platform requirements"
   composer check-platform-reqs --lock
