@@ -49,4 +49,29 @@ class CodexSetupScriptTest extends TestCase
         self::assertStringNotContainsString('--ignore-platform-req', $script);
         self::assertStringNotContainsString('install_node_dependencies &', $script);
     }
+
+    public function test_composer_never_blocks_on_the_root_prompt(): void
+    {
+        $script = $this->setupScript();
+        $allowRoot = strpos($script, 'export COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_NO_INTERACTION=1');
+        $detachStdin = strpos($script, "\nexec </dev/null\n");
+        $firstComposerCall = preg_match('/^(?!\s*#).*\bcomposer (?:--version|check-platform-reqs|install|"\$)/m', $script, $match, PREG_OFFSET_CAPTURE)
+            ? $match[0][1]
+            : null;
+
+        self::assertIsInt($allowRoot);
+        self::assertIsInt($detachStdin);
+        self::assertIsInt($firstComposerCall);
+        self::assertTrue($allowRoot < $firstComposerCall);
+        self::assertTrue($detachStdin < $firstComposerCall);
+    }
+
+    public function test_one_script_serves_both_setup_and_maintenance(): void
+    {
+        $root = dirname(__DIR__, 2);
+
+        self::assertFileDoesNotExist($root.'/codex/maintenance.sh');
+        self::assertStringNotContainsString('--optimize-autoloader', $this->setupScript());
+        self::assertStringNotContainsString('maintenance.sh', (string) file_get_contents($root.'/codex/README.md'));
+    }
 }
