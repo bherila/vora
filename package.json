@@ -6,7 +6,8 @@
         "build": "vite build",
         "dev": "vite",
         "test": "jest --passWithNoTests",
-        "type-check": "tsc --noEmit",
+        "test:browser": "pnpm run build && playwright test",
+        "type-check": "tsc --noEmit && tsc -p tests/browser/tsconfig.json",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "postinstall": "node scripts/spotlight-noindex.mjs"
@@ -14,6 +15,7 @@
     "devDependencies": {
         "@eslint/js": "^9.39.5",
         "@jest/types": "^30.4.1",
+        "@playwright/test": "1.63.0",
         "@tailwindcss/typography": "^0.5.20",
         "@tailwindcss/vite": "^4.3.3",
         "@testing-library/jest-dom": "6.9.1",
