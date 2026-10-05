@@ -25,7 +25,7 @@ class StoreCharacterProfilePictureRequest extends FormRequest
         return [
             'filename' => ['required', 'string', 'max:255'],
             'content_type' => ['required', 'string', 'max:255'],
-            'size' => ['nullable', 'integer', 'min:1'],
+            'size' => ['required', 'integer', 'min:1'],
         ];
     }
 

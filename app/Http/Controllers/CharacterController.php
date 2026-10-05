@@ -172,6 +172,7 @@ class CharacterController extends Controller
             MediaPurpose::ProfilePicture,
             $character->discoverable,
             $character->id,
+            expectedSizeBytes: (int) $request->validated('size'),
         );
         $media = $result['media'];
         $media->syncAudienceMembers($this->characterAudienceUserIds($character));
