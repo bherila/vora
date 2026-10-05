@@ -40,6 +40,12 @@ runs the backend gate against a MariaDB 10.6 service container in the `sql` job
 defined in `.github/workflows/ci.yml`; that job matches production and is
 additional coverage, not a replacement for SQLite.
 
+That job runs `composer test:parallel`, so Laravel gives each PHPUnit process
+its own `vora_ci_test_<n>` database. Nothing changes locally: the parallel
+plumbing is skipped entirely for in-memory SQLite
+(`TestDatabases::whenNotUsingInMemoryDatabase`), and `composer test` remains the
+sequential command the backend gate above asks for.
+
 ## Database safety
 
 Never run migrations or schema dumps unless the user explicitly requests it. When explicitly requested:
@@ -51,6 +57,9 @@ php artisan schema:dump --database=sqlite
 
 Never use `--prune`. Tests must use SQLite in-memory and must never run against a production or shared database.
 The sole exception is the CI-only MariaDB job, which is guarded to accept only
-its loopback service container, dedicated `vora_ci` database, engine marker,
-and dedicated CI credentials. Never reuse that job configuration to target a
-shared or production database.
+its loopback service container, engine marker, dedicated CI credentials, and
+the `vora_ci` database or one of the `vora_ci_test_<n>` databases Laravel
+derives from it under `--parallel`. That name allowlist is deliberately narrow
+-- digits only, anchored at both ends -- and is pinned by
+`tests/Unit/DatabaseSafetyGuardTest.php`. Never reuse that job configuration to
+target a shared or production database.
