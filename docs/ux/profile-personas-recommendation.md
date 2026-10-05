@@ -595,7 +595,7 @@ Phase 1.
 | **A follow-graph call site or persona-reachable surface is missed** and silently widens access or exposes the owner | Keep the route inventory and cross-surface Separate-persona guard current; require an explicit reason wherever persona context is denied |
 | **Persona session state leaking into privacy decisions** | Authorship only; assert the gate is invariant to `active_character_id` |
 | **Persona pages multiply the moderation surface** | Admin views resolve `character.user_id` regardless of Linked/Separate; reports accept both user and persona targets |
-| **Blocking (not yet built) collides with Separate personas** — if @alice blocks Kira and Ben's content vanishes, she infers the link. Blocking must be account-level to prevent evasion. | Decide deliberately when blocking is designed |
+| **Blocking can expose Separate personas** — if @alice blocks Kira and Ben's content vanishes, she infers the link. | Shipped blocking applies account-wide denial to prevent evasion, while observable hiding crosses only publicly linked identities. See [Block asymmetry](../conventions/privacy-and-visibility.md#blocking-is-asymmetric-by-design). |
 | **Mixed feed distributes reactively moderated posts** | Keep Following as the fail-closed default; Mixed remains explicit opt-in and still requires Approved posts from other users |
 
 ### Settled implementation decisions
@@ -624,5 +624,8 @@ Phase 1.
    personas do not have a viewing context, and discovery matching remains based
    on the persona's independent interest ratings.
 
-Blocking and chat remain deferred design work, as listed above; they are not
-implicit gaps in the shipped persona contract.
+Blocking and account-to-account chat have since shipped. Blocking preserves
+the Separate boundary through account-wide denial and identity-aware hiding;
+chat requires mutual account follows, not persona follows. The routes and
+privacy tests define the current behavior; these features are no longer
+deferred persona work.

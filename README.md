@@ -17,14 +17,21 @@ taxonomy, and user interest ratings.
 - **Interest requests**: users can request new interests for admin review.
   Admins can edit, approve, reject, or delete pending requests.
 - **Audit log**: auth audit data is available through the admin UI.
-- **Video media pipeline (infrastructure ready)**: Cloudflare R2 buckets and an
-  out-of-band HLS transcoder are provisioned for adaptive-bitrate video. The
-  app-side upload/playback feature is not built yet. See
-  [docs/s3-hls-integration.md](docs/s3-hls-integration.md).
+- **Profiles and personas**: users have self-profiles and optional Linked or
+  Separate personas, with independent follow scopes and authoring identities.
+- **Feed and discussions**: users publish posts, comment on discussions, and
+  manage their contributions from their activity page.
+- **Direct messages**: mutual account followers can chat, with unread counts
+  and retained history when messaging becomes unavailable.
+- **Blocking**: users can block accounts or personas, with privacy rules that
+  preserve Separate personas' owner anonymity.
+- **Media and stories**: users upload photos and videos, play adaptive-bitrate
+  HLS video, and write long-form or branching stories. Media and stories pass
+  through admin review. See [docs/media/overview.md](docs/media/overview.md).
 
 ## Tech Stack
 
-- **Backend**: Laravel 13 on PHP `^8.3`
+- **Backend**: Laravel 13 on PHP `^8.4`
 - **Frontend**: React 19 + TypeScript
 - **UI**: shadcn-style components using Base UI primitives
 - **Styling**: Tailwind CSS v4
@@ -81,10 +88,17 @@ composer test
 Tests are configured to use SQLite in-memory regardless of local `.env`
 database credentials. This is enforced by `phpunit.xml` and `Tests\SafeTestCase`.
 
+The manual **Two-account acceptance** GitHub Actions workflow checks auth,
+persona switching, follow and blocking privacy, discussions, and chat. See
+[TESTING.AGENTS.md](TESTING.AGENTS.md) for its scope and browser smoke checks.
+
 ## Key Routes
 
 - `/register`, `/login`, `/email/verify`, `/pending-approval`
-- `/dashboard`
+- `/feed`, `/explore`, `/me`, `/me/activity`
+- `/users`, `/users/follow-requests`, `/c/{ulid}`
+- `/messages`, `/messages/{conversation}`
+- `/m/{ulid}`, `/s/{ulid}`, `/p/{ulid}`
 - `/user/settings`
 - `/interests`
 - `/admin/users`

@@ -25,7 +25,7 @@ jest.mock('@/lib/useAdaptivePolling', () => ({
 }));
 
 const conversation: ChatConversation = {
-  id: '01CONVERSATION000000000000',
+  id: '01J00000000000000000000001',
   other_user: { id: '01OTHERACCOUNT0000000000000', display_name: 'Aria', avatar_url: null },
   latest_message: null,
   unread_count: 1,
@@ -109,5 +109,25 @@ describe('ChatPage', () => {
     expect(await screen.findByText('See you later')).toBeInTheDocument();
     expect(screen.getByText('Messaging is unavailable. Your existing history remains here.')).toBeInTheDocument();
     expect(screen.queryByLabelText('Message')).toBeNull();
+  });
+
+  it('restores the inbox and selected thread when browser history changes', async () => {
+    render(<ChatPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Aria/ }));
+    await screen.findByText('See you later');
+
+    window.history.replaceState({}, '', '/messages');
+    fireEvent.popState(window);
+
+    await waitFor(() => expect(screen.queryByLabelText('Message')).toBeNull());
+    expect(screen.queryByRole('log')).toBeNull();
+    expect(screen.getByRole('button', { name: /Aria/ })).not.toHaveAttribute('aria-current');
+
+    window.history.replaceState({}, '', `/messages/${conversation.id}`);
+    fireEvent.popState(window);
+
+    expect(await screen.findByText('See you later')).toBeInTheDocument();
+    expect(chatApi.messages).toHaveBeenLastCalledWith(conversation.id);
+    expect(screen.getByLabelText('Message')).toBeInTheDocument();
   });
 });

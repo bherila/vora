@@ -199,6 +199,20 @@ export function ChatPage() {
     };
   }, [clearPrivateState, loadInbox, loadThread]);
 
+  useEffect(() => {
+    const restoreConversation = (): void => {
+      const conversationId = initialConversationId();
+      selectedIdRef.current = conversationId;
+      setSelectedId(conversationId);
+      setMessages([]);
+      setOlderCursor(null);
+      if (conversationId) void loadThread(conversationId);
+    };
+
+    window.addEventListener('popstate', restoreConversation);
+    return () => window.removeEventListener('popstate', restoreConversation);
+  }, [loadThread]);
+
   const pollInbox = useCallback(async (): Promise<void> => {
     try {
       const sync = await chatApi.sync(syncEtagRef.current);

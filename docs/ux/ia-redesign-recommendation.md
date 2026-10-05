@@ -1,6 +1,9 @@
 # Vora UX / IA Redesign Recommendation
 
-> Design study output. Not yet implemented — decisions for the product owner.
+> Historical design study. The profile/persona redesign has since shipped;
+> this document records the original proposal, not the current routes or backlog.
+> See [Profile & Personas](profile-personas-recommendation.md) for the subsequent
+> implementation record and `routes/web.php` for current routes.
 
 ## TL;DR
 
