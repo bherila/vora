@@ -70,7 +70,15 @@ class MediaUploadService
         ?string $fileHash = null,
         ?int $expectedSizeBytes = null,
         bool $announceOnApproval = false,
+        ?int $thumbnailSizeBytes = null,
     ): array {
+        // Each presigned PUT is bound to an exact byte length, so the sizes
+        // must be known up front (the request validates them against limits).
+        if ($expectedSizeBytes === null || $expectedSizeBytes < 1) {
+            throw new \InvalidArgumentException('An upload must declare its size before it can be presigned.');
+        }
+        $wantsThumbnail = $wantsThumbnail && $thumbnailSizeBytes !== null && $thumbnailSizeBytes > 0;
+
         $ulid = (string) Str::ulid();
         $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
         $thumbnailKey = $wantsThumbnail ? $this->buildThumbnailKey($user, $ulid) : null;
@@ -109,13 +117,14 @@ class MediaUploadService
 
         $ttl = (int) config('media.upload_url_ttl', 30);
 
-        $signed = $this->storage->getSignedUploadUrl($media->disk, $key, $mimeType, $ttl);
+        $signed = $this->storage->getSignedUploadUrl($media->disk, $key, $mimeType, $expectedSizeBytes, $ttl);
 
         $thumbnailSigned = $thumbnailKey !== null
             ? $this->storage->getSignedUploadUrl(
                 (string) config('media.thumbnail_disk'),
                 $thumbnailKey,
                 self::THUMBNAIL_MIME,
+                (int) $thumbnailSizeBytes,
                 $ttl,
             )
             : null;

@@ -54,6 +54,7 @@ class ProfileController extends Controller
             false,
             null,
             MediaPurpose::ProfilePicture,
+            expectedSizeBytes: (int) $request->validated('size'),
         );
 
         return response()->json([

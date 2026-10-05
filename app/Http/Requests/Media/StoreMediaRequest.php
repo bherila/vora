@@ -34,7 +34,8 @@ class StoreMediaRequest extends FormRequest
             'type' => ['required', Rule::in(MediaType::values())],
             'filename' => ['required', 'string', 'max:255'],
             'content_type' => ['required', 'string', 'max:255'],
-            'size' => ['nullable', 'integer', 'min:1'],
+            // Signed into the presigned PUT: storage rejects any other length.
+            'size' => ['required', 'integer', 'min:1'],
             'title' => ['nullable', 'string', 'max:255'],
             'character_id' => [
                 'nullable',
@@ -47,6 +48,7 @@ class StoreMediaRequest extends FormRequest
             // The client generates the thumbnail/poster itself; ask for a second
             // presigned URL when it has one to upload.
             'has_thumbnail' => ['nullable', 'boolean'],
+            'thumbnail_size' => ['nullable', 'required_if_accepted:has_thumbnail', 'integer', 'min:1', 'max:'.(int) config('media.thumbnail.max_bytes')],
             // Base64 of a 32-byte blockhash (44 chars incl. padding). Photos only.
             'perceptual_hash' => ['nullable', 'string', 'max:64'],
             // Lowercase hex SHA-256 of the file bytes (64 chars), for exact-dup

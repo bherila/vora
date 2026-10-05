@@ -334,6 +334,7 @@ class CharacterTest extends TestCase
             'type' => 'photo',
             'filename' => 'nova.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'character_id' => $character->id,
         ]);
 
@@ -386,6 +387,7 @@ class CharacterTest extends TestCase
             'type' => 'photo',
             'filename' => 'nova.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => Audience::SpecificPeople->value,
             'audience_user_ids' => [$viewer->id],
         ])->assertStatus(422)->assertJsonValidationErrors('audience_user_ids.0');

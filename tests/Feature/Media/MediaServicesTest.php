@@ -48,7 +48,8 @@ class MediaServicesTest extends TestCase
     public function test_create_pending_upload_persists_record_and_interests(): void
     {
         $this->mock(FileStorageService::class, function ($mock): void {
-            $mock->shouldReceive('getSignedUploadUrl')->once()->andReturn([
+            // The declared size is bound into the presigned PUT.
+            $mock->shouldReceive('getSignedUploadUrl')->once()->withArgs(fn (string $disk, string $key, string $type, int $length): bool => $length === 2048)->andReturn([
                 'url' => 'https://r2.example/signed-put',
                 'headers' => ['Content-Type' => 'image/jpeg'],
             ]);
@@ -65,6 +66,7 @@ class MediaServicesTest extends TestCase
             'Vacation',
             Audience::Everyone,
             [$interest->id],
+            expectedSizeBytes: 2048,
         );
 
         $media = $result['media'];

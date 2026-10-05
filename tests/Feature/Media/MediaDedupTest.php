@@ -48,6 +48,7 @@ class MediaDedupTest extends TestCase
             'type' => 'photo',
             'filename' => 'again.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
             'file_hash' => $hash,
         ])->assertStatus(409)->assertJsonPath('success', false);
@@ -69,6 +70,7 @@ class MediaDedupTest extends TestCase
             'type' => 'photo',
             'filename' => 'mine.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
             'file_hash' => $hash,
         ])->assertCreated();

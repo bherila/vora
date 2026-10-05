@@ -41,6 +41,7 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'title' => 'Beach',
             'audience' => 'everyone',
             'interest_ids' => [$interest->id],
@@ -74,6 +75,7 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'quiet.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
             'announce' => false,
         ])->assertCreated();
@@ -90,6 +92,7 @@ class MediaApiTest extends TestCase
             'type' => 'video',
             'filename' => 'x.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
         ])->assertStatus(422)->assertJsonValidationErrors('content_type');
     }
@@ -116,8 +119,10 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
             'has_thumbnail' => true,
+            'thumbnail_size' => 4096,
             'perceptual_hash' => 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
         ])
             ->assertCreated()
@@ -129,6 +134,56 @@ class MediaApiTest extends TestCase
         $this->assertSame('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', $media->perceptual_hash);
     }
 
+    public function test_store_signs_each_upload_url_for_its_declared_size(): void
+    {
+        $lengths = [];
+        $this->mock(FileStorageService::class, function (MockInterface $mock) use (&$lengths): void {
+            $mock->shouldReceive('getSignedUploadUrl')->twice()->andReturnUsing(
+                function (string $disk, string $key, string $type, int $length) use (&$lengths): array {
+                    $lengths[$key] = $length;
+
+                    return ['url' => 'https://r2.example/put', 'headers' => ['Content-Type' => $type]];
+                },
+            );
+        });
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/media', [
+            'type' => 'photo',
+            'filename' => 'beach.jpg',
+            'content_type' => 'image/jpeg',
+            'size' => 123456,
+            'audience' => 'everyone',
+            'has_thumbnail' => true,
+            'thumbnail_size' => 7890,
+        ])->assertCreated();
+
+        $media = Media::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame([$media->object_key => 123456, $media->thumbnail_key => 7890], $lengths);
+    }
+
+    public function test_store_requires_declared_sizes_within_limits(): void
+    {
+        $this->fakeStorage();
+        $user = User::factory()->approved()->create();
+        $payload = [
+            'type' => 'photo',
+            'filename' => 'beach.jpg',
+            'content_type' => 'image/jpeg',
+            'audience' => 'everyone',
+        ];
+
+        $this->actingAs($user)->postJson('/api/media', $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('size');
+        $this->actingAs($user)->postJson('/api/media', $payload + ['size' => 2048, 'has_thumbnail' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('thumbnail_size');
+        $this->actingAs($user)->postJson('/api/media', $payload + [
+            'size' => 2048,
+            'has_thumbnail' => true,
+            'thumbnail_size' => (int) config('media.thumbnail.max_bytes') + 1,
+        ])->assertUnprocessable()->assertJsonValidationErrors('thumbnail_size');
+    }
+
     public function test_store_without_thumbnail_returns_null_thumbnail_url(): void
     {
         $this->fakeStorage();
@@ -138,6 +193,7 @@ class MediaApiTest extends TestCase
             'type' => 'photo',
             'filename' => 'beach.jpg',
             'content_type' => 'image/jpeg',
+            'size' => 2048,
             'audience' => 'everyone',
         ])
             ->assertCreated()

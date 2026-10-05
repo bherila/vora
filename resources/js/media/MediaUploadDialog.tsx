@@ -270,6 +270,7 @@ export function MediaUploadDialog({
           title: item.title.trim() || null,
           interest_ids: uploadInterestIds,
           has_thumbnail: thumbnail !== null,
+          thumbnail_size: thumbnail?.size ?? null,
           perceptual_hash: perceptualHash,
           file_hash: fileHash,
           announce,
