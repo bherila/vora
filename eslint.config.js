@@ -19,6 +19,8 @@ export default tseslint.config(
       "postcss.config.js",
       "vite.config.ts",
       "tailwind.config.ts",
+      "test-results/**",
+      "playwright-report/**",
     ],
   },
   js.configs.recommended,
@@ -32,7 +34,7 @@ export default tseslint.config(
         ...globals.es2020,
       },
       parserOptions: {
-        project: ["./tsconfig.json"],
+        project: ["./tsconfig.json", "./tests/browser/tsconfig.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },

@@ -1,6 +1,7 @@
 name: Two-account acceptance
 
 on:
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -79,3 +80,18 @@ jobs:
             resources/js/community/CommentThread.test.tsx \
             resources/js/community/StartDiscussion.test.tsx \
             resources/js/user/activity.test.tsx
+
+      - name: Install Chromium for browser journeys
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run desktop and mobile browser journeys
+        run: pnpm run test:browser
+
+      - name: Upload browser failure traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

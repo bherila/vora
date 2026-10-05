@@ -48,8 +48,9 @@ sequential command the backend gate above asks for.
 
 ## Two-account acceptance
 
-Run the **Two-account acceptance** workflow manually against the branch under
-review. It checks password/two-factor auth and approval gates, authoring identity
+The **Two-account acceptance** workflow runs on pull requests and can also be
+run manually against the branch under review. It checks password/two-factor
+auth and approval gates, authoring identity
 switching, account and persona follows, Separate-persona privacy, blocking,
 discussion contribution ownership, and chat eligibility/history. Its Jest step
 checks navbar identities, profiles, blocking, chat, discussions, and activity.
@@ -68,8 +69,34 @@ php artisan test \
   tests/Feature/Chat/ChatApiTest.php
 ```
 
-These are Laravel HTTP feature tests and React component tests. They do not
-exercise a live browser's navigation, focus, layout, or cookie handling.
+The workflow also runs Playwright journeys in desktop Chromium and mobile
+Chromium emulating a Pixel 7. These use two independent browser sessions for
+password/two-factor login, mutual follows, unread counts, chat send/reply/reload,
+keyboard focus, browser Back/Forward, blocking, unblocking, and logout. Blocked
+threads disappear; unblocking restores retained history without restoring
+removed follows or allowing new messages.
+
+Run the browser journeys locally after installing the frozen Composer and pnpm
+dependencies and stopping any Vite dev server. Run these separately from the
+backend suite, which changes shared view/cache files during tests:
+
+```bash
+pnpm exec playwright install chromium
+pnpm run test:browser
+```
+
+The command builds production assets and starts a test-only loopback HTTP bridge
+on `127.0.0.1:4187`. The bridge forwards requests into one long-lived PHPUnit
+worker, retaining SQLite `:memory:` across requests. Database sessions, auth,
+CSRF protection, Laravel routes, and frontend requests run normally. The worker
+creates approved accounts and exposes their actual two-factor codes only through
+test fixture endpoints; no test endpoints are registered in the application.
+Keep one worker (`workers: 1`) and do not point this harness at another database.
+
+Playwright saves failure traces and screenshots in `test-results/`, also uploaded
+by CI. These journeys do not cover registration/approval, personas, discussions,
+media, or a deployed PHP web server; use the feature tests and manual checks below
+for those surfaces.
 
 ### Browser smoke checks
 
