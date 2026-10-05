@@ -260,15 +260,34 @@ jobs:
         timeout-minutes: 4
         run: composer install --no-interaction --prefer-dist
 
-      # Pint is formatting-only and database-independent, and the `test` job
-      # already runs it -- that job's condition (frontend || backend) is a
-      # superset of this one's (backend), so it always runs when this job does.
-      # The MariaDB suite itself is deliberately kept: per TESTING.AGENTS.md it
-      # is additional coverage against the engine production runs, not a
-      # replacement for the SQLite pass in `test`.
+      # `--parallel` gives each PHPUnit process its own database, which Laravel
+      # names `<database>_test_<token>` and creates on the fly (see
+      # Illuminate\Testing\Concerns\TestDatabases). The service container grants
+      # `vora_ci` rights over the `vora_ci` database only, so without this the
+      # workers cannot create their own. The grant is scoped to the derived names
+      # -- `\_` escapes MariaDB's single-character wildcard, so this authorises
+      # `vora_ci_test_*` and nothing else -- and root is used here and nowhere
+      # else: the suite itself still connects as `vora_ci`.
+      - name: Authorise the parallel test databases
+        run: |
+          php <<'PHP'
+          <?php
+          $pdo = new PDO('mysql:host=127.0.0.1;port=3306', 'root', 'vora_ci_root_password', [
+              PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+          ]);
+          $pdo->exec('GRANT ALL PRIVILEGES ON `vora\_ci\_test\_%`.* TO "vora_ci"@"%"');
+          $pdo->exec('FLUSH PRIVILEGES');
+          echo "granted\n";
+          PHP
+
+      # Pint is formatting-only and database-independent, and the `backend` job
+      # already runs it -- both jobs share the same `backend` condition, so it
+      # always runs when this job does. The MariaDB suite itself is deliberately
+      # kept: per TESTING.AGENTS.md it is additional coverage against the engine
+      # production runs, not a replacement for the SQLite pass.
       - name: Backend tests
         timeout-minutes: 10
-        run: composer test
+        run: composer test:parallel
 
   result:
     name: CI result
