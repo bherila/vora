@@ -46,6 +46,63 @@ plumbing is skipped entirely for in-memory SQLite
 (`TestDatabases::whenNotUsingInMemoryDatabase`), and `composer test` remains the
 sequential command the backend gate above asks for.
 
+## Two-account acceptance
+
+Run the **Two-account acceptance** workflow manually against the branch under
+review. It checks password/two-factor auth and approval gates, authoring identity
+switching, account and persona follows, Separate-persona privacy, blocking,
+discussion contribution ownership, and chat eligibility/history. Its Jest step
+checks navbar identities, profiles, blocking, chat, discussions, and activity.
+
+The workflow's backend step can also be run locally:
+
+```bash
+php artisan test \
+  tests/Feature/Auth/AuthFlowTest.php \
+  tests/Feature/IdentitySessionTest.php \
+  tests/Feature/Follow/FollowRequestTest.php \
+  tests/Feature/Privacy/PersonaFollowPrivacyTest.php \
+  tests/Feature/Privacy/SeparatePersonaSurfaceGuardTest.php \
+  tests/Feature/Privacy/BlockingPrivacyTest.php \
+  tests/Feature/Acceptance/TwoAccountDiscussionTest.php \
+  tests/Feature/Chat/ChatApiTest.php
+```
+
+These are Laravel HTTP feature tests and React component tests. They do not
+exercise a live browser's navigation, focus, layout, or cookie handling.
+
+### Browser smoke checks
+
+Use two separate browser profiles with approved, non-admin test accounts on a
+development or staging instance. Use an admin session only for approval steps.
+Record the tested commit, browser, viewport, and results. Repeat the navigation
+and chat checks at a narrow mobile viewport.
+
+1. **Auth and approval:** register a test account, verify its email, and confirm
+   it cannot access Feed before admin approval. Complete password/two-factor
+   login after approval; confirm Feed opens. Log out and confirm protected
+   pages require login again.
+2. **Personas:** create Linked and Separate personas. Switch authoring identity
+   and publish a post; confirm its byline and the switcher's help text. As the
+   second account, confirm the Separate persona's profile, posts, and follow
+   lists do not expose its owner. Switching identity must not change what the
+   first account can view.
+3. **Follows:** follow the first account from the second, accept the request,
+   and confirm Followers content appears. Follow a persona separately and
+   confirm that edge does not grant access to the owner's account-only content.
+4. **Discussions:** add comments and replies from both accounts. Remove the
+   second account's follow access; confirm the private discussion disappears,
+   while that account can still remove its own contributions from My Activity.
+   A deleted parent must not remove the other account's reply.
+5. **Chat:** establish mutual account follows and open Messages. Send and reply,
+   confirm unread counts clear on opening the thread, and reload its URL to
+   check history. Test keyboard focus and browser Back. Remove a required follow;
+   confirm composing becomes unavailable while existing history remains.
+6. **Blocking:** restore mutual follows, then block the other account. Confirm
+   chat cannot send and blocked content disappears. Unblock from Settings;
+   confirm removed follows are not silently restored. Repeat with a Separate
+   persona and check that the blocked list names the persona without its owner.
+
 ## Database safety
 
 Never run migrations or schema dumps unless the user explicitly requests it. When explicitly requested:
