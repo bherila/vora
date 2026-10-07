@@ -95,10 +95,13 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      # Every ssh connection, including rsync's transport, sends keepalives so a
+      # long quiet stretch (a slow migration, a large transfer) is not dropped by
+      # an idle-timeout middlebox partway through the deploy.
       - name: Deploy with rsync
         run: |
           rsync -av --delete --exclude='.env' \
-            -e "ssh -o StrictHostKeyChecking=yes" \
+            -e "ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4" \
             app \
             bootstrap \
             config \
@@ -115,7 +118,7 @@ jobs:
 
       - name: Migrate, verify schema, and refresh web roots
         run: |
-          ssh -o StrictHostKeyChecking=yes \
+          ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
             "chmod 710 ~/laravel && cd ~/laravel && if [ -f .env ]; then chmod 600 .env; fi && umask 077 && /opt/cpanel/ea-php85/root/usr/bin/php artisan migrate --force --no-interaction && /opt/cpanel/ea-php85/root/usr/bin/php artisan schema:assert-persona && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php85/root/usr/bin/php artisan config:cache && chmod 600 bootstrap/cache/config.php && cd ~ && rm -rf public_html && rm -rf web && ln -s laravel/public public_html && ln -s laravel/public web"
 
@@ -128,7 +131,7 @@ jobs:
       - name: Verify scheduler and queue health
         run: |
           for attempt in 1 2 3 4; do
-            if ssh -o StrictHostKeyChecking=yes \
+            if ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
               ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} \
               "cd ~/laravel && /opt/cpanel/ea-php85/root/usr/bin/php artisan ops:queue-health --json"; then
               exit 0
