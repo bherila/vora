@@ -6,6 +6,11 @@ overrides:
   # Force the patched js-yaml into jest's deep istanbul coverage chain
   # (@istanbuljs/load-nyc-config pins js-yaml 3.x; GHSA-h67p-54hq-rp68).
   js-yaml@<4.1.2: ">=4.1.2"
+  # Upstream packages pin vulnerable versions even in their latest releases.
+  # Remove these overrides when concurrently and typography accept the fixes.
+  # GHSA-pqg4-j6r4-53mv and GHSA-rj75-hqrm-r3gf respectively.
+  concurrently>shell-quote: "1.11.0"
+  "@tailwindcss/typography>postcss-selector-parser": "7.1.6"
 allowBuilds:
   unrs-resolver: true
 # bwh-auth is a first-party package; skip the release-age supply-chain gate so a
