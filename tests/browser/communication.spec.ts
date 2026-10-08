@@ -1,39 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-interface TestAccount {
-  id: number;
-  email: string;
-}
-
-interface TestAccounts {
-  alice: TestAccount;
-  bob: TestAccount;
-}
-
-async function login(page: Page, account: TestAccount, name: string): Promise<void> {
-  page.on('pageerror', (error) => console.error(error));
-  await page.goto('/login');
-  await page.getByLabel('Email', { exact: true }).fill(account.email);
-  await page.getByLabel('Password', { exact: true }).fill('password');
-  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
-  await expect(page).toHaveURL(/\/login\/two-factor\//);
-  // Read the actual emailed code from the test worker, then verify through UI.
-  const response = await page.request.get('/__browser/two-factor', {
-    headers: { 'x-browser-email': account.email },
-  });
-  expect(response.ok()).toBeTruthy();
-  const { code } = await response.json() as { code: string };
-  await page.getByLabel('Verification Code').fill(code);
-  await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
-  await expect(page).toHaveURL(/\/feed$/);
-  await expect(page.getByRole('button', { name: `Account and identity menu (currently ${name})` })).toBeVisible();
-}
-
-async function acceptFollow(page: Page): Promise<void> {
-  await page.goto('/users/follow-requests');
-  await page.getByRole('button', { name: 'Accept', exact: true }).click();
-  await expect(page.getByText('Follow request accepted.', { exact: false })).toBeVisible();
-}
+import { acceptFollow, login, peerContext, type TestAccounts } from './helpers';
 
 async function sendMessage(page: Page, body: string): Promise<void> {
   await page.getByLabel('Message', { exact: true }).fill(body);
@@ -52,8 +19,7 @@ test('two accounts log in, follow, chat, navigate history, block, unblock, and l
   });
   expect(csrfRejected.status()).toBe(419);
   // A second independent cookie jar with the same desktop/mobile settings.
-  const { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = test.info().project.use;
-  const bobContext = await browser.newContext({ baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch });
+  const bobContext = await peerContext(browser);
   const bob = await bobContext.newPage();
   try {
     await login(page, accounts.alice, 'Alice');

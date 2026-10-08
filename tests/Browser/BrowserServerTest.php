@@ -2,13 +2,20 @@
 
 namespace Tests\Browser;
 
+use App\Enums\Audience;
+use App\Models\Character;
+use App\Models\Media;
 use App\Models\User;
+use App\Services\FileStorageService;
 use BWH\Auth\Models\TwoFactorAttempt;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Notification;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 /**
@@ -37,13 +44,69 @@ class BrowserServerTest extends TestCase
             'session.domain' => null,
             'session.secure' => false,
         ]);
-        User::factory()->admin()->create(); // Test accounts must not become first-user admins.
+        $admin = User::factory()->admin()->create(['display_name' => 'Browser Admin']);
+        Notification::fake([VerifyEmail::class]);
+        // Object storage is faked; media requests still use normal policies
+        // and protected asset routes, including after access is revoked.
+        $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', true);
+        $storage = \Mockery::mock(FileStorageService::class);
+        $storage->shouldReceive('getSignedViewUrl')->andReturnUsing(function (string $disk, string $key): string {
+            $media = Media::query()->where('object_key', $key)->firstOrFail();
+
+            return route('media.asset', ['ulid' => $media->ulid, 'variant' => 'original'], false);
+        });
+        $storage->shouldReceive('getFileSize')->andReturn(strlen($image));
+        $storage->shouldReceive('readStream')->andReturnUsing(static function () use ($image): mixed {
+            $stream = fopen('php://memory', 'r+');
+            fwrite($stream, $image);
+            rewind($stream);
+
+            return $stream;
+        });
+        $this->app->instance(FileStorageService::class, $storage);
         $this->emit(['ready' => true]);
         $requests = 0;
 
         while (($line = fgets(STDIN)) !== false) {
             $input = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
             $requests++;
+
+            if ($input['path'] === '/__browser/registration') {
+                $this->emitJson($input['id'], [
+                    'admin' => ['id' => $admin->id, 'email' => $admin->email],
+                    'email' => "browser-signup-{$requests}@example.test",
+                ]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/verification-link') {
+                $user = User::query()->where('email', $input['headers']['x-browser-email'] ?? '')->firstOrFail();
+                $notification = Notification::sent($user, VerifyEmail::class)->last();
+                $this->assertInstanceOf(VerifyEmail::class, $notification);
+                $this->emitJson($input['id'], ['url' => $notification->toMail($user)->actionUrl]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/media-fixtures') {
+                $persona = Character::query()->findOrFail($input['headers']['x-browser-persona'] ?? '');
+                $media = [];
+                foreach (['account' => null, 'persona' => $persona->id] as $name => $characterId) {
+                    $item = Media::factory()->approved()->create([
+                        'user_id' => $persona->user_id,
+                        'character_id' => $characterId,
+                        'title' => "{$name} followers image",
+                        'mime_type' => 'image/png',
+                        'size_bytes' => strlen($image),
+                        'audience' => Audience::Followers,
+                    ]);
+                    $media[$name] = ['ulid' => $item->ulid, 'title' => $item->title];
+                }
+                $this->emitJson($input['id'], $media);
+
+                continue;
+            }
 
             if ($input['path'] === '/__browser/fixtures') {
                 $users = [];
@@ -98,12 +161,19 @@ class BrowserServerTest extends TestCase
             $kernel = $this->app->make(Kernel::class);
             $response = $kernel->handle($request);
             $kernel->terminate($request, $response);
+            if ($response instanceof StreamedResponse) {
+                ob_start();
+                $response->sendContent();
+                $body = ob_get_clean();
+            } else {
+                $body = $response->getContent();
+            }
             $this->emit([
                 'id' => $input['id'],
                 'status' => $response->getStatusCode(),
                 'headers' => $response->headers->allPreserveCaseWithoutCookies(),
                 'cookies' => array_map(strval(...), $response->headers->getCookies()),
-                'body' => base64_encode($response->getContent()),
+                'body' => base64_encode($body),
             ]);
         }
 
@@ -114,5 +184,11 @@ class BrowserServerTest extends TestCase
     private function emit(array $message): void
     {
         fwrite(STDOUT, 'VORA_BROWSER_JSON '.json_encode($message, JSON_THROW_ON_ERROR)."\n");
+    }
+
+    /** @param array<string, mixed> $data */
+    private function emitJson(int $id, array $data): void
+    {
+        $this->emit(['id' => $id, 'status' => 200, 'headers' => [], 'body' => base64_encode(json_encode($data, JSON_THROW_ON_ERROR))]);
     }
 }

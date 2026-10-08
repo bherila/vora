@@ -71,10 +71,14 @@ php artisan test \
 
 The workflow also runs Playwright journeys in desktop Chromium and mobile
 Chromium emulating a Pixel 7. These use two independent browser sessions for
-password/two-factor login, mutual follows, unread counts, chat send/reply/reload,
-keyboard focus, browser Back/Forward, blocking, unblocking, and logout. Blocked
-threads disappear; unblocking restores retained history without restoring
-removed follows or allowing new messages.
+registration, email verification and admin approval, password/two-factor login,
+Linked/Separate persona creation and authoring, persona follow privacy, protected
+media rendering and access revocation, and private discussion contribution
+ownership after follow access is removed. Communication journeys cover mutual
+follows, unread counts, chat send/reply/reload, keyboard focus, browser
+Back/Forward, blocking, unblocking, and logout. Profile actions update on block
+and unblock without a reload. Blocked threads disappear; unblocking restores
+retained history without restoring removed follows or allowing new messages.
 
 Run the browser journeys locally after installing the frozen Composer and pnpm
 dependencies and stopping any Vite dev server. Run these separately from the
@@ -90,13 +94,18 @@ on `127.0.0.1:4187`. The bridge forwards requests into one long-lived PHPUnit
 worker, retaining SQLite `:memory:` across requests. Database sessions, auth,
 CSRF protection, Laravel routes, and frontend requests run normally. The worker
 creates approved accounts and exposes their actual two-factor codes only through
-test fixture endpoints; no test endpoints are registered in the application.
+test fixture endpoints. The registration journey creates its account through the
+UI, follows the signed verification link from a captured notification, and uses
+an independent admin session for approval. Media fixtures use a tiny image in
+fake object storage, served through real protected asset routes and policies.
+The bridge captures streamed image responses as well as normal HTML/JSON.
+No test endpoints are registered in the application.
 Keep one worker (`workers: 1`) and do not point this harness at another database.
 
 Playwright saves failure traces and screenshots in `test-results/`, also uploaded
-by CI. These journeys do not cover registration/approval, personas, discussions,
-media, or a deployed PHP web server; use the feature tests and manual checks below
-for those surfaces.
+by CI. These journeys do not cover real email delivery, object-store uploads,
+video transcoding/playback, or a deployed PHP web server. Keep the feature tests
+and manual checks below for those integrations and additional audience cases.
 
 ### Browser smoke checks
 
@@ -129,6 +138,10 @@ and chat checks at a narrow mobile viewport.
    chat cannot send and blocked content disappears. Unblock from Settings;
    confirm removed follows are not silently restored. Repeat with a Separate
    persona and check that the blocked list names the persona without its owner.
+7. **Media integrations:** upload a photo and video through the profile. Confirm
+   review state, photo rendering, and HLS playback after processing. As the second
+   account, check allowed access, then revoke access and retry the direct media
+   and asset URLs. Check a Separate persona's media never names its owner.
 
 ## Database safety
 
