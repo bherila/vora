@@ -88,8 +88,10 @@ composer test
 Tests are configured to use SQLite in-memory regardless of local `.env`
 database credentials. This is enforced by `phpunit.xml` and `Tests\SafeTestCase`.
 
-The manual **Two-account acceptance** GitHub Actions workflow checks auth,
-persona switching, follow and blocking privacy, discussions, and chat. See
+The **Two-account acceptance** GitHub Actions workflow runs on every pull request
+and can also be started manually. It checks auth, persona switching, follow and
+blocking privacy, discussions, media visibility, and chat, including desktop and
+mobile Chromium journeys. See
 [TESTING.AGENTS.md](TESTING.AGENTS.md) for its scope and browser smoke checks.
 
 ## Key Routes
