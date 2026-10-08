@@ -47,6 +47,7 @@ test('registration requires email verification and admin approval before login o
     expect((await page.request.get('/api/admin/users')).status()).toBe(403);
     await page.getByRole('button', { name: 'Account and identity menu (currently Dana)' }).click();
     await page.getByRole('menuitem', { name: 'Log out', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
     await page.goto('/feed');
     await expect(page).toHaveURL(/\/login$/);
     await adminPage.goto('/admin/users');
