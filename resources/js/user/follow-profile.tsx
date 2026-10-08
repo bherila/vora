@@ -353,6 +353,21 @@ export function FollowProfilePage() {
     }
   };
 
+  const handleBlockChanged = (blockId: number | null): void => {
+    // Blocking removes both follow edges. Drop their capabilities immediately;
+    // after unblocking, refresh visibility without restoring those old edges.
+    setProfile((current) => current ? {
+      ...current,
+      viewer_block_id: blockId,
+      can_message: false,
+      can_follow_back: false,
+      follow_request: null,
+      restricted: true,
+    } : current);
+    setMessage('');
+    if (blockId === null) loadProfile();
+  };
+
   const startMessage = async (): Promise<void> => {
     if (!profile) return;
     setError('');
@@ -464,10 +479,10 @@ export function FollowProfilePage() {
                 id={profile.id}
                 displayName={profile.display_name}
                 initialBlockId={profile.viewer_block_id}
-                onChanged={(blockId) => setProfile((current) => current ? { ...current, viewer_block_id: blockId } : current)}
+                onChanged={handleBlockChanged}
               />
               <ReportButton type="user" id={profile.id} variant="ghost" />
-              {!hasActiveRequest ? (
+              {profile.viewer_block_id != null ? null : !hasActiveRequest ? (
                 <Button onClick={() => void sendRequest()}>{profile.can_follow_back ? 'Follow back' : 'Send follow request'}</Button>
               ) : (
                 <span className="text-sm text-muted-foreground">Request: <strong>{profile.follow_request?.status}</strong></span>
@@ -478,8 +493,8 @@ export function FollowProfilePage() {
         <CardContent className="space-y-5">
           {profile.restricted ? (
             <section>
-              <h2 className="font-semibold">This profile is private</h2>
-              <p className="text-sm text-muted-foreground">Send a follow request to see more.</p>
+              <h2 className="font-semibold">{profile.viewer_block_id != null ? 'You blocked this account' : 'This profile is private'}</h2>
+              <p className="text-sm text-muted-foreground">{profile.viewer_block_id != null ? 'Unblock to view this profile again.' : 'Send a follow request to see more.'}</p>
             </section>
           ) : (
             <>

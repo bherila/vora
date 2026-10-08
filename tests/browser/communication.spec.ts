@@ -111,6 +111,10 @@ test('two accounts log in, follow, chat, navigate history, block, unblock, and l
     await page.getByRole('button', { name: 'Open block confirmation for Bob', exact: true }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Block Bob', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Open unblock confirmation for Bob', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Message', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(Send follow request|Follow back)$/ })).toHaveCount(0);
+    await expect(page.getByText('Request:', { exact: false })).toHaveCount(0);
+    await expect(page.getByText('You blocked this account', { exact: true })).toBeVisible();
 
     await bob.goto(threadUrl);
     await expect(bob).toHaveURL(/\/messages$/);
@@ -123,9 +127,11 @@ test('two accounts log in, follow, chat, navigate history, block, unblock, and l
     await page.getByRole('button', { name: 'Open unblock confirmation for Bob', exact: true }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Unblock Bob', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Open block confirmation for Bob', exact: true })).toBeVisible();
-    await page.reload();
     await expect(page.getByRole('button', { name: 'Send follow request', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Message', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Request:', { exact: false })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Follow back', exact: true })).toHaveCount(0);
+    await expect(page.getByText('You blocked this account', { exact: true })).toHaveCount(0);
     await page.goto(threadUrl);
     await expect(page.getByText('Messaging is unavailable. Your existing history remains here.', { exact: true })).toBeVisible();
     await expect(page.getByRole('log').getByText('Hello Alice from Bob', { exact: true })).toHaveCount(1);
