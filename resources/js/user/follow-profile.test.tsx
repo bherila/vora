@@ -278,6 +278,49 @@ describe('FollowProfilePage (/me)', () => {
     expect(screen.getByText('he/him')).toBeInTheDocument();
   });
 
+  it('clears follow and message capabilities on block and refreshes visibility on unblock', async () => {
+    const initial = ownerInitialData();
+    const visitorProfile = {
+      ...initial.followProfile as Record<string, unknown>,
+      is_self: false,
+      can_message: true,
+      can_follow_back: true,
+      follow_request: { status: 'accepted', can_retry: false },
+      viewer_muted: false,
+      viewer_block_id: null,
+    };
+    setInitialData({ ...initial, followProfile: visitorProfile });
+    (fetchWrapper.post as jest.Mock).mockResolvedValue({ data: { block_id: 91 } });
+    (fetchWrapper.get as jest.Mock).mockImplementation((url: string) => Promise.resolve(
+      url === '/api/users/7'
+        ? { data: { ...visitorProfile, can_message: false, can_follow_back: false, follow_request: null } }
+        : url.includes('content-counts')
+          ? { data: { media: 0, stories: 0, posts: 0, favorites: 0 } }
+          : { data: [] },
+    ));
+    render(<FollowProfilePage />);
+    expect(screen.getByRole('button', { name: 'Message' })).toBeInTheDocument();
+    expect(screen.getByText('accepted')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open block confirmation for Ben' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Block Ben' }));
+    await screen.findByRole('button', { name: 'Open unblock confirmation for Ben' });
+    expect(screen.queryByRole('button', { name: /^(Message|Follow back|Send follow request)$/ })).toBeNull();
+    expect(screen.queryByText('accepted')).toBeNull();
+    expect(screen.queryByText('Hello there.')).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Profile content' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'You blocked this account' })).toBeInTheDocument();
+    expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/users/7'); // Blocked profiles return 404.
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open unblock confirmation for Ben' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Unblock Ben' }));
+    await screen.findByRole('button', { name: 'Send follow request' });
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/users/7'));
+    expect(screen.getByText('Hello there.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Message|Follow back)$/ })).toBeNull();
+    expect(screen.queryByText('accepted')).toBeNull();
+  });
+
   it('renders the identity rail with per-identity counts once a persona exists', async () => {
     setInitialData(ownerInitialData(
       { characters: [{ id: 5, ulid: '01HZX5KIRA', display_name: 'Kira', avatar_url: null }] },
