@@ -10,6 +10,25 @@ export interface TestAccounts {
   bob: TestAccount;
 }
 
+interface ContentRecord {
+  id: number;
+  ulid: string;
+}
+
+export interface ContentFixtures {
+  admin: TestAccount;
+  stories: { longForm: ContentRecord; adventure: ContentRecord };
+  media: Record<'pending' | 'rejected' | 'uploading' | 'processing' | 'broken', ContentRecord & { title: string }>;
+}
+
+export async function contentFixtures(page: Page, owner: TestAccount): Promise<ContentFixtures> {
+  const response = await page.request.get('/__browser/content-fixtures', {
+    headers: { 'x-browser-owner': String(owner.id) },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json() as Promise<ContentFixtures>;
+}
+
 export async function login(page: Page, account: Pick<TestAccount, 'email'>, name: string): Promise<void> {
   page.on('pageerror', (error) => console.error(error));
   await page.goto('/login');
