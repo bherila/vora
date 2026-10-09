@@ -74,7 +74,14 @@ Chromium emulating a Pixel 7. These use two independent browser sessions for
 registration, email verification and admin approval, password/two-factor login,
 Linked/Separate persona creation and authoring, persona follow privacy, protected
 media rendering and access revocation, and private discussion contribution
-ownership after follow access is removed. Communication journeys cover mutual
+ownership after follow access is removed. Additional journeys check Mutuals
+access before and after each follow, Specific people selection and outsider
+denial, and blocking without restoring mutual access after unblocking. Story
+readers render Markdown and adventure choices, endings, and restart; editor
+changes and admin rejection revoke reader access until renewed approval.
+Media journeys check pending/rejected review privacy, unfinished uploads,
+processing video messages, and fatal HLS errors without original-file fallback.
+Communication journeys cover mutual
 follows, unread counts, chat send/reply/reload, keyboard focus, browser
 Back/Forward, blocking, unblocking, and logout. Profile actions update on block
 and unblock without a reload. Blocked threads disappear; unblocking restores
@@ -98,6 +105,8 @@ test fixture endpoints. The registration journey creates its account through the
 UI, follows the signed verification link from a captured notification, and uses
 an independent admin session for approval. Media fixtures use a tiny image in
 fake object storage, served through real protected asset routes and policies.
+Video fixtures have missing transcoder mappings or a deliberately invalid HLS
+manifest to exercise processing and playback failure; they do not encode video.
 The bridge captures streamed image responses as well as normal HTML/JSON.
 No test endpoints are registered in the application.
 Keep one worker (`workers: 1`) and do not point this harness at another database.

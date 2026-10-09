@@ -5,8 +5,10 @@ namespace Tests\Browser;
 use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\Media;
+use App\Models\Story;
 use App\Models\User;
 use App\Services\FileStorageService;
+use App\Services\Story\StoryService;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Http\Kernel;
@@ -56,6 +58,11 @@ class BrowserServerTest extends TestCase
             return route('media.asset', ['ulid' => $media->ulid, 'variant' => 'original'], false);
         });
         $storage->shouldReceive('getFileSize')->andReturn(strlen($image));
+        // Missing mappings represent videos still processing. One deliberately
+        // invalid manifest exercises the real player's fatal-error handling.
+        $storage->shouldReceive('get')->andReturnUsing(static function (string $disk, string $key): ?string {
+            return $key === 'by-id/browser-broken/master.m3u8' ? 'Invalid browser-test manifest' : null;
+        });
         $storage->shouldReceive('readStream')->andReturnUsing(static function () use ($image): mixed {
             $stream = fopen('php://memory', 'r+');
             fwrite($stream, $image);
@@ -108,11 +115,53 @@ class BrowserServerTest extends TestCase
                 continue;
             }
 
+            if ($input['path'] === '/__browser/content-fixtures') {
+                $owner = User::query()->findOrFail($input['headers']['x-browser-owner'] ?? '');
+                $longForm = Story::factory()->for($owner)->readable()->create([
+                    'title' => 'The lighthouse journal',
+                    'body' => "## A quiet harbor\n\nThe lantern guided us home.",
+                ]);
+                $adventure = Story::factory()->for($owner)->cyoa()->readable()->create([
+                    'title' => 'Paths through the harbor',
+                ]);
+                $this->app->make(StoryService::class)->saveGraph($adventure, [
+                    ['key' => 'start', 'title' => 'The crossroads', 'body' => 'Choose your route.', 'is_start' => true],
+                    ['key' => 'dock', 'title' => 'At the dock', 'body' => 'A boat waits in the moonlight.'],
+                ], [
+                    ['from' => 'start', 'to' => 'dock', 'label' => 'Visit the dock', 'position' => 0],
+                    ['from' => 'start', 'to' => null, 'label' => 'Stay ashore', 'position' => 1],
+                ]);
+                $media = [
+                    'pending' => Media::factory()->for($owner)->create(['title' => 'Photo awaiting review']),
+                    'rejected' => Media::factory()->for($owner)->rejected()->create([
+                        'title' => 'Photo withheld from readers',
+                        'moderation_notes' => 'Private moderator note',
+                    ]),
+                    'uploading' => Media::factory()->for($owner)->pendingUpload()->create(['title' => 'Unfinished upload']),
+                    'processing' => Media::factory()->for($owner)->video()->approved()->create(['title' => 'Video awaiting transcoding']),
+                    'broken' => Media::factory()->for($owner)->video()->approved()->create([
+                        'title' => 'Video with unavailable stream',
+                        'hls_content_id' => 'browser-broken',
+                    ]),
+                ];
+                $this->emitJson($input['id'], [
+                    'admin' => ['id' => $admin->id, 'email' => $admin->email],
+                    'stories' => [
+                        'longForm' => ['id' => $longForm->id, 'ulid' => $longForm->ulid],
+                        'adventure' => ['id' => $adventure->id, 'ulid' => $adventure->ulid],
+                    ],
+                    'media' => array_map(static fn (Media $item): array => ['id' => $item->id, 'ulid' => $item->ulid, 'title' => $item->title], $media),
+                ]);
+
+                continue;
+            }
+
             if ($input['path'] === '/__browser/fixtures') {
                 $users = [];
                 foreach (['Alice', 'Bob'] as $name) {
+                    $suffix = $input['headers']['x-browser-name-suffix'] ?? '';
                     $user = User::factory()->approved()->create([
-                        'display_name' => $name,
+                        'display_name' => trim($name.' '.$suffix),
                         'is_admin' => false,
                     ]);
                     $users[strtolower($name)] = ['id' => $user->id, 'email' => $user->email];
