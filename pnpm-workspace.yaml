@@ -17,3 +17,4 @@ allowBuilds:
 # freshly published version installs immediately in policy-enabled environments.
 minimumReleaseAgeExclude:
   - bwh-auth
+  - react-hook-form@7.90.0
