@@ -8,7 +8,7 @@
         "dev": "vite",
         "test": "jest --passWithNoTests",
         "test:browser": "pnpm run build && playwright test",
-        "type-check": "tsc --noEmit && tsc -p tests/browser/tsconfig.json",
+        "type-check": "tsc6 --noEmit && tsc6 -p tests/browser/tsconfig.json",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "postinstall": "node scripts/spotlight-noindex.mjs"
