@@ -17,6 +17,7 @@
     // and npm install -D @types/node
 
     // Other Outputs
+    "rootDir": ".",
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
