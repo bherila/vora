@@ -17,7 +17,7 @@
         "laravel/tinker": "^3.0.2",
         "league/flysystem-aws-s3-v3": "^3.35.3",
         "spatie/laravel-csp": "^3.29.0",
-        "symfony/yaml": "^7.4"
+        "symfony/yaml": "~8.0.15"
     },
     "require-dev": {
         "brianium/paratest": "^7.20",
