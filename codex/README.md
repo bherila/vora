@@ -13,11 +13,11 @@ container resuming on a newer commit) repeats it and only the dependency install
 do any work.
 
 `setup.sh` assumes the Codex image already provides Bash, curl, PHP 8.5 (the
-environment's configured runtime), Node.js, and either `pnpm` or Corepack. It
+environment's configured runtime), Node.js, and `npm` (or Corepack). It
 uses tools already available on `PATH` when possible, installs Composer into
-`$HOME/.local/bin` only when missing, and activates pnpm through Corepack only
-when `pnpm` is missing. It validates the locked PHP platform and installs
-Composer dependencies before the more verbose pnpm installation so PHP failures
+`$HOME/.local/bin` only when missing, and installs the pinned pnpm through npm
+(see below) only when the installed pnpm is not that version. It validates the
+locked PHP platform and installs Composer dependencies before the more verbose pnpm installation so PHP failures
 remain visible in Codex logs.
 
 For Laravel convenience, the script creates `.env` from `.env.example` when
@@ -61,3 +61,15 @@ added before they can run against those services:
 - Production deploys from GitHub Actions: `DEPLOY_ENABLED=true` plus
   `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_USERNAME`, and `SSH_HOST` as
   variables or secrets accessible to the deploy workflow.
+## pnpm version
+
+`package.json`'s `packageManager` pins pnpm (for example `pnpm@12.11.2`). A pnpm of any other
+version switches itself by downloading the pinned release (`@pnpm/exe.<platform>`) with Node's
+built-in `fetch`, which ignores the sandbox egress proxy and fails with "Could not reach
+https://registry.npmjs.org/@pnpm/exe.linux-x64/…: fetch failed" (even `pnpm --version` does
+this). So `ensure_pnpm` installs the exact pinned version with `npm install --global --prefix
+~/.local` (npm honours the proxy), falls back to Corepack, and exits with an error rather than
+continuing on the wrong version. It checks versions with
+`npm_config_manage_package_manager_versions=false` so the check itself never triggers a
+download, and exports `NODE_USE_ENV_PROXY=1` so Node's `fetch` uses the proxy where the Node
+version supports it.
