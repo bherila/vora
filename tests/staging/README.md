@@ -47,13 +47,20 @@ add/move/removal. The run removes only its two saved references at the end and v
 previously playable signed HLS segment then returns 404. Video metadata includes
 a unique run marker so a previous run cannot retain the same content hash.
 Original fixture files are generated under `.fixtures/`; screenshots, traces,
-HTML report, and run identifiers stay under ignored `artifacts/`. These artifacts
-can contain disposable session cookies and signed local URLs; keep them local.
+HTML report, and run identifiers stay under ignored `artifacts/`. Local artifacts
+remain on this machine. The CI workflow uploads its disposable reports and service
+logs for seven days; these may contain test session cookies and signed loopback URLs.
 
 Playback polling allows the application's normal two-minute negative HLS cache
 and local FFmpeg processing to complete. The test timeout is six minutes.
 Passing validates this local MinIO/transcoder contract, not production R2,
 external transcoding infrastructure, email delivery, or hosting.
+
+The **Real media staging acceptance** GitHub Actions workflow runs this same
+stack on relevant pull requests and supports manual dispatch. It builds the
+images sequentially with layer caching, initializes its isolated SQLite volume,
+runs the acceptance journey, and stops services afterward. Prefer CI for the full
+journey on a busy shared development machine.
 
 After testing, stop idle containers without deleting reusable volumes:
 
