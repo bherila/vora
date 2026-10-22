@@ -37,7 +37,10 @@ be moved directly into the device's camera roll.
 The existing verified-email, account approval, two-factor authentication,
 eligibility, quota, and media review policies apply. New uploads await media
 review before other attendees can see them. Event membership does not bypass
-moderation or account restrictions. An uploader retains private management access
+moderation or account restrictions. Set the instance’s default storage quota in
+Admin → Users; unset account quotas inherit it, and explicit account overrides
+still apply. Uploads and durable Saves both count toward account usage. An
+uploader retains private management access
 to their own files if their Event membership changes. Deleting Events is not
 exposed: changing visibility or membership preserves their media's access boundary.
 
@@ -81,8 +84,8 @@ session cookies, cache prefixes, or Redis namespaces between instances.
 A shared transcoder may process several named input/output bucket pairs with a
 single global worker/resource budget. Each instance needs a distinct HLS output
 bucket: cleanup and content reference ownership are scoped to that destination.
-See the transcoder repository's multi-tenant deployment guide for its pair
-configuration and fairness/checkpoint behavior. Adding an Event app does not
+See the [shared transcoder guide](https://github.com/bherila/s3-hls-transcoder/blob/main/docs/MULTI_TENANT.md)
+for its pair configuration and fairness/checkpoint behavior. Adding an Event app does not
 require copying the transcoder deployment.
 
 ## Validation and reusable local staging
