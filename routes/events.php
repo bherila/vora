@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Events\EventAdminController;
 use App\Http\Controllers\Events\EventController;
+use App\Http\Controllers\Events\EventJoinController;
 use App\Http\Controllers\Events\EventMediaController;
 use App\Models\Event;
 use App\Services\Events\EventAccess;
@@ -13,7 +14,11 @@ Route::bind('event', fn (string $ulid): Event => app(EventAccess::class)
     ->visibleTo(Event::query(), request()->user())->where('ulid', $ulid)->first()
     ?? abort(404, 'Not found.'));
 
+Route::get('/events/join/{ulid}', [EventJoinController::class, 'start'])->whereUlid('ulid')
+    ->middleware('module:events')->name('events.join');
+
 Route::middleware(['auth', 'approved', 'module:events'])->group(function (): void {
+    Route::get('/events/continue', [EventJoinController::class, 'continue'])->name('events.join.continue');
     Route::get('/events', [EventController::class, 'page'])->name('events.index');
     Route::get('/attendees', [EventController::class, 'page'])->name('events.attendees');
     Route::get('/attendees/{user}', [EventController::class, 'page'])->name('events.attendee');

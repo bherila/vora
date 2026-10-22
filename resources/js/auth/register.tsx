@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 
+import { EventJoiningNotice } from './event-joining';
+
 function getAdultBirthDateLimit(): string {
   const date = new Date();
   date.setFullYear(date.getFullYear() - 18);
@@ -133,6 +135,7 @@ function RegisterPage() {
           <CardDescription>Sign up to get started</CardDescription>
         </CardHeader>
         <CardContent>
+          <EventJoiningNotice stage="sign-in" />
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>

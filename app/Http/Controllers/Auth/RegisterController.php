@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
+use App\Services\Events\EventJoining;
 use App\Services\InviteService;
 use App\Services\SettingsService;
 use Illuminate\Auth\Events\Registered;
@@ -30,7 +31,7 @@ class RegisterController extends Controller
         $invite = $this->invites->findUsable($inviteUuid);
 
         return view('auth.register', [
-            'initialData' => ['register' => [
+            'initialData' => app(EventJoining::class)->initialData($request) + ['register' => [
                 'public_signups_enabled' => $this->settings->publicSignupsEnabled(),
                 'invite' => $inviteUuid,
                 'invite_valid' => $invite !== null,

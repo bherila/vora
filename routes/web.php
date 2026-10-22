@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\AdminUserRestrictionController;
 use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PendingApprovalController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\CanonicalDiscussionController;
@@ -122,7 +123,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/mutes', [MuteController::class, 'store']);
     Route::delete('/api/mutes', [MuteController::class, 'destroy']);
 
-    Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
+    Route::get('/pending-approval', PendingApprovalController::class)->name('approval.pending');
     Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Services\Events\EventJoining;
 use BWH\Auth\Concerns\ThrottlesLoginAttempts;
 use BWH\Auth\Contracts\AuthAuditLogger;
 use BWH\Auth\Services\TwoFactorService;
@@ -30,9 +31,9 @@ class LoginController extends Controller
         private readonly TwoFactorService $twoFactor,
     ) {}
 
-    public function show(): View
+    public function show(Request $request, EventJoining $joining): View
     {
-        return view('auth.login');
+        return view('auth.login', ['initialData' => $joining->initialData($request)]);
     }
 
     public function store(LoginRequest $request): RedirectResponse|JsonResponse
@@ -85,7 +86,7 @@ class LoginController extends Controller
             return redirect()->route('login');
         }
 
-        return view('auth.two-factor', ['attemptToken' => $token]);
+        return view('auth.two-factor', ['attemptToken' => $token, 'initialData' => app(EventJoining::class)->initialData($request)]);
     }
 
     public function logout(Request $request): RedirectResponse

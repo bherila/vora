@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\Events\EventJoining;
+use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,7 +16,7 @@ class EmailVerificationController extends Controller
     {
         return $request->user()?->hasVerifiedEmail()
             ? $this->afterVerified($request)
-            : view('auth.verify-email');
+            : view('auth.verify-email', ['initialData' => app(EventJoining::class)->initialData($request)]);
     }
 
     public function verify(EmailVerificationRequest $request): RedirectResponse
@@ -33,11 +35,7 @@ class EmailVerificationController extends Controller
      */
     private function afterVerified(Request $request): RedirectResponse
     {
-        $user = $request->user();
-
-        return $user->isApproved()
-            ? redirect()->intended($user->getLoginRedirectUrl())
-            : redirect()->route('approval.pending');
+        return redirect(app(AuthUserPolicy::class)->redirectAfterLogin($request->user(), $request));
     }
 
     public function resend(Request $request): RedirectResponse

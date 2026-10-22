@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 
+import { EventJoiningNotice } from './event-joining';
 import { getCsrfToken } from './shared-components';
 
 function LoginPage() {
@@ -53,6 +54,7 @@ function LoginPage() {
           <CardDescription>Enter your credentials to access your account</CardDescription>
         </CardHeader>
         <CardContent>
+          <EventJoiningNotice stage="sign-in" />
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>

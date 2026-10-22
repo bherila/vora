@@ -1,12 +1,14 @@
 import { TwoFactorForm } from 'bwh-auth';
 import { createRoot } from 'react-dom/client';
 
+import { EventJoiningNotice } from './event-joining';
 import { getAuthComponents } from './shared-components';
 
 function TwoFactorPage({ attemptToken, appEnv }: { attemptToken: string; appEnv: string }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <EventJoiningNotice stage="two-factor" />
         <TwoFactorForm
           components={getAuthComponents()}
           attemptToken={attemptToken}
