@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { mediaTypeForFile } from '@/media/types';
 import { type UploadReservation } from '@/media/uploadMediaFile';
+import { safeLocalBlobUrl } from '@/security/dom-url';
 
 export interface QueuedUpload {
   id: number;
@@ -32,7 +33,7 @@ function FilePreview({ file }: FilePreviewProps) {
   useEffect(() => {
     if (typeof URL.createObjectURL !== 'function' || mediaTypeForFile(file) === null) return;
     const preview = URL.createObjectURL(file);
-    setUrl(preview);
+    setUrl(safeLocalBlobUrl(preview));
     return () => URL.revokeObjectURL(preview);
   }, [file]);
 

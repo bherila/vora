@@ -75,7 +75,7 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     put.mockResolvedValue();
     let id = 41;
     post.mockImplementation(async (url) => /uploads$/.test(url) ? createdUpload(id++) : { success: true });
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: jest.fn(() => `blob:preview-${Math.random()}`) });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: jest.fn(() => `blob:${window.location.origin}/preview-${Math.random()}`) });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: jest.fn() });
   });
 

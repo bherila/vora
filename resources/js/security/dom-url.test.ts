@@ -1,8 +1,9 @@
-import { safeHttpsUrl, safeInternalUrl, safeSameOriginUrl } from '@/security/dom-url';
+import { safeHttpsUrl, safeInternalUrl, safeLocalBlobUrl, safeSameOriginUrl } from '@/security/dom-url';
 
 describe('DOM URL boundaries', () => {
   it('accepts app-relative routes and encodes HTML metacharacters', () => {
     expect(safeInternalUrl('/users/7?name=<script>')).toBe('/users/7?name=%3Cscript%3E');
+    expect(safeInternalUrl("/users/7?name='quoted'")).toBe('/users/7?name=%27quoted%27');
   });
 
   it.each([
@@ -29,5 +30,14 @@ describe('DOM URL boundaries', () => {
     expect(safeHttpsUrl(signed)).toBe(signed);
     expect(safeHttpsUrl('http://r2.example/file')).toBeNull();
     expect(safeHttpsUrl('javascript:alert(1)')).toBeNull();
+  });
+
+  it('accepts only this origin’s preview blobs and escapes URL metacharacters', () => {
+    const preview = `blob:${window.location.origin}/01234567-89ab-cdef-0123-456789abcdef`;
+    expect(safeLocalBlobUrl(preview)).toBe(preview);
+    expect(safeLocalBlobUrl(`${preview}'<svg>`)).toBe(`${preview}%27%3Csvg%3E`);
+    for (const value of [null, 'javascript:alert(1)', 'data:text/html,<svg>', '/uploads/image.png', 'https://localhost/image.png', 'blob:https://evil.example/preview', 'blob:null/preview']) {
+      expect(safeLocalBlobUrl(value)).toBeNull();
+    }
   });
 });
