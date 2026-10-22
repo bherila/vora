@@ -58,12 +58,12 @@ function statusLabel(item: QueuedUpload): string {
 
 /** Local previews are revoked as soon as their queue row leaves the dialog. */
 export function UploadQueue({ items, locked, busy, onRemove, onTitleChange }: UploadQueueProps) {
-  return <ol aria-label="Selected uploads" className="grid max-h-64 gap-3 overflow-y-auto rounded-md border p-3">
+  return <ol aria-label="Selected uploads" className="grid min-w-0 grid-cols-1 max-h-64 gap-3 overflow-y-auto rounded-md border p-3">
     {items.map((item) => <li key={item.id} className="flex min-w-0 items-start gap-3" aria-label={item.file.name}>
       <FilePreview file={item.file} />
-      <div className="grid min-w-0 flex-1 gap-1">
-        <div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-medium" title={item.file.name}>{item.file.name}</p>
-          {item.status !== 'completed' && <Button type="button" size="sm" variant="outline" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => onRemove(item.id)}>Remove</Button>}
+      <div className="grid min-w-0 flex-1 grid-cols-1 gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-2"><p className="min-w-0 flex-1 truncate text-sm font-medium" title={item.file.name}>{item.file.name}</p>
+          {item.status !== 'completed' && <Button type="button" size="sm" variant="outline" className="shrink-0" aria-label={`Remove ${item.file.name}`} disabled={busy} onClick={() => onRemove(item.id)}>Remove</Button>}
         </div>
         <p className="text-xs text-muted-foreground">{statusLabel(item)}</p>
         {['preparing', 'uploading'].includes(item.status) && <progress value={item.progress} max={100} aria-label={`Progress for ${item.file.name}`} className="h-2 w-full" />}

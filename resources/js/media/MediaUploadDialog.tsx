@@ -258,11 +258,11 @@ export function MediaUploadDialog({
       <DialogTrigger asChild>
         <Button size={triggerSize} variant={triggerVariant}>{triggerLabel}</Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] min-w-0 grid-cols-1 overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload media</DialogTitle>
         </DialogHeader>
-        <form onSubmit={(event) => void upload(event)} className="grid gap-4">
+        <form onSubmit={(event) => void upload(event)} className="grid min-w-0 grid-cols-1 gap-4">
           <FileDropzone
             accept="image/*,video/*"
             files={pending.map((item) => item.file)}
