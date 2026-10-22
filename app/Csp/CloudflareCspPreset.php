@@ -73,7 +73,8 @@ class CloudflareCspPreset implements Preset
                 continue;
             }
 
-            $origins[$scheme.'://'.$host] = true;
+            $port = parse_url($url, PHP_URL_PORT);
+            $origins[$scheme.'://'.$host.(is_int($port) ? ':'.$port : '')] = true;
         }
 
         return array_keys($origins);

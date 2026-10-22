@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { StorageLimitDialog } from '@/admin/StorageLimitDialog';
 import { DatePicker } from '@/components/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { formatBytes } from '@/media/types';
 
 interface AdminUser {
   id: number;
@@ -50,6 +52,7 @@ interface AdminUser {
   can_receive_invites: boolean;
   trusted_inviter: boolean;
   library_enabled: boolean;
+  storage_limit_bytes: number | null;
   is_banned: boolean;
   ban_reason: string | null;
   ban_hides_content: boolean;
@@ -112,6 +115,7 @@ export function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [storageTarget, setStorageTarget] = useState<AdminUser | null>(null);
   const [birthDateTarget, setBirthDateTarget] = useState<AdminUser | null>(null);
   const [birthDateValue, setBirthDateValue] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -496,6 +500,7 @@ export function AdminUsersPage() {
                     ))}
                     {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
                     {user.library_enabled && <Badge variant="outline">Library enabled</Badge>}
+                    <Badge variant="outline">Storage: {user.storage_limit_bytes == null ? 'Unlimited' : formatBytes(user.storage_limit_bytes)}</Badge>
                     {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
                     <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
                     {user.referrer_display_name && (
@@ -585,6 +590,7 @@ export function AdminUsersPage() {
                         <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
                           {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
                         </Button>
+                        <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => setStorageTarget(user)}>Set storage limit</Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -687,6 +693,16 @@ export function AdminUsersPage() {
         </Table>
       )}
 
+      {storageTarget && <StorageLimitDialog
+        key={storageTarget.id}
+        userName={storageTarget.display_name ?? storageTarget.name}
+        limitBytes={storageTarget.storage_limit_bytes ?? null}
+        onClose={() => setStorageTarget(null)}
+        onSave={async (limitBytes) => {
+          await patchUser(storageTarget.id, { storage_limit_bytes: limitBytes });
+          await loadUsers();
+        }}
+      />}
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent>
           <DialogHeader>

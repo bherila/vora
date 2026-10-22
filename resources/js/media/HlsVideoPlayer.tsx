@@ -16,8 +16,8 @@ interface HlsVideoPlayerProps {
 }
 
 /**
- * Plays an adaptive-bitrate HLS stream. Safari/iOS play HLS natively; everywhere
- * else we attach hls.js (Media Source Extensions). `src` points at the
+ * Plays an adaptive-bitrate HLS stream through hls.js when Media Source
+ * Extensions are available, otherwise native HLS. `src` points at the
  * authenticated playback proxy, which serves manifests and 302-redirects segments
  * to presigned R2 URLs.
  */
@@ -42,16 +42,8 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       return;
     }
 
-    // Native HLS (Safari, iOS): point the element at the manifest.
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = safeSource;
-      const handleNativeError = () => onErrorRef.current?.();
-      video.addEventListener('error', handleNativeError);
-      return () => {
-        video.removeEventListener('error', handleNativeError);
-      };
-    }
-
+    // Native HLS capability checks can overstate support (including Chromium).
+    // Prefer hls.js/MSE as recommended by hls.js, retaining native-only support.
     if (Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true });
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -63,6 +55,16 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       hls.attachMedia(video);
       return () => {
         hls.destroy();
+      };
+    }
+
+    // Native HLS remains available on browsers without supported MSE.
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = safeSource;
+      const handleNativeError = () => onErrorRef.current?.();
+      video.addEventListener('error', handleNativeError);
+      return () => {
+        video.removeEventListener('error', handleNativeError);
       };
     }
 

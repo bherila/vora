@@ -229,7 +229,7 @@ class MediaController extends Controller
         );
 
         if (! $completed) {
-            return response()->json(['success' => false, 'message' => 'Multipart upload could not be completed.'], 422);
+            return response()->json(['success' => false, 'message' => 'Multipart upload could not be completed. Check the file and your account storage limit.'], 422);
         }
 
         $media->refresh()->load('interests');
@@ -255,6 +255,17 @@ class MediaController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function cancelUpload(Request $request, Media $media): JsonResponse
+    {
+        $this->authorizeOr404('complete', $media);
+        abort_unless($media->user_id === $request->user()->id && $media->supportsMultipartUpload(), 404, 'Not found.');
+        if (! $this->uploads->cancelPendingUpload($request->user(), $media)) {
+            return response()->json(['success' => false, 'message' => 'A completed upload cannot be canceled.'], 409);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
     /**
      * Confirm an upload finished; verifies the object landed in storage.
      */
@@ -269,7 +280,7 @@ class MediaController extends Controller
         if (! $this->uploads->completeUpload($media)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Upload could not be verified — the file is missing or exceeds the size limit.',
+                'message' => 'Upload could not be verified — the file is missing, exceeds the size limit, or would exceed your account storage limit.',
             ], 422);
         }
 

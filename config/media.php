@@ -19,7 +19,7 @@ return [
         'video' => 's3',
     ],
 
-    // Disk that holds the s3-hls transcoder output (read-only for the app).
+    // Transcoder output: playback reads; permanent cleanup deletes unreferenced artifacts.
     'hls_disk' => 'hls',
 
     // Disk that holds the image-hashing worker's PDQ results (read-only for the

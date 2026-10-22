@@ -8,12 +8,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
+import { LibraryBulkActions } from '@/library/LibraryBulkActions';
 import { LibraryCollectionDialog, LibraryNoteDialog, LibraryShareDialog, type ShareTarget } from '@/library/LibraryDialogs';
 import { LibraryItemDialog, LibraryItemPreview } from '@/library/LibraryItemDialog';
+import { StorageQuotaSummary } from '@/library/StorageQuotaSummary';
 import { type AccountStorageUsage, EMPTY_STORAGE_USAGE, type LibraryCollection, libraryError, type LibraryItem } from '@/library/types';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import { formatBytes, type PagedResponse } from '@/media/types';
@@ -41,6 +44,7 @@ export function LibraryPage() {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [revision, setRevision] = useState(0);
   const [activeItem, setActiveItem] = useState<LibraryItem | null>(null);
   const [collectionEditor, setCollectionEditor] = useState<LibraryCollection | null>();
@@ -55,6 +59,9 @@ export function LibraryPage() {
   const [initialItemUlid] = useState(params.get('item'));
   const canAddHere = enabled && (!selectedCollection || selectedCollection.owned) && section !== 'shared';
   const refresh = (): void => setRevision((value) => value + 1);
+  const selectableItems = items.filter((item) => item.owned);
+
+  useEffect(() => { setSelectedItems([]); }, [section, collectionUlid, query, page, revision]);
 
   useEffect(() => {
     let active = true;
@@ -149,7 +156,8 @@ export function LibraryPage() {
     </header>
     {!enabled && <Alert><AlertDescription>Library storage is enabled selectively by an administrator. You can still view shared content and manage items already in your Library.</AlertDescription></Alert>}
     <div className="rounded-lg border px-4 py-3 text-sm">
-      <p className="font-medium">{formatBytes(usage.total_bytes)} in your account</p>
+      <StorageQuotaSummary usage={usage} />
+      <p className="mt-3 border-t pt-3 font-medium">Stored originals, including retention: {formatBytes(usage.total_bytes)}</p>
       <p className="text-muted-foreground">Uploaded originals: {formatBytes(usage.uploaded_bytes)} · Saved originals: {formatBytes(usage.saved_bytes)} · Retained deleted uploads: {formatBytes(usage.retained_bytes)}</p>
       <p className="mt-1 text-xs text-muted-foreground">Each original counts once in your account, even in several collections. Processed copies are excluded.</p>
       {usage.unknown_size_file_count > 0 && <p className="mt-1 text-xs text-muted-foreground">Sizes are unavailable for {usage.unknown_size_file_count} files and excluded from these totals.</p>}
@@ -184,10 +192,12 @@ export function LibraryPage() {
         <Label htmlFor="library-search" className="sr-only">Search Library items</Label>
         <Input id="library-search" placeholder="Search titles and notes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        {!loading && selectableItems.length > 0 && <Label className="flex items-center gap-2 text-sm"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedItems(checked ? selectableItems.map((item) => item.ulid) : [])} />Select all on this page</Label>}
+        {!loading && selectedItems.length > 0 && <LibraryBulkActions itemUlids={selectedItems} collections={collections} currentCollection={selectedCollection} enabled={enabled} onChanged={refresh} onClear={() => setSelectedItems([])} />}
         {loading ? <p role="status" className="py-8 text-sm text-muted-foreground">Loading Library…</p> : items.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center"><p className="font-medium">No items here yet.</p><p className="mt-2 text-sm text-muted-foreground">Upload media, add a note, or choose Save to Library on a media page.</p></div> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => <Card key={item.ulid} className="overflow-hidden py-0">
             <button type="button" aria-label={`Open ${item.title || 'untitled item'}`} className="flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-muted" onClick={() => void openItem(item.ulid)}><LibraryItemPreview item={item} /></button>
-            <CardContent className="space-y-2 p-4"><h3 className="truncate font-medium">{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</h3><div className="flex flex-wrap gap-1"><Badge variant="secondary">{item.body !== null ? 'Note' : item.media?.type ?? 'Media'}</Badge><Badge variant="outline">{item.owned ? item.source === 'saved' ? 'Saved' : 'Yours' : 'Shared with you'}</Badge></div></CardContent>
+            <CardContent className="space-y-2 p-4"><div className="flex items-center gap-2">{item.owned && <Checkbox aria-label={`Select ${item.title || 'untitled item'}`} checked={selectedItems.includes(item.ulid)} onCheckedChange={(checked) => setSelectedItems((current) => checked ? [...current, item.ulid] : current.filter((ulid) => ulid !== item.ulid))} />}<h3 className="truncate font-medium">{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</h3></div><div className="flex flex-wrap gap-1"><Badge variant="secondary">{item.body !== null ? 'Note' : item.media?.type ?? 'Media'}</Badge><Badge variant="outline">{item.owned ? item.source === 'saved' ? 'Saved' : 'Yours' : 'Shared with you'}</Badge></div></CardContent>
           </Card>)}
         </div>}
         {(page > 1 || hasMore) && <div className="flex items-center justify-between"><Button variant="outline" disabled={loading || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</Button><span className="text-sm">Page {page}</span><Button variant="outline" disabled={loading || !hasMore} onClick={() => setPage((value) => value + 1)}>Next</Button></div>}

@@ -165,8 +165,9 @@ class BrowserServerTest extends TestCase
                 foreach ([$owner, $saver] as $user) {
                     $user->forceFill(['library_enabled' => true])->save();
                 }
+                $suffix = $input['headers']['x-browser-name-suffix'] ?? '';
                 $persona = Character::factory()->for($owner)->create([
-                    'display_name' => 'Library related persona', 'is_linked' => false,
+                    'display_name' => trim('Library related persona '.$suffix), 'is_linked' => false,
                 ]);
                 $media = Media::factory()->for($owner)->approved()->create([
                     'title' => 'Shared library photo', 'mime_type' => 'image/png', 'size_bytes' => strlen($image),

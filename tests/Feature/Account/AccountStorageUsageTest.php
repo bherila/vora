@@ -32,6 +32,13 @@ class AccountStorageUsageTest extends TestCase
                     'active_file_count' => 0,
                     'retained_file_count' => 0,
                     'unknown_size_file_count' => 0,
+                    'active_unknown_size_file_count' => 0,
+                    'limit_bytes' => null,
+                    'reserved_bytes' => 0,
+                    'used_bytes' => 0,
+                    'remaining_bytes' => null,
+                    'over_limit' => false,
+                    'warning' => null,
                 ],
             ]);
     }
@@ -63,6 +70,13 @@ class AccountStorageUsageTest extends TestCase
                     'active_file_count' => 3,
                     'retained_file_count' => 1,
                     'unknown_size_file_count' => 0,
+                    'active_unknown_size_file_count' => 0,
+                    'limit_bytes' => null,
+                    'reserved_bytes' => 9999,
+                    'used_bytes' => 5 * 1024 ** 3 + 1200 + 9999,
+                    'remaining_bytes' => null,
+                    'over_limit' => false,
+                    'warning' => null,
                 ],
             ]);
     }

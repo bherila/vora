@@ -250,6 +250,7 @@ export function MediaUploadDialog({
     setUploading(true);
     setProgress(0);
     let completedCount = 0;
+    let disposableUploadId: number | null = null;
     try {
       for (const [index, item] of pending.entries()) {
         const selectedFile = item.file;
@@ -294,12 +295,15 @@ export function MediaUploadDialog({
         const created = existingSession === null
           ? (await fetchWrapper.post(isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload)) as StoreResponse
           : null;
+        disposableUploadId = created?.data.id ?? null;
 
         const shouldMultipart = existingSession !== null
           || (created?.multipart.enabled === true && selectedFile.size >= created.multipart.threshold_bytes);
 
         if (shouldMultipart) {
           const session = existingSession ?? await beginMultipartSession(created, sessionKey);
+          // A started multipart session can resume after a transient failure.
+          disposableUploadId = null;
           await uploadMultipartFile(selectedFile, {
             sessionKey,
             session,
@@ -338,6 +342,7 @@ export function MediaUploadDialog({
           await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
           await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
         }
+        disposableUploadId = null;
         completedCount += 1;
       }
 
@@ -346,10 +351,18 @@ export function MediaUploadDialog({
       resetForm();
       onUploaded();
     } catch (err) {
+      if (disposableUploadId !== null) {
+        try {
+          await fetchWrapper.post(`/api/media/${disposableUploadId}/cancel-upload`, {});
+        } catch {
+          // A completed upload is protected by the server. Other abandoned
+          // uploads remain visible to scheduled cleanup if cancellation fails.
+        }
+      }
       if (completedCount > 0) {
         setPending(pending.slice(completedCount));
-        onUploaded();
       }
+      onUploaded();
 
       if (err instanceof DOMException && err.name === 'AbortError') {
         toast.info(completedCount > 0 ? `${completedCount} upload${completedCount === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');

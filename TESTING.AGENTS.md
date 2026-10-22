@@ -119,6 +119,11 @@ by CI. These journeys do not cover real email delivery, object-store uploads,
 video transcoding/playback, or a deployed PHP web server. Keep the feature tests
 and manual checks below for those integrations and additional audience cases.
 
+For real Library photo/video uploads, external transcoding, retained playback,
+and final-reference cleanup, follow [Private Library rollout checks](docs/media/library-rollout.md).
+Its opt-in `ops:media-integration-check` command performs read-only checks of four
+explicitly selected test resources; it does not replace browser playback checks.
+
 ### Browser smoke checks
 
 Use two separate browser profiles with approved, non-admin test accounts on a

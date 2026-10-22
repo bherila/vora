@@ -82,7 +82,8 @@ return [
 
         // HLS output bucket written by the s3-hls transcoder. The app reads
         // mapping objects (mappings/<source-key>.json) from here to resolve a
-        // playable master playlist; it never writes here.
+        // playable master playlist. Permanent cleanup deletes private mappings
+        // and output trees only after their final media reference is released.
         'hls' => [
             'driver' => 's3',
             'key' => env('HLS_ACCESS_KEY_ID') ?: env('AWS_ACCESS_KEY_ID'),

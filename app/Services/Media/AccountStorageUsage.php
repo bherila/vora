@@ -11,10 +11,10 @@ class AccountStorageUsage
 {
     /**
      * Logical original-file usage, counted once per account and stored media row.
-     * Sharing alone consumes no recipient storage. Derivatives and unfinished
-     * uploads are excluded; unknown sizes are explicitly reported.
+     * Sharing alone consumes no recipient storage. Derivatives are excluded;
+     * unfinished uploads reserve their declared size. Unknown sizes are reported.
      *
-     * @return array{active_bytes: int, uploaded_bytes: int, saved_bytes: int, retained_bytes: int, total_bytes: int, active_file_count: int, retained_file_count: int, unknown_size_file_count: int}
+     * @return array<string, int|string|bool|null>
      */
     public function forUser(User $user): array
     {
@@ -38,10 +38,18 @@ class AccountStorageUsage
             ->selectRaw('COALESCE(SUM(CASE WHEN active = 0 THEN size_bytes ELSE 0 END), 0) AS retained_bytes')
             ->selectRaw('COUNT(CASE WHEN active = 1 THEN 1 END) AS active_file_count')
             ->selectRaw('COUNT(CASE WHEN active = 0 THEN 1 END) AS retained_file_count')
-            ->selectRaw('COUNT(CASE WHEN size_bytes IS NULL THEN 1 END) AS unknown_size_file_count')->first();
+            ->selectRaw('COUNT(CASE WHEN size_bytes IS NULL THEN 1 END) AS unknown_size_file_count')
+            ->selectRaw('COUNT(CASE WHEN active = 1 AND size_bytes IS NULL THEN 1 END) AS active_unknown_size_file_count')->first();
 
         $activeBytes = (int) $totals->active_bytes;
         $retainedBytes = (int) $totals->retained_bytes;
+
+        $reservedBytes = (int) $user->media()->where('upload_status', 'pending')->sum('multipart_expected_size_bytes');
+        $limit = $user->storage_limit_bytes;
+        $usedBytes = $activeBytes + $reservedBytes;
+        $unknown = (int) $totals->active_unknown_size_file_count;
+        $warning = $limit === null ? null : ($unknown > 0 ? 'unknown_size'
+            : ($usedBytes >= $limit ? 'limit_reached' : ($usedBytes >= $limit * 0.9 ? 'near_limit' : null)));
 
         return [
             'active_bytes' => $activeBytes,
@@ -52,6 +60,13 @@ class AccountStorageUsage
             'active_file_count' => (int) $totals->active_file_count,
             'retained_file_count' => (int) $totals->retained_file_count,
             'unknown_size_file_count' => (int) $totals->unknown_size_file_count,
+            'active_unknown_size_file_count' => $unknown,
+            'limit_bytes' => $limit,
+            'reserved_bytes' => $reservedBytes,
+            'used_bytes' => $usedBytes,
+            'remaining_bytes' => $limit === null ? null : max(0, $limit - $usedBytes),
+            'over_limit' => $limit !== null && ($usedBytes > $limit || $unknown > 0),
+            'warning' => $warning,
         ];
     }
 }
