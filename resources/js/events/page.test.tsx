@@ -179,6 +179,22 @@ describe('EventsPage', () => {
     back.mockRestore();
   });
 
+  it.each([
+    { activation: 'pointer', detail: 1, restored: 546 },
+    { activation: 'keyboard', detail: 0, restored: 224 },
+  ])('restores the $activation activation position when native focus scrolls before click', async ({ detail, restored }) => {
+    render(<EventsPage />);
+    const link = await screen.findByRole('link', { name: 'Open Welcome video' });
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 546 });
+    fireEvent(link, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 224 });
+    fireEvent.click(link, { detail });
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, restored));
+  });
+
   it('continues viewer navigation across gallery page boundaries with full detail loading', async () => {
     const second = { ...media, id: 12, ulid: 'media-two', title: 'Next page photo', type: 'photo', url: '/second' };
     const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;

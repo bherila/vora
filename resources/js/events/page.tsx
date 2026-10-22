@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useRef, useState } from 'react';
+import { type MouseEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -59,6 +59,7 @@ export function EventsPage() {
   const [detailRefreshPaused, setDetailRefreshPaused] = useState(false);
   const [detailRevision, setDetailRevision] = useState(0);
   const galleryScroll = useRef(0);
+  const galleryPointerStart = useRef<{ anchor: HTMLAnchorElement; scroll: number } | null>(null);
   const itemRef = useRef('');
   const openedHere = useRef(false);
   const pendingEdge = useRef<'first' | 'last' | null>(null);
@@ -85,12 +86,12 @@ export function EventsPage() {
     window.history.replaceState(window.history.state, '', url);
     setLocation(window.location.pathname + window.location.search);
   };
-  const navigate = (url: string): void => {
+  const navigate = (url: string, scrollPosition = window.scrollY): void => {
     pendingScrollRestore.current = null;
     const target = new URL(url, window.location.origin);
     const targetItem = target.searchParams.get('item') ?? target.searchParams.get('media');
     if (targetItem && itemRef.current) { replaceLocation(url); return; }
-    if (targetItem) { galleryScroll.current = window.scrollY; openedHere.current = true; }
+    if (targetItem) { galleryScroll.current = scrollPosition; openedHere.current = true; }
     window.history.pushState(targetItem ? { eventViewer: true } : {}, '', url);
     setLocation(window.location.pathname + window.location.search);
   };
@@ -105,12 +106,19 @@ export function EventsPage() {
     setListRevision((value) => value + 1);
   };
   useEffect(() => { itemRef.current = itemUlid; }, [itemUlid]);
+  const captureGalleryPointer = (event: PointerEvent<HTMLElement>): void => {
+    const anchor = (event.target as HTMLElement).closest('a');
+    // Some mobile browsers scroll a link into focus before dispatching its click.
+    galleryPointerStart.current = event.button === 0 && anchor ? { anchor, scroll: window.scrollY } : null;
+  };
   const followInternalLink = (event: MouseEvent<HTMLElement>): void => {
+    const pointerStart = galleryPointerStart.current;
+    galleryPointerStart.current = null;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const anchor = (event.target as HTMLElement).closest('a');
     if (!anchor || anchor.origin !== window.location.origin || !anchor.pathname.startsWith('/events') && !anchor.pathname.startsWith('/attendees')) return;
     event.preventDefault();
-    navigate(anchor.pathname + anchor.search);
+    navigate(anchor.pathname + anchor.search, event.detail > 0 && pointerStart?.anchor === anchor ? pointerStart.scroll : window.scrollY);
   };
 
   useEffect(() => {
@@ -272,7 +280,7 @@ export function EventsPage() {
   const clearFiltersUrl = pageUrl(params, { attendee_id: null, favorites_of: null, featured: null, section: null, page: null, item: null }, '/events');
   const mediaHeading = featured ? featuredLabel : favoritesOf ? `${attendees.find((entry) => String(entry.id) === favoritesOf)?.display_name ?? 'Attendee'}’s favorites` : section === 'mine' ? 'My uploads' : selectedAttendee ? `Uploads by ${selectedAttendee.display_name}` : selectedEvent?.name ?? 'All photos & videos';
 
-  return <div className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} onClick={followInternalLink}>
+  return <div className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} onPointerDownCapture={captureGalleryPointer} onClick={followInternalLink}>
     <Toaster />
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Event photos & videos</h1><p className="mt-1 text-sm text-muted-foreground">Browse the moments attendees shared, or add your own.</p></div>
