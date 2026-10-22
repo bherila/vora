@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
 import { AccountIdentitySettings } from '@/auth/account-identity-settings';
+import { ageRequirementMessage, ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
 import { Avatar } from '@/components/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -633,7 +634,7 @@ export function UserSettingsPage() {
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Used for account review and ID verification. Your real name is never displayed to others.
+                    Used for account review. Your real name is never displayed to others.
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -642,7 +643,7 @@ export function UserSettingsPage() {
                     {accountBirthDate || 'Not provided'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Used to verify age eligibility and never displayed to others. Contact an administrator if this date is incorrect.
+                    Your birth date is never displayed to others. Contact an administrator if this date is incorrect. {getAgePolicy().minimum_age !== null && ageRequirementMessage(getAgePolicy())} {ageVerificationMessage(getAgePolicy())}
                   </p>
                 </div>
                 <div className="space-y-1">

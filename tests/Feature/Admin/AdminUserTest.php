@@ -139,13 +139,13 @@ class AdminUserTest extends TestCase
     }
 
     #[Test]
-    public function admin_cannot_set_underage_birth_date(): void
+    public function admin_cannot_set_future_birth_date(): void
     {
         $admin = $this->admin();
         $target = User::factory()->approved()->create(['birth_date' => '1990-01-15']);
 
         $this->actingAs($admin)->patchJson("/api/admin/users/{$target->id}", [
-            'birth_date' => today()->subYears(18)->addDay()->toDateString(),
+            'birth_date' => today()->addDay()->toDateString(),
         ])->assertStatus(422)
             ->assertJsonValidationErrors('birth_date');
 

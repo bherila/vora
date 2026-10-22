@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Services\Auth\AgeEligibility;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -29,7 +30,7 @@ class AdminUserUpdateRequest extends FormRequest
             'library_enabled' => ['sometimes', 'boolean'],
             'storage_limit_bytes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:'.SettingsService::MAX_STORAGE_LIMIT_BYTES],
             'storage_unlimited' => ['sometimes', 'boolean'],
-            'birth_date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
+            'birth_date' => app(AgeEligibility::class)->birthDateRules(adminCorrection: true),
         ];
     }
 

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +14,7 @@ function VerifyEmailPage() {
   const initialStatus = typeof window === 'undefined'
     ? ''
     : window.location.search.includes('signup_status=pending-approval')
-      ? 'Thank you for signing up. After you verify your email, your account will be reviewed by an admin. ID verification will be required before age-restricted content is available.'
+      ? `Thank you for signing up. After you verify your email, your account will be reviewed by an admin. ${ageVerificationMessage(getAgePolicy())}`
       : '';
   const [status, setStatus] = useState(initialStatus);
   const [loading, setLoading] = useState(false);

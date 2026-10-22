@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { formatStorageLimit, StorageLimitDialog } from '@/admin/StorageLimitDialog';
+import { todayDate } from '@/auth/age-policy';
 import { DatePicker } from '@/components/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -84,17 +85,6 @@ function getCsrfToken() {
   return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 }
 
-function getAdultBirthDateLimit(): string {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - 18);
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
 async function patchUser(id: number, body: Record<string, unknown>) {
   const response = await fetch(`/api/admin/users/${id}`, {
     method: 'PATCH',
@@ -125,7 +115,7 @@ export function AdminUsersPage() {
   const [birthDateTarget, setBirthDateTarget] = useState<AdminUser | null>(null);
   const [birthDateValue, setBirthDateValue] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
-  const adultBirthDateLimit = getAdultBirthDateLimit();
+  const latestBirthDate = todayDate();
 
   // Ban dialog.
   const [banTarget, setBanTarget] = useState<AdminUser | null>(null);
@@ -782,13 +772,13 @@ export function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Edit Birth Date</DialogTitle>
             <DialogDescription>
-              Update the date of birth for <strong>{birthDateTarget?.name}</strong>. Store this as the literal calendar date shown on the user's ID.
+              Update the date of birth for <strong>{birthDateTarget?.name}</strong>. Record the correct calendar date. Changing it clears prior age verification and may restrict access under the current age policy.
             </DialogDescription>
           </DialogHeader>
           <DatePicker
             id="admin-user-birth-date"
             value={birthDateValue}
-            max={adultBirthDateLimit}
+            max={latestBirthDate}
             onChange={setBirthDateValue}
             placeholder="Select birth date"
           />

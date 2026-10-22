@@ -31,7 +31,7 @@ class LegalPagesTest extends TestCase
             ->assertSee('Terms of Service')
             ->assertSee('User content')
             ->assertSee('Acceptable use')
-            ->assertSee('at least 18 years old or the age of majority');
+            ->assertSee('at least 18 years old to hold an account');
     }
 
     public function test_default_home_page_has_single_heading_and_no_boilerplate_notice(): void

@@ -50,6 +50,10 @@ class VoraAuthUserPolicy implements AuthUserPolicy
             return route('user.settings', [], false);
         }
 
+        if (app(AgeEligibility::class)->reason($user) !== null) {
+            return route('age.eligibility', [], false);
+        }
+
         return app(EventJoining::class)->url($request)
             ?? $this->safeIntended($request)
             ?? $user->getLoginRedirectUrl();

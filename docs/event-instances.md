@@ -44,6 +44,18 @@ uploader retains private management access
 to their own files if their Event membership changes. Deleting Events is not
 exposed: changing visibility or membership preserves their media's access boundary.
 
+Administrators set the minimum account age and optional manual age confirmation
+in **Invites & Signups**. Defaults remain 18 years and no manual verification.
+Leave the minimum blank to disable it; birth dates remain required for registration
+and invitation requests. This software policy does not determine legal eligibility.
+When manual verification is enabled, an administrator confirms the attendee's age
+using the existing verification control in **Users**; the site does not collect
+identity-document uploads. Changing a recorded birth date clears prior verification.
+Policy changes apply to existing sessions immediately: attendees who no longer
+qualify see an explanation and can still manage, export or remove their account.
+Administrators retain access to change the policy. The built-in Terms reflect the
+current settings; review custom Terms when changing admission policy.
+
 ## Joining links and admission
 
 Use an Event's **Copy joining link** action to copy `/events/join/{ULID}` on

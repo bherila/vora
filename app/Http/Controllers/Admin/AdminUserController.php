@@ -159,6 +159,9 @@ class AdminUserController extends Controller
         }
 
         if (array_key_exists('birth_date', $data)) {
+            if ($user->birth_date?->toDateString() !== $data['birth_date']) {
+                $user->id_verified_at = null;
+            }
             $user->birth_date = $data['birth_date'];
         }
 
