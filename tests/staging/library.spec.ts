@@ -113,12 +113,6 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
   await page.getByRole('button', { name: 'Upload media', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type="file"]').setInputFiles(new URL(`./.fixtures/${filename}`, import.meta.url).pathname);
-  const fixtureBytes = await dialog.locator('input[type="file"]').evaluate((input: HTMLInputElement) => input.files?.[0]?.size ?? 0);
-  expect(fixtureBytes, 'The real upload fixture must contain bytes').toBeGreaterThan(0);
-  if (expectMultipartVideo) {
-    if (type === 'photo') expect(fixtureBytes, 'Tiny direct-upload photo fixture').toBeLessThan(1024);
-    else expect(fixtureBytes, 'Video fixture exceeds the opt-in multipart threshold').toBeGreaterThan(1024);
-  }
   await dialog.getByPlaceholder('Title (optional)', { exact: true }).fill(title);
   const pendingResponse = page.waitForResponse((response) => response.url().endsWith('/api/library/uploads') && response.request().method() === 'POST');
   const completeResponse = page.waitForResponse((response) => /\/api\/media\/[0-9]+\/(?:multipart\/)?complete$/.test(response.url()) && response.request().method() === 'POST');
@@ -132,6 +126,14 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
     const pending = await pendingResponse;
     expect(pending.ok()).toBeTruthy();
     const result = await pending.json() as Upload;
+    // FileDropzone clears its native input after retaining the File in React.
+    // Read the selected size from the actual form request instead of that input.
+    const fixtureBytes = (pending.request().postDataJSON() as { size: number }).size;
+    expect(fixtureBytes, 'The real upload fixture must contain bytes').toBeGreaterThan(0);
+    if (expectMultipartVideo) {
+      if (type === 'photo') expect(fixtureBytes, 'Tiny direct-upload photo fixture').toBeLessThan(1024);
+      else expect(fixtureBytes, 'Video fixture exceeds the opt-in multipart threshold').toBeGreaterThan(1024);
+    }
     const source = new URL(result.upload_url);
     expect(['127.0.0.1', 'localhost', '[::1]']).toContain(source.hostname);
     const completed = await completeResponse;
