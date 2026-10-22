@@ -79,6 +79,15 @@ notes, and collection creation from Admin Users. Disabling storage preserves
 existing viewing, removal, and access-revocation operations. Recipients need
 no storage entitlement to view an explicitly shared item or collection.
 
+The Library supports selection of owned items on the current page. Bulk actions
+add items to a collection, move only the current collection membership, remove
+collection membership, or remove items from the Library after confirmation.
+Other collection memberships survive a move. Selection resets on search, page,
+and section changes. `POST /api/library/items/bulk` accepts at most 100 opaque
+item identifiers and validates every item, collection, and source membership
+before changing anything. Removing membership or items remains available when
+storage is disabled. Adding saved items to a shared collection keeps them private.
+
 The migration makes `media.user_id` nullable so the stored media row can outlive
 its uploader. `library_items` are independent account-owned references to that
 row, or private text notes. `library_collection_items` only organizes those
