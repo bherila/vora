@@ -149,7 +149,7 @@ export function EventsPage() {
   const featuredUrl = pageUrl(params, { section: null, attendee_id: null, favorites_of: null, featured: '1', page: null, item: null }, '/events');
   const mineUrl = pageUrl(params, { section: 'mine', attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
 
-  return <main className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} onClick={followInternalLink}>
+  return <div className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-6 px-4 py-8`} onClick={followInternalLink}>
     <Toaster />
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Events</h1><p className="mt-1 text-sm text-muted-foreground">Share photos and videos with event attendees.</p></div>
@@ -195,7 +195,7 @@ export function EventsPage() {
     {activeItem && <EventMediaDialog key={activeItem.ulid} item={activeItem} onClose={closeItem} onDeleted={refresh} />}
     {editor !== undefined && <EventEditor event={editor} attendees={attendees} onClose={() => setEditor(undefined)} onSaved={refresh} />}
     {curatorsOpen && settings && <CuratorEditor settings={settings} attendees={attendees} onClose={() => setCuratorsOpen(false)} onSaved={refresh} />}
-  </main>;
+  </div>;
 }
 
 const element = document.getElementById('events');

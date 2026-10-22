@@ -97,7 +97,9 @@ media staging workflow exercises Docker uploads/playback independently of any
 production buckets.
 
 For a reusable local instance, set `LOCAL_STAGING_APP_PROFILE=event` when starting
-`docker/local/compose.yaml`. It defaults to `vora`. Follow the existing explicit
+`docker/local/compose.yaml`. It defaults to `vora`. Profile changes require
+recreating the containers (`up -d --no-build --force-recreate`); `start` reuses
+their previous environment. Follow the existing explicit
 SQLite initialization instructions in `docker/local/README.md`; changing profiles
 does not initialize or reset data. Keep disposable volumes for reuse, and run
 `docker compose -f docker/local/compose.yaml stop` when finished.
