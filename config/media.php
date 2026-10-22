@@ -61,6 +61,10 @@ return [
 
     'key_prefix' => env('MEDIA_KEY_PREFIX', 'uploads'),
 
+    // Optional separate scan prefix for immutable approved videos. Leave raw
+    // uploads outside the transcoder's scan prefix when sharing a legacy bucket.
+    'reviewed_key_prefix' => env('MEDIA_REVIEWED_KEY_PREFIX'),
+
     /*
     |--------------------------------------------------------------------------
     | Per-type upload constraints

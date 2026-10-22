@@ -271,6 +271,41 @@ class MediaServicesTest extends TestCase
         $this->assertSame('benign thumbnail', Storage::disk('photos')->get($fresh->reviewed_thumbnail_key));
     }
 
+    public function test_reviewed_video_prefix_keeps_raw_uploads_photos_and_thumbnails_outside_the_scan_prefix(): void
+    {
+        config(['media.key_prefix' => 'uploads', 'media.reviewed_key_prefix' => 'videos/reviewed']);
+        Storage::fake('s3');
+        Storage::fake('photos');
+        $admin = User::factory()->admin()->create();
+        $video = Media::factory()->video()->create([
+            'disk' => 's3', 'object_key' => 'uploads/raw.mp4', 'thumbnail_key' => 'uploads/poster.jpg',
+        ]);
+        $photo = Media::factory()->create(['disk' => 'photos', 'object_key' => 'uploads/raw.jpg']);
+        Storage::disk('s3')->put($video->object_key, 'video');
+        Storage::disk('photos')->put($video->thumbnail_key, 'poster');
+        Storage::disk('photos')->put($photo->object_key, 'photo');
+
+        $moderation = app(MediaModerationService::class);
+        $this->assertTrue($moderation->approve($video, $admin));
+        $this->assertTrue($moderation->approve($photo, $admin));
+        $this->assertStringStartsWith('videos/reviewed/', $video->reviewed_object_key);
+        $this->assertStringStartsWith('uploads/reviewed/', $photo->reviewed_object_key);
+        $this->assertStringStartsWith('uploads/reviewed-thumbnails/', $video->reviewed_thumbnail_key);
+        Storage::disk('s3')->assertExists('uploads/raw.mp4');
+        Storage::disk('s3')->assertExists($video->reviewed_object_key);
+        $this->assertSame('video', Storage::disk('s3')->get($video->playbackObjectKey()));
+    }
+
+    public function test_reviewed_video_prefix_defaults_to_the_existing_source_prefix(): void
+    {
+        config(['media.key_prefix' => 'uploads', 'media.reviewed_key_prefix' => null]);
+        Storage::fake('s3');
+        $media = Media::factory()->video()->create(['disk' => 's3']);
+        Storage::disk('s3')->put($media->object_key, 'video');
+        $this->assertTrue(app(MediaModerationService::class)->approve($media, User::factory()->admin()->create()));
+        $this->assertStringStartsWith('uploads/reviewed/', $media->reviewed_object_key);
+    }
+
     public function test_completion_clears_previous_reviewed_copies_when_reentering_review(): void
     {
         Storage::fake('photos');
