@@ -26,6 +26,7 @@ use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -77,7 +78,7 @@ class AppServiceProvider extends ServiceProvider
         // the hidden case to abort(404, 'Not found.')). Implicit binding would emit
         // Laravel's ModelNotFoundException message naming the model and id, which
         // re-opens the existence oracle the MediaPolicy closes.
-        Route::bind('media', fn (string $value): Media => Media::find($value) ?? abort(404, 'Not found.'));
+        Route::bind('media', fn (string $value, RoutingRoute $route): Media => ($route->allowsTrashedBindings() ? Media::withTrashed() : Media::query())->find($value) ?? abort(404, 'Not found.'));
 
         // Same generic 404 for Story/Post/Comment numeric routes. Their controllers
         // normalise the hidden case to abort(404) via authorizeOr404(), so a missing

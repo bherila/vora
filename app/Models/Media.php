@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -172,6 +173,17 @@ class Media extends Model
     public function isGalleryMedia(): bool
     {
         return $this->purpose === MediaPurpose::Gallery;
+    }
+
+    public function supportsMultipartUpload(): bool
+    {
+        return in_array($this->purpose, [MediaPurpose::Gallery, MediaPurpose::Library], true);
+    }
+
+    /** @return HasMany<LibraryItem, $this> */
+    public function libraryItems(): HasMany
+    {
+        return $this->hasMany(LibraryItem::class);
     }
 
     public function isProfilePicture(): bool

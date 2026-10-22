@@ -15,6 +15,7 @@ use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
 use App\Services\Chat\ChatState;
+use App\Services\Media\AccountStorageUsage;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
@@ -34,6 +35,14 @@ class ProfileController extends Controller
         private readonly MediaService $media,
         private readonly ChatState $chatState,
     ) {}
+
+    public function storageUsage(Request $request, AccountStorageUsage $usage): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $usage->forUser($request->user()),
+        ]);
+    }
 
     public function storeProfilePicture(StoreProfilePictureRequest $request): JsonResponse
     {

@@ -14,6 +14,7 @@ use App\Models\Story;
 use App\Models\StoryInvolvement;
 use App\Models\User;
 use App\Services\Chat\ChatState;
+use App\Services\Library\LibraryService;
 use App\Services\Media\MediaService;
 use Illuminate\Support\Facades\DB;
 
@@ -25,18 +26,23 @@ class UserAccountService
     public function __construct(
         private readonly MediaService $media,
         private readonly ChatState $chatState,
+        private readonly LibraryService $library,
     ) {}
 
     /**
-     * Permanently delete a user and everything they own: all media (gallery +
-     * profile pictures, including their characters' avatars) and the backing
-     * storage objects, their characters, interest ratings, and follow requests.
+     * Permanently delete an account and release its media references, personas,
+     * interest ratings, and follow requests. Other accounts' durable Library
+     * references retain their stored bytes independently of this uploader.
      *
      * Storage objects are removed first because force-deleting the user only
      * cascades database rows, which would otherwise orphan the R2 objects.
      */
     public function purge(User $user): void
     {
+        foreach ($user->libraryItems()->get() as $item) {
+            $this->library->remove($user, $item);
+        }
+
         foreach ($user->media()->withTrashed()->get() as $media) {
             if ($media instanceof Media) {
                 $this->media->delete($media);

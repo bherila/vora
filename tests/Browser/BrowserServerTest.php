@@ -9,6 +9,7 @@ use App\Models\Story;
 use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\Story\StoryService;
+use App\Services\UserAccountService;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Http\Kernel;
@@ -58,6 +59,8 @@ class BrowserServerTest extends TestCase
             return route('media.asset', ['ulid' => $media->ulid, 'variant' => 'original'], false);
         });
         $storage->shouldReceive('getFileSize')->andReturn(strlen($image));
+        $storage->shouldReceive('deleteFile')->andReturn(true);
+        $storage->shouldReceive('deleteDirectory')->andReturn(true);
         // Missing mappings represent videos still processing. One deliberately
         // invalid manifest exercises the real player's fatal-error handling.
         $storage->shouldReceive('get')->andReturnUsing(static function (string $disk, string $key): ?string {
@@ -152,6 +155,31 @@ class BrowserServerTest extends TestCase
                     ],
                     'media' => array_map(static fn (Media $item): array => ['id' => $item->id, 'ulid' => $item->ulid, 'title' => $item->title], $media),
                 ]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/library-fixtures') {
+                $owner = User::query()->findOrFail($input['headers']['x-browser-owner'] ?? '');
+                $saver = User::query()->findOrFail($input['headers']['x-browser-saver'] ?? '');
+                foreach ([$owner, $saver] as $user) {
+                    $user->forceFill(['library_enabled' => true])->save();
+                }
+                $persona = Character::factory()->for($owner)->create([
+                    'display_name' => 'Library related persona', 'is_linked' => false,
+                ]);
+                $media = Media::factory()->for($owner)->approved()->create([
+                    'title' => 'Shared library photo', 'mime_type' => 'image/png', 'size_bytes' => strlen($image),
+                ]);
+                $this->emitJson($input['id'], ['media' => ['ulid' => $media->ulid], 'persona' => ['ulid' => $persona->ulid, 'display_name' => $persona->display_name]]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/library-purge-uploader') {
+                $owner = User::query()->findOrFail($input['headers']['x-browser-owner'] ?? '');
+                $this->app->make(UserAccountService::class)->purge($owner);
+                $this->emitJson($input['id'], ['purged' => true]);
 
                 continue;
             }

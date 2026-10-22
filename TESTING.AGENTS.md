@@ -81,6 +81,9 @@ readers render Markdown and adventure choices, endings, and restart; editor
 changes and admin rejection revoke reader access until renewed approval.
 Media journeys check pending/rejected review privacy, unfinished uploads,
 processing video messages, and fatal HLS errors without original-file fallback.
+Library journeys cover private collections linked to an existing persona,
+explicit sharing and revocation, durable Save, and playback retained after the
+uploader and related persona are permanently deleted, on desktop and mobile.
 Communication journeys cover mutual
 follows, unread counts, chat send/reply/reload, keyboard focus, browser
 Back/Forward, blocking, unblocking, and logout. Profile actions update on block

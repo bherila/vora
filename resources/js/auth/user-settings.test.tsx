@@ -35,6 +35,16 @@ jest.mock('@/initialData', () => ({
       notify_favorite: true,
       web_push_public_key: '',
       web_push_subscription_count: 0,
+      storage_usage: {
+        active_bytes: 1048576,
+        uploaded_bytes: 1048576,
+        saved_bytes: 0,
+        retained_bytes: 524288,
+        total_bytes: 1572864,
+        active_file_count: 2,
+        retained_file_count: 1,
+        unknown_size_file_count: 1,
+      },
     },
   }),
 }));
@@ -88,6 +98,21 @@ describe('UserSettingsPage', () => {
     expect(screen.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Your public profile')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Edit profile' })).toHaveAttribute('href', '/me');
+  });
+
+  it('shows active and retained original-file storage with an incomplete-size notice', () => {
+    window.history.replaceState({}, '', '/user/settings?tab=data');
+
+    render(<UserSettingsPage />);
+
+    expect(screen.getByText('Storage usage')).toBeInTheDocument();
+    expect(screen.getByText('Active files (2)')).toBeInTheDocument();
+    expect(screen.getByText('1.00 MB')).toBeInTheDocument();
+    expect(screen.getByText('Retained deleted files (1)')).toBeInTheDocument();
+    expect(screen.getByText('512.0 KB')).toBeInTheDocument();
+    expect(screen.getByText('Total stored originals')).toBeInTheDocument();
+    expect(screen.getByText('1.50 MB')).toBeInTheDocument();
+    expect(screen.getByText(/Size unavailable for 1 file;/)).toBeInTheDocument();
   });
 
   it('preserves unsaved notification changes while switching tabs', () => {

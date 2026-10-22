@@ -145,7 +145,7 @@ class MediaDuplicateService
      */
     public function flagContentDuplicate(Media $video): void
     {
-        if ($video->hls_content_id === null || $video->duplicate_of_media_id !== null) {
+        if ($video->user_id === null || $video->hls_content_id === null || $video->duplicate_of_media_id !== null) {
             return;
         }
 

@@ -49,6 +49,7 @@ interface AdminUser {
   invite_balance: number;
   can_receive_invites: boolean;
   trusted_inviter: boolean;
+  library_enabled: boolean;
   is_banned: boolean;
   ban_reason: string | null;
   ban_hides_content: boolean;
@@ -195,6 +196,18 @@ export function AdminUsersPage() {
       await loadUsers();
     } catch (err) {
       setError(typeof err === 'string' ? err : 'Failed to update user.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleLibrary = async (user: AdminUser): Promise<void> => {
+    setActionLoading(user.id);
+    try {
+      await patchUser(user.id, { library_enabled: !user.library_enabled });
+      await loadUsers();
+    } catch (error) {
+      setError(typeof error === 'string' ? error : 'Failed to update Library access.');
     } finally {
       setActionLoading(null);
     }
@@ -482,6 +495,7 @@ export function AdminUsersPage() {
                       <Badge key={restriction.id} variant="destructive">Restricted: {restriction.label}</Badge>
                     ))}
                     {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
+                    {user.library_enabled && <Badge variant="outline">Library enabled</Badge>}
                     {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
                     <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
                     {user.referrer_display_name && (
@@ -567,6 +581,9 @@ export function AdminUsersPage() {
                           data-test="admin-users-toggle-name-lock"
                         >
                           {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
+                          {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
                         </Button>
                         <Button
                           size="sm"

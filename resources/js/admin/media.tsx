@@ -165,7 +165,7 @@ export function AdminMediaPage() {
                 <dl className="text-xs text-muted-foreground">
                   <div className="flex justify-between">
                     <dt>Uploader</dt>
-                    <dd>{item.user.name} ({item.user.email})</dd>
+                    <dd>{item.user.id === null ? 'Former uploader' : <>{item.user.name} ({item.user.email})</>}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt>Type / size</dt>

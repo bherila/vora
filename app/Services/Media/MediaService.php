@@ -2,10 +2,12 @@
 
 namespace App\Services\Media;
 
+use App\Enums\Audience;
 use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
+use Illuminate\Support\Facades\DB;
 
 /**
  * High-level media operations that span storage and the database.
@@ -55,15 +57,37 @@ class MediaService
     }
 
     /**
-     * Permanently delete a media item: remove row-private objects from their
-     * buckets and force-delete the database row (pivots cascade).
-     *
-     * Only the source object is deleted. Transcoded HLS output is shared across
-     * sources with identical content (the transcoder deduplicates by content
-     * hash), so cleanup of the encoded bucket is left to s3-hls's own
-     * reference-counted pass — deleting it here could break another upload.
+     * Release the upload/publication reference. Independent Library references
+     * retain the media row and its objects without the uploader identity. Once
+     * there are no references, purge source/reviewed objects and derivatives.
+     * HLS cleanup also checks other media rows sharing the encoded content id.
      */
     public function delete(Media $media): void
+    {
+        DB::transaction(function () use ($media): void {
+            $media = Media::withTrashed()->whereKey($media->id)->lockForUpdate()->first();
+            if (! $media instanceof Media) {
+                return;
+            }
+            if ($media->libraryItems()->exists()) {
+                // Remove the uploader's publication/identity reference while
+                // retaining the one stored file for independent saved copies.
+                $media->forceFill([
+                    'user_id' => null, 'character_id' => null, 'canonical_post_id' => null,
+                    'audience' => Audience::SpecificPeople, 'discoverable' => false,
+                    'announce_on_approval' => false,
+                ])->save();
+                $media->audienceMembers()->delete();
+                $this->softDelete($media);
+
+                return;
+            }
+
+            $this->purgeObjects($media);
+        });
+    }
+
+    private function purgeObjects(Media $media): void
     {
         if ($media->multipart_upload_id !== null) {
             $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);

@@ -18,6 +18,8 @@ type DeletedContentType = 'media' | 'stories' | 'characters' | 'posts';
 interface DeletedBase {
   id: number;
   deleted_at: string | null;
+  library_reference_count?: number;
+  can_restore?: boolean;
 }
 
 type DeletedMediaItem = AdminMediaItem & DeletedBase;
@@ -116,15 +118,19 @@ function AdminDeletedContentPage() {
     }
   };
 
-  const permanentlyDelete = async (id: number): Promise<void> => {
-    if (!window.confirm('Permanently delete this item? This removes the retained record and cannot be undone.')) {
+  const permanentlyDelete = async (item: DeletedBase): Promise<void> => {
+    const { id } = item;
+    const retained = (item.library_reference_count ?? 0) > 0;
+    if (!window.confirm(retained
+      ? 'Remove access from all saved Library items? Files remain retained until their last Library reference is removed.'
+      : 'Permanently delete this item? This removes the retained record and cannot be undone.')) {
       return;
     }
 
     setBusy((current) => ({ ...current, [id]: true }));
     try {
-      await fetchWrapper.delete(`/api/admin/deleted-content/${tab}/${id}`);
-      toast.success('Content permanently deleted.');
+      const response = await fetchWrapper.delete(`/api/admin/deleted-content/${tab}/${id}`) as { message: string };
+      toast.success(response.message);
       await load(tab);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -146,13 +152,13 @@ function AdminDeletedContentPage() {
             </a>
           </Button>
         )}
-        <Button type="button" size="sm" variant="outline" disabled={busy[item.id]} onClick={() => void restore(item.id)}>
+        <Button type="button" size="sm" variant="outline" disabled={busy[item.id] || item.can_restore === false} onClick={() => void restore(item.id)}>
           <RotateCcw className="h-4 w-4" />
           Restore
         </Button>
-        <Button type="button" size="sm" variant="destructive" disabled={busy[item.id]} onClick={() => void permanentlyDelete(item.id)}>
+        <Button type="button" size="sm" variant="destructive" disabled={busy[item.id]} onClick={() => void permanentlyDelete(item)}>
           <Trash2 className="h-4 w-4" />
-          Delete forever
+          {(item.library_reference_count ?? 0) > 0 ? 'Remove saved access' : 'Delete forever'}
         </Button>
       </div>
     );

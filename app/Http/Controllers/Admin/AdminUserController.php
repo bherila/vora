@@ -131,6 +131,10 @@ class AdminUserController extends Controller
             $user->trusted_inviter = (bool) $data['trusted_inviter'];
         }
 
+        if (array_key_exists('library_enabled', $data)) {
+            $user->library_enabled = (bool) $data['library_enabled'];
+        }
+
         if (array_key_exists('birth_date', $data)) {
             $user->birth_date = $data['birth_date'];
         }
@@ -303,6 +307,7 @@ class AdminUserController extends Controller
             'invite_balance' => $balance,
             'can_receive_invites' => (bool) $user->can_receive_invites,
             'trusted_inviter' => (bool) $user->trusted_inviter,
+            'library_enabled' => (bool) $user->library_enabled,
             'is_banned' => $user->isBanned(),
             'banned_at' => $user->banned_at?->toIso8601String(),
             'ban_reason' => $user->ban_reason,

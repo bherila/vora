@@ -196,6 +196,12 @@ trait HasPrivacyPolicy
             return false;
         }
 
+        return $this->audienceAllows($viewer);
+    }
+
+    /** Check the audience without the owner/admin review bypass. */
+    public function audienceAllows(User $viewer): bool
+    {
         return match ($this->audience) {
             Audience::Everyone => true,
             Audience::Followers => FollowGraph::followsIdentity($viewer->id, $this->user_id, $this->followCharacterId()),

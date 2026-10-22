@@ -165,6 +165,8 @@ interface MediaUploadDialogProps {
   triggerLabel?: ReactNode;
   triggerSize?: 'default' | 'sm';
   triggerVariant?: 'default' | 'outline';
+  /** Defined (including null) for private Library uploads. */
+  libraryCollectionUlid?: string | null;
 }
 
 /**
@@ -180,10 +182,12 @@ export function MediaUploadDialog({
   triggerLabel = 'Upload media',
   triggerSize = 'default',
   triggerVariant = 'default',
+  libraryCollectionUlid,
 }: MediaUploadDialogProps) {
   const uploadRestriction = activeRestriction('media.upload');
   const activeIdentityId = useActiveIdentityId();
-  const resolvedDefaultCharacterId = defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
+  const isLibrary = libraryCollectionUlid !== undefined;
+  const resolvedDefaultCharacterId = isLibrary ? null : defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [characterId, setCharacterId] = useState(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
@@ -260,7 +264,9 @@ export function MediaUploadDialog({
           computeFileHash(selectedFile),
         ]);
 
-        const sessionKey = multipartSessionKey(selectedFile);
+        const sessionKey = isLibrary
+          ? `library:${libraryCollectionUlid ?? 'all'}:${multipartSessionKey(selectedFile)}`
+          : multipartSessionKey(selectedFile);
         const existingSession = readMultipartSession(sessionKey);
         const uploadPayload = {
           type,
@@ -274,7 +280,10 @@ export function MediaUploadDialog({
           perceptual_hash: perceptualHash,
           file_hash: fileHash,
           announce,
-          ...(selectedCharacterId === null ? {
+          ...(isLibrary ? {
+            audience: 'specific', audience_user_ids: [], discoverable: false, announce: false,
+            collection_ulid: libraryCollectionUlid,
+          } : selectedCharacterId === null ? {
             audience,
             audience_user_ids: audience === 'specific' ? audienceUserIds : [],
             discoverable,
@@ -283,7 +292,7 @@ export function MediaUploadDialog({
           }),
         };
         const created = existingSession === null
-          ? (await fetchWrapper.post('/api/media', uploadPayload)) as StoreResponse
+          ? (await fetchWrapper.post(isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload)) as StoreResponse
           : null;
 
         const shouldMultipart = existingSession !== null
@@ -412,7 +421,11 @@ export function MediaUploadDialog({
               </select>
             </label>
           )}
-          {characterId === '' ? (
+          {isLibrary ? (
+            <p className="text-sm text-muted-foreground">
+              Uploads stay in your private Library. If you selected a shared collection, its recipients can view and save new uploads after review.
+            </p>
+          ) : characterId === '' ? (
             <>
               <AudienceField
                 audience={audience}
@@ -436,7 +449,7 @@ export function MediaUploadDialog({
           ) : (
             <p className="text-sm text-muted-foreground">This upload uses the selected character's privacy setting.</p>
           )}
-          <div className="grid gap-1">
+          {!isLibrary && <><div className="grid gap-1">
             <span className="text-sm">Interests</span>
             <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />
           </div>
@@ -449,7 +462,7 @@ export function MediaUploadDialog({
               className="mt-0.5"
             />
             <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
-          </label>
+          </label></>}
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={uploading}>
               {uploading ? 'Uploading…' : 'Upload'}
