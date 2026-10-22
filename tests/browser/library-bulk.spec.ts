@@ -7,7 +7,7 @@ test('Library bulk organization moves only the current collection membership and
   const accountResponse = await request.get('/__browser/fixtures', { headers: { 'x-browser-name-suffix': suffix } });
   const accounts = await accountResponse.json() as TestAccounts;
   const fixtureResponse = await request.get('/__browser/library-fixtures', {
-    headers: { 'x-browser-owner': String(accounts.alice.id), 'x-browser-saver': String(accounts.bob.id) },
+    headers: { 'x-browser-owner': String(accounts.alice.id), 'x-browser-saver': String(accounts.bob.id), 'x-browser-name-suffix': suffix },
   });
   expect(fixtureResponse.ok()).toBeTruthy();
   await login(page, accounts.bob, `Bob ${suffix}`);
