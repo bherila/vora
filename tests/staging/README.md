@@ -16,6 +16,13 @@ LOCAL_STAGING_ACCEPTANCE=1 ALLOW_DISPOSABLE_ACCOUNT_PURGE=1 \
 ```
 
 Run one acceptance process at a time; concurrent runs share recipient quota settings.
+The **Real media staging acceptance** GitHub Actions workflow also runs this
+command for relevant pull requests and manual dispatch. It builds the three
+Docker images sequentially with cached layers, explicitly initializes only the
+isolated staging SQLite volume, and uploads reports/service diagnostics even
+on failure. Its cleanup stops containers without deleting volumes; GitHub then
+disposes of the ephemeral runner. No deployment secrets are required.
+
 The runner refuses non-loopback service URLs. Defaults are
 `http://127.0.0.1:18080` for the app and `http://127.0.0.1:18025` for Mailpit;
 `STAGING_APP_URL` and `STAGING_MAIL_URL` may select other loopback ports.
