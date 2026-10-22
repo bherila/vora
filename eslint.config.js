@@ -20,6 +20,8 @@ export default tseslint.config(
       "vite.config.ts",
       "tailwind.config.ts",
       "test-results/**",
+      "tests/staging/artifacts/**",
+      "tests/staging/.fixtures/**",
       "playwright-report/**",
     ],
   },
@@ -34,7 +36,7 @@ export default tseslint.config(
         ...globals.es2020,
       },
       parserOptions: {
-        project: ["./tsconfig.json", "./tests/browser/tsconfig.json"],
+        project: ["./tsconfig.json", "./tests/browser/tsconfig.json", "./tests/staging/tsconfig.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },
