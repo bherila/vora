@@ -83,8 +83,6 @@ jobs:
     env:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH || (inputs.primary && 'laravel') || '' }}
       DEPLOY_PHP_BINARY: ${{ vars.DEPLOY_PHP_BINARY || (inputs.primary && '/opt/cpanel/ea-php85/root/usr/bin/php') || '' }}
       DEPLOY_WEB_ROOTS: ${{ vars.DEPLOY_WEB_ROOTS || (inputs.primary && 'public_html,web') || '' }}
@@ -110,14 +108,23 @@ jobs:
 
       - name: Validate target and configure SSH
         if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$SSH_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
           [[ "$SSH_USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]
-          [[ "$DEPLOY_PATH" =~ ^[a-zA-Z0-9_/-]+$ && "$DEPLOY_PATH" != /* && "$DEPLOY_PATH" != *..* ]]
+          valid_relative_path() {
+            [[ "$1" =~ ^[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)*$ && "$1" != . && "$1" != *..* && "$1" != */./* && "$1" != */. ]]
+          }
+          valid_relative_path "$DEPLOY_PATH"
           [[ "$DEPLOY_PHP_BINARY" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEPLOY_PHP_BINARY" != *..* ]]
-          [[ "$DEPLOY_WEB_ROOTS" =~ ^[a-zA-Z0-9_,/-]*$ && "$DEPLOY_WEB_ROOTS" != *..* && "$DEPLOY_WEB_ROOTS" != /* ]]
+          IFS=',' read -r -a roots <<< "$DEPLOY_WEB_ROOTS"
+          for root in "${roots[@]}"; do
+            test -z "$root" || valid_relative_path "$root"
+          done
           [[ "$DEPLOY_HEALTH_URL" =~ ^https://[^/[:space:]]+/?$ ]]
           [[ "$DEPLOY_PROFILE" == vora || "$DEPLOY_PROFILE" == event ]]
           [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]]

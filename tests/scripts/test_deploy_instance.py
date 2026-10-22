@@ -29,9 +29,9 @@ if [ "$2" = ops:instance-profile ] && [ "${TEST_DEPLOY_PROFILE_MATCH:-true}" = f
     def tearDown(self):
         self.workspace.cleanup()
 
-    def deploy(self, roots=None, profile_matches=True):
+    def deploy(self, roots=None, profile_matches=True, path=None):
         return subprocess.run([
-            'bash', str(SCRIPT), str(self.app.relative_to(Path.home())), str(self.php),
+            'bash', str(SCRIPT), str((path or self.app).relative_to(Path.home())), str(self.php),
             'event', str(self.target.relative_to(Path.home())) if roots is None else roots,
         ], env={**os.environ, 'TEST_DEPLOY_COMMAND_LOG': str(self.log),
                 'TEST_DEPLOY_PROFILE_MATCH': str(profile_matches).lower()},
@@ -63,6 +63,19 @@ if [ "$2" = ops:instance-profile ] && [ "${TEST_DEPLOY_PROFILE_MATCH:-true}" = f
         self.assertNotEqual(self.deploy(str(self.app.relative_to(Path.home()))).returncode, 0)
         self.assertFalse(self.log.exists())
         self.assertTrue(self.app.is_dir())
+
+    def test_symlink_ancestor_cannot_be_replaced_with_a_self_reference(self):
+        alias = self.root / 'alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        result = self.deploy(roots=str(alias.relative_to(Path.home())), path=alias / 'app')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(alias.readlink(), self.root)
+        self.assertFalse(self.log.exists())
+
+    def test_document_root_with_a_domain_name_is_supported(self):
+        self.target = self.root / 'event.example.com'
+        self.assertEqual(self.deploy().returncode, 0)
+        self.assertEqual(self.target.readlink(), self.app / 'public')
 
     def test_mismatched_profile_stops_before_database_changes(self):
         self.assertNotEqual(self.deploy(profile_matches=False).returncode, 0)
