@@ -16,6 +16,7 @@ use App\Services\Events\EventSettings;
 use App\Services\FileStorageService;
 use App\Services\Media\AccountStorageUsage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -164,6 +165,35 @@ class EventModuleTest extends TestCase
         $this->getJson('/api/events/media?featured=1')->assertOk()->assertJsonCount(0, 'data');
         $this->getJson('/api/events/media?favorites_of='.$curator->id)->assertOk()->assertJsonCount(0, 'data');
         $this->actingAs(User::first())->getJson('/api/events/settings')->assertOk()->assertJsonPath('data.featured_curators.0.id', $curator->id);
+    }
+
+    public function test_disabling_favorites_hides_event_favorite_surfaces_without_reading_favorite_rows(): void
+    {
+        $owner = $this->account();
+        $viewer = $this->account();
+        $event = $this->event([], ['visibility' => 'everyone']);
+        $media = $this->media($owner, $event);
+        Favorite::create(['user_id' => $viewer->id, 'favoritable_type' => $media->getMorphClass(), 'favoritable_id' => $media->id]);
+        app(EventSettings::class)->setFeaturedCuratorIds([$viewer->id]);
+        config(['instance.modules.favorites' => false]);
+        $favoriteQueries = [];
+        DB::listen(static function ($query) use (&$favoriteQueries): void {
+            if (str_contains(strtolower($query->sql), 'favorites')) {
+                $favoriteQueries[] = $query->sql;
+            }
+        });
+        $this->actingAs($viewer)->getJson('/api/events/media?favorites_of='.$viewer->id)->assertNotFound();
+        $this->getJson('/api/events/media?featured=1')->assertNotFound();
+        $this->getJson('/api/events/media?featured=0')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.favorited', false);
+        $this->getJson('/api/events/media/'.$media->ulid)->assertOk()->assertJsonPath('data.favorited', false);
+        $this->getJson('/api/events/settings')->assertOk()->assertJsonPath('data.viewer_id', $viewer->id)
+            ->assertJsonPath('data.is_admin', false)->assertJsonCount(0, 'data.featured_curators');
+        $this->actingAs(User::first())->getJson('/api/events/settings')->assertOk()->assertJsonCount(0, 'data.featured_curators');
+        $this->putJson('/api/admin/events/settings', ['featured_curator_ids' => []])->assertNotFound();
+        $this->assertSame([], $favoriteQueries);
+        config(['instance.modules.favorites' => true]);
+        $this->actingAs($viewer)->getJson('/api/events/media?featured=1')->assertOk()->assertJsonPath('data.0.favorited', true);
+        $this->getJson('/api/events/settings')->assertOk()->assertJsonPath('data.featured_curators.0.id', $viewer->id);
     }
 
     public function test_event_publication_requires_active_approved_owner_and_viewer(): void

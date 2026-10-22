@@ -19,6 +19,6 @@ Route::middleware(['auth', 'approved', 'module:events'])->group(function (): voi
     Route::middleware('can:admin-only')->group(function (): void {
         Route::post('/api/admin/events', [EventAdminController::class, 'store']);
         Route::patch('/api/admin/events/{event:ulid}', [EventAdminController::class, 'update']);
-        Route::put('/api/admin/events/settings', [EventAdminController::class, 'settings']);
+        Route::put('/api/admin/events/settings', [EventAdminController::class, 'settings'])->middleware('module:favorites');
     });
 });

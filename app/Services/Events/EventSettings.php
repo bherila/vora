@@ -5,6 +5,7 @@ namespace App\Services\Events;
 use App\Models\User;
 use App\Services\SettingsService;
 use App\Support\BlockGraph;
+use App\Support\InstanceFeatures;
 use Illuminate\Support\Collection;
 
 class EventSettings
@@ -30,6 +31,9 @@ class EventSettings
     /** @return Collection<int, User> */
     public function featuredCurators(?User $viewer = null): Collection
     {
+        if (! InstanceFeatures::enabled('favorites')) {
+            return collect();
+        }
         $ids = $this->featuredCuratorIds();
         $users = User::query()->active()->whereNotNull('approved_at')->whereIn('id', $ids)->get(['id', 'display_name'])->keyBy('id');
 

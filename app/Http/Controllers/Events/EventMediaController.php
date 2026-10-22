@@ -19,6 +19,7 @@ use App\Services\FileStorageService;
 use App\Services\Media\MediaUploadService;
 use App\Services\Moderation\RestrictionGate;
 use App\Support\BlockGraph;
+use App\Support\InstanceFeatures;
 use App\Support\PaginationMeta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -80,7 +81,8 @@ class EventMediaController extends Controller
         foreach ($page->getCollection() as $item) {
             $item->setAttribute('viewer_library_item_ulid', $saved[$item->id] ?? null);
         }
-        $favorited = array_flip($this->favorites->favoritedIdsFor($viewer, 'media', $page->getCollection()->modelKeys()));
+        $favorited = InstanceFeatures::enabled('favorites')
+            ? array_flip($this->favorites->favoritedIdsFor($viewer, 'media', $page->getCollection()->modelKeys())) : [];
 
         return response()->json([
             'success' => true,
@@ -93,7 +95,8 @@ class EventMediaController extends Controller
     {
         $media = $this->visibleMedia($request->user())->where('ulid', $ulid)->first();
         abort_unless($media instanceof Media, 404, 'Not found.');
-        $favorited = $this->favorites->favoritedIdsFor($request->user(), 'media', [$media->id]) !== [];
+        $favorited = InstanceFeatures::enabled('favorites')
+            && $this->favorites->favoritedIdsFor($request->user(), 'media', [$media->id]) !== [];
         $media->setAttribute('viewer_library_item_ulid', $request->user()->libraryItems()->where('media_id', $media->id)->value('ulid'));
 
         return response()->json(['success' => true, 'data' => $this->presenter->media($media, $request->user(), $favorited, resolveHls: true)]);

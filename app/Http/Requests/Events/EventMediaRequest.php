@@ -2,12 +2,16 @@
 
 namespace App\Http\Requests\Events;
 
+use App\Support\InstanceFeatures;
 use Illuminate\Foundation\Http\FormRequest;
 
 class EventMediaRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        abort_if(! InstanceFeatures::enabled('favorites')
+            && ($this->filled('favorites_of') || $this->boolean('featured')), 404);
+
         return $this->user() !== null;
     }
 
