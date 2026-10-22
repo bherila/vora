@@ -2,7 +2,7 @@ import type { Audience } from '@/lib/audience';
 
 export type { Audience };
 export type MediaTypeValue = 'photo' | 'video';
-export type MediaPurposeValue = 'gallery' | 'profile_picture' | 'library';
+export type MediaPurposeValue = 'gallery' | 'profile_picture' | 'library' | 'event';
 export type ModerationStatusValue = 'pending' | 'approved' | 'rejected';
 
 export interface VideoStatus {

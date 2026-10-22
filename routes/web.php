@@ -53,6 +53,7 @@ use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
 use App\Services\Media\AccountStorageUsage;
+use App\Support\InstanceFeatures;
 use Illuminate\Support\Facades\Route;
 
 // Home page and static pages (public).
@@ -485,3 +486,13 @@ Route::middleware(['auth', 'approved'])->prefix('api/interests')->group(function
     Route::post('/inherit', [InterestController::class, 'setInheritance']);
     Route::post('/request', [InterestController::class, 'requestNew']);
 });
+
+require __DIR__.'/events.php';
+
+// Keep route names stable for existing links and cached routes. The deployment
+// capability is enforced on every request, including direct API requests.
+foreach (Route::getRoutes() as $instanceRoute) {
+    foreach (InstanceFeatures::routeModules($instanceRoute->uri()) as $module) {
+        $instanceRoute->middleware('module:'.$module);
+    }
+}

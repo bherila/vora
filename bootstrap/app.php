@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureApproved;
+use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsureNotBanned;
 use App\Http\Middleware\EnsureNotDeactivated;
 use Illuminate\Foundation\Application;
@@ -17,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'approved' => EnsureApproved::class,
+            'module' => EnsureModuleEnabled::class,
         ]);
 
         // Gate self-deactivated accounts to the reactivate page across the whole

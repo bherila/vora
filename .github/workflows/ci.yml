@@ -197,6 +197,12 @@ jobs:
           ./vendor/bin/pint --test
           composer test
 
+      - name: Event deployment profile checks
+        timeout-minutes: 3
+        env:
+          APP_PROFILE: event
+        run: php artisan test tests/Feature/InstanceProfileTest.php
+
   sql:
     name: Backend tests (MariaDB 10.6)
     needs: changes

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\ProfileGate;
+use App\Support\InstanceFeatures;
 use App\Support\UserPresenter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
@@ -67,6 +68,17 @@ class FavoriteService
      */
     public function canViewerSee(User $viewer, Model $item): bool
     {
+        $module = match (true) {
+            $item instanceof Post => 'community',
+            $item instanceof Story => 'stories',
+            $item instanceof Character => 'personas',
+            $item instanceof User => 'profiles',
+            default => null,
+        };
+        if (! InstanceFeatures::enabled('favorites') || ($module !== null && ! InstanceFeatures::enabled($module))) {
+            return false;
+        }
+
         if ($item instanceof Media
             && $item->user_id !== $viewer->id
             && $this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {

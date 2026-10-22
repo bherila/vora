@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\StaticPage;
 use App\Support\DefaultStaticPages;
+use App\Support\InstanceFeatures;
 use App\Support\StaticPageRenderer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -13,12 +14,12 @@ class StaticPageController extends Controller
 {
     public function home(): View|RedirectResponse
     {
-        // Logged-in users have no use for the marketing splash; send them to the
-        // feed. Its auth/approved gate then bounces anyone not yet
-        // approved/verified to the right place. Guests (and crawlers) still get
-        // the CMS home page below.
         if (auth()->check()) {
-            return redirect()->route('feed');
+            return redirect(InstanceFeatures::homePath());
+        }
+
+        if (config('instance.profile') === 'event') {
+            return view('events.welcome');
         }
 
         return $this->show('home');
