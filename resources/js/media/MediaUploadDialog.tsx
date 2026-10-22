@@ -377,9 +377,9 @@ export function MediaUploadDialog({
               }, abortController.signal);
             },
             abort: async () => {
-              await postUpload(`/api/media/${session.mediaId}/multipart/abort`, {
-                upload_id: session.uploadId,
-              });
+              // Explicit cancellation also removes the incomplete Library item
+              // and prevents a late direct PUT from completing this upload.
+              await postUpload(`/api/media/${session.mediaId}/cancel-upload`, {});
             },
           });
           try {

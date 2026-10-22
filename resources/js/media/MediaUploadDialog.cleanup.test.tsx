@@ -129,6 +129,49 @@ describe('MediaUploadDialog reservation cleanup', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('cancels an initialized hashed multipart upload through the owner-only endpoint and preserves completed files', async () => {
+    let nextId = 41;
+    jest.mocked(computeFileHash).mockResolvedValueOnce('first-hash').mockResolvedValueOnce('second-hash');
+    post.mockImplementation(async (url) => {
+      if (url === '/api/library/uploads') return createdUpload(nextId++, true);
+      if (/\/multipart\/init$/.test(url)) {
+        return { data: { upload_id: 'active-upload', part_size_bytes: 16, expires_in_minutes: 30 } };
+      }
+      return { success: true };
+    });
+    multipart.mockImplementationOnce(async (_file, options) => {
+      await options.complete([{ part_number: 1, etag: 'first-complete' }]);
+      window.localStorage.removeItem(options.sessionKey);
+    }).mockImplementationOnce((_file, options) => new Promise<void>((_resolve, reject) => {
+      options.signal?.addEventListener('abort', () => {
+        // Exercise the dialog's actual abort callback. The upload helper's own
+        // tests cover invoking it and discarding local state on AbortError.
+        void options.abort().then(() => {
+          window.localStorage.removeItem(options.sessionKey);
+          reject(new DOMException('Aborted', 'AbortError'));
+        }).catch(reject);
+      });
+    }));
+    const refresh = startUpload([
+      new File(['first'], 'first.mp4', { type: 'video/mp4' }),
+      new File(['second'], 'second.mp4', { type: 'video/mp4' }),
+    ]);
+    await waitFor(() => expect(multipart).toHaveBeenCalledTimes(2));
+    expect(window.localStorage.length).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('1 upload completed before cancellation.'));
+    expect(post).toHaveBeenCalledWith('/api/media/42/cancel-upload', {});
+    expect(post).not.toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
+    expect(post.mock.calls.map(([url]) => url)).not.toContain('/api/media/42/multipart/abort');
+    expect(post).toHaveBeenCalledWith('/api/media/41/multipart/complete', {
+      upload_id: 'active-upload', parts: [{ part_number: 1, etag: 'first-complete' }],
+    }, expect.any(AbortSignal));
+    expect(window.localStorage.length).toBe(0);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('keeps an established multipart reservation and resumes it after a transient failure', async () => {
     post.mockImplementation(async (url) => {
       if (url === '/api/library/uploads') return createdUpload(41, true);
