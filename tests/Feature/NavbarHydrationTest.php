@@ -53,8 +53,9 @@ class NavbarHydrationTest extends TestCase
         $this->assertSame('Nova Vega', $navbar['accountMenu']['label']);
         $this->assertNull($navbar['accountMenu']['avatarUrl']);
         $this->assertSame('/me', $navbar['accountMenu']['profileHref']);
-        $this->assertSame(['Your activity', 'Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
+        $this->assertSame(['Your activity', 'Library', 'Settings', 'Invites', 'Log out'], array_column($navbar['accountMenu']['items'], 'label'));
         $this->assertSame('/me/activity', $navbar['accountMenu']['items'][0]['href']);
+        $this->assertSame('/library', $navbar['accountMenu']['items'][1]['href']);
         $this->assertSame([], $navbar['guestMenuItems']);
     }
 
@@ -66,9 +67,10 @@ class NavbarHydrationTest extends TestCase
         $payload = $this->initialData($this->actingAs($user)->get('/me')->assertOk()->getContent());
         $items = $payload['navbar']['accountMenu']['items'];
 
-        $this->assertSame(['Profile', 'Your activity', 'Settings', 'Invites', 'Log out'], array_column($items, 'label'));
+        $this->assertSame(['Profile', 'Your activity', 'Library', 'Settings', 'Invites', 'Log out'], array_column($items, 'label'));
         $this->assertSame('/me', $items[0]['href']);
         $this->assertSame('/me/activity', $items[1]['href']);
+        $this->assertSame('/library', $items[2]['href']);
     }
 
     public function test_admin_navbar_menu_is_hydrated_from_blade(): void

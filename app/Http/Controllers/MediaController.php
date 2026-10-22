@@ -22,6 +22,7 @@ use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
 use App\Services\Favorites\FavoriteService;
+use App\Services\Library\LibraryAccess;
 use App\Services\Media\HlsService;
 use App\Services\Media\MediaDuplicateService;
 use App\Services\Media\MediaResponseService;
@@ -175,7 +176,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('complete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! $media->supportsMultipartUpload()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -195,7 +196,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('complete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! $media->supportsMultipartUpload()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -217,7 +218,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('complete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! $media->supportsMultipartUpload()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -243,7 +244,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('complete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! $media->supportsMultipartUpload()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -261,7 +262,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('complete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! $media->supportsMultipartUpload()) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -339,6 +340,10 @@ class MediaController extends Controller
             ->where('favoritable_id', $media->id)
             ->exists();
         $payload['favorite_count'] = $this->favorites->countFor($media);
+        $payload['can_save_to_library'] = $viewer instanceof User && $viewer->library_enabled
+            && app(LibraryAccess::class)->canSaveMedia($viewer, $media);
+        $payload['library_item_ulid'] = $viewer instanceof User
+            ? $viewer->libraryItems()->where('media_id', $media->id)->value('ulid') : null;
 
         // Uploader context so the single-media view can frame the item inside the
         // owner's profile (a header back to Explore + a link to that profile).

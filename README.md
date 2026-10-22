@@ -28,6 +28,13 @@ taxonomy, and user interest ratings.
 - **Media and stories**: users upload photos and videos, play adaptive-bitrate
   HLS video, and write long-form or branching stories. Media and stories pass
   through admin review. See [docs/media/overview.md](docs/media/overview.md).
+- **Private Library**: selectively enabled cloud storage for uploaded or saved
+  media and notes, organized into private collections with optional links to
+  existing personas. Users explicitly share items or collections with named
+  recipients. Items saved from someone else stay private to the saver, including
+  in shared collections. Saved files survive the original uploader's account deletion
+  through independent references to the same stored file. Original-file usage
+  is visible in Library and Settings; admins enable storage per account.
 
 ## Tech Stack
 

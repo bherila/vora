@@ -52,7 +52,7 @@ export function FavoriteButton({ type, id, initialFavorited, className }: Favori
       className={className}
     >
       <Star className={`h-4 w-4 ${favorited ? 'fill-current' : ''}`} />
-      {favorited ? 'Saved' : 'Save'}
+      {type === 'media' ? (favorited ? 'Favorited' : 'Favorite') : (favorited ? 'Saved' : 'Save')}
     </Button>
   );
 }

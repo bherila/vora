@@ -49,6 +49,7 @@ export default defineConfig({
                 'resources/js/user/persona-editor.tsx',
                 'resources/js/user/persona-profile.tsx',
                 'resources/js/media/view.tsx',
+                'resources/js/library/page.tsx',
                 'resources/js/stories/page.tsx',
                 'resources/js/stories/reader.tsx',
             ],

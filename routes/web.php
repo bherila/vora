@@ -30,6 +30,8 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\InviteController;
+use App\Http\Controllers\LibraryContentController;
+use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\MediaAssetController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MuteController;
@@ -48,6 +50,7 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
+use App\Services\Media\AccountStorageUsage;
 use Illuminate\Support\Facades\Route;
 
 // Home page and static pages (public).
@@ -102,6 +105,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
     Route::get('/api/account/export', [ProfileController::class, 'export']);
+    Route::get('/api/account/storage', [ProfileController::class, 'storageUsage']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
@@ -116,7 +120,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/api/mutes', [MuteController::class, 'destroy']);
 
     Route::get('/pending-approval', fn () => view('auth.pending-approval'))->name('approval.pending');
-    Route::get('/user/settings', function () {
+    Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();
 
         return view('user.settings', ['initialData' => ['userSettings' => [
@@ -146,6 +150,7 @@ Route::middleware('auth')->group(function () {
             'notify_message' => (bool) $user->notify_message,
             'web_push_public_key' => config('webpush.vapid.public_key'),
             'web_push_subscription_count' => $user->pushSubscriptions()->count(),
+            'storage_usage' => $storageUsage->forUser($user),
             'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),
         ]]]);
     })->name('user.settings');
@@ -213,6 +218,29 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Explore is the cross-profile browse. Redirect old links/bookmarks there.
     Route::get('/media', fn () => redirect()->route('explore'))->name('media');
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
+
+    Route::get('/library', [LibraryController::class, 'page'])->name('library');
+    Route::prefix('api/library')->group(function () {
+        Route::get('/items', [LibraryController::class, 'index']);
+        Route::post('/notes', [LibraryController::class, 'storeNote']);
+        Route::post('/uploads', [LibraryController::class, 'upload']);
+        Route::post('/save', [LibraryController::class, 'save']);
+        Route::get('/personas', [LibraryController::class, 'personas']);
+        Route::get('/collections', [LibraryController::class, 'collections']);
+        Route::post('/collections', [LibraryController::class, 'storeCollection']);
+        Route::patch('/collections/{ulid}', [LibraryController::class, 'updateCollection']);
+        Route::delete('/collections/{ulid}', [LibraryController::class, 'destroyCollection']);
+        Route::put('/collections/{ulid}/sharing', [LibraryController::class, 'shareCollection']);
+        Route::get('/items/{ulid}', [LibraryController::class, 'show']);
+        Route::patch('/items/{ulid}', [LibraryController::class, 'updateItem']);
+        Route::delete('/items/{ulid}', [LibraryController::class, 'destroyItem']);
+        Route::put('/items/{ulid}/sharing', [LibraryController::class, 'shareItem']);
+        Route::post('/items/{ulid}/collections', [LibraryController::class, 'addMembership']);
+        Route::delete('/items/{ulid}/collections/{collectionUlid}', [LibraryController::class, 'removeMembership']);
+        Route::get('/items/{ulid}/assets/{variant}', [LibraryContentController::class, 'asset'])->name('library.asset');
+        Route::get('/items/{ulid}/hls/{path?}', [LibraryContentController::class, 'hls'])
+            ->where('path', '.*')->name('library.hls');
+    });
 
     // Cross-user exploration of approved, discoverable media.
     Route::get('/explore', [ExploreController::class, 'page'])->name('explore');
@@ -421,7 +449,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/media', [AdminMediaController::class, 'apiIndex']);
     Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'apiIndex']);
     Route::post('/media/{media}/duplicate-review', [AdminMediaDuplicateController::class, 'queueReview']);
-    Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate']);
+    Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate'])->withTrashed();
 
     Route::get('/reports', [AdminReportController::class, 'apiIndex']);
     Route::post('/reports/{report}/act', [AdminReportController::class, 'act']);

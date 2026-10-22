@@ -31,9 +31,17 @@ server and exposes `~/laravel/public/` through the cPanel document-root symlinks
 The application directory must remain group-traversable (`710`) so LiteSpeed can
 reach public files without making the application contents group-readable.
 
-After deployment, the workflow verifies `https://macrophile.me/up` through the
-public Cloudflare path. A web-server 404 or an unhealthy Laravel application
-fails the deployment instead of reporting a false success.
+After deployment, the workflow verifies `/up`, `/`, and `/login` through the
+public Cloudflare path, following redirects and requiring a final HTTP 200.
+The normal web pages are checked because `/up` can succeed while user-facing
+pages return a LiteSpeed 503.
+
+`public/.htaccess` sets the LiteSpeed web worker's PHP `memory_limit` to `1024M`,
+matching the SVC web-handler configuration. Artisan's CLI PHP limits are separate.
+When diagnosing a 503, inspect the host PHP/LiteSpeed error log as well as
+`storage/logs/laravel.log`; a successful CLI command or `/up` response alone does
+not establish that normal web requests work. The setting does not override
+hosting-account resource limits.
 
 Immediately after migrations, deployment also runs `schema:assert-persona`.
 This fails the deployment immediately when any database column required by the

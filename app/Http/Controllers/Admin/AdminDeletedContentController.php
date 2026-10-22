@@ -9,6 +9,7 @@ use App\Models\Post;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\AdminMediaResponseService;
+use App\Services\Media\MediaModerationService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Support\PaginationMeta;
@@ -27,6 +28,7 @@ class AdminDeletedContentController extends Controller
         private readonly AdminMediaResponseService $adminMedia,
         private readonly MediaResponseService $mediaResponder,
         private readonly MediaService $mediaService,
+        private readonly MediaModerationService $moderation,
     ) {}
 
     public function index(): View
@@ -52,17 +54,24 @@ class AdminDeletedContentController extends Controller
     public function restore(string $type, int $id): JsonResponse
     {
         $model = $this->findDeleted($this->normalizeType($type), $id);
+        abort_if($model instanceof Media && $model->user_id === null, 422, 'The uploader no longer exists. Retained files cannot be restored as a publication.');
         $model->restore();
 
         return response()->json(['success' => true, 'message' => 'Content restored.']);
     }
 
-    public function destroy(string $type, int $id): JsonResponse
+    public function destroy(Request $request, string $type, int $id): JsonResponse
     {
         $normalized = $this->normalizeType($type);
         $model = $this->findDeleted($normalized, $id);
 
         if ($model instanceof Media) {
+            if ($model->libraryItems()->exists()) {
+                $this->moderation->reject($model, $request->user(), 'Removed from retained content by an administrator.');
+                $this->mediaService->delete($model);
+
+                return response()->json(['success' => true, 'message' => 'Saved access removed. Files remain retained until their last Library reference is removed.']);
+            }
             $this->mediaService->delete($model);
         } else {
             $model->forceDelete();
@@ -77,6 +86,7 @@ class AdminDeletedContentController extends Controller
     private function mediaPayload(): array
     {
         $paginator = Media::onlyTrashed()
+            ->withCount('libraryItems')
             ->with([
                 'interests',
                 'character',
@@ -90,6 +100,8 @@ class AdminDeletedContentController extends Controller
                 ->map(fn (Media $media): array => $this->adminMedia->item($media, resolveHls: false, downloadAll: true) + [
                     'content_type' => 'media',
                     'deleted_at' => $media->deleted_at?->toIso8601String(),
+                    'library_reference_count' => $media->library_items_count,
+                    'can_restore' => $media->user_id !== null,
                 ])
                 ->values()
                 ->all(),

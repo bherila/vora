@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { type Audience } from '@/lib/audience';
+import { type AccountStorageUsage, EMPTY_STORAGE_USAGE } from '@/library/types';
+import { formatBytes } from '@/media/types';
 import {
   GENDER_OPTIONS,
   normalizeProfileOptionValue,
@@ -29,6 +31,7 @@ import {
 import { getAuthComponents } from './shared-components';
 
 interface UserSettingsInitialPayload {
+  storage_usage?: AccountStorageUsage | null;
   name?: string | null;
   display_name?: string | null;
   birth_date?: string | null;
@@ -59,6 +62,7 @@ interface UserSettingsInitialPayload {
 }
 
 interface UserSettingsInitialData {
+  storage_usage: AccountStorageUsage;
   name: string;
   display_name: string;
   birth_date: string;
@@ -185,6 +189,7 @@ function emptyInitialData(): UserSettingsInitialData {
     notify_message: true,
     web_push_public_key: '',
     web_push_subscription_count: 0,
+    storage_usage: EMPTY_STORAGE_USAGE,
     can_manage_interests: false,
   };
 }
@@ -217,6 +222,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     notify_message: payload.notify_message ?? true,
     web_push_public_key: payload.web_push_public_key ?? '',
     web_push_subscription_count: payload.web_push_subscription_count ?? 0,
+    storage_usage: payload.storage_usage ?? EMPTY_STORAGE_USAGE,
     can_manage_interests: payload.can_manage_interests ?? false,
   };
 }
@@ -862,6 +868,38 @@ export function UserSettingsPage() {
 
         <TabsContent value="data" className="space-y-4">
           {dataError && <Alert variant="destructive"><AlertDescription>{dataError}</AlertDescription></Alert>}
+          <Card>
+            <CardHeader>
+              <CardTitle>Storage usage</CardTitle>
+              <CardDescription>
+                Original photos and videos you uploaded or saved, including persona media and profile pictures.
+                Thumbnails and processed copies are excluded. Reload this page to update usage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <dl className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <dt className="text-sm text-muted-foreground">Active files ({initialData.storage_usage.active_file_count})</dt>
+                  <dd className="font-medium">{formatBytes(initialData.storage_usage.active_bytes)}</dd>
+                  <dd className="text-xs text-muted-foreground">Uploaded: {formatBytes(initialData.storage_usage.uploaded_bytes)} · Saved: {formatBytes(initialData.storage_usage.saved_bytes)}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Retained deleted files ({initialData.storage_usage.retained_file_count})</dt>
+                  <dd className="font-medium">{formatBytes(initialData.storage_usage.retained_bytes)}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-muted-foreground">Total stored originals</dt>
+                  <dd className="font-medium">{formatBytes(initialData.storage_usage.total_bytes)}</dd>
+                </div>
+              </dl>
+              <p className="text-sm text-muted-foreground">Deleted files remain stored until permanently removed by an administrator.</p>
+              {initialData.storage_usage.unknown_size_file_count > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Size unavailable for {initialData.storage_usage.unknown_size_file_count} {initialData.storage_usage.unknown_size_file_count === 1 ? 'file' : 'files'}; those bytes are excluded from these totals.
+                </p>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Export account data</CardTitle>

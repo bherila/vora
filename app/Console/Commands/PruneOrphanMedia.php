@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\Media\MediaService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Garbage-collects abandoned uploads: media rows left in `upload_status =
@@ -44,6 +45,7 @@ class PruneOrphanMedia extends Command
             ->get();
 
         $objectsDeleted = 0;
+        $pendingPruned = $dryRun ? $stale->count() : 0;
         foreach ($stale as $media) {
             if ($dryRun) {
                 $this->line("would prune pending media #{$media->id} ({$media->disk}/{$media->object_key})");
@@ -59,25 +61,30 @@ class PruneOrphanMedia extends Command
                 continue;
             }
 
-            if ($media->multipart_upload_id !== null) {
-                $storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
-            }
+            $objectsDeleted += DB::transaction(function () use ($media, $storage, $thumbnailDisk, $cutoff, &$pendingPruned): int {
+                // Re-check after locking: completion and a subsequent Save may
+                // have happened since the stale-upload listing was fetched.
+                $media = Media::withTrashed()->whereKey($media->id)->lockForUpdate()->first();
+                if (! $media instanceof Media || $media->upload_status !== 'pending' || $media->created_at >= $cutoff) {
+                    return 0;
+                }
+                if ($media->multipart_upload_id !== null) {
+                    $storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
+                }
+                $deleted = 0;
+                if ($storage->fileExists($media->disk, $media->object_key)) {
+                    $storage->deleteFile($media->disk, $media->object_key);
+                    $deleted++;
+                }
+                if ($media->thumbnail_key !== null && $storage->fileExists($thumbnailDisk, $media->thumbnail_key)) {
+                    $storage->deleteFile($thumbnailDisk, $media->thumbnail_key);
+                    $deleted++;
+                }
+                $media->forceDelete();
+                $pendingPruned++;
 
-            if ($storage->fileExists($media->disk, $media->object_key)) {
-                $storage->deleteFile($media->disk, $media->object_key);
-                $objectsDeleted++;
-            }
-
-            // A stale pending row may also have a client-uploaded thumbnail
-            // object (its own presigned PUT); remove it so abandoned uploads
-            // don't leak thumbnail objects into storage indefinitely.
-            if ($media->thumbnail_key !== null
-                && $storage->fileExists($thumbnailDisk, $media->thumbnail_key)) {
-                $storage->deleteFile($thumbnailDisk, $media->thumbnail_key);
-                $objectsDeleted++;
-            }
-
-            $media->forceDelete();
+                return $deleted;
+            });
         }
 
         // Orphaned ready profile pictures: referenced by no (live or soft-deleted)
@@ -101,7 +108,7 @@ class PruneOrphanMedia extends Command
         }
 
         $verb = $dryRun ? 'Would prune' : 'Pruned';
-        $this->info("{$verb} {$stale->count()} abandoned upload(s) and {$orphanedAvatars->count()} orphaned profile picture(s); removed {$objectsDeleted} stray object(s).");
+        $this->info("{$verb} {$pendingPruned} abandoned upload(s) and {$orphanedAvatars->count()} orphaned profile picture(s); removed {$objectsDeleted} stray object(s).");
 
         return self::SUCCESS;
     }

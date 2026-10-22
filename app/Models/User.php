@@ -97,6 +97,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
+            'library_enabled' => 'boolean',
             'can_receive_invites' => 'boolean',
             'ban_hides_content' => 'boolean',
             'trusted_inviter' => 'boolean',
@@ -289,6 +290,18 @@ class User extends Authenticatable implements MustVerifyEmail
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /** @return HasMany<LibraryItem, $this> */
+    public function libraryItems(): HasMany
+    {
+        return $this->hasMany(LibraryItem::class);
+    }
+
+    /** @return HasMany<LibraryCollection, $this> */
+    public function libraryCollections(): HasMany
+    {
+        return $this->hasMany(LibraryCollection::class);
     }
 
     /**

@@ -2,7 +2,7 @@ import type { Audience } from '@/lib/audience';
 
 export type { Audience };
 export type MediaTypeValue = 'photo' | 'video';
-export type MediaPurposeValue = 'gallery' | 'profile_picture';
+export type MediaPurposeValue = 'gallery' | 'profile_picture' | 'library';
 export type ModerationStatusValue = 'pending' | 'approved' | 'rejected';
 
 export interface VideoStatus {
@@ -68,6 +68,8 @@ export interface MediaItem {
   created_at: string | null;
   /** Present only on the single-media view: whether the current viewer saved it. */
   favorited?: boolean;
+  can_save_to_library?: boolean;
+  library_item_ulid?: string | null;
   /** Present on the single-media view: how many users have saved this item. */
   favorite_count?: number;
   /** Present on the single-media view: the uploader, for the profile frame. */
@@ -117,7 +119,7 @@ export interface AdminMediaItem extends MediaItem {
       distance: number;
     }[];
   };
-  user: { id: number; name: string | null; email: string | null };
+  user: { id: number | null; name: string | null; email: string | null };
 }
 
 export function mediaTypeForFile(file: File): MediaTypeValue | null {

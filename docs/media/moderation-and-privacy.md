@@ -26,13 +26,22 @@ never contains those keys.
 
 The owner chooses who may see an item once it has been approved.
 
-- Enum: `App\Enums\Visibility`
-  - `users` — any signed-in user may discover and view it.
-  - `unlisted` — hidden from discovery; reachable only via the direct link
-    (`/m/{ulid}`), i.e. anyone who has the link.
-- Trait: `App\Traits\HasVisibility`
-  - `scopeVisibleTo(?User)` — for listings/discovery (excludes unlisted).
-  - `isVisibleTo(?User)` — for direct lookups (allows unlisted via link).
+- Enum: `App\Enums\Audience`: Everyone, Followers, Mutuals, or Specific people.
+  An empty Specific people allowlist is owner-only.
+- Trait: `App\Traits\HasPrivacyPolicy`: audience checks apply to both listings
+  and direct links. Discoverability is separate; a link never bypasses access.
+- Persona-authored media inherits that persona's audience. A Library
+  collection's related-persona link is organizational only and grants no access.
+
+Library sharing uses explicit item/collection recipients. Current and future
+uploads and original notes in a shared collection are included. Items saved from
+someone else remain private to their saver, including in a shared collection;
+they cannot be reshared to bypass the source audience or block graph. Original
+notes stay private unless explicitly shared or placed in a shared collection.
+Viewing permits durable Save for accounts
+with Library storage enabled. Revocation prevents further access through the
+share, but does not remove existing independent saves. Saved media is still
+subject to moderation, and has no access to the source discussion or metadata.
 
 ## How they combine
 
@@ -49,7 +58,7 @@ The owner chooses who may see an item once it has been approved.
 To make another model moderated and/or privacy-aware:
 
 1. Add the matching columns (`moderation_status`, `moderated_by_user_id`,
-   `moderated_at`, `moderation_notes`, and/or `visibility`, `user_id`).
-2. `use` the `Moderatable` and/or `HasVisibility` traits and cast the enums.
+   `moderated_at`, `moderation_notes`, and/or `audience`, `discoverable`, `user_id`).
+2. `use` the `Moderatable` and/or `HasPrivacyPolicy` traits and cast the enums.
 3. Serialize through a presenter that hides moderation from owners, mirroring
    `MediaPresenter`.

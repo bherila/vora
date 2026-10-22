@@ -120,9 +120,20 @@ jobs:
 
       - name: Verify production health
         run: |
-          curl --fail-with-body --silent --show-error \
-            --retry 4 --retry-delay 3 --retry-all-errors --max-time 15 \
-            https://macrophile.me/up
+          # /up skips the normal web middleware and can stay healthy while
+          # user-facing pages fail in the PHP web worker.
+          for path in /up / /login; do
+            url="https://macrophile.me${path}"
+            status=$(curl --fail-with-body --silent --show-error \
+              --location --max-redirs 3 \
+              --retry 4 --retry-delay 3 --retry-all-errors --max-time 15 \
+              --output /dev/null --write-out '%{http_code}' "$url")
+            if [ "$status" != 200 ]; then
+              echo "Production check failed: $url returned HTTP $status" >&2
+              exit 1
+            fi
+            echo "Production check passed: $url"
+          done
 
       - name: Verify scheduler and queue health
         run: |

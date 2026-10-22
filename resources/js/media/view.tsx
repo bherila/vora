@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
+import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
 import { safeInternalUrl } from '@/security/dom-url';
@@ -202,9 +203,10 @@ export function MediaViewPage() {
             </>
           )}
           {typeof item.favorite_count === 'number' && item.favorite_count > 0 && (
-            <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'save' : 'saves'}</span>
+            <span className="text-sm text-muted-foreground">{item.favorite_count} {item.favorite_count === 1 ? 'favorite' : 'favorites'}</span>
           )}
           {item.favorited !== undefined && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+          {(item.can_save_to_library || item.library_item_ulid) && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
           {item.can_report && <ReportButton type="media" id={item.id} />}
         </div>
       </div>
