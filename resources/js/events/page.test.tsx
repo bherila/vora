@@ -1,16 +1,17 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
+import { EVENT_REFRESH_LIMIT, eventRefreshDelay } from '@/events/media-status';
 import { EventsPage } from '@/events/page';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 
 jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 jest.mock('@/initialData', () => ({ readInitialData: jest.fn() }));
-jest.mock('sonner', () => ({ Toaster: () => null }));
+jest.mock('sonner', () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => <button>Favorite</button> }));
 jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: () => <button>Save to Library</button> }));
 jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: ({ item }: { item: { video: { master_url: string } } }) => <div data-testid="player">{item.video?.master_url}</div> }));
-jest.mock('@/media/MediaUploadDialog', () => ({ MediaUploadDialog: ({ eventUlid, triggerLabel }: { eventUlid: string; triggerLabel: string }) => <button data-event={eventUlid}>{triggerLabel}</button> }));
+jest.mock('@/media/MediaUploadDialog', () => ({ MediaUploadDialog: ({ eventUlid, eventOptions, triggerLabel }: { eventUlid?: string; eventOptions: unknown[]; triggerLabel: string }) => <button data-event={eventUlid ?? ''} data-options={eventOptions.length}>{triggerLabel}</button> }));
 
 const event = { ulid: 'event-one', name: 'Welcome', description: 'Welcome gathering', visibility: 'everyone', timezone: 'UTC', starts_at: null, ends_at: null, can_manage: true, member_ids: [] };
 const attendees = [{ id: 3, display_name: 'Alex' }, { id: 7, display_name: 'Sam' }];
@@ -30,16 +31,17 @@ function mockRequests() {
 }
 
 describe('EventsPage', () => {
-  beforeEach(() => { jest.resetAllMocks(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
+  beforeEach(() => { jest.resetAllMocks(); window.scrollTo = jest.fn(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
 
   it('loads visible events and requires an explicit event before upload', async () => {
     render(<EventsPage />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading events');
     expect(await screen.findByText('Welcome video')).toBeInTheDocument();
-    expect(screen.getByText(/Choose an event above to upload/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Upload to Welcome' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-options', '1');
+    expect(screen.queryByLabelText('Uploaded by')).toBeNull();
+    expect(screen.queryByLabelText('Favorites by')).toBeNull();
     fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
-    expect(await screen.findByRole('button', { name: 'Upload to Welcome' })).toHaveAttribute('data-event', 'event-one');
+    expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-event', 'event-one');
     expect(screen.getByText('All attendees', { selector: '[data-slot=badge]' })).toBeInTheDocument();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
   });
@@ -63,9 +65,9 @@ describe('EventsPage', () => {
     fireEvent.click(link);
     expect(await screen.findByRole('heading', { name: 'Uploads by Sam' })).toBeInTheDocument();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&attendee_id=7'));
-    fireEvent.click(screen.getByRole('link', { name: 'Featured favorites' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Sam’s favorites' }));
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&featured=1'));
-    expect(await screen.findByText(/Favorites selected by Sam/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sam’s favorites' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'My uploads' }));
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&attendee_id=3'));
     expect(screen.getByRole('link', { name: 'My collection' })).toHaveAttribute('href', '/library');
@@ -77,7 +79,7 @@ describe('EventsPage', () => {
     expect(await screen.findByTestId('player')).toHaveTextContent('/api/events/hls/master.m3u8');
     expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media/media-one');
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('link', { name: 'Download to device' })).toHaveAttribute('href', '/api/events/media/media-one/download');
+    expect(within(dialog).getByRole('link', { name: 'Download' })).toHaveAttribute('href', '/api/events/media/media-one/download');
     expect(within(dialog).getByRole('button', { name: 'Save to Library' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Delete my upload' })).toBeNull();
   });
@@ -115,7 +117,7 @@ describe('EventsPage', () => {
     jest.mocked(readInitialData).mockReturnValue({ instance: { modules: { favorites: false, library: false } } });
     render(<EventsPage />);
     await screen.findByText('Welcome video');
-    expect(screen.queryByRole('link', { name: 'Featured favorites' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Sam’s favorites' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'My collection' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage featured curators' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Favorite' })).toBeNull();
@@ -124,6 +126,177 @@ describe('EventsPage', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).queryByRole('button', { name: 'Save to Library' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Favorite' })).toBeNull();
+  });
+
+  it('reveals filters on demand and clears attendee filters through URL navigation', async () => {
+    render(<EventsPage />);
+    await screen.findByText('Welcome video');
+    expect(screen.getByRole('link', { name: 'Welcome' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Uploaded by')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter media' }));
+    expect(screen.getByLabelText('Uploaded by')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Uploaded by'), { target: { value: '7' } });
+    expect(await screen.findByRole('heading', { name: 'Uploads by Sam' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Clear filters' }));
+    expect(window.location.search).not.toContain('attendee_id');
+    expect(await screen.findByRole('heading', { name: 'All photos & videos' })).toBeInTheDocument();
+  });
+
+  it('uses one viewer history entry across items and returns to the gallery scroll position', async () => {
+    const second = { ...media, id: 12, ulid: 'media-two', title: 'Second photo', type: 'photo', url: '/second' };
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url.startsWith('/api/events/media?') ? { data: [media, second], meta: { ...meta, last_page: 1, has_more: false, total: 2 } } : url === '/api/events/media/media-two' ? { data: second } : implementation(url));
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 333 });
+    render(<EventsPage />);
+    const initialLength = window.history.length;
+    fireEvent.click(await screen.findByRole('link', { name: 'Open Welcome video' }));
+    await screen.findByRole('dialog');
+    expect(window.history.length).toBe(initialLength + 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+    await screen.findByRole('heading', { name: 'Second photo' });
+    expect(window.location.search).toContain('item=media-two');
+    expect(window.history.length).toBe(initialLength + 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('');
+    await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, 333));
+  });
+
+  it('closes a direct media link by replacing its URL without navigating away', async () => {
+    window.history.replaceState({}, '', '/events?event_ulid=event-one&media=media-one');
+    const back = jest.spyOn(window.history, 'back');
+    render(<EventsPage />);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('?event_ulid=event-one');
+    expect(back).not.toHaveBeenCalled();
+    back.mockRestore();
+  });
+
+  it('continues viewer navigation across gallery page boundaries with full detail loading', async () => {
+    const second = { ...media, id: 12, ulid: 'media-two', title: 'Next page photo', type: 'photo', url: '/second' };
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url.startsWith('/api/events/media?page=2') ? { data: [second], meta: { ...meta, current_page: 2, has_more: false } } : url === '/api/events/media/media-two' ? { data: second } : implementation(url));
+    render(<EventsPage />);
+    fireEvent.click(await screen.findByRole('link', { name: 'Open Welcome video' }));
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+    expect(await screen.findByRole('heading', { name: 'Next page photo' })).toBeInTheDocument();
+    expect(window.location.search).toContain('page=2');
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media/media-two');
+  });
+
+  it('silently refreshes review-pending listings and stops once shared', async () => {
+    jest.useFakeTimers();
+    let pending = true;
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url.startsWith('/api/events/media?') ? { data: [{ ...media, type: 'photo', url: '/photo', under_review: pending }], meta } : implementation(url));
+    const { unmount } = render(<EventsPage />);
+    try {
+      await act(async () => {});
+      expect(screen.getByText(/Awaiting review/)).toBeInTheDocument();
+      pending = false;
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(screen.getByText(/Sam · Welcome · Shared/)).toBeInTheDocument();
+      const count = jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url.startsWith('/api/events/media?')).length;
+      await act(async () => { jest.advanceTimersByTime(60_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url.startsWith('/api/events/media?'))).toHaveLength(count);
+    } finally { unmount(); jest.useRealTimers(); }
+  });
+
+  it('refreshes active review/video transitions and stops on readiness or revocation', async () => {
+    jest.useFakeTimers();
+    window.history.replaceState({}, '', '/events?media=media-one');
+    let stage = 0;
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url !== '/api/events/media/media-one') return implementation(url);
+      if (stage === 3) throw new Error('Access removed.');
+      return { data: { ...media, under_review: stage === 0, video: { status: stage === 2 ? 'ready' : 'processing', master_url: stage === 2 ? '/ready.m3u8' : null } } };
+    });
+    const { unmount } = render(<EventsPage />);
+    try {
+      await act(async () => {});
+      expect(screen.getByText(/Sam · Welcome · Awaiting review/)).toBeInTheDocument();
+      stage = 1;
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(screen.getByText(/Sam · Welcome · Preparing video/)).toBeInTheDocument();
+      stage = 2;
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(screen.getByTestId('player')).toHaveTextContent('/ready.m3u8');
+      await act(async () => { jest.advanceTimersByTime(60_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(3);
+    } finally { unmount(); jest.useRealTimers(); }
+  });
+
+  it('bounds active polling, provides manual refresh, and cleans up when closed', async () => {
+    jest.useFakeTimers();
+    window.history.replaceState({}, '', '/events?media=media-one');
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events/media/media-one' ? { data: { ...media, under_review: true } } : implementation(url));
+    const { unmount } = render(<EventsPage />);
+    try {
+      await act(async () => {});
+      for (let attempt = 0; attempt < EVENT_REFRESH_LIMIT; attempt += 1) await act(async () => { jest.advanceTimersByTime(eventRefreshDelay(attempt)); });
+      expect(screen.getByText('Automatic updates have paused.')).toBeInTheDocument();
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(EVENT_REFRESH_LIMIT + 1);
+      await act(async () => { jest.advanceTimersByTime(600_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(EVENT_REFRESH_LIMIT + 1);
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Check for updates' }));
+      await act(async () => {});
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await act(async () => { jest.advanceTimersByTime(60_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(EVENT_REFRESH_LIMIT + 2);
+    } finally { unmount(); jest.useRealTimers(); }
+  });
+
+  it('clears revoked detail playback and stops polling rather than retaining a stale item', async () => {
+    jest.useFakeTimers();
+    window.history.replaceState({}, '', '/events?media=media-one');
+    let revoked = false;
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url !== '/api/events/media/media-one') return implementation(url);
+      if (revoked) throw new Error('Access removed.');
+      return { data: { ...media, under_review: true } };
+    });
+    const { unmount } = render(<EventsPage />);
+    try {
+      await act(async () => {});
+      revoked = true;
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(screen.queryByTestId('player')).toBeNull();
+      expect(screen.getByRole('alert')).toHaveTextContent('Access removed.');
+      await act(async () => { jest.advanceTimersByTime(60_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(2);
+    } finally { unmount(); jest.useRealTimers(); }
+  });
+
+  it('pauses automatic requests while the tab is hidden', async () => {
+    jest.useFakeTimers();
+    window.history.replaceState({}, '', '/events?media=media-one');
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events/media/media-one' ? { data: { ...media, under_review: true } } : implementation(url));
+    const { unmount } = render(<EventsPage />);
+    try {
+      await act(async () => {});
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(1);
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      await act(async () => { jest.advanceTimersByTime(5_000); });
+      expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/events/media/media-one')).toHaveLength(2);
+    } finally { unmount(); Reflect.deleteProperty(document, 'hidden'); jest.useRealTimers(); }
+  });
+
+  it('provides a selectable joining URL when clipboard access fails', async () => {
+    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: jest.fn().mockRejectedValue(new Error('Denied')) } });
+    render(<EventsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy joining link' }));
+    expect(await screen.findByLabelText('Joining link')).toHaveValue(`${window.location.origin}/events/join/event-one`);
+    expect(screen.getByLabelText('Joining link')).toHaveAttribute('readonly');
   });
 
 });
