@@ -354,6 +354,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
             ->where('path', '.*')
             ->name('media.hls');
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
+        Route::post('/{media}/cancel-upload', [MediaController::class, 'cancelUpload']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::patch('/{media}', [MediaController::class, 'update']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);

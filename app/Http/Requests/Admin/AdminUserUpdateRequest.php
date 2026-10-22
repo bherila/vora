@@ -25,6 +25,7 @@ class AdminUserUpdateRequest extends FormRequest
             'can_receive_invites' => ['sometimes', 'boolean'],
             'trusted_inviter' => ['sometimes', 'boolean'],
             'library_enabled' => ['sometimes', 'boolean'],
+            'storage_limit_bytes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9007199254740991'],
             'birth_date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
         ];
     }

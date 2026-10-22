@@ -6,6 +6,7 @@ use App\Enums\MediaPurpose;
 use App\Models\LibraryItem;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Media\AccountStorageQuota;
 use App\Services\Media\MediaService;
 use Illuminate\Support\Facades\DB;
 
@@ -14,11 +15,13 @@ class LibraryService
     public function __construct(
         private readonly LibraryAccess $access,
         private readonly MediaService $mediaService,
+        private readonly AccountStorageQuota $quota,
     ) {}
 
     public function saveMedia(User $user, string $ulid, ?string $collectionUlid): LibraryItem
     {
         return DB::transaction(function () use ($user, $ulid, $collectionUlid): LibraryItem {
+            $user = $this->quota->lock($user);
             $media = Media::query()->where('ulid', $ulid)->lockForUpdate()->first();
             // Administrative review access is not ordinary viewing permission.
             abort_unless($media instanceof Media && $this->access->canSaveMedia($user, $media), 404, 'Not found.');
@@ -35,6 +38,7 @@ class LibraryService
         $source = LibraryItem::query()->where('ulid', $ulid)->firstOrFail();
 
         return DB::transaction(function () use ($user, $source, $collectionUlid): LibraryItem {
+            $user = $this->quota->lock($user);
             // Establish the transaction's read snapshot after the source lock,
             // so a concurrent Save's existing reference is visible on MariaDB.
             $media = $source->media_id === null ? null
@@ -63,7 +67,17 @@ class LibraryService
 
     public function referenceMedia(User $user, Media $media, ?string $title = null): LibraryItem
     {
-        return $user->libraryItems()->firstOrCreate(['media_id' => $media->id], [
+        $user = $this->quota->lock($user);
+        // Callers lock the account before the source media. Pending private
+        // uploads already reserve their declared size in MediaUploadService.
+        $existing = $user->libraryItems()->where('media_id', $media->id)->first();
+        if ($existing instanceof LibraryItem) {
+            return $existing;
+        }
+        $this->quota->assertCanReference($user, $media);
+
+        return $user->libraryItems()->create([
+            'media_id' => $media->id,
             'source' => $media->user_id === $user->id ? 'upload' : 'saved',
             'title' => $title ?? $media->title,
         ]);

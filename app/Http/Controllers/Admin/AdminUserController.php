@@ -135,6 +135,10 @@ class AdminUserController extends Controller
             $user->library_enabled = (bool) $data['library_enabled'];
         }
 
+        if (array_key_exists('storage_limit_bytes', $data)) {
+            $user->storage_limit_bytes = $data['storage_limit_bytes'];
+        }
+
         if (array_key_exists('birth_date', $data)) {
             $user->birth_date = $data['birth_date'];
         }
@@ -308,6 +312,7 @@ class AdminUserController extends Controller
             'can_receive_invites' => (bool) $user->can_receive_invites,
             'trusted_inviter' => (bool) $user->trusted_inviter,
             'library_enabled' => (bool) $user->library_enabled,
+            'storage_limit_bytes' => $user->storage_limit_bytes,
             'is_banned' => $user->isBanned(),
             'banned_at' => $user->banned_at?->toIso8601String(),
             'ban_reason' => $user->ban_reason,
