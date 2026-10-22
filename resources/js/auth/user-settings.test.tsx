@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { fetchWrapper } from '@/fetchWrapper';
 import type { InstanceBootstrap } from '@/instance';
+import { currentBrowserPushSubscription } from '@/push';
 
 let mockInstance: InstanceBootstrap['instance'];
+let mockPushSupported = false;
 
 import { UserSettingsPage } from './user-settings';
 
@@ -55,7 +57,7 @@ jest.mock('@/initialData', () => ({
 
 jest.mock('@/push', () => ({
   currentBrowserPushSubscription: jest.fn(),
-  isWebPushSupported: () => false,
+  isWebPushSupported: () => mockPushSupported,
   subscribeBrowserToWebPush: jest.fn(),
   unsubscribeBrowserFromWebPush: jest.fn(),
 }));
@@ -79,6 +81,7 @@ function notificationResponse() {
       notify_co_author_invite: true,
       notify_co_author_invite_accepted: true,
       notify_favorite: true,
+      notify_message: true,
     },
   };
 }
@@ -86,6 +89,7 @@ function notificationResponse() {
 describe('UserSettingsPage', () => {
   beforeEach(() => {
     mockInstance = undefined;
+    mockPushSupported = false;
     window.history.replaceState({}, '', '/user/settings');
     patch.mockReset();
     patch.mockResolvedValue(notificationResponse());
@@ -228,7 +232,7 @@ describe('UserSettingsPage', () => {
     expect(screen.getByRole('tablist', { name: 'Settings sections' })).toHaveClass('grid-cols-2', 'sm:grid-cols-5');
   });
   it.each(['notifications', 'privacy'])('falls back from disabled social %s settings without requesting disabled modules', (tab) => {
-    mockInstance = { profile: 'event', modules: { profiles: false, personas: false, community: false, stories: false, chat: false } };
+    mockInstance = { profile: 'event', modules: { profiles: false, personas: false, community: false, stories: false, chat: false, favorites: false } };
     window.history.replaceState({}, '', `/user/settings?tab=${tab}`);
     render(<UserSettingsPage />);
     expect(screen.getByRole('tab', { name: 'Account' })).toHaveAttribute('aria-selected', 'true');
@@ -240,6 +244,41 @@ describe('UserSettingsPage', () => {
     expect(screen.getByRole('tab', { name: 'Security' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Data & account' })).toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it('keeps favorite-only notification preferences available to Event attendees without social controls', async () => {
+    mockInstance = { profile: 'event', modules: { profiles: false, personas: false, community: false, stories: false, chat: false, favorites: true } };
+    window.history.replaceState({}, '', '/user/settings?tab=notifications');
+    patch.mockResolvedValue({ ...notificationResponse(), data: { ...notificationResponse().data, notify_favorite: false } });
+    render(<UserSettingsPage />);
+    expect(screen.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Notify me when someone favorites my content' }));
+    expect(screen.getByText('Browser push notifications')).toBeInTheDocument();
+    expect(screen.getByText(/Notifications stay in your inbox/)).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Settings sections' })).toHaveClass('sm:grid-cols-4');
+    fireEvent.click(screen.getByRole('button', { name: 'Save notification preferences' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/api/account', { notify_favorite: false }));
+    expect(get).not.toHaveBeenCalledWith('/api/mutes');
+    expect(get).not.toHaveBeenCalledWith('/api/blocks');
+  });
+
+  it('checks browser push ownership when Favorites is the only notification module', async () => {
+    mockInstance = { profile: 'event', modules: { profiles: false, personas: false, community: false, stories: false, chat: false, favorites: true } };
+    mockPushSupported = true;
+    jest.mocked(currentBrowserPushSubscription).mockResolvedValue(null);
+    const originalNotification = Object.getOwnPropertyDescriptor(globalThis, 'Notification');
+    Object.defineProperty(globalThis, 'Notification', { configurable: true, value: { permission: 'granted' } });
+    try {
+      render(<UserSettingsPage />);
+      await waitFor(() => expect(get).toHaveBeenCalledWith('/api/push-subscriptions'));
+      expect(get).not.toHaveBeenCalledWith('/api/mutes');
+      expect(get).not.toHaveBeenCalledWith('/api/blocks');
+    } finally {
+      if (originalNotification) Object.defineProperty(globalThis, 'Notification', originalNotification);
+      else Reflect.deleteProperty(globalThis, 'Notification');
+    }
   });
 
 });

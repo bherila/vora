@@ -163,10 +163,17 @@ function socialSettingsEnabled(): boolean {
   return moduleEnabled('community') || moduleEnabled('profiles') || moduleEnabled('personas') || moduleEnabled('chat') || moduleEnabled('stories');
 }
 
+function notificationSettingsEnabled(): boolean {
+  return socialSettingsEnabled() || moduleEnabled('favorites');
+}
+
+function tabEnabled(tab: SettingsTab): boolean {
+  return tab === 'notifications' ? notificationSettingsEnabled() : tab !== 'privacy' || socialSettingsEnabled();
+}
+
 function tabFromUrl(): SettingsTab {
   const tab = new URLSearchParams(window.location.search).get('tab');
-  if (!socialSettingsEnabled() && (tab === 'notifications' || tab === 'privacy')) return 'account';
-  return SETTINGS_TABS.includes(tab as SettingsTab) ? tab as SettingsTab : 'account';
+  return SETTINGS_TABS.includes(tab as SettingsTab) && tabEnabled(tab as SettingsTab) ? tab as SettingsTab : 'account';
 }
 
 function emptyInitialData(): UserSettingsInitialData {
@@ -254,6 +261,7 @@ export function UserSettingsPage() {
   const initialData = getInitialData();
   const profilesEnabled = moduleEnabled('profiles');
   const socialEnabled = socialSettingsEnabled();
+  const notificationsEnabled = notificationSettingsEnabled();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromUrl);
   const [accountName, setAccountName] = useState(initialData.name);
@@ -301,7 +309,7 @@ export function UserSettingsPage() {
   const [blocksError, setBlocksError] = useState('');
 
   useEffect(() => {
-    if (!socialEnabled) { setPushStatusLoading(false); return; }
+    if (!notificationsEnabled) { setPushStatusLoading(false); return; }
     const supported = isWebPushSupported();
     setPushSupported(supported);
     setPushPermission(supported ? Notification.permission : 'denied');
@@ -338,7 +346,7 @@ export function UserSettingsPage() {
     return () => {
       active = false;
     };
-  }, [socialEnabled]);
+  }, [notificationsEnabled]);
 
   useEffect(() => {
     if (activeTab !== 'privacy' || !socialEnabled) return;
@@ -382,7 +390,7 @@ export function UserSettingsPage() {
   }, []);
 
   const handleTabChange = (value: string): void => {
-    const nextTab = SETTINGS_TABS.includes(value as SettingsTab) && (socialEnabled || value !== 'notifications' && value !== 'privacy') ? value as SettingsTab : 'account';
+    const nextTab = SETTINGS_TABS.includes(value as SettingsTab) && tabEnabled(value as SettingsTab) ? value as SettingsTab : 'account';
     setActiveTab(nextTab);
 
     const url = new URL(window.location.href);
@@ -420,16 +428,22 @@ export function UserSettingsPage() {
   // their dedicated persona pages.
   // Those fields are nullable/sometimes on the endpoint, so omitting them here
   // leaves them untouched — the account form can never clobber a /me edit.
-  const buildNotificationPayload = (): NotificationPayload => ({
-    notify_new_post: notifyNewPost,
-    notify_post_reaction: notifyPostReaction,
-    notify_post_comment: notifyPostComment,
-    notify_follow_request: notifyFollowRequest,
-    notify_follow_accepted: notifyFollowAccepted,
-    notify_co_author_invite: notifyCoAuthorInvite,
-    notify_co_author_invite_accepted: notifyCoAuthorInviteAccepted,
-    notify_favorite: notifyFavorite,
-    notify_message: notifyMessage,
+  const buildNotificationPayload = (): Partial<NotificationPayload> => ({
+    ...(moduleEnabled('community') ? {
+      notify_new_post: notifyNewPost,
+      notify_post_reaction: notifyPostReaction,
+      notify_post_comment: notifyPostComment,
+    } : {}),
+    ...(moduleEnabled('profiles') ? {
+      notify_follow_request: notifyFollowRequest,
+      notify_follow_accepted: notifyFollowAccepted,
+    } : {}),
+    ...(moduleEnabled('stories') ? {
+      notify_co_author_invite: notifyCoAuthorInvite,
+      notify_co_author_invite_accepted: notifyCoAuthorInviteAccepted,
+    } : {}),
+    ...(moduleEnabled('favorites') ? { notify_favorite: notifyFavorite } : {}),
+    ...(moduleEnabled('chat') ? { notify_message: notifyMessage } : {}),
   });
 
   const handleDeactivateAccount = async (): Promise<void> => {
@@ -582,11 +596,11 @@ export function UserSettingsPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList
           aria-label="Settings sections"
-          className={`grid h-auto w-full grid-cols-2 gap-1 ${socialEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-3'}`}
+          className={`grid h-auto w-full grid-cols-2 gap-1 ${socialEnabled ? 'sm:grid-cols-5' : notificationsEnabled ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}
         >
           <TabsTrigger value="account">Account</TabsTrigger>
-          {socialEnabled && <><TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="privacy">Privacy</TabsTrigger></>}
+          {notificationsEnabled && <TabsTrigger value="notifications">Notifications</TabsTrigger>}
+          {socialEnabled && <TabsTrigger value="privacy">Privacy</TabsTrigger>}
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="data">Data &amp; account</TabsTrigger>
         </TabsList>
@@ -660,7 +674,7 @@ export function UserSettingsPage() {
           </Card>
         </TabsContent>
 
-        {socialEnabled && <TabsContent value="notifications">
+        {notificationsEnabled && <TabsContent value="notifications">
           <Card>
             <CardHeader>
               <CardTitle>Notification preferences</CardTitle>
@@ -682,7 +696,7 @@ export function UserSettingsPage() {
               <form className="space-y-4" onSubmit={(event) => void handleNotificationSubmit(event)}>
                 <fieldset className="space-y-3 rounded-md border border-input p-3">
                   <legend className="px-1 text-sm font-medium">In-app notifications</legend>
-                  <label className="flex items-center gap-2 text-sm">
+                  {moduleEnabled('community') && <><label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyNewPost} onChange={(event) => setNotifyNewPost(event.target.checked)} />
                     Notify me when someone I follow posts
                   </label>
@@ -693,33 +707,33 @@ export function UserSettingsPage() {
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyPostComment} onChange={(event) => setNotifyPostComment(event.target.checked)} />
                     Notify me when someone comments on my post
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
+                  </label></>}
+                  {moduleEnabled('profiles') && <><label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyFollowRequest} onChange={(event) => setNotifyFollowRequest(event.target.checked)} />
                     Notify me when I receive a follow request
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyFollowAccepted} onChange={(event) => setNotifyFollowAccepted(event.target.checked)} />
                     Notify me when one of my follow requests is accepted
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
+                  </label></>}
+                  {moduleEnabled('stories') && <><label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyCoAuthorInvite} onChange={(event) => setNotifyCoAuthorInvite(event.target.checked)} />
                     Notify me when I receive a co-author invite
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyCoAuthorInviteAccepted} onChange={(event) => setNotifyCoAuthorInviteAccepted(event.target.checked)} />
                     Notify me when a co-author invite is accepted
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
+                  </label></>}
+                  {moduleEnabled('favorites') && <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyFavorite} onChange={(event) => setNotifyFavorite(event.target.checked)} />
-                    Notify me when someone saves my content
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
+                    Notify me when someone favorites my content
+                  </label>}
+                  {moduleEnabled('chat') && <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={notifyMessage} onChange={(event) => setNotifyMessage(event.target.checked)} />
                     Notify me when I receive a private message
-                  </label>
+                  </label>}
                   <p className="text-xs text-muted-foreground">
-                    Social notifications stay in your Vora inbox. Email is used only for account verification and password resets.
+                    Notifications stay in your inbox. Account verification and security emails remain separate.
                   </p>
                 </fieldset>
                 <Button type="submit" disabled={notificationSaving}>
