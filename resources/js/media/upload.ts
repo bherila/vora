@@ -36,6 +36,8 @@ export interface MultipartUploadSession {
   partSizeBytes: number;
   completedParts: CompletedMultipartPart[];
   createdAt: string;
+  /** Publication settings verified before this session can resume. */
+  context?: string;
 }
 
 interface UploadMultipartFileOptions {
@@ -85,6 +87,7 @@ export function readMultipartSession(key: string): MultipartUploadSession | null
         partSizeBytes: parsed.partSizeBytes,
         completedParts: parsed.completedParts.filter(isCompletedPart),
         createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+        ...(typeof parsed.context === 'string' ? { context: parsed.context } : {}),
       };
     }
   } catch {

@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 
-import { fetchWrapper } from '@/fetchWrapper';
 import { computeFileHash } from '@/media/imageProcessing';
 import { putToSignedUrl, uploadMultipartFile } from '@/media/upload';
+import { postUpload } from '@/media/uploadRequest';
 
 import { MediaUploadDialog } from './MediaUploadDialog';
 
@@ -12,7 +12,10 @@ interface MockFileDropzoneProps {
   disabled: boolean;
 }
 
-jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { post: jest.fn(), delete: jest.fn() } }));
+jest.mock('@/media/uploadRequest', () => ({
+  ...jest.requireActual<typeof import('@/media/uploadRequest')>('@/media/uploadRequest'),
+  postUpload: jest.fn(),
+}));
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() } }));
 jest.mock('@/identity', () => ({ useActiveIdentityId: () => null }));
 jest.mock('@/restrictions', () => ({ activeRestriction: () => null }));
@@ -26,6 +29,7 @@ jest.mock('@/media/upload', () => ({
   ...jest.requireActual<typeof import('@/media/upload')>('@/media/upload'),
   putToSignedUrl: jest.fn(),
   uploadMultipartFile: jest.fn(),
+  withRetries: (operation: () => Promise<unknown>) => operation(),
 }));
 jest.mock('@/components/media/FileDropzone', () => ({
   FileDropzone: function MockFileDropzone({ onFilesChange, disabled }: MockFileDropzoneProps) {
@@ -34,7 +38,7 @@ jest.mock('@/components/media/FileDropzone', () => ({
   },
 }));
 
-const post = jest.mocked(fetchWrapper.post);
+const post = jest.mocked(postUpload);
 const put = jest.mocked(putToSignedUrl);
 const multipart = jest.mocked(uploadMultipartFile);
 
@@ -74,7 +78,7 @@ describe('MediaUploadDialog reservation cleanup', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Storage connection lost.'));
     expect(post).toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
-    expect(post).not.toHaveBeenCalledWith('/api/media/41/complete', {});
+    expect(post.mock.calls.map(([url]) => url)).not.toContain('/api/media/41/complete');
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
   });
@@ -89,7 +93,7 @@ describe('MediaUploadDialog reservation cleanup', () => {
 
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith('Upload canceled.'));
     expect(post).toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
-    expect(post).not.toHaveBeenCalledWith('/api/media/41/complete', {});
+    expect(post.mock.calls.map(([url]) => url)).not.toContain('/api/media/41/complete');
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -105,7 +109,6 @@ describe('MediaUploadDialog reservation cleanup', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Completion response was lost.'));
     expect(post).toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
-    expect(fetchWrapper.delete).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledTimes(1);
   });
@@ -147,7 +150,6 @@ describe('MediaUploadDialog reservation cleanup', () => {
 
     expect(multipart).toHaveBeenCalledTimes(2);
     expect(post.mock.calls.map(([url]) => url)).toEqual(['/api/library/uploads', '/api/media/41/multipart/init']);
-    expect(fetchWrapper.delete).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenLastCalledWith('Temporary part upload failure.');
   });
 
@@ -161,10 +163,9 @@ describe('MediaUploadDialog reservation cleanup', () => {
     ]);
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Second upload failed. 1 upload completed before the failure.'));
-    expect(post).toHaveBeenCalledWith('/api/media/41/complete', {});
+    expect(post).toHaveBeenCalledWith('/api/media/41/complete', {}, expect.any(AbortSignal));
     expect(post).toHaveBeenCalledWith('/api/media/42/cancel-upload', {});
     expect(post).not.toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
-    expect(fetchWrapper.delete).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getAllByPlaceholderText('Title (optional)')).toHaveLength(1);
   });
