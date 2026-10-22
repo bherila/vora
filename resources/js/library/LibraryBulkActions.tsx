@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
+import { instanceProfile } from '@/instance';
 import { type LibraryCollection, libraryError } from '@/library/types';
 
 type BulkAction = 'add' | 'move' | 'remove' | 'delete';
@@ -24,6 +25,9 @@ const ACTION_LABELS: Record<BulkAction, string> = {
 };
 
 export function LibraryBulkActions({ itemUlids, collections, currentCollection, enabled, onChanged, onClear }: LibraryBulkActionsProps) {
+  const eventInstance = instanceProfile() === 'event';
+  const actionLabels = { ...ACTION_LABELS, delete: eventInstance ? 'Remove items' : ACTION_LABELS.delete };
+  const homeName = eventInstance ? 'My collection' : 'your Library';
   const [action, setAction] = useState<BulkAction | null>(null);
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
@@ -54,7 +58,7 @@ export function LibraryBulkActions({ itemUlids, collections, currentCollection, 
     }
   };
 
-  return <div className="space-y-3 rounded-lg border p-3" aria-label="Selected Library items">
+  return <div className="space-y-3 rounded-lg border p-3" aria-label={eventInstance ? 'Selected items' : 'Selected Library items'}>
     <div className="flex flex-wrap items-center gap-2">
       <p className="mr-auto text-sm font-medium" role="status">{itemUlids.length} selected</p>
       {enabled && <Button variant="outline" onClick={() => chooseAction('add')}>Add to collection</Button>}
@@ -62,16 +66,16 @@ export function LibraryBulkActions({ itemUlids, collections, currentCollection, 
         {enabled && <Button variant="outline" onClick={() => chooseAction('move')}>Move to collection</Button>}
         <Button variant="outline" onClick={() => chooseAction('remove')}>Remove from collection</Button>
       </>}
-      <Button variant="outline" onClick={() => chooseAction('delete')}>Remove from Library</Button>
+      <Button variant="outline" onClick={() => chooseAction('delete')}>{actionLabels.delete}</Button>
       <Button variant="ghost" onClick={onClear}>Clear selection</Button>
     </div>
     <Dialog open={action !== null} onOpenChange={(open) => { if (!open && !busy) setAction(null); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{action ? ACTION_LABELS[action] : 'Organize items'}</DialogTitle>
+          <DialogTitle>{action ? actionLabels[action] : 'Organize items'}</DialogTitle>
           <DialogDescription>
-            {action === 'delete' ? `Remove ${itemUlids.length} selected items from your Library and all your collections? People you shared them with lose access, but keep their own saved items. Files are retained while another saved reference or retention period still needs them.`
-              : action === 'remove' ? `Remove ${itemUlids.length} selected items from ${currentCollection?.name}? They remain in your Library and other collections. Recipients lose access through this collection, but keep their own saved items.`
+            {action === 'delete' ? `Remove ${itemUlids.length} selected items from ${homeName} and all your collections? People you shared them with lose access, but keep their own saved items. Files are retained while another saved reference or retention period still needs them.`
+              : action === 'remove' ? `Remove ${itemUlids.length} selected items from ${currentCollection?.name}? They remain in ${homeName} and other collections. Recipients lose access through this collection, but keep their own saved items.`
                 : action === 'move' ? `Move ${itemUlids.length} selected items out of ${currentCollection?.name} into another collection. Other collection memberships remain. Recipients lose access through the previous collection, but keep their own saved items.`
                   : `Add ${itemUlids.length} selected items to a collection. Their other collection memberships remain.`}
           </DialogDescription>
@@ -88,7 +92,7 @@ export function LibraryBulkActions({ itemUlids, collections, currentCollection, 
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => setAction(null)}>Cancel</Button>
-          <Button variant={action === 'delete' ? 'destructive' : 'default'} disabled={busy || (needsTarget && !target)} onClick={() => void apply()}>{busy ? 'Updating…' : action ? ACTION_LABELS[action] : 'Apply'}</Button>
+          <Button variant={action === 'delete' ? 'destructive' : 'default'} disabled={busy || (needsTarget && !target)} onClick={() => void apply()}>{busy ? 'Updating…' : action ? actionLabels[action] : 'Apply'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
