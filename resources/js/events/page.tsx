@@ -299,7 +299,7 @@ export function EventsPage() {
       </section>}
       {listRefreshPaused && <p role="status" className="text-sm text-muted-foreground">Automatic updates have paused. Choose Check for updates to look again.</p>}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2"><Label htmlFor="event-filter">Event</Label><select id="event-filter" className="rounded-md border bg-background p-2" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, section: null, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select></div>
+        <div className="flex min-w-0 max-w-full items-center gap-2"><Label htmlFor="event-filter" className="shrink-0">Event</Label><select id="event-filter" className="min-w-0 max-w-full flex-1 rounded-md border bg-background p-2" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, section: null, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select></div>
         <Button variant="outline" aria-expanded={filtersVisible} aria-controls="event-media-filters" onClick={() => setFiltersOpen((value) => !(value ?? filtersActive))}>Filter media</Button>
         {filtersActive && <a href={clearFiltersUrl} className="text-sm underline underline-offset-4">Clear filters</a>}
         <Button variant="ghost" size="sm" onClick={refresh}>Check for updates</Button>
