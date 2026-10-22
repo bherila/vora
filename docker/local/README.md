@@ -7,6 +7,12 @@ Every published port binds to loopback. Fixed credentials below are exclusively
 for this disposable local stack; never expose it to a network or use these in a
 deployed environment.
 
+Runtime CPU/memory limits keep the app, object store, and transcoder to one CPU
+and 1 GiB each, with smaller limits for mail and the scheduler. Keep the stack
+stopped when idle. Image compilation and repository validation are separate
+workloads; avoid running builds, full test suites, and transcoding concurrently
+on a busy workstation. CI remains the place for full validation gates.
+
 From the repository root:
 
 ```bash

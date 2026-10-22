@@ -32,6 +32,8 @@ x-app-environment: &app-environment
 services:
   app:
     image: vora-local-staging-app
+    cpus: 1.0
+    mem_limit: 1g
     build:
       context: ../..
       dockerfile: docker/local/Dockerfile
@@ -49,6 +51,8 @@ services:
 
   object-store:
     image: vora-local-staging-minio
+    cpus: 1.0
+    mem_limit: 1g
     build:
       context: ../..
       dockerfile: docker/local/Minio.Dockerfile
@@ -58,12 +62,15 @@ services:
       MINIO_ROOT_USER: vora-local-staging
       MINIO_ROOT_PASSWORD: disposable-storage-password
       MINIO_API_CORS_ALLOW_ORIGIN: http://127.0.0.1:18080
+      GOMAXPROCS: "1"
     volumes:
       - object-storage:/data
     depends_on:
       - app
 
   transcoder:
+    cpus: 1.0
+    mem_limit: 1g
     build:
       context: ../..
       dockerfile: docker/local/Dockerfile
@@ -76,11 +83,15 @@ services:
 
   mail:
     image: axllent/mailpit:v1.27
+    cpus: 0.25
+    mem_limit: 256m
     ports:
       - "127.0.0.1:18025:8025"
 
   scheduler:
     image: vora-local-staging-app
+    cpus: 0.5
+    mem_limit: 768m
     network_mode: service:app
     environment: *app-environment
     command: ["sh", "docker/local/schedule.sh"]
