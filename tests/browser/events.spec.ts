@@ -25,6 +25,13 @@ test('attendees discover uploads, browse photos and Save privately without an or
   await expect(upload.getByRole('option', { name: 'Private shower', exact: true })).toHaveCount(0);
   await upload.getByRole('combobox').selectOption(fixture.event.ulid);
   await expect(upload.getByText(/All approved attendees/i)).toBeVisible();
+  const longFilename = 'a-photo-with-a-long-original-camera-filename-to-check-the-upload-layout-on-small-screens.png';
+  await upload.locator('input[type="file"]').setInputFiles(new URL(`./fixtures/${longFilename}`, import.meta.url).pathname);
+  await expect.poll(() => upload.getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await upload.locator('input[type="file"]').setInputFiles([longFilename, 'attendee-photo.png'].map((name) => new URL(`./fixtures/${name}`, import.meta.url).pathname));
+  await expect(upload.getByRole('img')).toHaveCount(2);
+  await expect(upload.getByRole('status')).toHaveText('0 of 2 uploaded');
   await page.screenshot({ path: testInfo.outputPath('event-upload.png'), fullPage: true });
   await upload.getByRole('button', { name: 'Close', exact: true }).click();
 

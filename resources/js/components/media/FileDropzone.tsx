@@ -94,7 +94,7 @@ export function FileDropzone({ accept, disabled = false, files, label, multiple 
           Browse files
         </span>
       </button>
-      <p id={`${inputId}-selected`} className="text-sm text-muted-foreground">
+      <p id={`${inputId}-selected`} className="break-words text-sm text-muted-foreground">
         {formatFileList(files)}
       </p>
     </div>
