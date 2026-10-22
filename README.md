@@ -76,6 +76,11 @@ php artisan serve
 pnpm run dev
 ```
 
+For isolated local development and media integration checks, use the reusable
+[Docker staging setup](docker/local/README.md). It includes the normal app,
+private S3-compatible storage, real FFmpeg HLS, captured email, and disposable
+accounts. Initialization is explicit; stopping the services preserves their data.
+
 ## Validation
 
 Frontend:
