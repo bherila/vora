@@ -1,3 +1,8 @@
+# Configure the LiteSpeed web worker independently of Artisan's CLI settings.
+<IfModule LiteSpeed>
+    php_value memory_limit 1024M
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
