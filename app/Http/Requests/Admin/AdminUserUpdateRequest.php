@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Services\SettingsService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class AdminUserUpdateRequest extends FormRequest
 {
@@ -25,8 +27,19 @@ class AdminUserUpdateRequest extends FormRequest
             'can_receive_invites' => ['sometimes', 'boolean'],
             'trusted_inviter' => ['sometimes', 'boolean'],
             'library_enabled' => ['sometimes', 'boolean'],
-            'storage_limit_bytes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9007199254740991'],
+            'storage_limit_bytes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:'.SettingsService::MAX_STORAGE_LIMIT_BYTES],
+            'storage_unlimited' => ['sometimes', 'boolean'],
             'birth_date' => ['sometimes', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
         ];
+    }
+
+    /** @return array<\Closure(Validator): void> */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if ($this->boolean('storage_unlimited') && $this->input('storage_limit_bytes') !== null) {
+                $validator->errors()->add('storage_limit_bytes', 'Choose either a finite limit or unlimited storage.');
+            }
+        }];
     }
 }

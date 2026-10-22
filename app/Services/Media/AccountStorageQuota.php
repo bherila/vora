@@ -10,7 +10,10 @@ use Illuminate\Validation\ValidationException;
 /** Account mutations lock the account first, then media, before checking usage. */
 class AccountStorageQuota
 {
-    public function __construct(private readonly AccountStorageUsage $usage) {}
+    public function __construct(
+        private readonly AccountStorageUsage $usage,
+        private readonly AccountStorageLimit $limits,
+    ) {}
 
     public function lock(User $user): User
     {
@@ -28,7 +31,8 @@ class AccountStorageQuota
 
     public function allows(User $lockedUser, ?int $additionalBytes, int $releasedReservation = 0): bool
     {
-        if ($lockedUser->storage_limit_bytes === null) {
+        $limit = $this->limits->forUser($lockedUser);
+        if ($limit === null) {
             return true;
         }
         if ($additionalBytes === null || $additionalBytes < 0) {
@@ -37,7 +41,7 @@ class AccountStorageQuota
         $usage = $this->usage->forUser($lockedUser);
 
         return $usage['active_unknown_size_file_count'] === 0
-            && $lockedUser->storage_limit_bytes >= $usage['used_bytes'] - $releasedReservation + $additionalBytes;
+            && $limit >= $usage['used_bytes'] - $releasedReservation + $additionalBytes;
     }
 
     public function assertCanGrow(User $lockedUser, ?int $additionalBytes): void

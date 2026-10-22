@@ -12,7 +12,7 @@ const PASSWORD = 'Local-Staging-Only-2026!';
 const EMAILS = ['admin', 'recipient', 'outsider'].map((role) => `${role}@staging.invalid`);
 
 interface MailSummary { ID: string; To: { Address: string }[]; }
-interface Account { id: number; email: string; is_admin: boolean; is_deleted: boolean; storage_limit_bytes: number | null; }
+interface Account { id: number; email: string; is_admin: boolean; is_deleted: boolean; storage_limit_bytes: number | null; storage_unlimited: boolean; }
 interface Item { ulid: string; title: string; source: string; media: { video?: { status: string; master_url: string | null } } | null; }
 interface Upload {
   data: { id: number; ulid: string };
@@ -211,6 +211,8 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
   let adminPage: Page | undefined;
   let recipientAccountId: number | undefined;
   let originalLimit: number | null = null;
+  let originalUnlimited = false;
+  let originalDefaultLimit: number | null | undefined;
   try {
     const pages: Page[] = [];
     for (const email of EMAILS) {
@@ -222,7 +224,8 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     }
     const [admin, recipient, outsider] = pages;
     adminPage = admin;
-    const accounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
+    const adminUsers = await success<{ data: Account[]; settings: { default_storage_limit_bytes: number | null } }>(admin, 'GET', '/api/admin/users');
+    const accounts = adminUsers.data;
     const account = (email: string): Account => {
       const result = accounts.find((entry) => entry.email === email);
       if (!result || result.is_deleted || !EMAILS.includes(result.email)) throw new Error('Expected active seeded staging accounts; inspect the disposable Docker staging setup.');
@@ -231,7 +234,11 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     const recipientAccount = account('recipient@staging.invalid');
     recipientAccountId = recipientAccount.id;
     originalLimit = recipientAccount.storage_limit_bytes;
-    await success(admin, 'PATCH', `/api/admin/users/${recipientAccount.id}`, { storage_limit_bytes: null });
+    originalUnlimited = recipientAccount.storage_unlimited;
+    originalDefaultLimit = adminUsers.settings.default_storage_limit_bytes;
+    const defaultLimit = 2 * 1024 ** 2;
+    await success(admin, 'PUT', '/api/admin/storage-settings', { default_storage_limit_bytes: defaultLimit });
+    await success(admin, 'PATCH', `/api/admin/users/${recipientAccount.id}`, { storage_limit_bytes: null, storage_unlimited: true });
     const baselineUsage = (await success<{ data: { used_bytes: number; saved_bytes: number } }>(recipient, 'GET', '/api/account/storage')).data;
     const suffix = String(Date.now());
     const uploaderContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL });
@@ -240,6 +247,9 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     const uploaderAccount = await registerUploader(uploader, admin, request, account('admin@staging.invalid').id, suffix);
     expect(uploaderAccount.is_admin).toBe(false);
     expect(uploaderAccount.id).not.toBe(1);
+    expect(uploaderAccount.storage_limit_bytes).toBeNull();
+    expect(uploaderAccount.storage_unlimited).toBe(false);
+    expect((await success<{ data: { limit_bytes: number | null } }>(uploader, 'GET', '/api/account/storage')).data.limit_bytes).toBe(defaultLimit);
     const collection = (await success<{ data: { ulid: string } }>(uploader, 'POST', '/api/library/collections', { name: `Received ${suffix}` })).data;
     await success(uploader, 'PUT', `/api/library/collections/${collection.ulid}/sharing`, { user_ids: [recipientAccount.id] });
     const photoTitle = `Staging photo ${suffix}`;
@@ -255,6 +265,12 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     const image = recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true });
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
     await playable(recipient, videoItem.ulid);
+    // A changed default affects existing inheriting accounts. The recipient's
+    // explicit unlimited override still permits durable Saves under a zero default.
+    await success(admin, 'PUT', '/api/admin/storage-settings', { default_storage_limit_bytes: 0 });
+    expect((await success<{ data: { limit_bytes: number | null } }>(uploader, 'GET', '/api/account/storage')).data.limit_bytes).toBe(0);
+    expect((await api(uploader, 'POST', '/api/library/uploads', { type: 'photo', filename: 'blocked.png', content_type: 'image/png', size: 1 })).status).toBe(422);
+    expect((await success<{ data: { limit_bytes: number | null } }>(recipient, 'GET', '/api/account/storage')).data.limit_bytes).toBeNull();
     const savedPhoto = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { item_ulid: photoItem.ulid })).data;
     const savedVideo = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { item_ulid: videoItem.ulid })).data;
     const usage = (await success<{ data: { used_bytes: number; saved_bytes: number } }>(recipient, 'GET', '/api/account/storage')).data;
@@ -299,11 +315,18 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     expect((await recipient.request.get(segmentUrl)).status(), 'Final reference removal physically purges the real HLS segment').toBe(404);
     expect((await success<{ data: { used_bytes: number } }>(recipient, 'GET', '/api/account/storage')).data.used_bytes).toBe(baselineUsage.used_bytes);
   } finally {
-    if (adminPage && recipientAccountId !== undefined) {
-      try { await success(adminPage, 'PATCH', `/api/admin/users/${recipientAccountId}`, { storage_limit_bytes: originalLimit }); }
-      finally { for (const context of contexts) await context.close(); }
-    } else {
-      for (const context of contexts) await context.close();
+    try {
+      if (adminPage && recipientAccountId !== undefined) {
+        await success(adminPage, 'PATCH', `/api/admin/users/${recipientAccountId}`, { storage_limit_bytes: originalLimit, storage_unlimited: originalUnlimited });
+      }
+    } finally {
+      try {
+        if (adminPage && originalDefaultLimit !== undefined) {
+          await success(adminPage, 'PUT', '/api/admin/storage-settings', { default_storage_limit_bytes: originalDefaultLimit });
+        }
+      } finally {
+        for (const context of contexts) await context.close();
+      }
     }
   }
 });

@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AdminPostCommentController;
 use App\Http\Controllers\Admin\AdminPostController;
 use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminStaticPageController;
+use App\Http\Controllers\Admin\AdminStorageSettingsController;
 use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminUserRestrictionController;
@@ -418,6 +419,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
 // not disabled) and returns a clean 403 for JSON callers.
 Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
+    Route::put('/storage-settings', AdminStorageSettingsController::class);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
     Route::post('/users/{user}/ban', [AdminUserController::class, 'ban']);

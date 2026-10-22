@@ -11,6 +11,8 @@ use App\Models\InviteGrant;
 use App\Models\User;
 use App\Services\Chat\ChatState;
 use App\Services\InviteService;
+use App\Services\Media\AccountStorageLimit;
+use App\Services\SettingsService;
 use App\Services\UserAccountService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +24,8 @@ class AdminUserController extends Controller
         private readonly UserAccountService $accounts,
         private readonly InviteService $invites,
         private readonly ChatState $chatState,
+        private readonly SettingsService $settings,
+        private readonly AccountStorageLimit $storageLimits,
     ) {}
 
     /**
@@ -39,15 +43,19 @@ class AdminUserController extends Controller
     public function apiIndex(): JsonResponse
     {
         $balances = $this->inviteBalances();
+        $defaultStorageLimit = $this->settings->defaultStorageLimitBytes();
 
         $users = User::query()
             ->withTrashed()
             ->with(['referredByInvite.inviter:id,display_name', 'restrictions'])
             ->orderByDesc('id')
             ->get()
-            ->map(fn (User $u): array => $this->present($u, $balances[$u->id] ?? 0));
+            ->map(fn (User $u): array => $this->present($u, $defaultStorageLimit, $balances[$u->id] ?? 0));
 
-        return response()->json(['success' => true, 'data' => $users]);
+        return response()->json([
+            'success' => true, 'data' => $users,
+            'settings' => ['default_storage_limit_bytes' => $defaultStorageLimit],
+        ]);
     }
 
     /**
@@ -86,7 +94,7 @@ class AdminUserController extends Controller
             'is_disabled' => false,
         ])->save();
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -135,8 +143,19 @@ class AdminUserController extends Controller
             $user->library_enabled = (bool) $data['library_enabled'];
         }
 
+        if (array_key_exists('storage_unlimited', $data)) {
+            $user->storage_unlimited = (bool) $data['storage_unlimited'];
+            if ($user->storage_unlimited) {
+                $user->storage_limit_bytes = null;
+            }
+        }
         if (array_key_exists('storage_limit_bytes', $data)) {
             $user->storage_limit_bytes = $data['storage_limit_bytes'];
+            // A finite value always means custom; null without an explicit
+            // unlimited choice returns the account to the site default.
+            if ($data['storage_limit_bytes'] !== null || ! array_key_exists('storage_unlimited', $data)) {
+                $user->storage_unlimited = false;
+            }
         }
 
         if (array_key_exists('birth_date', $data)) {
@@ -149,7 +168,7 @@ class AdminUserController extends Controller
             $this->chatState->touchUserAndPeers($user);
         }
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -174,7 +193,7 @@ class AdminUserController extends Controller
         ])->save();
         $this->chatState->touchUserAndPeers($user);
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -192,7 +211,7 @@ class AdminUserController extends Controller
         ])->save();
         $this->chatState->touchUserAndPeers($user);
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -217,7 +236,7 @@ class AdminUserController extends Controller
             ])->save();
         }
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -239,7 +258,7 @@ class AdminUserController extends Controller
             ], 422);
         }
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
@@ -273,13 +292,13 @@ class AdminUserController extends Controller
             $this->chatState->touchUserAndPeers($user);
         }
 
-        return response()->json(['success' => true, 'data' => $this->present($user)]);
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function present(User $user, ?int $balance = null): array
+    private function present(User $user, ?int $defaultStorageLimit, ?int $balance = null): array
     {
         $balance ??= $this->invites->availableBalance($user);
         $referrer = $user->referredByInvite?->inviter;
@@ -313,6 +332,8 @@ class AdminUserController extends Controller
             'trusted_inviter' => (bool) $user->trusted_inviter,
             'library_enabled' => (bool) $user->library_enabled,
             'storage_limit_bytes' => $user->storage_limit_bytes,
+            'storage_unlimited' => (bool) $user->storage_unlimited,
+            'effective_storage_limit_bytes' => $this->storageLimits->resolve($user, $defaultStorageLimit),
             'is_banned' => $user->isBanned(),
             'banned_at' => $user->banned_at?->toIso8601String(),
             'ban_reason' => $user->ban_reason,

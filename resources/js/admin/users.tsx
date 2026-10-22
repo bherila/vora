@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { StorageLimitDialog } from '@/admin/StorageLimitDialog';
+import { formatStorageLimit, StorageLimitDialog } from '@/admin/StorageLimitDialog';
 import { DatePicker } from '@/components/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,6 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
-import { formatBytes } from '@/media/types';
 
 interface AdminUser {
   id: number;
@@ -53,6 +52,8 @@ interface AdminUser {
   trusted_inviter: boolean;
   library_enabled: boolean;
   storage_limit_bytes: number | null;
+  storage_unlimited: boolean;
+  effective_storage_limit_bytes: number | null;
   is_banned: boolean;
   ban_reason: string | null;
   ban_hides_content: boolean;
@@ -107,7 +108,7 @@ async function patchUser(id: number, body: Record<string, unknown>) {
     const data = await response.json().catch(() => ({})) as { message?: string };
     throw new Error(data.message ?? 'Request failed');
   }
-  return response.json() as Promise<{ success: boolean }>;
+  return response.json() as Promise<{ success: boolean; data: AdminUser }>;
 }
 
 export function AdminUsersPage() {
@@ -116,6 +117,9 @@ export function AdminUsersPage() {
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [storageTarget, setStorageTarget] = useState<AdminUser | null>(null);
+  const [defaultStorageLimit, setDefaultStorageLimit] = useState<number | null>(null);
+  const [storageSettingsLoaded, setStorageSettingsLoaded] = useState(false);
+  const [defaultStorageOpen, setDefaultStorageOpen] = useState(false);
   const [birthDateTarget, setBirthDateTarget] = useState<AdminUser | null>(null);
   const [birthDateValue, setBirthDateValue] = useState('');
   const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -138,16 +142,21 @@ export function AdminUsersPage() {
   const [restrictionReason, setRestrictionReason] = useState('');
   const [restrictionExpiry, setRestrictionExpiry] = useState('');
 
-  const loadUsers = async () => {
+  const loadUsers = async (): Promise<boolean> => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetchWrapper.get('/api/admin/users') as { success: boolean; data: AdminUser[] };
-      if (response.success) {
-        setUsers(response.data);
-      }
+      const response = await fetchWrapper.get('/api/admin/users') as {
+        success: boolean; data: AdminUser[]; settings: { default_storage_limit_bytes: number | null };
+      };
+      if (!response.success || !response.settings) throw new Error('Failed to load users and storage settings.');
+      setUsers(response.data);
+      setDefaultStorageLimit(response.settings.default_storage_limit_bytes);
+      setStorageSettingsLoaded(true);
+      return true;
     } catch (err) {
-      setError(typeof err === 'string' ? err : 'Failed to load users.');
+      setError(err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to load users.');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -439,10 +448,21 @@ export function AdminUsersPage() {
       <h1 className="mb-6 text-2xl font-bold">Admin — Users</h1>
 
       {error && (
-        <div className="mb-4 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="mb-4 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
+
+      <section aria-labelledby="default-storage-heading" className="mb-6 space-y-2 rounded-lg border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="default-storage-heading" className="font-semibold">Default account storage</h2>
+            <p className="mt-1 text-sm">{storageSettingsLoaded ? `Site default: ${formatStorageLimit(defaultStorageLimit)}` : 'Site default unavailable until settings are loaded.'}</p>
+          </div>
+          <Button variant="outline" disabled={loading || !storageSettingsLoaded} onClick={() => setDefaultStorageOpen(true)}>Change site default</Button>
+        </div>
+        <p className="text-sm text-muted-foreground">Applies to accounts using the site default, including new accounts. Custom limits and Unlimited overrides stay as set. Library access is enabled separately.</p>
+      </section>
 
       {loading ? (
         <p className="text-muted-foreground">Loading users...</p>
@@ -500,7 +520,7 @@ export function AdminUsersPage() {
                     ))}
                     {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
                     {user.library_enabled && <Badge variant="outline">Library enabled</Badge>}
-                    <Badge variant="outline">Storage: {user.storage_limit_bytes == null ? 'Unlimited' : formatBytes(user.storage_limit_bytes)}</Badge>
+                    <Badge variant="outline">Storage: {user.storage_unlimited ? 'Unlimited override' : user.storage_limit_bytes === null ? `Site default (${formatStorageLimit(user.effective_storage_limit_bytes)})` : `Custom (${formatStorageLimit(user.storage_limit_bytes)})`}</Badge>
                     {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
                     <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
                     {user.referrer_display_name && (
@@ -696,11 +716,32 @@ export function AdminUsersPage() {
       {storageTarget && <StorageLimitDialog
         key={storageTarget.id}
         userName={storageTarget.display_name ?? storageTarget.name}
-        limitBytes={storageTarget.storage_limit_bytes ?? null}
+        limitBytes={storageTarget.storage_limit_bytes}
+        unlimitedOverride={storageTarget.storage_unlimited}
+        defaultLimitBytes={defaultStorageLimit}
         onClose={() => setStorageTarget(null)}
-        onSave={async (limitBytes) => {
-          await patchUser(storageTarget.id, { storage_limit_bytes: limitBytes });
-          await loadUsers();
+        onSave={async (value) => {
+          const response = await patchUser(storageTarget.id, { ...value });
+          setUsers((current) => current.map((user) => user.id === storageTarget.id ? response.data : user));
+          if (!await loadUsers()) throw new Error('The account limit was saved, but users could not be refreshed. Try again to refresh the list.');
+        }}
+      />}
+      {defaultStorageOpen && <StorageLimitDialog
+        userName="Site default"
+        siteDefault
+        limitBytes={defaultStorageLimit}
+        unlimitedOverride={defaultStorageLimit === null}
+        defaultLimitBytes={defaultStorageLimit}
+        onClose={() => setDefaultStorageOpen(false)}
+        onSave={async (value) => {
+          const response = await fetchWrapper.put('/api/admin/storage-settings', {
+            default_storage_limit_bytes: value.storage_limit_bytes,
+          }) as { success: boolean; data: { default_storage_limit_bytes: number | null } };
+          const updated = response.data.default_storage_limit_bytes;
+          setDefaultStorageLimit(updated);
+          setUsers((current) => current.map((user) => !user.storage_unlimited && user.storage_limit_bytes === null
+            ? { ...user, effective_storage_limit_bytes: updated } : user));
+          if (!await loadUsers()) throw new Error('The site default was saved, but users could not be refreshed. Try again to refresh the list.');
         }}
       />}
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>

@@ -69,8 +69,20 @@ thumbnails, reviewed copies, and HLS derivatives are excluded. Unfinished upload
 reserve their declared original size separately until completion, cancellation,
 or stale-upload cleanup.
 
-Admins can set `users.storage_limit_bytes` in Admin Users: null means unlimited,
-and zero prevents additional media storage. Limits apply to active uploaded and
+Admins set the site-wide default quota in Admin Users. Unset per-user limits
+inherit that default, including accounts created before the default changes.
+The site default starts unlimited. Each account can instead have a custom GiB
+limit or an explicit unlimited override; custom limits and unlimited overrides
+are unaffected by default changes. Choosing **Use site default** clears the
+override. A limit of zero prevents additional media storage.
+
+`users.storage_limit_bytes` holds custom limits; null inherits the default unless
+`users.storage_unlimited` is true. The runtime default is stored in the settings
+table as `default_storage_limit_bytes`. The admin-only
+`PUT /api/admin/storage-settings` endpoint updates it, with null meaning an
+unlimited default. No user rows need rewriting when the default changes.
+
+Limits apply to active uploaded and
 saved originals plus upload reservations, counted once per account. Deleted
 uploads held for admin retention remain measured but do not use the allowance.
 Notes and viewing shares consume no allowance. Library and Settings show the
@@ -81,6 +93,8 @@ Uploads and durable Saves serialize on the account before checking capacity;
 completion verifies actual object size before replacing its reservation. Failed
 direct uploads cancel their pending record so retries do not reserve space twice.
 Reading, removing files, and revoking sharing remain available above the limit.
+Lowering either the default or an account override preserves existing content;
+new storage and completion of pending uploads use the current effective limit.
 There is no billing integration. Storage creation is also controlled by the
 admin-managed `users.library_enabled` flag, which is off by default and cannot
 be set through registration or ordinary account settings.
