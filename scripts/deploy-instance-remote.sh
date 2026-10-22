@@ -7,6 +7,18 @@ deploy_path=$1
 php_binary=$2
 expected_profile=$3
 web_roots=${4:-}
+IFS=',' read -r -a roots <<< "$web_roots"
+for root in "${roots[@]}"; do
+  test -n "$root" || continue
+  target="$HOME/$root"
+  # A new instance must never replace a real directory or its own application.
+  case "$root/" in "$deploy_path/"*) echo "Web root overlaps application" >&2; exit 1;; esac
+  if [ -e "$target" ] && [ ! -L "$target" ]; then
+    echo "Web root must be absent or a symlink: $root" >&2
+    exit 1
+  fi
+done
+
 cd "$HOME/$deploy_path"
 test -f .env
 chmod 710 .
@@ -21,15 +33,7 @@ chmod 600 bootstrap/cache/config.php
 "$php_binary" artisan schema:assert-persona
 "$php_binary" artisan view:clear
 
-IFS=',' read -r -a roots <<< "$web_roots"
 for root in "${roots[@]}"; do
   test -n "$root" || continue
-  target="$HOME/$root"
-  # A new instance must never replace a real directory or its own application.
-  case "$root/" in "$deploy_path/"*) echo "Web root overlaps application" >&2; exit 1;; esac
-  if [ -e "$target" ] && [ ! -L "$target" ]; then
-    echo "Web root must be absent or a symlink: $root" >&2
-    exit 1
-  fi
-  ln -sfnT "$HOME/$deploy_path/public" "$target"
+  ln -sfnT "$HOME/$deploy_path/public" "$HOME/$root"
 done

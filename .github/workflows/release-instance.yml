@@ -60,6 +60,9 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit --configuration phpunit.xml
 
+      - name: Verify deployment filesystem safety
+        run: python3 tests/scripts/test_deploy_instance.py
+
       - name: Prepare tested release
         run: |
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader

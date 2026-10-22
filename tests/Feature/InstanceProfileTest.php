@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Support\InstanceFeatures;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Env;
 use Tests\TestCase;
 
 class InstanceProfileTest extends TestCase
@@ -14,14 +13,25 @@ class InstanceProfileTest extends TestCase
 
     public function test_profile_defaults_and_module_overrides_are_resolved_from_deployment_configuration(): void
     {
-        $repository = Env::getRepository();
         $keys = ['APP_PROFILE', 'MODULE_EVENTS_ENABLED', 'MODULE_CHAT_ENABLED'];
-        $previous = array_combine($keys, array_map(fn (string $key) => $repository->get($key), $keys));
+        $previous = [];
+        foreach ($keys as $key) {
+            $previous[$key] = [$_ENV[$key] ?? null, $_SERVER[$key] ?? null, getenv($key)];
+        }
+        $setEnvironment = static function (string $key, ?string $value): void {
+            if ($value === null) {
+                unset($_ENV[$key], $_SERVER[$key]);
+                putenv($key);
+            } else {
+                $_ENV[$key] = $_SERVER[$key] = $value;
+                putenv($key.'='.$value);
+            }
+        };
 
         try {
-            $repository->clear('MODULE_EVENTS_ENABLED');
-            $repository->clear('MODULE_CHAT_ENABLED');
-            $repository->set('APP_PROFILE', 'event');
+            $setEnvironment('MODULE_EVENTS_ENABLED', null);
+            $setEnvironment('MODULE_CHAT_ENABLED', null);
+            $setEnvironment('APP_PROFILE', 'event');
             $event = require config_path('instance.php');
             $this->assertSame('event', $event['profile']);
             $this->assertTrue($event['modules']['events']);
@@ -31,17 +41,24 @@ class InstanceProfileTest extends TestCase
                 $this->assertFalse($event['modules'][$module]);
             }
 
-            $repository->set('MODULE_CHAT_ENABLED', 'true');
+            $setEnvironment('MODULE_CHAT_ENABLED', 'true');
             $override = require config_path('instance.php');
             $this->assertTrue($override['modules']['chat']);
-            $repository->set('APP_PROFILE', 'vora');
-            $repository->clear('MODULE_CHAT_ENABLED');
+            $setEnvironment('APP_PROFILE', 'vora');
+            $setEnvironment('MODULE_CHAT_ENABLED', null);
             $vora = require config_path('instance.php');
             $this->assertFalse($vora['modules']['events']);
             $this->assertTrue($vora['modules']['chat']);
         } finally {
-            foreach ($previous as $key => $value) {
-                $value === null ? $repository->clear($key) : $repository->set($key, $value);
+            foreach ($previous as $key => [$environment, $server, $process]) {
+                unset($_ENV[$key], $_SERVER[$key]);
+                if ($environment !== null) {
+                    $_ENV[$key] = $environment;
+                }
+                if ($server !== null) {
+                    $_SERVER[$key] = $server;
+                }
+                putenv($process === false ? $key : $key.'='.$process);
             }
         }
     }

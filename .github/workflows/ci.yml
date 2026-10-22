@@ -58,6 +58,7 @@ jobs:
               - 'database/**'
               - 'routes/**'
               - 'tests/**'
+              - 'scripts/deploy-instance-remote.sh'
               - '.github/workflows/**'
 
   migrations:
@@ -196,6 +197,9 @@ jobs:
         run: |
           ./vendor/bin/pint --test
           composer test
+
+      - name: Deployment filesystem safety
+        run: python3 tests/scripts/test_deploy_instance.py
 
       - name: Event deployment profile checks
         timeout-minutes: 3
