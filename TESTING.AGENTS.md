@@ -84,6 +84,11 @@ processing video messages, and fatal HLS errors without original-file fallback.
 Library journeys cover private collections linked to an existing persona,
 explicit sharing and revocation, durable Save, and playback retained after the
 uploader and related persona are permanently deleted, on desktop and mobile.
+The Event UX journey also runs in iPhone-sized WebKit. It checks upload
+discovery, Event selection, photo navigation, one-click private Save, downloads,
+and named favorites. Physical-device and attendee pilot checks are tracked in
+[Event attendee UX validation](docs/event-ux-validation.md); emulation does not
+complete them.
 Communication journeys cover mutual
 follows, unread counts, chat send/reply/reload, keyboard focus, browser
 Back/Forward, blocking, unblocking, and logout. Profile actions update on block
@@ -95,7 +100,7 @@ dependencies and stopping any Vite dev server. Run these separately from the
 backend suite, which changes shared view/cache files during tests:
 
 ```bash
-pnpm exec playwright install chromium
+pnpm exec playwright install chromium webkit
 pnpm run test:browser
 ```
 

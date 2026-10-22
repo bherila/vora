@@ -5,7 +5,7 @@ import type { EventMediaItem, EventProfile } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 
 jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
-jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: () => <div>Media player</div> }));
+jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: ({ item }: { item: { type: string } }) => item.type === 'video' ? <video controls aria-label="Playback controls" /> : <div>Media player</div> }));
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => <button>Favorite</button> }));
 jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: () => <button>Save to Library</button> }));
 
@@ -74,7 +74,7 @@ describe('Event administration and media actions', () => {
   it('keeps delete failures visible and does not expose unsafe download URLs', async () => {
     jest.mocked(fetchWrapper.delete).mockRejectedValue('Unable to delete.');
     render(<EventMediaDialog item={{ ...item, download_url: 'https://outside.example/file' }} onClose={jest.fn()} onDeleted={jest.fn()} />);
-    expect(screen.queryByRole('link', { name: 'Download to device' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Download' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Delete my upload' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to delete.');
@@ -88,6 +88,33 @@ describe('Event administration and media actions', () => {
     expect(screen.getByRole('checkbox', { name: 'Sam' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Save event' }));
     await waitFor(() => expect(fetchWrapper.patch).toHaveBeenCalledWith('/api/admin/events/event-one', expect.objectContaining({ member_ids: [3] })));
+  });
+
+  it('navigates with buttons, arrow keys and horizontal photo swipes, preserving vertical gestures', () => {
+    const navigate = jest.fn();
+    render(<EventMediaDialog item={item} onClose={jest.fn()} onDeleted={jest.fn()} onNavigate={navigate} hasPrevious hasNext position="Item 2 of 3" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
+    const surface = screen.getByTestId('event-media-surface');
+    fireEvent.touchStart(surface, { touches: [{ clientX: 150, clientY: 20 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 40, clientY: 30 }] });
+    fireEvent.touchStart(surface, { touches: [{ clientX: 50, clientY: 20 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 45, clientY: 170 }] });
+    expect(navigate.mock.calls.map(([direction]) => direction)).toEqual([1, -1, 1]);
+    expect(screen.getByText('Item 2 of 3')).toBeInTheDocument();
+  });
+
+  it('leaves interactive video keys and gestures alone and respects viewer boundaries', () => {
+    const navigate = jest.fn();
+    render(<EventMediaDialog item={{ ...item, type: 'video' }} onClose={jest.fn()} onDeleted={jest.fn()} onNavigate={navigate} hasNext />);
+    const video = screen.getByLabelText('Playback controls');
+    fireEvent.keyDown(video, { key: 'ArrowRight' });
+    fireEvent.touchStart(video, { touches: [{ clientX: 150, clientY: 20 }] });
+    fireEvent.touchEnd(video, { changedTouches: [{ clientX: 20, clientY: 20 }] });
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft' });
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowRight', altKey: true });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Previous item' })).toBeDisabled();
   });
 
 });

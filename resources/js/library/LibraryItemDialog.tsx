@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { instanceProfile } from '@/instance';
 import { itemShareTarget, type ShareTarget } from '@/library/LibraryDialogs';
 import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
 import { type LibraryCollection, libraryError, type LibraryItem } from '@/library/types';
@@ -25,6 +26,8 @@ interface LibraryItemDialogProps {
 }
 
 export function LibraryItemDialog({ item: initialItem, collections, enabled, onClose, onChanged, onShare }: LibraryItemDialogProps) {
+  const eventInstance = instanceProfile() === 'event';
+  const removeLabel = eventInstance ? 'Remove item' : 'Remove from Library';
   const [item, setItem] = useState(initialItem);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(item.title ?? '');
@@ -78,7 +81,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
     setError('');
     try {
       await fetchWrapper.delete(`/api/library/items/${item.ulid}`);
-      toast.success('Removed from your Library.');
+      toast.success(eventInstance ? 'Removed from My collection.' : 'Removed from your Library.');
       onChanged();
       onClose();
     } catch (error) {
@@ -94,7 +97,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
       <DialogContent className="max-h-[90svh] overflow-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</DialogTitle>
-          <DialogDescription>{item.owned ? item.source === 'saved' ? 'Saved items are visible only to you, including in shared collections.' : 'In your private Library. Only people you share with can view it.' : 'Shared with you.'}</DialogDescription>
+          <DialogDescription>{item.owned ? item.source === 'saved' ? 'Saved items are visible only to you, including in shared collections.' : `In your private ${eventInstance ? 'collection' : 'Library'}. Only people you share with can view it.` : 'Shared with you.'}</DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!item.available ? <p className="rounded-md border p-6 text-sm text-muted-foreground">This media is currently unavailable.</p> : item.media ? <>
@@ -108,7 +111,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
           {item.owned && <>
             {enabled && <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(!editing)}>Edit</Button>}
             {item.source !== 'saved' && <Button variant="outline" size="sm" disabled={busy} onClick={() => onShare(itemShareTarget(item))}>Share</Button>}
-            <Button variant="destructive" size="sm" disabled={busy} onClick={() => setRemoveOpen(true)}>Remove from Library</Button>
+            <Button variant="destructive" size="sm" disabled={busy} onClick={() => setRemoveOpen(true)}>{removeLabel}</Button>
           </>}
         </div>
         {editing && <div className="grid gap-3 rounded-md border p-4">
@@ -139,8 +142,8 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
     </Dialog>
     <AlertDialog open={removeOpen} onOpenChange={(open) => { if (!busy) setRemoveOpen(open); }}>
       <AlertDialogContent>
-        <AlertDialogHeader><AlertDialogTitle>Remove this item from your Library?</AlertDialogTitle><AlertDialogDescription>This removes it from all your collections. Other people keep their saved items. Deleted uploads may remain in admin retention.</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={() => void remove()}>Remove from Library</AlertDialogAction></AlertDialogFooter>
+        <AlertDialogHeader><AlertDialogTitle>Remove this item from {eventInstance ? 'My collection' : 'your Library'}?</AlertDialogTitle><AlertDialogDescription>This removes it from all your collections. Other people keep their saved items. Deleted uploads may remain in admin retention.</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={() => void remove()}>{removeLabel}</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   </>;

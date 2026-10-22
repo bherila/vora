@@ -80,7 +80,7 @@ describe('MediaUploadDialog reservation cleanup', () => {
     expect(post).toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
     expect(post.mock.calls.map(([url]) => url)).not.toContain('/api/media/41/complete');
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Retry failed' })).toBeEnabled();
   });
 
   it('releases a direct PUT reservation when the user cancels the in-flight upload', async () => {
@@ -188,7 +188,7 @@ describe('MediaUploadDialog reservation cleanup', () => {
     expect(JSON.parse(window.localStorage.getItem(window.localStorage.key(0)!)!)).toMatchObject({
       mediaId: 41, uploadId: 'resumable-123',
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry failed' }));
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
 
     expect(multipart).toHaveBeenCalledTimes(2);
@@ -205,11 +205,13 @@ describe('MediaUploadDialog reservation cleanup', () => {
       new File(['second'], 'second.jpg', { type: 'image/jpeg' }),
     ]);
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Second upload failed. 1 upload completed before the failure.'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('1 of 2 uploaded. Retry failed files below.'));
     expect(post).toHaveBeenCalledWith('/api/media/41/complete', {}, expect.any(AbortSignal));
     expect(post).toHaveBeenCalledWith('/api/media/42/cancel-upload', {});
     expect(post).not.toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByPlaceholderText('Title (optional)')).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText('Title (optional)')).toHaveLength(2);
+    expect(screen.getByText('Uploaded · awaiting review')).toBeInTheDocument();
+    expect(screen.getByText('Second upload failed.')).toBeInTheDocument();
   });
 });

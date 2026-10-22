@@ -53,10 +53,13 @@ test('private collections share explicitly and saved media survives its uploader
 
     await page.goto(`/m/${media.ulid}`);
     await page.getByRole('button', { name: 'Save to Library', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Open in Library', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Organize', exact: true }).click();
     const saveDialog = page.getByRole('dialog');
-    await expect(saveDialog.getByText(/Keep access here even if the original uploader/)).toBeVisible();
-    await saveDialog.getByLabel('Collection (optional)').selectOption(collectionUlid ?? '');
-    await saveDialog.getByRole('button', { name: 'Save to Library', exact: true }).click();
+    await expect(saveDialog.getByText(/Already saved privately/)).toBeVisible();
+    await saveDialog.getByLabel('Collection', { exact: true }).selectOption(collectionUlid ?? '');
+    await saveDialog.getByRole('button', { name: 'Add to collection', exact: true }).click();
+    await expect(saveDialog).toHaveCount(0);
     const savedLink = page.getByRole('link', { name: 'Open in Library', exact: true });
     await expect(savedLink).toBeVisible();
     const savedHref = await savedLink.getAttribute('href');

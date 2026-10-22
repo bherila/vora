@@ -22,7 +22,7 @@ function formatFileList(files: File[]): string {
     return firstFile.name;
   }
 
-  return `${files.length} files selected: ${files.map((file) => file.name).join(', ')}`;
+  return `${files.length} files selected.`;
 }
 
 function filesFromList(fileList: FileList | null, multiple: boolean): File[] {
@@ -63,7 +63,7 @@ export function FileDropzone({ accept, disabled = false, files, label, multiple 
   };
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 grid-cols-1 gap-2">
       <input
         ref={inputRef}
         id={inputId}
@@ -94,7 +94,7 @@ export function FileDropzone({ accept, disabled = false, files, label, multiple 
           Browse files
         </span>
       </button>
-      <p id={`${inputId}-selected`} className="text-sm text-muted-foreground">
+      <p id={`${inputId}-selected`} className="break-words text-sm text-muted-foreground">
         {formatFileList(files)}
       </p>
     </div>

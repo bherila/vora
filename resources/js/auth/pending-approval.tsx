@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 
+import { EventJoiningNotice, getEventJoiningUrl } from './event-joining';
+
 const mountEl = document.getElementById('pending-approval');
 
 function PendingApprovalPage() {
+  const joiningUrl = getEventJoiningUrl();
   const querySource = typeof window === 'undefined'
     ? ''
     : new URLSearchParams(window.location.search).get('source') || '';
@@ -22,7 +25,7 @@ function PendingApprovalPage() {
     try {
       await fetchWrapper.post('/logout', {});
     } finally {
-      window.location.href = '/login';
+      window.location.href = joiningUrl ?? '/login';
     }
   };
 
@@ -36,12 +39,14 @@ function PendingApprovalPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <EventJoiningNotice stage="approval" />
           <p className="text-center text-sm text-muted-foreground">
             {sourceMessage} Our team will review your account and notify you once approved.
           </p>
           <p className="text-center text-sm text-muted-foreground">
             ID verification will be required to verify your age before age-restricted content is available.
           </p>
+          <Button asChild className="w-full"><a href="/pending-approval">Check approval and continue</a></Button>
           <Button
             type="button"
             variant="outline"

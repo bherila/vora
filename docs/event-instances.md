@@ -44,6 +44,35 @@ uploader retains private management access
 to their own files if their Event membership changes. Deleting Events is not
 exposed: changing visibility or membership preserves their media's access boundary.
 
+## Joining links and admission
+
+Use an Event's **Copy joining link** action to copy `/events/join/{ULID}` on
+the current instance. The complete URL can be encoded in a QR code without a
+special token or QR service. A joining link remembers a destination; it does
+not create membership or bypass account approval, eligibility, or media rules.
+An Event joining URL is not a personal signup invitation. The organizer must
+enable public sign-ups (with the existing approval policy) or issue each new
+attendee a separate personal `/i/{UUID}` signup invitation. Open that invitation
+in the same browser after the Event link to retain its destination. Existing
+invitation expiry, single-use, email binding, and approval policies still apply.
+Restricted and missing Events reveal no Event name, location, or membership
+before admission and return the same not-found response to unauthorized users.
+
+The same browser session retains the Event while switching between login and
+registration, completing password/email two-factor login, verifying email,
+and waiting for account approval. Verification and pending-approval screens
+explain the next step and provide continuation buttons. After approval, Event
+access is checked again; the organizer must separately add attendees to a
+restricted Event. Forced password changes still take precedence.
+
+Email verification links remain signed and account-bound. If email opens in a
+different browser or on another device, that browser does not inherit the
+original joining session. Reopen the original joining link or scan its QR code
+in the browser where you sign in; it will restore the Event destination without
+transferring a login or granting access. Keep the joining link until admission
+is complete. See [Event UX validation](event-ux-validation.md) for phone/pilot
+checks.
+
 ## Deployment target
 
 The primary `prod` deployment continues automatically on `main`. Additional

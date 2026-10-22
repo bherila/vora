@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
-import { moduleEnabled } from '@/instance';
+import { instanceProfile, moduleEnabled } from '@/instance';
 import { LibraryBulkActions } from '@/library/LibraryBulkActions';
 import { LibraryCollectionDialog, LibraryNoteDialog, LibraryShareDialog, type ShareTarget } from '@/library/LibraryDialogs';
 import { LibraryItemDialog, LibraryItemPreview } from '@/library/LibraryItemDialog';
@@ -37,6 +37,8 @@ const SECTIONS = [
 export function LibraryPage() {
   const [initial] = useState(() => readInitialData<LibraryBootstrap>().library);
   const enabled = initial?.enabled ?? false;
+  const eventInstance = instanceProfile() === 'event';
+  const homeName = eventInstance ? 'My collection' : 'Library';
   const personasEnabled = moduleEnabled('personas');
   const [usage, setUsage] = useState(initial?.storage_usage ?? EMPTY_STORAGE_USAGE);
   const [collections, setCollections] = useState<LibraryCollection[]>([]);
@@ -143,7 +145,7 @@ export function LibraryPage() {
       window.history.replaceState({}, '', url);
       setRemoveCollection(null);
       refresh();
-      toast.success('Collection removed. Its items remain in your Library.');
+      toast.success(`Collection removed. Its items remain in ${eventInstance ? 'My collection' : 'your Library'}.`);
     } catch (error) {
       toast.error(libraryError(error));
     } finally {
@@ -153,7 +155,7 @@ export function LibraryPage() {
 
   return <main className={`${BROWSING_PAGE_WIDTH} space-y-5 px-4 py-6`}>
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-2xl font-semibold">Library</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">A private place for notes, photos, and videos you upload or save. {personasEnabled ? 'Organize them around existing personas and choose who you share with.' : 'Organize your collections and choose who you share with.'}</p></div>
+      <div><h1 className="text-2xl font-semibold">{homeName}</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">A private place for notes, photos, and videos you upload or save. {personasEnabled ? 'Organize them around existing personas and choose who you share with.' : 'Organize your collections and choose who you share with.'}</p></div>
       {enabled && <Button onClick={() => setCollectionEditor(null)}>New collection</Button>}
     </header>
     {!enabled && <Alert><AlertDescription>Library storage is enabled selectively by an administrator. You can still view shared content and manage items already in your Library.</AlertDescription></Alert>}

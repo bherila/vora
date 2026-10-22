@@ -6,7 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
 
+import { EventJoiningNotice, getEventJoiningUrl } from './event-joining';
+
 function VerifyEmailPage() {
+  const joiningUrl = getEventJoiningUrl();
   const initialStatus = typeof window === 'undefined'
     ? ''
     : window.location.search.includes('signup_status=pending-approval')
@@ -34,7 +37,7 @@ function VerifyEmailPage() {
     try {
       await fetchWrapper.post('/logout', {});
     } finally {
-      window.location.href = '/login';
+      window.location.href = joiningUrl ?? '/login';
     }
   };
 
@@ -49,6 +52,7 @@ function VerifyEmailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <EventJoiningNotice stage="verify" />
           {status && (
             <Alert>
               <AlertDescription>{status}</AlertDescription>
@@ -58,6 +62,8 @@ function VerifyEmailPage() {
           <p className="text-center text-sm text-muted-foreground">
             Check your inbox and spam folder for the verification email.
           </p>
+
+          <Button asChild className="w-full"><a href="/email/verify">I&apos;ve verified my email — continue</a></Button>
 
           <form onSubmit={(e) => void handleResend(e)}>
             <Button type="submit" variant="outline" className="w-full" disabled={loading}>

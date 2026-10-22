@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 
+import { EventJoiningNotice, getEventJoiningUrl } from './event-joining';
+
 function getAdultBirthDateLimit(): string {
   const date = new Date();
   date.setFullYear(date.getFullYear() - 18);
@@ -133,6 +135,7 @@ function RegisterPage() {
           <CardDescription>Sign up to get started</CardDescription>
         </CardHeader>
         <CardContent>
+          <EventJoiningNotice stage="sign-in" />
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
@@ -145,6 +148,7 @@ function RegisterPage() {
                 {initialData.invite
                   ? 'This invite link is invalid or has expired. Ask whoever invited you for a new one.'
                   : 'Public sign-ups are currently closed. You need a valid invite link to join.'}
+                {getEventJoiningUrl() && <> Ask the organizer for a separate personal signup invitation. An Event joining link keeps your destination but does not grant signup or restricted Event access.</>}
               </AlertDescription>
             </Alert>
           )}

@@ -363,7 +363,7 @@ describe('MediaUploadDialog content-verified resume', () => {
     expect(post).not.toHaveBeenCalled();
     expect(multipart).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Continue unfinished' })).toBeEnabled();
   });
   it('creates event uploads with a separate resume scope and no gallery publication fields', async () => {
     const implementation = post.getMockImplementation()!;

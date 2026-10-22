@@ -6,7 +6,7 @@ const INTERNAL_URL_BASE = 'https://vora.invalid';
  * alone so signed object-storage URLs keep their signatures.
  */
 function escapeUrlMetacharacters(value: string): string {
-  return value.replace(/[<>"']/g, (character) => encodeURIComponent(character));
+  return value.replace(/[<>"']/g, (character) => character === "'" ? '%27' : encodeURIComponent(character));
 }
 
 /**
@@ -73,6 +73,20 @@ export function safeHttpsUrl(value: unknown): string | null {
     if (parsed.protocol !== 'https:') {
       return null;
     }
+
+    return escapeUrlMetacharacters(parsed.href);
+  } catch {
+    return null;
+  }
+}
+
+/** Local file previews may use only revocable blobs created in this origin. */
+export function safeLocalBlobUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'blob:' || parsed.origin !== window.location.origin) return null;
 
     return escapeUrlMetacharacters(parsed.href);
   } catch {

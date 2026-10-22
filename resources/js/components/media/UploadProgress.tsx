@@ -13,8 +13,8 @@ export function UploadProgress({ label = 'Uploading…', progress, onCancel, can
   return (
     <div className="grid gap-2" role="status" aria-live="polite">
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-        <span>{label}</span>
-        <span>{percent}%</span>
+        <span className="min-w-0 break-words">{label}</span>
+        <span className="shrink-0">{percent}%</span>
       </div>
       <progress className="h-2 w-full overflow-hidden rounded-full" max={100} value={percent} aria-label={label} />
       {onCancel && (

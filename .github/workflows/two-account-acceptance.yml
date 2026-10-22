@@ -79,10 +79,10 @@ jobs:
             resources/js/community/StartDiscussion.test.tsx \
             resources/js/user/activity.test.tsx
 
-      - name: Install Chromium for browser journeys
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium and WebKit for browser journeys
+        run: pnpm exec playwright install --with-deps chromium webkit
 
-      - name: Run desktop and mobile browser journeys
+      - name: Run desktop, mobile and iPhone WebKit browser journeys
         run: pnpm run test:browser
 
       - name: Upload browser failure traces and screenshots
@@ -91,5 +91,14 @@ jobs:
         with:
           name: browser-failures
           path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Preserve Event UX screenshots for review
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: event-ux-screenshots
+          path: test-results/**/event-*.png
           if-no-files-found: ignore
           retention-days: 7

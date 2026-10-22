@@ -218,12 +218,13 @@ describe('LibraryPage', () => {
   });
 
   it('creates collections without persona requests or fields when personas are disabled', async () => {
-    bootstrap.mockReturnValue({ instance: { modules: { personas: false, profiles: false, events: true } }, library: { enabled: true, storage_usage: EMPTY_STORAGE_USAGE } });
+    bootstrap.mockReturnValue({ instance: { profile: 'event', modules: { personas: false, profiles: false, events: true } }, library: { enabled: true, storage_usage: EMPTY_STORAGE_USAGE } });
     render(<LibraryPage />);
     fireEvent.click(screen.getByRole('button', { name: 'New collection' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).queryByLabelText('Related persona (optional)')).toBeNull();
     expect(within(dialog).queryByLabelText('Search existing personas')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'My collection', hidden: true })).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText('Collection name'), { target: { value: 'Event memories' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create collection' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/collections', { name: 'Event memories', description: null }));

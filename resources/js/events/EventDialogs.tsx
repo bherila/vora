@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, type TouchEvent, useRef, useState } from 'react';
 
 import { FavoriteButton } from '@/components/favorite-button';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { eventMediaStatus, mediaNeedsRefresh } from '@/events/media-status';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
@@ -129,13 +130,46 @@ interface EventMediaDialogProps {
   item: EventMediaItem;
   onClose: () => void;
   onDeleted: () => void;
+  onNavigate?: (direction: -1 | 1) => void;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  navigationBusy?: boolean;
+  position?: string;
+  onRefresh?: () => void;
+  refreshPaused?: boolean;
 }
 
-export function EventMediaDialog({ item, onClose, onDeleted }: EventMediaDialogProps) {
+export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, hasPrevious = false, hasNext = false, navigationBusy = false, position, onRefresh, refreshPaused = false }: EventMediaDialogProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const downloadUrl = safeInternalUrl(item.download_url);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const interactive = (target: EventTarget): boolean => target instanceof Element
+    && !!target.closest('video,input,textarea,select,[contenteditable="true"],[role="slider"],[data-video-controls]');
+  const navigate = (direction: -1 | 1): void => {
+    if (!busy && !navigationBusy && !confirmDelete && (direction === -1 ? hasPrevious : hasNext)) onNavigate?.(direction);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || interactive(event.target) || (event.target instanceof Element && event.target.closest('[role="dialog"]') !== event.currentTarget)) return;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      navigate(event.key === 'ArrowLeft' ? -1 : 1);
+    }
+  };
+  const startSwipe = (event: TouchEvent<HTMLDivElement>): void => {
+    const touch = event.touches[0];
+    touchStart.current = item.type === 'photo' && event.touches.length === 1 && touch && !interactive(event.target) ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const endSwipe = (event: TouchEvent<HTMLDivElement>): void => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    const end = event.changedTouches[0];
+    if (!start || !end || interactive(event.target)) return;
+    const dx = end.clientX - start.x;
+    const dy = end.clientY - start.y;
+    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.5) navigate(dx < 0 ? 1 : -1);
+  };
   const remove = async (): Promise<void> => {
     setBusy(true);
     setError('');
@@ -147,19 +181,27 @@ export function EventMediaDialog({ item, onClose, onDeleted }: EventMediaDialogP
     finally { setBusy(false); }
   };
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-      <DialogHeader><DialogTitle>{item.title || 'Event media'}</DialogTitle><DialogDescription>{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{item.under_review ? ' · Awaiting review' : ''}</DialogDescription></DialogHeader>
+    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl" onKeyDown={keyDown}>
+      <DialogHeader><DialogTitle>{item.title || 'Event media'}</DialogTitle><DialogDescription>{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{` · ${eventMediaStatus(item)}`}</DialogDescription></DialogHeader>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <MediaPlayer item={item} className="max-h-[65vh] w-full object-contain" />
+      {onNavigate && <nav aria-label="Media navigation" className="flex items-center justify-between gap-3">
+        <Button variant="outline" size="sm" disabled={!hasPrevious || busy || navigationBusy || confirmDelete} onClick={() => navigate(-1)}>Previous item</Button>
+        {position && <span className="text-sm text-muted-foreground">{position}</span>}
+        <Button variant="outline" size="sm" disabled={!hasNext || busy || navigationBusy || confirmDelete} onClick={() => navigate(1)}>Next item</Button>
+      </nav>}
+      <div className="touch-pan-y touch-pinch-zoom" onTouchStart={startSwipe} onTouchEnd={endSwipe} onTouchCancel={() => { touchStart.current = null; }} data-testid="event-media-surface">
+        <MediaPlayer item={item} className="max-h-[65vh] w-full object-contain" />
+      </div>
+      {mediaNeedsRefresh(item) && <p className="text-xs text-muted-foreground">{refreshPaused ? 'Automatic updates have paused.' : 'Status updates automatically for a short time.'} {onRefresh && <button type="button" className="underline underline-offset-4" onClick={onRefresh}>Check for updates</button>}</p>}
       <div className="flex flex-wrap items-center gap-2">
         {moduleEnabled('favorites') && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
-        {moduleEnabled('library') && item.can_save_to_library && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
-        {downloadUrl && <a href={downloadUrl} download className="text-sm underline underline-offset-4">Download to device</a>}
+        {moduleEnabled('library') && (item.can_save_to_library || item.library_item_ulid) && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
+        {downloadUrl && <a href={downloadUrl} download className="text-sm underline underline-offset-4">Download</a>}
         {item.owned && !confirmDelete && <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete my upload</Button>}
       </div>
-      <p className="text-xs text-muted-foreground">Favorites are visible to attendees who can access the media. Items saved to your Library stay private and retain access; downloads are stored on your device.</p>
+      <p className="text-xs text-muted-foreground">Favorites are visible to attendees who can access the media. Items saved to your collection stay private and retain access; downloads are stored on your device.</p>
       {confirmDelete && <div className="grid gap-3 rounded border border-destructive p-3">
-        <p className="text-sm">Delete this upload from the event? Items already saved to another account’s Library retain access.</p>
+        <p className="text-sm">Delete this upload from the event? Items already saved to another account’s collection retain access.</p>
         <div className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep upload</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? 'Deleting…' : 'Confirm delete'}</Button></div>
       </div>}
     </DialogContent>
