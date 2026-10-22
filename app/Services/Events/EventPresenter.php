@@ -30,7 +30,7 @@ class EventPresenter
     }
 
     /** @return array<string, mixed> */
-    public function media(Media $media, User $viewer, bool $favorited = false, bool $resolveHls = false): array
+    public function media(Media $media, User $viewer, bool $favorited = false, bool $resolveHls = false, ?string $libraryItemUlid = null): array
     {
         $owned = $media->user_id === $viewer->id;
         $data = $owned ? $this->media->item($media, resolveHls: $resolveHls) : $this->media->visitorItem($media, resolveHls: $resolveHls);
@@ -40,7 +40,7 @@ class EventPresenter
             'uploader' => ['id' => $media->user_id, 'display_name' => $media->user?->display_name],
             'owned' => $owned, 'favorited' => $favorited,
             'can_save_to_library' => $viewer->canUseLibrary() && app(LibraryAccess::class)->canSaveMedia($viewer, $media),
-            'library_item_ulid' => $media->getAttribute('viewer_library_item_ulid'),
+            'library_item_ulid' => $libraryItemUlid,
             'download_url' => $media->isReady() ? route('events.media.download', ['ulid' => $media->ulid], false) : null,
         ];
     }

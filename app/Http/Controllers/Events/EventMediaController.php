@@ -78,15 +78,12 @@ class EventMediaController extends Controller
         }
         $page = $query->latest('media.created_at')->orderByDesc('media.id')->paginate(24);
         $saved = $viewer->libraryItems()->whereIn('media_id', $page->getCollection()->modelKeys())->pluck('ulid', 'media_id');
-        foreach ($page->getCollection() as $item) {
-            $item->setAttribute('viewer_library_item_ulid', $saved[$item->id] ?? null);
-        }
         $favorited = InstanceFeatures::enabled('favorites')
             ? array_flip($this->favorites->favoritedIdsFor($viewer, 'media', $page->getCollection()->modelKeys())) : [];
 
         return response()->json([
             'success' => true,
-            'data' => $page->getCollection()->map(fn (Media $media): array => $this->presenter->media($media, $viewer, isset($favorited[$media->id]))),
+            'data' => $page->getCollection()->map(fn (Media $media): array => $this->presenter->media($media, $viewer, isset($favorited[$media->id]), libraryItemUlid: $saved[$media->id] ?? null)),
             'meta' => PaginationMeta::from($page),
         ]);
     }
@@ -97,9 +94,9 @@ class EventMediaController extends Controller
         abort_unless($media instanceof Media, 404, 'Not found.');
         $favorited = InstanceFeatures::enabled('favorites')
             && $this->favorites->favoritedIdsFor($request->user(), 'media', [$media->id]) !== [];
-        $media->setAttribute('viewer_library_item_ulid', $request->user()->libraryItems()->where('media_id', $media->id)->value('ulid'));
+        $libraryItemUlid = $request->user()->libraryItems()->where('media_id', $media->id)->value('ulid');
 
-        return response()->json(['success' => true, 'data' => $this->presenter->media($media, $request->user(), $favorited, resolveHls: true)]);
+        return response()->json(['success' => true, 'data' => $this->presenter->media($media, $request->user(), $favorited, resolveHls: true, libraryItemUlid: $libraryItemUlid)]);
     }
 
     public function upload(EventUploadRequest $request, Event $event, MediaUploadService $uploads): JsonResponse

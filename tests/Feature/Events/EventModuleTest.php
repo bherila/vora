@@ -101,6 +101,27 @@ class EventModuleTest extends TestCase
         $this->assertFalse(Media::query()->viewableBy($outsider)->whereKey($photo->id)->exists());
     }
 
+    public function test_video_detail_resolves_and_persists_hls_with_private_library_metadata(): void
+    {
+        $owner = $this->account();
+        $viewer = $this->account();
+        $event = $this->event([$owner->id, $viewer->id]);
+        $media = $this->media($owner, $event, true);
+        $media->forceFill(['hls_content_id' => null, 'hls_checked_at' => null])->save();
+        Storage::disk('hls')->put('mappings/'.$media->playbackObjectKey().'.json', json_encode(['contentId' => 'event-content'], JSON_THROW_ON_ERROR));
+        $saved = $this->actingAs($viewer)->postJson('/api/library/save', ['media_ulid' => $media->ulid])->assertCreated()->json('data.ulid');
+        $this->getJson('/api/events/media')->assertOk()->assertJsonPath('data.0.library_item_ulid', $saved)
+            ->assertJsonPath('data.0.video.status', 'processing');
+        $this->getJson('/api/events/media/'.$media->ulid)->assertOk()->assertJsonPath('data.library_item_ulid', $saved)
+            ->assertJsonPath('data.video.status', 'ready')->assertJsonPath('data.video.master_url', '/api/media/'.$media->id.'/hls/master.m3u8');
+        $this->assertSame('event-content', $media->fresh()->hls_content_id);
+        $this->assertNotNull($media->fresh()->hls_checked_at);
+        $media->forceFill(['hls_content_id' => null, 'hls_checked_at' => null])->save();
+        $this->actingAs($owner)->getJson('/api/events/media/'.$media->ulid)->assertOk()
+            ->assertJsonPath('data.library_item_ulid', null)->assertJsonPath('data.video.status', 'ready');
+        $this->assertSame('event-content', $media->fresh()->hls_content_id);
+    }
+
     public function test_missing_and_hidden_upload_events_have_identical_generic_responses(): void
     {
         config(['app.debug' => false]);
