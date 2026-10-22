@@ -46,4 +46,19 @@ class CloudflareCspPresetTest extends TestCase
         $this->assertStringNotContainsString('https://media.example.test:', $policy->getContents());
         $this->assertStringContainsString("object-src 'none'", $policy->getContents());
     }
+
+    public function test_local_file_previews_allow_blobs_only_for_images_and_media(): void
+    {
+        config(['csp.nonce_enabled' => false]);
+        $policy = new Policy;
+        (new CloudflareCspPreset)->configure($policy);
+
+        foreach (explode(';', $policy->getContents()) as $directive) {
+            if (preg_match('/^(img-src|media-src) /', $directive)) {
+                $this->assertStringContainsString('blob:', $directive);
+            } else {
+                $this->assertStringNotContainsString('blob:', $directive);
+            }
+        }
+    }
 }

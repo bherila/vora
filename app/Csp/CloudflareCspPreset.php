@@ -28,12 +28,16 @@ class CloudflareCspPreset implements Preset
             ])
             ->add(Directive::IMG, [
                 Keyword::SELF,
+                // Local, revocable previews of files selected for upload.
+                'blob:',
                 'https://static.cloudflareinsights.com',
                 // Signed photo URLs and HLS poster frames.
                 ...$mediaOrigins,
             ])
             ->add(Directive::MEDIA, [
                 Keyword::SELF,
+                // Local upload previews and MediaSource HLS playback.
+                'blob:',
                 // Signed video preview URLs and HLS segments.
                 ...$mediaOrigins,
             ])
