@@ -1,4 +1,6 @@
-import { type APIRequestContext, type BrowserContext, expect, type Page, type Response, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+import { type APIRequestContext, type BrowserContext, expect, type Page, type Request, type Response, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
 let expectMultipartVideo = false;
@@ -112,7 +114,7 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
 async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string): Promise<Upload> {
   const filename = type === 'photo' ? 'photo.png' : 'video.mp4';
   await page.goto(eventUlid ? `/events?event_ulid=${eventUlid}` : `/library?collection=${collection}`);
-  await page.getByRole('button', { name: eventUlid ? /^Upload to / : 'Upload media', exact: !eventUlid }).click();
+  await page.getByRole('button', { name: eventUlid ? 'Add photos & videos' : 'Upload media', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type="file"]').setInputFiles(new URL(`./.fixtures/${filename}`, import.meta.url).pathname);
   await dialog.getByPlaceholder('Title (optional)', { exact: true }).fill(title);
@@ -366,6 +368,35 @@ test('Event profile real media inherits restricted access, visible favorites and
     const shared = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
       name: `All attendees ${suffix}`, visibility: 'everyone', timezone: 'UTC', member_ids: [],
     })).data;
+    // Exercise the real batch UI: one bad file must not lose/reupload good files.
+    await uploader.goto(`/events?event_ulid=${shared.ulid}`);
+    await uploader.getByRole('button', { name: 'Add photos & videos', exact: true }).click();
+    const batch = uploader.getByRole('dialog');
+    const photoBytes = readFileSync(new URL('./.fixtures/photo.png', import.meta.url));
+    let batchReservations = 0;
+    const countReservation = (sent: Request): void => {
+      if (sent.method() === 'POST' && new URL(sent.url()).pathname === `/api/events/${shared.ulid}/uploads`) batchReservations += 1;
+    };
+    uploader.on('request', countReservation);
+    try {
+      await batch.locator('input[type="file"]').setInputFiles([
+        { name: `batch-first-${suffix}.png`, mimeType: 'image/png', buffer: photoBytes },
+        { name: 'unsupported.txt', mimeType: 'text/plain', buffer: Buffer.from('Not media') },
+        { name: `batch-last-${suffix}.png`, mimeType: 'image/png', buffer: photoBytes },
+      ]);
+      await expect(batch.getByRole('img', { name: `Preview of batch-first-${suffix}.png`, exact: true })).toBeVisible();
+      await batch.getByRole('button', { name: 'Upload', exact: true }).click();
+      await expect(batch.getByRole('status').filter({ hasText: '2 of 3 uploaded' })).toBeVisible();
+      await expect(batch.getByRole('alert')).toContainText('Only image and video files');
+      await batch.getByRole('button', { name: 'Retry failed', exact: true }).click();
+      await expect(batch.getByRole('button', { name: 'Retry failed', exact: true })).toBeEnabled();
+      await batch.getByRole('button', { name: 'Remove unsupported.txt', exact: true }).click();
+      await batch.getByRole('button', { name: 'Done', exact: true }).click();
+      await expect(batch).toHaveCount(0);
+      expect(batchReservations, 'Successful batch files are not uploaded again on retry').toBe(2);
+    } finally {
+      uploader.off('request', countReservation);
+    }
     expect((await success<{ data: { ulid: string }[] }>(outsider, 'GET', '/api/events')).data.map((event) => event.ulid)).not.toContain(restricted.ulid);
     for (const path of ['/api/chat/conversations', '/api/characters', '/api/users', '/api/stories']) {
       expect((await api(outsider, 'GET', path)).status).toBe(404);

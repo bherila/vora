@@ -12,7 +12,7 @@ test('attendees discover uploads, browse photos and Save privately without an or
   const suffix = `Events ${testInfo.project.name}`;
   const accounts = await (await request.get('/__browser/fixtures', { headers: { 'x-browser-name-suffix': suffix } })).json() as TestAccounts;
   const response = await request.get('/__browser/event-fixtures', {
-    headers: { 'x-browser-owner': String(accounts.alice.id), 'x-browser-saver': String(accounts.bob.id) },
+    headers: { 'x-browser-owner': String(accounts.alice.id), 'x-browser-saver': String(accounts.bob.id), 'x-browser-name-suffix': suffix },
   });
   expect(response.ok()).toBeTruthy();
   const fixture = await response.json() as EventFixtures;
@@ -21,7 +21,7 @@ test('attendees discover uploads, browse photos and Save privately without an or
   await page.getByRole('button', { name: 'Add photos & videos', exact: true }).click();
   const upload = page.getByRole('dialog');
   await expect(upload.getByRole('combobox')).toBeVisible();
-  await expect(upload.getByRole('option', { name: 'Welcome party', exact: true })).toBeAttached();
+  await expect(upload.getByRole('option', { name: fixture.event.name, exact: true })).toBeAttached();
   await expect(upload.getByRole('option', { name: 'Private shower', exact: true })).toHaveCount(0);
   await upload.getByRole('combobox').selectOption(fixture.event.ulid);
   await expect(upload.getByText(/All approved attendees/i)).toBeVisible();

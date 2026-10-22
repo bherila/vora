@@ -194,13 +194,14 @@ class BrowserServerTest extends TestCase
                 ]]);
                 $owner = User::query()->findOrFail($input['headers']['x-browser-owner'] ?? '');
                 $saver = User::query()->findOrFail($input['headers']['x-browser-saver'] ?? '');
-                $event = Event::create(['name' => 'Welcome party', 'visibility' => 'everyone', 'timezone' => 'UTC']);
+                $suffix = $input['headers']['x-browser-name-suffix'] ?? '';
+                $event = Event::create(['name' => trim('Welcome party '.$suffix), 'visibility' => 'everyone', 'timezone' => 'UTC']);
                 $privateEvent = Event::create(['name' => 'Private shower', 'visibility' => 'specific', 'timezone' => 'UTC']);
                 $privateEvent->members()->attach($owner);
                 $media = [];
                 foreach (range(1, 12) as $index) {
                     $item = Media::factory()->for($owner)->approved()->create([
-                        'title' => 'Welcome photo '.$index, 'purpose' => MediaPurpose::Event,
+                        'title' => trim('Welcome photo '.$index.' '.$suffix), 'purpose' => MediaPurpose::Event,
                         'event_id' => $event->id, 'mime_type' => 'image/png',
                         'audience' => Audience::Everyone, 'discoverable' => false, 'size_bytes' => strlen($image),
                     ]);
