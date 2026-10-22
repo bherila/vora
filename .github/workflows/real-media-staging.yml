@@ -147,7 +147,8 @@ jobs:
           node tests/staging/check-startup.mjs
 
       - name: Run normal SMTP-authenticated real-media acceptance
-        timeout-minutes: 7
+        # Event runs the Library journey plus its own membership/retention journey.
+        timeout-minutes: 14
         run: pnpm exec playwright test --config tests/staging/playwright.config.mjs
 
       - name: Collect disposable service diagnostics
