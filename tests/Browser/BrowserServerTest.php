@@ -56,7 +56,7 @@ class BrowserServerTest extends TestCase
         Notification::fake([VerifyEmail::class]);
         // Object storage is faked; media requests still use normal policies
         // and protected asset routes, including after access is revoked.
-        $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', true);
+        $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwmDnzPwAEwQJir+BoFQAAAABJRU5ErkJggg==', true);
         $storage = \Mockery::mock(FileStorageService::class);
         $storage->shouldReceive('getSignedViewUrl')->andReturnUsing(function (string $disk, string $key): string {
             $media = Media::query()->where('object_key', $key)->firstOrFail();
