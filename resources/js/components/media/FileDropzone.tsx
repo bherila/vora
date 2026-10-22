@@ -22,7 +22,7 @@ function formatFileList(files: File[]): string {
     return firstFile.name;
   }
 
-  return `${files.length} files selected: ${files.map((file) => file.name).join(', ')}`;
+  return `${files.length} files selected.`;
 }
 
 function filesFromList(fileList: FileList | null, multiple: boolean): File[] {
