@@ -1,11 +1,40 @@
-"""Exercise deployment filesystem safety without connecting to SSH or a database."""
+"""Exercise release source and filesystem safety without SSH or a database."""
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/deploy-instance-remote.sh'
+RELEASE_WORKFLOW = SCRIPT.parent.parent / '.github/workflows/release-instance.yml'
+
+
+class ReleaseWorkflowSourceTest(unittest.TestCase):
+    def source_guard(self, repository, source_ref):
+        workflow = RELEASE_WORKFLOW.read_text()
+        step = workflow.split('      - name: Validate release source\n', 1)[1].split('\n      - ', 1)[0]
+        script = textwrap.dedent(step.split('        run: |\n', 1)[1])
+        return subprocess.run(['bash', '-c', script], env={
+            **os.environ, 'CALLER_REPOSITORY': repository, 'SOURCE_REF': source_ref,
+        }, text=True, capture_output=True, check=False)
+
+    def test_cross_repository_call_requires_an_explicit_vora_ref(self):
+        result = self.source_guard('bherila/kath', '')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('must set source_ref', result.stdout)
+
+    def test_cross_repository_call_accepts_an_explicit_vora_commit(self):
+        self.assertEqual(self.source_guard('bherila/kath', 'a' * 40).returncode, 0)
+
+    def test_primary_release_can_keep_the_triggering_commit_default(self):
+        self.assertEqual(self.source_guard('bherila/vora', '').returncode, 0)
+
+    def test_checkout_uses_vora_instead_of_the_callers_repository(self):
+        workflow = RELEASE_WORKFLOW.read_text()
+        checkout = workflow.split('      - uses: actions/checkout@v6\n', 1)[1].split('\n      - ', 1)[0]
+        self.assertIn('repository: bherila/vora', checkout)
+        self.assertIn('ref: ${{ inputs.source_ref || github.sha }}', checkout)
 
 
 class InstanceDeploymentTest(unittest.TestCase):
