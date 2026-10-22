@@ -2,8 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 
 import { EventsPage } from '@/events/page';
 import { fetchWrapper } from '@/fetchWrapper';
+import { readInitialData } from '@/initialData';
 
 jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
+jest.mock('@/initialData', () => ({ readInitialData: jest.fn() }));
 jest.mock('sonner', () => ({ Toaster: () => null }));
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => <button>Favorite</button> }));
 jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: () => <button>Save to Library</button> }));
@@ -28,7 +30,7 @@ function mockRequests() {
 }
 
 describe('EventsPage', () => {
-  beforeEach(() => { jest.resetAllMocks(); window.history.replaceState({}, '', '/events'); mockRequests(); });
+  beforeEach(() => { jest.resetAllMocks(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
 
   it('loads visible events and requires an explicit event before upload', async () => {
     render(<EventsPage />);
@@ -109,4 +111,19 @@ describe('EventsPage', () => {
     expect(screen.queryByRole('button', { name: 'Manage featured curators' })).toBeNull();
     expect(within(screen.getByLabelText('Event')).getAllByRole('option')).toHaveLength(2);
   });
+  it('hides disabled Favorite and Library controls while retaining event browsing', async () => {
+    jest.mocked(readInitialData).mockReturnValue({ instance: { modules: { favorites: false, library: false } } });
+    render(<EventsPage />);
+    await screen.findByText('Welcome video');
+    expect(screen.queryByRole('link', { name: 'Featured favorites' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'My collection' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Manage featured curators' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Favorite' })).toBeNull();
+    expect(screen.queryByLabelText('Favorites by')).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Open Welcome video' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('button', { name: 'Save to Library' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Favorite' })).toBeNull();
+  });
+
 });

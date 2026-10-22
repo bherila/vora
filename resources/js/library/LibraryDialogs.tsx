@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { moduleEnabled } from '@/instance';
 import { type LibraryCollection, libraryError, type LibraryItem, type LibraryPersona } from '@/library/types';
 
 export interface ShareTarget {
@@ -64,25 +65,56 @@ export function LibraryShareDialog({ target, onClose, onChanged }: ShareDialogPr
       {target.kind === 'collections' && <p className="text-sm text-muted-foreground">Sharing includes all current and future items you upload or write, including notes. Items saved from someone else remain private to you.</p>}
       {target.kind === 'items' && <p className="text-sm text-muted-foreground">These are direct recipients. People with access through a shared collection can also view this item.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <UserPicker selectedIds={ids} onChange={setIds} disabled={busy} />
+      {moduleEnabled('profiles') ? <UserPicker selectedIds={ids} onChange={setIds} disabled={busy} /> : moduleEnabled('events') ? <LibraryAttendeePicker selectedIds={ids} onChange={setIds} disabled={busy} /> : <p className="text-sm text-muted-foreground">Recipient selection is unavailable. You can still remove direct sharing.</p>}
       <Label htmlFor="library-share-link">Link for recipients</Label>
       <Input id="library-share-link" value={link} readOnly />
       <Button variant="outline" onClick={() => void copyLink()}>Copy link</Button>
       <DialogFooter>
         <Button variant="outline" disabled={busy} onClick={() => void save([])}>Stop direct sharing</Button>
-        <Button disabled={busy} onClick={() => void save(ids)}>{busy ? 'Saving…' : 'Save sharing'}</Button>
+        <Button disabled={busy || !moduleEnabled('profiles') && !moduleEnabled('events')} onClick={() => void save(ids)}>{busy ? 'Saving…' : 'Save sharing'}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;
 }
 
+interface LibraryAttendeePickerProps {
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+  disabled: boolean;
+}
+
+function LibraryAttendeePicker({ selectedIds, onChange, disabled }: LibraryAttendeePickerProps) {
+  const [attendees, setAttendees] = useState<{ id: number; display_name: string }[]>([]);
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetchWrapper.get('/api/events/attendees') as Promise<{ data: { id: number; display_name: string }[] }>,
+      fetchWrapper.get('/api/events/settings') as Promise<{ data: { viewer_id: number } }>,
+    ]).then(([response, settings]) => {
+      if (active) setAttendees(response.data.filter((attendee) => attendee.id !== settings.data.viewer_id));
+    }).catch((error: unknown) => { if (active) setError(libraryError(error)); });
+    return () => { active = false; };
+  }, []);
+  return <fieldset className="grid gap-2 rounded border p-3" disabled={disabled}>
+    <legend className="text-sm font-medium">Specific attendees</legend>
+    <Label htmlFor="library-attendee-search">Search attendees</Label><Input id="library-attendee-search" value={query} onChange={(event) => setQuery(event.target.value)} />
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <div className="grid max-h-48 gap-2 overflow-auto">
+      {attendees.filter((attendee) => attendee.display_name.toLowerCase().includes(query.trim().toLowerCase())).map((attendee) => <label key={attendee.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedIds.includes(attendee.id)} onChange={(event) => onChange(event.target.checked ? [...selectedIds, attendee.id] : selectedIds.filter((id) => id !== attendee.id))} />{attendee.display_name}</label>)}
+    </div>
+  </fieldset>;
+}
+
 interface CollectionDialogProps {
   collection: LibraryCollection | null;
+  personasEnabled?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }
 
-export function LibraryCollectionDialog({ collection, onClose, onChanged }: CollectionDialogProps) {
+export function LibraryCollectionDialog({ collection, personasEnabled = true, onClose, onChanged }: CollectionDialogProps) {
   const [name, setName] = useState(collection?.name ?? '');
   const [description, setDescription] = useState(collection?.description ?? '');
   const [personaUlid, setPersonaUlid] = useState(collection?.related_persona?.ulid ?? '');
@@ -93,6 +125,7 @@ export function LibraryCollectionDialog({ collection, onClose, onChanged }: Coll
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!personasEnabled) return;
     let active = true;
     const timer = window.setTimeout(() => {
       fetchWrapper.get(`/api/library/personas?q=${encodeURIComponent(query)}`).then((response) => {
@@ -105,7 +138,7 @@ export function LibraryCollectionDialog({ collection, onClose, onChanged }: Coll
       }).catch(() => { if (active) setError('Could not load personas. You can create a collection without a persona link.'); });
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [query, personaUlid]);
+  }, [query, personaUlid, personasEnabled]);
 
   const save = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -113,7 +146,7 @@ export function LibraryCollectionDialog({ collection, onClose, onChanged }: Coll
     setError('');
     const payload = {
       name: name.trim(), description: description.trim() || null,
-      ...(!collection || personaChanged ? { related_persona_ulid: personaUlid || null } : {}),
+      ...(personasEnabled && (!collection || personaChanged) ? { related_persona_ulid: personaUlid || null } : {}),
     };
     try {
       if (collection) await fetchWrapper.patch(`/api/library/collections/${collection.ulid}`, payload);
@@ -132,7 +165,7 @@ export function LibraryCollectionDialog({ collection, onClose, onChanged }: Coll
     <DialogContent>
       <DialogHeader>
         <DialogTitle>{collection ? 'Edit collection' : 'New private collection'}</DialogTitle>
-        <DialogDescription>A related persona is a label for organizing your content. It grants no access and sends no notification.</DialogDescription>
+        <DialogDescription>{personasEnabled ? 'A related persona is a label for organizing your content. It grants no access and sends no notification.' : 'Organize uploads, saved media, and notes in a private collection. You choose whether to share your uploads and notes.'}</DialogDescription>
       </DialogHeader>
       <form onSubmit={(event) => void save(event)} className="grid gap-3">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -140,14 +173,14 @@ export function LibraryCollectionDialog({ collection, onClose, onChanged }: Coll
         <Input id="collection-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={255} disabled={busy} />
         <Label htmlFor="collection-description">Description (optional)</Label>
         <Textarea id="collection-description" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} disabled={busy} />
-        <Label htmlFor="persona-search">Search existing personas</Label>
+        {personasEnabled && <><Label htmlFor="persona-search">Search existing personas</Label>
         <Input id="persona-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search public personas or paste a persona link" disabled={busy} />
         <Label htmlFor="related-persona">Related persona (optional)</Label>
         <select id="related-persona" value={personaUlid} onChange={(event) => { setPersonaChanged(true); setPersonaUlid(event.target.value); }} disabled={busy} className="h-10 rounded-md border border-input bg-background px-3">
           <option value="">{collection?.related_persona_unavailable && !personaChanged ? 'Keep unavailable persona link' : 'No related persona'}</option>
           {personas.map((persona) => <option key={persona.ulid} value={persona.ulid}>{persona.display_name}</option>)}
         </select>
-        {collection?.related_persona_unavailable && <Button type="button" variant="outline" disabled={busy} onClick={() => { setPersonaUlid(''); setPersonaChanged(true); }}>Clear unavailable persona link</Button>}
+        {collection?.related_persona_unavailable && <Button type="button" variant="outline" disabled={busy} onClick={() => { setPersonaUlid(''); setPersonaChanged(true); }}>Clear unavailable persona link</Button>}</>}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
           <Button type="submit" disabled={busy}>{busy ? 'Saving…' : collection ? 'Save collection' : 'Create collection'}</Button>

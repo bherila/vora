@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { fetchWrapper } from '@/fetchWrapper';
+import type { InstanceBootstrap } from '@/instance';
+
+let mockInstance: InstanceBootstrap['instance'];
 
 import { UserSettingsPage } from './user-settings';
 
@@ -20,6 +23,7 @@ jest.mock('@/fetchWrapper', () => ({
 
 jest.mock('@/initialData', () => ({
   readInitialData: () => ({
+    instance: mockInstance,
     userSettings: {
       name: 'Account Name',
       display_name: 'Public Name',
@@ -81,6 +85,7 @@ function notificationResponse() {
 
 describe('UserSettingsPage', () => {
   beforeEach(() => {
+    mockInstance = undefined;
     window.history.replaceState({}, '', '/user/settings');
     patch.mockReset();
     patch.mockResolvedValue(notificationResponse());
@@ -222,4 +227,19 @@ describe('UserSettingsPage', () => {
 
     expect(screen.getByRole('tablist', { name: 'Settings sections' })).toHaveClass('grid-cols-2', 'sm:grid-cols-5');
   });
+  it.each(['notifications', 'privacy'])('falls back from disabled social %s settings without requesting disabled modules', (tab) => {
+    mockInstance = { profile: 'event', modules: { profiles: false, personas: false, community: false, stories: false, chat: false } };
+    window.history.replaceState({}, '', `/user/settings?tab=${tab}`);
+    render(<UserSettingsPage />);
+    expect(screen.getByRole('tab', { name: 'Account' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Notifications' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Privacy' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Edit profile' })).toBeNull();
+    expect(screen.getByLabelText('Display name')).toHaveValue('Public Name');
+    expect(screen.getByText('1990-01-01')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Security' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Data & account' })).toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
+
 });

@@ -64,7 +64,7 @@ describe('Event administration and media actions', () => {
     render(<EventMediaDialog item={item} onClose={close} onDeleted={deleted} />);
     fireEvent.click(screen.getByRole('button', { name: 'Delete my upload' }));
     expect(fetchWrapper.delete).not.toHaveBeenCalled();
-    expect(screen.getByText(/Copies already saved/)).toBeInTheDocument();
+    expect(screen.getByText(/Items already saved/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
     await waitFor(() => expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/media/12'));
     expect(deleted).toHaveBeenCalledTimes(1);
@@ -80,4 +80,14 @@ describe('Event administration and media actions', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to delete.');
     expect(screen.getByRole('button', { name: 'Confirm delete' })).toBeEnabled();
   });
+  it('preserves available selected attendees and explicitly removes unavailable members when saving', async () => {
+    jest.mocked(fetchWrapper.patch).mockResolvedValue({ success: true });
+    render(<EventEditor event={{ ...event, member_ids: [3, 99] }} attendees={attendees} onSaved={jest.fn()} onClose={jest.fn()} />);
+    expect(screen.getByText('Unavailable attendees will be removed when you save.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Alex' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Sam' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Save event' }));
+    await waitFor(() => expect(fetchWrapper.patch).toHaveBeenCalledWith('/api/admin/events/event-one', expect.objectContaining({ member_ids: [3] })));
+  });
+
 });

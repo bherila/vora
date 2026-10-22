@@ -217,4 +217,36 @@ describe('LibraryPage', () => {
     expect(screen.queryByLabelText('Selected Library items')).toBeNull();
   });
 
+  it('creates collections without persona requests or fields when personas are disabled', async () => {
+    bootstrap.mockReturnValue({ instance: { modules: { personas: false, profiles: false, events: true } }, library: { enabled: true, storage_usage: EMPTY_STORAGE_USAGE } });
+    render(<LibraryPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'New collection' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText('Related persona (optional)')).toBeNull();
+    expect(within(dialog).queryByLabelText('Search existing personas')).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Collection name'), { target: { value: 'Event memories' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create collection' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/collections', { name: 'Event memories', description: null }));
+    expect(get.mock.calls.some(([url]) => url.startsWith('/api/library/personas'))).toBe(false);
+    expect(screen.queryByText(/Organize them around existing personas/)).toBeNull();
+  });
+
+  it('shares with Event attendees without calling the disabled social people directory', async () => {
+    window.history.replaceState({}, '', '/library?collection=my-collection');
+    bootstrap.mockReturnValue({ instance: { modules: { personas: false, profiles: false, events: true } }, library: { enabled: true, storage_usage: EMPTY_STORAGE_USAGE } });
+    const originalGet = get.getMockImplementation()!;
+    get.mockImplementation(async (url) => url === '/api/events/attendees' ? { data: [{ id: 8, display_name: 'Sam' }, { id: 3, display_name: 'Myself' }] } : url === '/api/events/settings' ? { data: { viewer_id: 3 } } : originalGet(url));
+    jest.mocked(fetchWrapper.put).mockResolvedValue({ success: true });
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Share collection' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('checkbox', { name: 'Sam' }));
+    expect(within(dialog).queryByRole('checkbox', { name: 'Myself' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save sharing' }));
+    await waitFor(() => expect(fetchWrapper.put).toHaveBeenCalledWith('/api/library/collections/my-collection/sharing', { user_ids: [8] }));
+    expect(get).toHaveBeenCalledWith('/api/events/attendees');
+    expect(get).not.toHaveBeenCalledWith('/api/users');
+    expect(screen.queryByRole('link', { name: 'Lyra' })).toBeNull();
+  });
+
 });

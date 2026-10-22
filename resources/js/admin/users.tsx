@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
+import { instanceProfile, moduleEnabled } from '@/instance';
 
 interface AdminUser {
   id: number;
@@ -112,6 +113,7 @@ async function patchUser(id: number, body: Record<string, unknown>) {
 }
 
 export function AdminUsersPage() {
+  const eventProfile = instanceProfile() === 'event';
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -461,7 +463,7 @@ export function AdminUsersPage() {
           </div>
           <Button variant="outline" disabled={loading || !storageSettingsLoaded} onClick={() => setDefaultStorageOpen(true)}>Change site default</Button>
         </div>
-        <p className="text-sm text-muted-foreground">Applies to accounts using the site default, including new accounts. Custom limits and Unlimited overrides stay as set. Library access is enabled separately.</p>
+        <p className="text-sm text-muted-foreground">Applies to accounts using the site default, including new accounts. Custom limits and Unlimited overrides stay as set. {eventProfile ? 'Library access is available to all attendees.' : 'Library access is enabled separately.'}</p>
       </section>
 
       {loading ? (
@@ -519,7 +521,7 @@ export function AdminUsersPage() {
                       <Badge key={restriction.id} variant="destructive">Restricted: {restriction.label}</Badge>
                     ))}
                     {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
-                    {user.library_enabled && <Badge variant="outline">Library enabled</Badge>}
+                    {moduleEnabled('library') && (eventProfile || user.library_enabled) && <Badge variant="outline">{eventProfile ? 'Library available' : 'Library enabled'}</Badge>}
                     <Badge variant="outline">Storage: {user.storage_unlimited ? 'Unlimited override' : user.storage_limit_bytes === null ? `Site default (${formatStorageLimit(user.effective_storage_limit_bytes)})` : `Custom (${formatStorageLimit(user.storage_limit_bytes)})`}</Badge>
                     {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
                     <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
@@ -607,9 +609,9 @@ export function AdminUsersPage() {
                         >
                           {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
                         </Button>
-                        <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
+                        {!eventProfile && moduleEnabled('library') && <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
                           {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
-                        </Button>
+                        </Button>}
                         <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => setStorageTarget(user)}>Set storage limit</Button>
                         <Button
                           size="sm"

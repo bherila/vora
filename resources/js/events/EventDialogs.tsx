@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
+import { moduleEnabled } from '@/instance';
 import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { safeInternalUrl } from '@/security/dom-url';
@@ -55,7 +56,9 @@ export function EventEditor({ event, attendees, onClose, onSaved }: EventEditorP
   const [startsAt, setStartsAt] = useState(localDateTime(event?.starts_at));
   const [endsAt, setEndsAt] = useState(localDateTime(event?.ends_at));
   const [visibility, setVisibility] = useState(event?.visibility ?? 'everyone');
-  const [members, setMembers] = useState(event?.member_ids ?? []);
+  const availableIds = new Set(attendees.map((attendee) => attendee.id));
+  const unavailableMembers = event?.member_ids?.some((id) => !availableIds.has(id)) ?? false;
+  const [members, setMembers] = useState(() => (event?.member_ids ?? []).filter((id) => availableIds.has(id)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -84,6 +87,7 @@ export function EventEditor({ event, attendees, onClose, onSaved }: EventEditorP
         <div className="grid gap-1"><Label htmlFor="event-start">Starts at (optional)</Label><Input id="event-start" type="datetime-local" step="1" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} disabled={busy} /></div>
         <div className="grid gap-1"><Label htmlFor="event-end">Ends at (optional)</Label><Input id="event-end" type="datetime-local" step="1" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} disabled={busy} /><p className="text-xs text-muted-foreground">Enter times in your device timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). The timezone above controls how the event is displayed.</p></div>
         <div className="grid gap-1"><Label htmlFor="event-visibility">Who can access this event?</Label><select id="event-visibility" className="rounded border bg-background p-2" value={visibility} disabled={busy} onChange={(event) => setVisibility(event.target.value as EventProfile['visibility'])}><option value="everyone">All attendees</option><option value="specific">Selected attendees</option></select></div>
+        {unavailableMembers && <p className="text-sm text-muted-foreground">Unavailable attendees will be removed when you save.</p>}
         {visibility === 'specific' && <AttendeePicker attendees={attendees} selected={members} onChange={setMembers} disabled={busy} label="Selected attendees" />}
         <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button disabled={busy}>{busy ? 'Saving…' : 'Save event'}</Button></DialogFooter>
       </form>
@@ -148,14 +152,14 @@ export function EventMediaDialog({ item, onClose, onDeleted }: EventMediaDialogP
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <MediaPlayer item={item} className="max-h-[65vh] w-full object-contain" />
       <div className="flex flex-wrap items-center gap-2">
-        <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />
-        {item.can_save_to_library && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
+        {moduleEnabled('favorites') && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
+        {moduleEnabled('library') && item.can_save_to_library && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
         {downloadUrl && <a href={downloadUrl} download className="text-sm underline underline-offset-4">Download to device</a>}
         {item.owned && !confirmDelete && <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete my upload</Button>}
       </div>
       <p className="text-xs text-muted-foreground">Favorites are visible to attendees who can access the media. Items saved to your Library stay private and retain access; downloads are stored on your device.</p>
       {confirmDelete && <div className="grid gap-3 rounded border border-destructive p-3">
-        <p className="text-sm">Delete this upload from the event? Copies already saved to another account’s Library retain access.</p>
+        <p className="text-sm">Delete this upload from the event? Items already saved to another account’s Library retain access.</p>
         <div className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep upload</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? 'Deleting…' : 'Confirm delete'}</Button></div>
       </div>}
     </DialogContent>

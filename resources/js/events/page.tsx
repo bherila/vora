@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDialogs';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
+import { moduleEnabled } from '@/instance';
 import { MediaGrid } from '@/media/MediaGrid';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import type { PageMeta } from '@/media/types';
@@ -51,13 +52,14 @@ export function EventsPage() {
   const [curatorsOpen, setCuratorsOpen] = useState(false);
   const parsed = new URL(location, window.location.origin);
   const params = parsed.searchParams;
+  const favoritesEnabled = moduleEnabled('favorites');
   const section = params.get('section') ?? 'all';
   const attendeePath = parsed.pathname.match(/^\/(?:events\/)?attendees\/(\d+)\/?$/);
   const attendeeId = attendeePath?.[1] ?? params.get('attendee_id') ?? '';
   const attendeeIndex = /^\/(?:events\/)?attendees\/?$/.test(parsed.pathname);
   const eventUlid = params.get('event_ulid') ?? '';
-  const favoritesOf = params.get('favorites_of') ?? '';
-  const featured = params.get('featured') === '1';
+  const favoritesOf = favoritesEnabled ? params.get('favorites_of') ?? '' : '';
+  const featured = favoritesEnabled && params.get('featured') === '1';
   const itemUlid = params.get('item') ?? params.get('media') ?? '';
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
   const selectedEvent = events.find((event) => event.ulid === eventUlid);
@@ -151,17 +153,17 @@ export function EventsPage() {
     <Toaster />
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Events</h1><p className="mt-1 text-sm text-muted-foreground">Share photos and videos with event attendees.</p></div>
-      {settings?.is_admin && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setCuratorsOpen(true)}>Manage featured curators</Button><Button onClick={() => setEditor(null)}>Create event</Button></div>}
+      {settings?.is_admin && <div className="flex flex-wrap gap-2">{favoritesEnabled && <Button variant="outline" onClick={() => setCuratorsOpen(true)}>Manage featured curators</Button>}<Button onClick={() => setEditor(null)}>Create event</Button></div>}
     </header>
     <nav aria-label="Event navigation" className="flex flex-wrap gap-2">
-      {[{ label: 'All media', href: allMediaUrl, current: showMedia && !featured && section !== 'mine' && !attendeeId }, { label: 'Events', href: eventsUrl, current: isEventIndex }, { label: 'Attendees', href: attendeesUrl, current: attendeeIndex || !!attendeeId }, { label: 'Featured favorites', href: featuredUrl, current: featured }, { label: 'My uploads', href: mineUrl, current: section === 'mine' }].map(({ label, href, current }) => <a key={label} href={href} aria-current={current ? 'page' : undefined} className={`rounded-md px-3 py-2 text-sm ${current ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'}`}>{label}</a>)}
-      <a href="/library" className="rounded-md bg-muted px-3 py-2 text-sm hover:bg-accent">My collection</a>
+      {[{ label: 'All media', href: allMediaUrl, current: showMedia && !featured && section !== 'mine' && !attendeeId }, { label: 'Events', href: eventsUrl, current: isEventIndex }, { label: 'Attendees', href: attendeesUrl, current: attendeeIndex || !!attendeeId }, { label: 'Featured favorites', href: featuredUrl, current: featured }, { label: 'My uploads', href: mineUrl, current: section === 'mine' }].filter((link) => favoritesEnabled || link.label !== 'Featured favorites').map(({ label, href, current }) => <a key={label} href={href} aria-current={current ? 'page' : undefined} className={`rounded-md px-3 py-2 text-sm ${current ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'}`}>{label}</a>)}
+      {moduleEnabled('library') && <a href="/library" className="rounded-md bg-muted px-3 py-2 text-sm hover:bg-accent">My collection</a>}
     </nav>
     {initialLoading ? <p role="status">Loading events…</p> : error ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{error}</p><Button variant="outline" onClick={refresh}>Retry</Button></div> : <>
       <div className="flex flex-wrap items-end gap-4">
         <div className="grid min-w-48 gap-1"><Label htmlFor="event-filter">Event</Label><select id="event-filter" className="rounded-md border bg-background p-2" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select></div>
         {showMedia && section !== 'mine' && <div className="grid min-w-48 gap-1"><Label htmlFor="attendee-filter">Uploaded by</Label><select id="attendee-filter" className="rounded-md border bg-background p-2" value={attendeeId} onChange={(event) => navigate(pageUrl(params, { attendee_id: event.target.value, section: null, page: null, item: null }, '/events'))}><option value="">All attendees</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>}
-        {showMedia && <div className="grid min-w-48 gap-1"><Label htmlFor="favorites-filter">Favorites by</Label><select id="favorites-filter" className="rounded-md border bg-background p-2" value={favoritesOf} onChange={(event) => navigate(pageUrl(params, { favorites_of: event.target.value, page: null, item: null }))}><option value="">Any / unfiltered</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>}
+        {showMedia && favoritesEnabled && <div className="grid min-w-48 gap-1"><Label htmlFor="favorites-filter">Favorites by</Label><select id="favorites-filter" className="rounded-md border bg-background p-2" value={favoritesOf} onChange={(event) => navigate(pageUrl(params, { favorites_of: event.target.value, page: null, item: null }))}><option value="">Any / unfiltered</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>}
         {selectedEvent ? <MediaUploadDialog key={selectedEvent.ulid} eventUlid={selectedEvent.ulid} characters={[]} lastInterestIds={[]} onUploaded={refresh} triggerLabel={`Upload to ${selectedEvent.name}`} /> : <p className="text-sm text-muted-foreground">Choose an event above to upload photos or videos.</p>}
       </div>
       {selectedEvent && <section className="space-y-2 rounded border p-4">
@@ -177,13 +179,13 @@ export function EventsPage() {
         {events.map((event) => <Card key={event.ulid}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold"><a href={pageUrl(params, { event_ulid: event.ulid, section: null, page: null, item: null }, '/events')} className="underline underline-offset-4">{event.name}</a></h2>{event.description && <p className="text-sm">{event.description}</p>}{eventDate(event) && <p className="text-xs text-muted-foreground">{eventDate(event)}</p>}<p className="text-xs">{event.visibility === 'everyone' ? 'All attendees' : 'Selected attendees only'}</p>{event.can_manage && <Button size="sm" variant="outline" onClick={() => setEditor(event)}>Edit {event.name}</Button>}</CardContent></Card>)}
       </section> : attendeeIndex ? <section aria-label="Attendee galleries" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {attendees.length === 0 && <p>No attendees are available.</p>}
-        {attendees.map((attendee) => <Card key={attendee.id}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold">{attendee.display_name}</h2><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: null, page: null, item: null }, `/attendees/${attendee.id}`)}>View uploads by {attendee.display_name}</a><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: String(attendee.id), page: null, item: null }, '/events')}>View favorites by {attendee.display_name}</a></CardContent></Card>)}
+        {attendees.map((attendee) => <Card key={attendee.id}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold">{attendee.display_name}</h2><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: null, page: null, item: null }, `/attendees/${attendee.id}`)}>View uploads by {attendee.display_name}</a>{favoritesEnabled && <a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: String(attendee.id), page: null, item: null }, '/events')}>View favorites by {attendee.display_name}</a>}</CardContent></Card>)}
       </section> : <section className="space-y-4" aria-label="Event media">
         <h2 className="text-lg font-semibold">{featured ? 'Featured favorites' : section === 'mine' ? 'My uploads' : selectedAttendee ? `Uploads by ${selectedAttendee.display_name}` : 'All media'}</h2>
         {featured && <p className="text-sm text-muted-foreground">Favorites selected by {settings?.featured_curators.map((curator) => curator.display_name).join(', ') || 'the featured curators'}. Only media you can access appears here.</p>}
         {mediaError ? <p role="alert" className="text-sm text-destructive">{mediaError}</p> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <p className="text-sm text-muted-foreground">No media matches these filters.</p> : <MediaGrid items={items} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
           const item = items.find((entry) => entry.id === media.id);
-          return item && <div className="flex flex-wrap items-center gap-2"><FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} /><span className="text-xs text-muted-foreground">{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{item.under_review ? ' · Awaiting review' : ''}</span></div>;
+          return item && <div className="flex flex-wrap items-center gap-2">{favoritesEnabled && <FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} />}<span className="text-xs text-muted-foreground">{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{item.under_review ? ' · Awaiting review' : ''}</span></div>;
         }} />}
         {meta && meta.last_page > 1 && <nav className="flex items-center justify-between gap-3" aria-label="Media pages"><Button variant="outline" disabled={page <= 1 || loading} onClick={() => navigate(pageUrl(params, { page: String(page - 1), item: null }))}>Previous</Button><span className="text-sm">Page {meta.current_page} of {meta.last_page}</span><Button variant="outline" disabled={!meta.has_more || loading} onClick={() => navigate(pageUrl(params, { page: String(page + 1), item: null }))}>Next</Button></nav>}
       </section>}

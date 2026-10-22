@@ -5,6 +5,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { AdminUsersPage } from '@/admin/users';
 import { fetchWrapper } from '@/fetchWrapper';
 
+let mockProfile: 'vora' | 'event' = 'vora';
+jest.mock('@/instance', () => ({ instanceProfile: () => mockProfile, moduleEnabled: () => true }));
+
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
     get: jest.fn(),
@@ -64,6 +67,7 @@ const user = {
 
 describe('AdminUsersPage restrictions', () => {
   beforeEach(() => {
+    mockProfile = 'vora';
     jest.clearAllMocks();
     jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
     jest.mocked(fetchWrapper.delete).mockResolvedValue({ success: true });
@@ -87,6 +91,7 @@ describe('AdminUsersPage storage defaults', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    mockProfile = 'vora';
     jest.clearAllMocks();
     jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
     globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: user }) });
@@ -202,4 +207,14 @@ describe('AdminUsersPage storage defaults', () => {
     expect(screen.getByRole('button', { name: 'Change site default' })).toBeDisabled();
     expect(fetchWrapper.put).not.toHaveBeenCalled();
   });
+  it('shows automatic Event Library access without exposing the ineffective premium toggle', async () => {
+    mockProfile = 'event';
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, library_enabled: false }], settings: { default_storage_limit_bytes: null } });
+    render(<AdminUsersPage />);
+    expect(await screen.findByText('Library available')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Enable|Disable) Library storage$/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Set storage limit' })).toBeInTheDocument();
+    expect(screen.getByText(/Library access is available to all attendees/)).toBeInTheDocument();
+  });
+
 });

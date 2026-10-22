@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
+import { moduleEnabled } from '@/instance';
 import { LibraryBulkActions } from '@/library/LibraryBulkActions';
 import { LibraryCollectionDialog, LibraryNoteDialog, LibraryShareDialog, type ShareTarget } from '@/library/LibraryDialogs';
 import { LibraryItemDialog, LibraryItemPreview } from '@/library/LibraryItemDialog';
@@ -36,6 +37,7 @@ const SECTIONS = [
 export function LibraryPage() {
   const [initial] = useState(() => readInitialData<LibraryBootstrap>().library);
   const enabled = initial?.enabled ?? false;
+  const personasEnabled = moduleEnabled('personas');
   const [usage, setUsage] = useState(initial?.storage_usage ?? EMPTY_STORAGE_USAGE);
   const [collections, setCollections] = useState<LibraryCollection[]>([]);
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -151,7 +153,7 @@ export function LibraryPage() {
 
   return <main className={`${BROWSING_PAGE_WIDTH} space-y-5 px-4 py-6`}>
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-2xl font-semibold">Library</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">A private place for notes, photos, and videos you upload or save. Organize them around existing personas and choose who you share with.</p></div>
+      <div><h1 className="text-2xl font-semibold">Library</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">A private place for notes, photos, and videos you upload or save. {personasEnabled ? 'Organize them around existing personas and choose who you share with.' : 'Organize your collections and choose who you share with.'}</p></div>
       {enabled && <Button onClick={() => setCollectionEditor(null)}>New collection</Button>}
     </header>
     {!enabled && <Alert><AlertDescription>Library storage is enabled selectively by an administrator. You can still view shared content and manage items already in your Library.</AlertDescription></Alert>}
@@ -186,8 +188,8 @@ export function LibraryPage() {
           </div>
         </div>
         {selectedCollection?.description && <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{selectedCollection.description}</p>}
-        {selectedCollection?.related_persona && <p className="text-sm">Related to <a className="underline underline-offset-4" href={selectedCollection.related_persona.href}>{selectedCollection.related_persona.display_name}</a></p>}
-        {selectedCollection?.related_persona_unavailable && <p className="text-sm text-muted-foreground">The related persona is unavailable. Your collection and files remain accessible.</p>}
+        {personasEnabled && selectedCollection?.related_persona && <p className="text-sm">Related to <a className="underline underline-offset-4" href={selectedCollection.related_persona.href}>{selectedCollection.related_persona.display_name}</a></p>}
+        {personasEnabled && selectedCollection?.related_persona_unavailable && <p className="text-sm text-muted-foreground">The related persona is unavailable. Your collection and files remain accessible.</p>}
         {selectedCollection?.owned && selectedCollection.member_ids.length > 0 && <p className="text-sm text-muted-foreground">This collection is shared. Current and future items you upload or write, including notes, are visible to its recipients and can be saved by them. Items saved from someone else stay private to you.</p>}
         <Label htmlFor="library-search" className="sr-only">Search Library items</Label>
         <Input id="library-search" placeholder="Search titles and notes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
@@ -204,7 +206,7 @@ export function LibraryPage() {
       </section>
     </div>
     {activeItem && <LibraryItemDialog key={activeItem.ulid} item={activeItem} collections={collections} enabled={enabled} onClose={closeItem} onChanged={refresh} onShare={setShareTarget} />}
-    {collectionEditor !== undefined && <LibraryCollectionDialog collection={collectionEditor} onClose={() => setCollectionEditor(undefined)} onChanged={refresh} />}
+    {collectionEditor !== undefined && <LibraryCollectionDialog personasEnabled={personasEnabled} collection={collectionEditor} onClose={() => setCollectionEditor(undefined)} onChanged={refresh} />}
     {noteOpen && <LibraryNoteDialog collections={collections} selectedCollection={collectionUlid} onClose={() => setNoteOpen(false)} onChanged={refresh} />}
     {shareTarget && <LibraryShareDialog key={`${shareTarget.kind}:${shareTarget.ulid}`} target={shareTarget} onClose={() => setShareTarget(null)} onChanged={sharingChanged} />}
     <AlertDialog open={removeCollection !== null} onOpenChange={(open) => { if (!open && !removingCollection) setRemoveCollection(null); }}>

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { AccountIdentitySettings } from '@/auth/account-identity-settings';
 import { Avatar } from '@/components/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
+import { moduleEnabled } from '@/instance';
 import { type Audience } from '@/lib/audience';
 import { StorageQuotaSummary } from '@/library/StorageQuotaSummary';
 import { type AccountStorageUsage, EMPTY_STORAGE_USAGE } from '@/library/types';
@@ -157,8 +159,13 @@ interface BlockedIdentity {
 const SETTINGS_TABS = ['account', 'notifications', 'privacy', 'security', 'data'] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
+function socialSettingsEnabled(): boolean {
+  return moduleEnabled('community') || moduleEnabled('profiles') || moduleEnabled('personas') || moduleEnabled('chat') || moduleEnabled('stories');
+}
+
 function tabFromUrl(): SettingsTab {
   const tab = new URLSearchParams(window.location.search).get('tab');
+  if (!socialSettingsEnabled() && (tab === 'notifications' || tab === 'privacy')) return 'account';
   return SETTINGS_TABS.includes(tab as SettingsTab) ? tab as SettingsTab : 'account';
 }
 
@@ -245,6 +252,8 @@ function normalizeNumberList(value: unknown): number[] {
 
 export function UserSettingsPage() {
   const initialData = getInitialData();
+  const profilesEnabled = moduleEnabled('profiles');
+  const socialEnabled = socialSettingsEnabled();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromUrl);
   const [accountName, setAccountName] = useState(initialData.name);
@@ -292,6 +301,7 @@ export function UserSettingsPage() {
   const [blocksError, setBlocksError] = useState('');
 
   useEffect(() => {
+    if (!socialEnabled) { setPushStatusLoading(false); return; }
     const supported = isWebPushSupported();
     setPushSupported(supported);
     setPushPermission(supported ? Notification.permission : 'denied');
@@ -328,10 +338,10 @@ export function UserSettingsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [socialEnabled]);
 
   useEffect(() => {
-    if (activeTab !== 'privacy') return;
+    if (activeTab !== 'privacy' || !socialEnabled) return;
 
     let active = true;
     setMutesLoading(true);
@@ -362,7 +372,7 @@ export function UserSettingsPage() {
     return () => {
       active = false;
     };
-  }, [activeTab]);
+  }, [activeTab, socialEnabled]);
 
   useEffect(() => {
     const handlePopState = (): void => setActiveTab(tabFromUrl());
@@ -372,7 +382,7 @@ export function UserSettingsPage() {
   }, []);
 
   const handleTabChange = (value: string): void => {
-    const nextTab = SETTINGS_TABS.includes(value as SettingsTab) ? value as SettingsTab : 'account';
+    const nextTab = SETTINGS_TABS.includes(value as SettingsTab) && (socialEnabled || value !== 'notifications' && value !== 'privacy') ? value as SettingsTab : 'account';
     setActiveTab(nextTab);
 
     const url = new URL(window.location.href);
@@ -559,7 +569,7 @@ export function UserSettingsPage() {
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-bold">Settings</h1>
 
-      <Card>
+      {profilesEnabled ? <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div>
             <p className="font-medium">Your public profile</p>
@@ -567,16 +577,16 @@ export function UserSettingsPage() {
           </div>
           <Button variant="outline" asChild><a href="/me">Edit profile</a></Button>
         </CardContent>
-      </Card>
+      </Card> : <AccountIdentitySettings displayName={initialData.display_name} />}
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList
           aria-label="Settings sections"
-          className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5"
+          className={`grid h-auto w-full grid-cols-2 gap-1 ${socialEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-3'}`}
         >
           <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="privacy">Privacy</TabsTrigger>
+          {socialEnabled && <><TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="privacy">Privacy</TabsTrigger></>}
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="data">Data &amp; account</TabsTrigger>
         </TabsList>
@@ -650,7 +660,7 @@ export function UserSettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications">
+        {socialEnabled && <TabsContent value="notifications">
           <Card>
             <CardHeader>
               <CardTitle>Notification preferences</CardTitle>
@@ -750,9 +760,9 @@ export function UserSettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="privacy" className="space-y-4">
+        {socialEnabled && <TabsContent value="privacy" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Blocked accounts and personas</CardTitle>
@@ -836,7 +846,7 @@ export function UserSettingsPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         <TabsContent value="security" className="space-y-4">
           {passkeyMessage && <Alert><AlertDescription>{passkeyMessage}</AlertDescription></Alert>}
@@ -873,7 +883,7 @@ export function UserSettingsPage() {
             <CardHeader>
               <CardTitle>Storage usage</CardTitle>
               <CardDescription>
-                Original photos and videos you uploaded or saved, including persona media and profile pictures.
+                Original photos and videos you uploaded or saved, including {moduleEnabled('personas') ? 'persona media and profile pictures' : 'profile pictures'}.
                 Thumbnails and processed copies are excluded. Reload this page to update usage.
               </CardDescription>
             </CardHeader>
