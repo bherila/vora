@@ -6,6 +6,7 @@ use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
+use App\Services\Events\EventAccess;
 use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
@@ -28,7 +29,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Media extends Model
 {
     use HasFactory;
-    use HasPrivacyPolicy;
+    use HasPrivacyPolicy {
+        scopeViewableBy as private scopeAudienceViewableBy;
+        isViewableBy as private isAudienceViewableBy;
+        audienceAllows as private genericAudienceAllows;
+    }
     use Moderatable;
     use SerializesDatesAsLocal;
     use SoftDeletes;
@@ -67,6 +72,7 @@ class Media extends Model
     protected $fillable = [
         'user_id',
         'character_id',
+        'event_id',
         'ulid',
         'type',
         'purpose',
@@ -115,6 +121,7 @@ class Media extends Model
             'multipart_max_part_number' => 'integer',
             'multipart_initiated_at' => 'datetime',
             'character_id' => 'integer',
+            'event_id' => 'integer',
         ];
     }
 
@@ -170,6 +177,61 @@ class Media extends Model
         return $this->belongsToMany(Interest::class, 'media_interests')->withTimestamps();
     }
 
+    /** @return BelongsTo<Event, $this> */
+    public function event(): BelongsTo
+    {
+        return $this->belongsTo(Event::class);
+    }
+
+    /** Event publication access is independent of the generic media audience. */
+    public function audienceAllows(User $viewer): bool
+    {
+        if ($this->purpose === MediaPurpose::Event && $viewer->id !== $this->user_id
+            && ! app(EventAccess::class)->canView($viewer, $this->event)) {
+            return false;
+        }
+
+        return $this->genericAudienceAllows($viewer);
+    }
+
+    public function isViewableBy(?User $viewer): bool
+    {
+        if ($this->purpose === MediaPurpose::Event && $viewer !== null && ! $viewer->isAdmin()
+            && ($viewer->trashed() || ! $viewer->isActive() || ! $viewer->isApproved())) {
+            return false;
+        }
+
+        return $this->isAudienceViewableBy($viewer);
+    }
+
+    /**
+     * @param  Builder<Media>  $query
+     * @return Builder<Media>
+     */
+    public function scopeViewableBy(Builder $query, ?User $viewer): Builder
+    {
+        $this->scopeAudienceViewableBy($query, $viewer);
+        if ($viewer?->isAdmin()) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $visible) use ($viewer): void {
+            $visible->where('media.purpose', '!=', MediaPurpose::Event->value);
+            if (! $viewer instanceof User || $viewer->trashed() || ! $viewer->isActive() || ! $viewer->isApproved()) {
+                return;
+            }
+            $visible->orWhere(function (Builder $eventMedia) use ($viewer): void {
+                $eventMedia->where('media.purpose', MediaPurpose::Event->value)->where(function (Builder $access) use ($viewer): void {
+                    $access->where('media.user_id', $viewer->id)->orWhere(function (Builder $publication) use ($viewer): void {
+                        $publication->where('upload_status', 'ready')->where('moderation_status', 'approved')
+                            ->whereHas('user', fn (Builder $owner) => $owner->active()->whereNotNull('approved_at'))
+                            ->whereHas('event', fn (Builder $events) => app(EventAccess::class)->visibleTo($events, $viewer));
+                    });
+                });
+            });
+        });
+    }
+
     public function isGalleryMedia(): bool
     {
         return $this->purpose === MediaPurpose::Gallery;
@@ -177,7 +239,7 @@ class Media extends Model
 
     public function supportsMultipartUpload(): bool
     {
-        return in_array($this->purpose, [MediaPurpose::Gallery, MediaPurpose::Library], true);
+        return in_array($this->purpose, [MediaPurpose::Gallery, MediaPurpose::Library, MediaPurpose::Event], true);
     }
 
     /** @return HasMany<LibraryItem, $this> */

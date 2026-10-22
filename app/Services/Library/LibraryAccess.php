@@ -2,6 +2,7 @@
 
 namespace App\Services\Library;
 
+use App\Enums\MediaPurpose;
 use App\Enums\RestrictionCapability;
 use App\Models\Character;
 use App\Models\LibraryCollection;
@@ -48,7 +49,8 @@ class LibraryAccess
             return false;
         }
 
-        if ($item->media !== null && ! $this->canViewMedia($viewer, $item->media)) {
+        if ($item->media !== null && (! $this->canViewMedia($viewer, $item->media)
+            || ($item->media->purpose === MediaPurpose::Event && ! $item->media->isViewableBy($viewer)))) {
             return false;
         }
 

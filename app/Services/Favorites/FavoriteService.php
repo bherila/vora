@@ -2,6 +2,7 @@
 
 namespace App\Services\Favorites;
 
+use App\Enums\MediaPurpose;
 use App\Enums\RestrictionCapability;
 use App\Models\Character;
 use App\Models\Favorite;
@@ -15,6 +16,7 @@ use App\Services\Privacy\ProfileGate;
 use App\Support\InstanceFeatures;
 use App\Support\UserPresenter;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
@@ -104,7 +106,7 @@ class FavoriteService
     public function visibleFor(User $owner, User $viewer): array
     {
         return $owner->favorites()
-            ->with('favoritable')
+            ->with(['favoritable' => fn (MorphTo $relation) => $relation->morphWith([Media::class => ['event.members', 'user']])])
             ->latest()
             ->get()
             ->map(fn ($favorite): ?Model => $favorite->favoritable)
@@ -218,7 +220,7 @@ class FavoriteService
                 // otherwise pseudonymous uploader, so use a neutral fallback.
                 'label' => $item->title ?: 'Untitled media',
                 'subtitle' => ucfirst($item->type->value ?? (string) $item->type),
-                'href' => "/m/{$item->ulid}",
+                'href' => $item->purpose === MediaPurpose::Event ? "/events?media={$item->ulid}" : "/m/{$item->ulid}",
                 'thumbnail_url' => $this->visitorMediaThumb($item),
             ],
             $item instanceof Story => [

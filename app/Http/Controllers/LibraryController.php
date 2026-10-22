@@ -45,7 +45,7 @@ class LibraryController extends Controller
     public function page(Request $request, AccountStorageUsage $usage): View
     {
         return view('library.index', ['initialData' => ['library' => [
-            'enabled' => (bool) $request->user()->library_enabled,
+            'enabled' => (bool) $request->user()->canUseLibrary(),
             'storage_usage' => $usage->forUser($request->user()),
         ]]]);
     }
@@ -74,7 +74,10 @@ class LibraryController extends Controller
         $query->where(function (Builder $q) use ($user, $restricted): void {
             $q->where('library_items.user_id', $user->id)->orWhereNull('media_id')
                 ->orWhereHas('media', function (Builder $media) use ($user, $restricted): void {
-                    $media->where('upload_status', 'ready')->where(function (Builder $visible) use ($user, $restricted): void {
+                    $media->where(function (Builder $acl) use ($user): void {
+                        $acl->where('purpose', '!=', MediaPurpose::Event->value)
+                            ->orWhere(fn (Builder $eventMedia) => $eventMedia->where('purpose', MediaPurpose::Event->value)->viewableBy($user));
+                    })->where('upload_status', 'ready')->where(function (Builder $visible) use ($user, $restricted): void {
                         $visible->where('user_id', $user->id);
                         if (! $restricted) {
                             $visible->orWhere('moderation_status', 'approved');
@@ -130,7 +133,7 @@ class LibraryController extends Controller
     {
         $collection = $request->user()->libraryCollections()->where('ulid', $ulid)->firstOrFail();
         $ids = $request->validated('user_ids');
-        abort_unless($request->user()->library_enabled || array_diff($ids, $collection->members()->pluck('users.id')->all()) === [], 403, 'Library storage is not enabled.');
+        abort_unless($request->user()->canUseLibrary() || array_diff($ids, $collection->members()->pluck('users.id')->all()) === [], 403, 'Library storage is not enabled.');
         $collection->members()->sync($ids);
 
         return response()->json(['success' => true]);
@@ -181,7 +184,7 @@ class LibraryController extends Controller
         $item = $request->user()->libraryItems()->where('ulid', $ulid)->firstOrFail();
         $ids = $request->validated('user_ids');
         abort_if($item->source === 'saved' && $ids !== [], 422, 'Saved items stay private in your Library.');
-        abort_unless($request->user()->library_enabled || array_diff($ids, $item->members()->pluck('users.id')->all()) === [], 403, 'Library storage is not enabled.');
+        abort_unless($request->user()->canUseLibrary() || array_diff($ids, $item->members()->pluck('users.id')->all()) === [], 403, 'Library storage is not enabled.');
         $item->members()->sync($ids);
 
         return response()->json(['success' => true]);

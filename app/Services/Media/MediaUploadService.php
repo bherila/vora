@@ -6,8 +6,10 @@ use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
+use App\Models\Event;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Events\EventAccess;
 use App\Services\FileStorageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -75,9 +77,23 @@ class MediaUploadService
         ?int $expectedSizeBytes = null,
         bool $announceOnApproval = false,
         ?int $thumbnailSizeBytes = null,
+        ?int $eventId = null,
     ): array {
-        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes): array {
+        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes, $eventId): array {
             $user = $this->quota->lock($user);
+            if ($purpose === MediaPurpose::Event) {
+                // Bind the immutable event ACL before an object key or URL can
+                // escape. Admin membership edits lock users before this row too.
+                $event = Event::query()->whereKey($eventId)->lockForUpdate()->first();
+                abort_unless(app(EventAccess::class)->canView($user, $event), 404, 'Not found.');
+                $audience = Audience::Everyone;
+                $discoverable = false;
+                $announceOnApproval = false;
+                $characterId = null;
+                $interestIds = [];
+            } elseif ($eventId !== null) {
+                throw new \InvalidArgumentException('Only Event media may reference an event.');
+            }
             $this->quota->assertCanGrow($user, $expectedSizeBytes);
             // Each presigned PUT is bound to an exact byte length, so the sizes
             // must be known up front (the request validates them against limits).
@@ -93,6 +109,7 @@ class MediaUploadService
             $media = new Media([
                 'user_id' => $user->id,
                 'character_id' => $characterId,
+                'event_id' => $eventId,
                 'ulid' => $ulid,
                 'type' => $type,
                 'purpose' => $purpose,
@@ -405,7 +422,8 @@ class MediaUploadService
         return DB::transaction(function () use ($user, $media): bool {
             $this->quota->lock($user);
             $this->lockUpload($media);
-            abort_unless($media->user_id === $user->id && $media->supportsMultipartUpload(), 404, 'Not found.');
+            abort_unless($media->user_id === $user->id
+                && ($media->supportsMultipartUpload() || $media->purpose === MediaPurpose::ProfilePicture), 404, 'Not found.');
             if ($media->isReady()) {
                 return false;
             }

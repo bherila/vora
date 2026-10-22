@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Audience;
 use App\Http\Middleware\EnsureNotBanned;
+use App\Support\InstanceFeatures;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,6 +24,12 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasPushSubscriptions;
     use Notifiable;
     use SoftDeletes;
+
+    public function canUseLibrary(): bool
+    {
+        return InstanceFeatures::enabled('library')
+            && ($this->library_enabled || config('instance.profile') === 'event');
+    }
 
     protected static function booted(): void
     {

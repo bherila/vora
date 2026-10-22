@@ -1,0 +1,24 @@
+<?php
+
+use App\Http\Controllers\Events\EventAdminController;
+use App\Http\Controllers\Events\EventController;
+use App\Http\Controllers\Events\EventMediaController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth', 'approved', 'module:events'])->group(function (): void {
+    Route::get('/events', [EventController::class, 'page'])->name('events.index');
+    Route::get('/attendees', [EventController::class, 'page'])->name('events.attendees');
+    Route::get('/attendees/{user}', [EventController::class, 'page'])->name('events.attendee');
+    Route::get('/api/events', [EventController::class, 'index']);
+    Route::get('/api/events/attendees', [EventController::class, 'attendees']);
+    Route::get('/api/events/settings', [EventController::class, 'settings']);
+    Route::get('/api/events/media', [EventMediaController::class, 'index']);
+    Route::get('/api/events/media/{ulid}/download', [EventMediaController::class, 'download'])->name('events.media.download');
+    Route::get('/api/events/media/{ulid}', [EventMediaController::class, 'show']);
+    Route::post('/api/events/{event:ulid}/uploads', [EventMediaController::class, 'upload']);
+    Route::middleware('can:admin-only')->group(function (): void {
+        Route::post('/api/admin/events', [EventAdminController::class, 'store']);
+        Route::patch('/api/admin/events/{event:ulid}', [EventAdminController::class, 'update']);
+        Route::put('/api/admin/events/settings', [EventAdminController::class, 'settings']);
+    });
+});
