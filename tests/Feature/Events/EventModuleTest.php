@@ -19,6 +19,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class EventModuleTest extends TestCase
@@ -30,7 +31,8 @@ class EventModuleTest extends TestCase
         parent::setUp();
         config(['instance.modules.events' => true, 'instance.modules.library' => true, 'instance.modules.profiles' => true, 'instance.modules.community' => true]);
         Notification::fake();
-        User::factory()->approved()->create(); // The first account is the bootstrap admin.
+        // Exercise explicit admin authorization rather than the user-id-1 bypass.
+        User::factory()->admin()->create(['id' => 100]);
         Storage::fake('photos');
         Storage::fake('s3');
         Storage::fake('hls');
@@ -97,6 +99,25 @@ class EventModuleTest extends TestCase
         $this->getJson('/api/users/'.$owner->id.'/media')->assertOk()->assertJsonCount(0, 'data');
         $this->getJson('/api/explore')->assertOk()->assertJsonCount(0, 'data');
         $this->assertFalse(Media::query()->viewableBy($outsider)->whereKey($photo->id)->exists());
+    }
+
+    public function test_missing_and_hidden_upload_events_have_identical_generic_responses(): void
+    {
+        config(['app.debug' => false]);
+        $owner = $this->account();
+        $outsider = $this->account();
+        $event = $this->event([$owner->id]);
+        $missing = (string) Str::ulid();
+        $payload = ['type' => 'photo', 'filename' => 'photo.jpg', 'content_type' => 'image/jpeg', 'size' => 8];
+        $this->actingAs($outsider);
+        $hidden = $this->postJson('/api/events/'.$event->ulid.'/uploads', $payload)->assertNotFound();
+        $unknown = $this->postJson('/api/events/'.$missing.'/uploads', $payload)->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $hidden->json());
+        $this->assertSame($hidden->json(), $unknown->json());
+        config(['instance.modules.events' => false]);
+        $disabled = $this->actingAs($owner)->postJson('/api/events/'.$event->ulid.'/uploads', $payload)->assertNotFound();
+        $disabledUnknown = $this->postJson('/api/events/'.$missing.'/uploads', $payload)->assertNotFound();
+        $this->assertSame($disabled->json(), $disabledUnknown->json());
     }
 
     public function test_saved_reference_survives_event_revocation_without_allowing_library_resharing(): void

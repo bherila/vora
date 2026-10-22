@@ -3,7 +3,15 @@
 use App\Http\Controllers\Events\EventAdminController;
 use App\Http\Controllers\Events\EventController;
 use App\Http\Controllers\Events\EventMediaController;
+use App\Models\Event;
+use App\Services\Events\EventAccess;
 use Illuminate\Support\Facades\Route;
+
+// Bind only events this account may access. Missing and hidden ULIDs share
+// the same response, including when a deployment disables the Event module.
+Route::bind('event', fn (string $ulid): Event => app(EventAccess::class)
+    ->visibleTo(Event::query(), request()->user())->where('ulid', $ulid)->first()
+    ?? abort(404, 'Not found.'));
 
 Route::middleware(['auth', 'approved', 'module:events'])->group(function (): void {
     Route::get('/events', [EventController::class, 'page'])->name('events.index');
