@@ -115,6 +115,7 @@ class InstanceProfileTest extends TestCase
 
     public function test_disabled_profiles_hide_legacy_gallery_paths_but_preserve_private_saves_and_admin_review(): void
     {
+        config(['instance.modules.profiles' => true]);
         Storage::fake('photos');
         Storage::fake('s3');
         Storage::fake('hls');
