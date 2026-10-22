@@ -183,7 +183,6 @@ export function MediaUploadDialog({
     if (isEvent && !hasEvent) { toast.error('Choose an available event before uploading.'); return; }
     if (pending.length === 0) { toast.error('Choose at least one file to upload.'); return; }
 
-
     const destination: MediaUploadDestination = isEvent ? { kind: 'event', ulid: selectedEventUlid }
       : isLibrary ? { kind: 'library', collectionUlid: libraryCollectionUlid ?? null }
         : { kind: 'gallery', characterId: characterId === '' ? null : Number(characterId), audience, audienceUserIds, discoverable, announce, interestIds: uploadInterestIds };

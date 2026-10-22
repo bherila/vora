@@ -40,7 +40,7 @@ function FilePreview({ file }: FilePreviewProps) {
   return <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
     {url === null ? (type === 'video' ? 'Video' : type === 'photo' ? 'Photo' : 'File') : type === 'video'
       ? <video src={url} muted playsInline preload="metadata" aria-label={`Preview of ${file.name}`} className="size-full object-cover" />
-      : <img src={url} alt={`Preview of ${file.name}`} className="size-full object-cover" />}
+      : <img src={url} alt={`Preview of ${file.name}`} loading="lazy" decoding="async" className="size-full object-cover" />}
   </div>;
 }
 
