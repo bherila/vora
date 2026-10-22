@@ -28,6 +28,10 @@ The runner refuses non-loopback service URLs. Defaults are
 `STAGING_APP_URL` and `STAGING_MAIL_URL` may select other loopback ports.
 Credentials match the disposable Docker seed, never a deployed account.
 
+CI also runs `node tests/staging/check-startup.mjs` before acceptance. It requires
+the actual login mount and reachable built JavaScript assets, because a PHP
+router error can produce an HTTP 200 response without rendering the app.
+
 The test logs into seeded admin, recipient, and outsider accounts using their
 actual SMTP two-factor codes. It creates a unique
 `library-run-<timestamp>@staging.invalid` uploader through an invitation, normal

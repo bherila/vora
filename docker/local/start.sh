@@ -6,4 +6,5 @@ if [ ! -f /var/lib/vora-staging/.initialized ]; then
     echo 'Waiting for explicit local SQLite initialization. See docker/local/README.md.'
 fi
 while [ ! -f /var/lib/vora-staging/.initialized ]; do sleep 1; done
-exec su -s /bin/sh www-data -c 'exec php -S 0.0.0.0:8080 -t public vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'
+# Laravel's development router resolves index.php and static files from getcwd().
+exec su -s /bin/sh www-data -c 'cd /app/public && exec php -S 0.0.0.0:8080 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'
