@@ -1,3 +1,5 @@
+import { UploadHttpError } from '@/media/uploadRequest';
+
 /**
  * PUT a file to a presigned URL using XHR so we can report progress (the fetch
  * API does not expose upload progress). The headers must be exactly those the
@@ -46,7 +48,8 @@ interface UploadMultipartFileOptions {
   signal?: AbortSignal;
 }
 
-const MAX_PART_RETRIES = 3;
+const MAX_ATTEMPTS = 6;
+const MAX_BACKOFF_MS = 20_000;
 
 export function putToSignedUrl(
   url: string,
@@ -119,25 +122,17 @@ export async function uploadMultipartFile(file: File, options: UploadMultipartFi
       const start = (partNumber - 1) * options.session.partSizeBytes;
       const end = Math.min(start + options.session.partSizeBytes, file.size);
       const blob = file.slice(start, end);
-      const signedPart = await withRetries(async () => {
+      const result = await withRetries(async () => {
         const [part] = await options.presignParts([{ partNumber, sizeBytes: blob.size }]);
-        if (!part) {
-          throw new Error('Upload part could not be signed.');
-        }
-
-        return part;
-      }, options.signal);
-
-      const result = await withRetries(
-        () => putBlobToSignedUrl(
-          signedPart.url,
+        if (!part) throw new Error('Upload part could not be signed.');
+        return putBlobToSignedUrl(
+          part.url,
           blob,
-          signedPart.headers,
+          part.headers,
           (fraction) => reportMultipartProgress(file, options.session.partSizeBytes, completed.size, blob.size * fraction, options.onProgress),
           putOptions(options.signal),
-        ),
-        options.signal,
-      );
+        );
+      }, options.signal);
 
       if (!result.etag) {
         throw new Error('Upload part completed without an ETag. Check the bucket CORS expose headers.');
@@ -148,6 +143,8 @@ export async function uploadMultipartFile(file: File, options: UploadMultipartFi
       reportMultipartProgress(file, options.session.partSizeBytes, completed.size, 0, options.onProgress);
     }
 
+    options.signal?.throwIfAborted();
+    // This endpoint consumes its multipart ID, so do not blindly retry completion.
     await options.complete(Array.from(completed.values()).sort((a, b) => a.part_number - b.part_number));
     removeMultipartSession(options.sessionKey);
     options.onProgress(1);
@@ -189,7 +186,7 @@ function putBlobToSignedUrl(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve({ etag: xhr.getResponseHeader('ETag') });
       } else {
-        reject(new Error(`Upload failed (HTTP ${xhr.status}).`));
+        reject(new UploadHttpError(xhr.status, `Upload failed (HTTP ${xhr.status}).`));
       }
     };
 
@@ -235,43 +232,54 @@ function reportMultipartProgress(
   onProgress(Math.min(1, (completedBytes + activePartLoadedBytes) / file.size));
 }
 
-async function withRetries<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+/** Retry transient failures, pausing while offline without spending attempts. */
+export async function withRetries<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_PART_RETRIES; attempt += 1) {
-    if (signal?.aborted) {
-      throw new DOMException('Upload canceled.', 'AbortError');
-    }
-
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    signal?.throwIfAborted();
+    await waitUntilOnline(signal);
+    signal?.throwIfAborted();
     try {
       return await operation();
     } catch (err) {
-      if (isAbortError(err)) {
+      if (isAbortError(err) || (err instanceof UploadHttpError && err.status < 500 && ![0, 408, 429].includes(err.status))) {
         throw err;
       }
-
       lastError = err;
-      if (attempt < MAX_PART_RETRIES) {
-        await delay(500 * attempt, signal);
+      if (attempt < MAX_ATTEMPTS) {
+        await delay(Math.min(1000 * 2 ** (attempt - 1), MAX_BACKOFF_MS), signal);
       }
     }
   }
-
   throw lastError instanceof Error ? lastError : new Error('Upload failed.');
 }
 
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
+function waitUntilOnline(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (navigator.onLine !== false) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const timeoutId = window.setTimeout(resolve, ms);
+    const cleanup = (): void => {
+      window.removeEventListener('online', online);
+      signal?.removeEventListener('abort', abort);
+    };
+    const online = (): void => { cleanup(); resolve(); };
+    const abort = (): void => { cleanup(); reject(new DOMException('Upload canceled.', 'AbortError')); };
+    window.addEventListener('online', online);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
     const abort = (): void => {
       window.clearTimeout(timeoutId);
       reject(new DOMException('Upload canceled.', 'AbortError'));
     };
-
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
-
     signal?.addEventListener('abort', abort, { once: true });
   });
 }

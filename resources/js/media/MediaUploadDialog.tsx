@@ -15,7 +15,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { fetchWrapper } from '@/fetchWrapper';
 import { useActiveIdentityId } from '@/identity';
 import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
@@ -25,9 +24,12 @@ import {
   type MultipartUploadSession,
   putToSignedUrl,
   readMultipartSession,
+  removeMultipartSession,
   saveMultipartSession,
   uploadMultipartFile,
+  withRetries,
 } from '@/media/upload';
+import { postUpload, UploadHttpError } from '@/media/uploadRequest';
 import { activeRestriction } from '@/restrictions';
 
 /** A character the upload can be associated with (privacy is inherited from it). */
@@ -107,19 +109,21 @@ async function buildDerivatives(file: File, type: 'photo' | 'video'): Promise<De
   }
 }
 
-function multipartSessionKey(file: File): string {
-  return `vora:media:multipart:${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+function multipartSessionKey(fileHash: string | null, scope: string): string {
+  // Metadata can collide for different files. Never resume without verified bytes.
+  return `vora:media:multipart:v2:${scope}:${fileHash ?? crypto.randomUUID()}`;
 }
 
 async function beginMultipartSession(
   created: StoreResponse | null,
   sessionKey: string,
+  signal: AbortSignal,
 ): Promise<MultipartUploadSession> {
   if (created === null) {
     throw new Error('Upload session is missing.');
   }
 
-  const init = (await fetchWrapper.post(`/api/media/${created.data.id}/multipart/init`, {})) as InitMultipartResponse;
+  const init = await postUpload<InitMultipartResponse>(`/api/media/${created.data.id}/multipart/init`, {}, signal);
   const session = {
     mediaId: created.data.id,
     uploadId: init.data.upload_id,
@@ -142,8 +146,9 @@ async function uploadThumbnailBestEffort(
     return;
   }
 
+  const { thumbnail_upload_url: url, thumbnail_upload_headers: headers } = created;
   try {
-    await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {}, { signal });
+    await withRetries(() => putToSignedUrl(url, thumbnail, headers, () => {}, { signal }), signal);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw err;
@@ -257,17 +262,19 @@ export function MediaUploadDialog({
         if (type === null) {
           continue;
         }
-        setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
+        setUploadLabel(`Preparing ${index + 1} of ${pending.length}: ${selectedFile.name}`);
         setProgress(0);
         const [{ thumbnail, perceptualHash }, fileHash] = await Promise.all([
           buildDerivatives(selectedFile, type),
-          computeFileHash(selectedFile),
+          computeFileHash(selectedFile, (fraction) => setProgress(fraction * 100), abortController.signal),
         ]);
 
-        const sessionKey = isLibrary
-          ? `library:${libraryCollectionUlid ?? 'all'}:${multipartSessionKey(selectedFile)}`
-          : multipartSessionKey(selectedFile);
-        const existingSession = readMultipartSession(sessionKey);
+        abortController.signal.throwIfAborted();
+        setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
+        setProgress(0);
+        const scope = isLibrary ? `library:${libraryCollectionUlid ?? 'all'}` : `gallery:${selectedCharacterId ?? 'account'}`;
+        const sessionKey = multipartSessionKey(fileHash, scope);
+        const existingSession = fileHash === null ? null : readMultipartSession(sessionKey);
         const uploadPayload = {
           type,
           filename: selectedFile.name,
@@ -291,52 +298,66 @@ export function MediaUploadDialog({
             character_id: selectedCharacterId,
           }),
         };
-        const created = existingSession === null
-          ? (await fetchWrapper.post(isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload)) as StoreResponse
-          : null;
+        const createUpload = (): Promise<StoreResponse> => postUpload<StoreResponse>(
+          isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
+        );
+        const created = existingSession === null ? await createUpload() : null;
 
         const shouldMultipart = existingSession !== null
           || (created?.multipart.enabled === true && selectedFile.size >= created.multipart.threshold_bytes);
 
         if (shouldMultipart) {
-          const session = existingSession ?? await beginMultipartSession(created, sessionKey);
-          await uploadMultipartFile(selectedFile, {
+          const runMultipart = (session: MultipartUploadSession, target: StoreResponse | null): Promise<void> => uploadMultipartFile(selectedFile, {
             sessionKey,
             session,
             signal: abortController.signal,
             onProgress: (fraction) => setProgress(fraction * 100),
             presignParts: async (parts: MultipartPartToSign[]) => {
-              const response = (await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/parts`, {
+              const response = await postUpload<PresignMultipartPartsResponse>(`/api/media/${session.mediaId}/multipart/parts`, {
                 upload_id: session.uploadId,
                 part_numbers: parts.map((part) => part.partNumber),
                 part_sizes: Object.fromEntries(parts.map((part) => [part.partNumber, part.sizeBytes])),
-              })) as PresignMultipartPartsResponse;
+              }, abortController.signal);
 
               return response.data;
             },
             complete: async (parts: CompletedMultipartPart[]) => {
-              if (created !== null) {
-                await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
+              if (target !== null) {
+                await uploadThumbnailBestEffort(target, thumbnail, abortController.signal);
               }
 
-              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/complete`, {
+              await postUpload(`/api/media/${session.mediaId}/multipart/complete`, {
                 upload_id: session.uploadId,
                 parts,
-              });
+              }, abortController.signal);
             },
             abort: async () => {
-              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/abort`, {
+              await postUpload(`/api/media/${session.mediaId}/multipart/abort`, {
                 upload_id: session.uploadId,
               });
             },
           });
+          try {
+            const session = existingSession ?? await beginMultipartSession(created, sessionKey, abortController.signal);
+            await runMultipart(session, created);
+          } catch (err) {
+            if (existingSession === null || !(err instanceof UploadHttpError) || ![404, 422].includes(err.status)) throw err;
+            // Expired, superseded, or owned by a previous account on this browser.
+            // Start a fresh upload instead of getting stuck on stale local state.
+            removeMultipartSession(sessionKey);
+            const replacement = await createUpload();
+            const session = await beginMultipartSession(replacement, sessionKey, abortController.signal);
+            await runMultipart(session, replacement);
+          } finally {
+            if (fileHash === null) removeMultipartSession(sessionKey);
+          }
         } else if (created !== null) {
-          await putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
+          await withRetries(() => putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
             setProgress(fraction * 100);
-          }, { signal: abortController.signal });
+          }, { signal: abortController.signal }), abortController.signal);
 
           await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
-          await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+          await withRetries(() => postUpload(`/api/media/${created.data.id}/complete`, {}, abortController.signal), abortController.signal);
         }
         completedCount += 1;
       }
