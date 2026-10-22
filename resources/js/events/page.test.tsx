@@ -136,6 +136,11 @@ describe('EventsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter media' }));
     expect(screen.getByLabelText('Uploaded by')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Uploaded by'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Filter media' }));
+    expect(screen.queryByLabelText('Uploaded by')).not.toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('attendee_id')).toBe('7');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter media' }));
+    expect(screen.getByLabelText('Uploaded by')).toHaveValue('7');
     expect(await screen.findByRole('heading', { name: 'Uploads by Sam' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Clear filters' }));
     expect(window.location.search).not.toContain('attendee_id');

@@ -52,7 +52,7 @@ export function EventsPage() {
   const [revision, setRevision] = useState(0);
   const [editor, setEditor] = useState<EventProfile | null>();
   const [curatorsOpen, setCuratorsOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState<boolean | null>(null);
   const [joiningLinkFallback, setJoiningLinkFallback] = useState('');
   const [listRevision, setListRevision] = useState(0);
   const [listRefreshPaused, setListRefreshPaused] = useState(false);
@@ -268,6 +268,7 @@ export function EventsPage() {
   const curatorNames = settings?.featured_curators.map((curator) => curator.display_name).join(' & ') ?? '';
   const featuredLabel = curatorNames ? `${curatorNames}’s favorites` : 'Featured favorites';
   const filtersActive = !!attendeeId || !!favoritesOf || featured || section === 'mine';
+  const filtersVisible = filtersOpen ?? filtersActive;
   const clearFiltersUrl = pageUrl(params, { attendee_id: null, favorites_of: null, featured: null, section: null, page: null, item: null }, '/events');
   const mediaHeading = featured ? featuredLabel : favoritesOf ? `${attendees.find((entry) => String(entry.id) === favoritesOf)?.display_name ?? 'Attendee'}’s favorites` : section === 'mine' ? 'My uploads' : selectedAttendee ? `Uploads by ${selectedAttendee.display_name}` : selectedEvent?.name ?? 'All photos & videos';
 
@@ -291,11 +292,11 @@ export function EventsPage() {
       {listRefreshPaused && <p role="status" className="text-sm text-muted-foreground">Automatic updates have paused. Choose Check for updates to look again.</p>}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2"><Label htmlFor="event-filter">Event</Label><select id="event-filter" className="rounded-md border bg-background p-2" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, section: null, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select></div>
-        <Button variant="outline" aria-expanded={filtersOpen || filtersActive} aria-controls="event-media-filters" onClick={() => setFiltersOpen((value) => !value)}>Filter media</Button>
+        <Button variant="outline" aria-expanded={filtersVisible} aria-controls="event-media-filters" onClick={() => setFiltersOpen((value) => !(value ?? filtersActive))}>Filter media</Button>
         {filtersActive && <a href={clearFiltersUrl} className="text-sm underline underline-offset-4">Clear filters</a>}
         <Button variant="ghost" size="sm" onClick={refresh}>Check for updates</Button>
       </div>
-      {(filtersOpen || filtersActive) && <section id="event-media-filters" aria-label="Media filters" className="flex flex-wrap items-end gap-4 rounded border p-4">
+      {filtersVisible && <section id="event-media-filters" aria-label="Media filters" className="flex flex-wrap items-end gap-4 rounded border p-4">
         <div className="grid min-w-48 gap-1"><Label htmlFor="attendee-filter">Uploaded by</Label><select id="attendee-filter" className="rounded-md border bg-background p-2" value={section === 'mine' ? String(viewerId) : attendeeId} onChange={(event) => navigate(pageUrl(params, { attendee_id: event.target.value, section: null, page: null, item: null }, '/events'))}><option value="">All attendees</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>
         {favoritesEnabled && <div className="grid min-w-48 gap-1"><Label htmlFor="favorites-filter">Favorites by</Label><select id="favorites-filter" className="rounded-md border bg-background p-2" value={favoritesOf} onChange={(event) => navigate(pageUrl(params, { favorites_of: event.target.value, featured: null, page: null, item: null }, '/events'))}><option value="">Everyone / unfiltered</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>}
         <a href={mineUrl} className="text-sm underline underline-offset-4">My uploads</a><a href={attendeesUrl} className="text-sm underline underline-offset-4">Browse attendees</a>
