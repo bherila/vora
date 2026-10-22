@@ -7,6 +7,7 @@ use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\Events\EventAccess;
+use App\Support\InstanceFeatures;
 
 class MediaPolicy
 {
@@ -26,7 +27,7 @@ class MediaPolicy
      */
     public function view(User $user, Media $media): bool
     {
-        if ($media->trashed()) {
+        if ($media->trashed() || ($media->isGalleryMedia() && ! $user->isAdmin() && ! InstanceFeatures::enabled('profiles'))) {
             return false;
         }
 
@@ -75,7 +76,7 @@ class MediaPolicy
      */
     public function viewById(User $user, Media $media): bool
     {
-        if ($media->trashed()) {
+        if ($media->trashed() || ($media->isGalleryMedia() && ! $user->isAdmin() && ! InstanceFeatures::enabled('profiles'))) {
             return false;
         }
 

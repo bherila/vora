@@ -2,9 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\MediaPurpose;
+use App\Models\Event;
+use App\Models\Media;
 use App\Models\User;
 use App\Support\InstanceFeatures;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InstanceProfileTest extends TestCase
@@ -71,7 +76,7 @@ class InstanceProfileTest extends TestCase
         }
 
         foreach (['/feed', '/api/feed', '/messages', '/api/chat/conversations', '/personas/new', '/api/characters', '/api/c/missing/counts', '/stories', '/api/stories', '/me', '/api/users', '/api/media', '/interests/1', '/api/interests', '/api/favorites', '/api/library/items', '/events', '/api/events', '/api/admin/events'] as $path) {
-            $method = $path === '/api/favorites' ? 'postJson' : 'getJson';
+            $method = in_array($path, ['/api/favorites', '/api/admin/events'], true) ? 'postJson' : 'getJson';
             $this->$method($path)->assertNotFound();
         }
 
@@ -106,5 +111,63 @@ class InstanceProfileTest extends TestCase
         config(['instance.profile' => 'vora']);
         $this->artisan('ops:instance-profile', ['--expect' => 'event'])->assertFailed();
         $this->artisan('ops:instance-profile', ['--expect' => 'vora'])->assertSuccessful();
+    }
+
+    public function test_disabled_profiles_hide_legacy_gallery_paths_but_preserve_private_saves_and_admin_review(): void
+    {
+        Storage::fake('photos');
+        Storage::fake('s3');
+        Storage::fake('hls');
+        $admin = User::factory()->approved()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create(['library_enabled' => true]);
+        $photo = Media::factory()->for($owner)->approved()->create(['disk' => 'photos', 'reviewed_object_key' => 'reviewed/legacy.jpg']);
+        $video = Media::factory()->for($owner)->video()->approved()->create(['disk' => 's3', 'hls_content_id' => 'legacy-gallery']);
+        Storage::disk('photos')->put($photo->reviewed_object_key, 'retained-photo');
+        Storage::disk('hls')->put('by-id/legacy-gallery/master.m3u8', "#EXTM3U\nstream/index.m3u8");
+        $saved = $this->actingAs($viewer)->postJson('/api/library/save', ['media_ulid' => $photo->ulid])->assertCreated()->json('data.ulid');
+        config(['instance.modules.profiles' => false]);
+
+        foreach ([$owner, $viewer] as $user) {
+            $this->actingAs($user)->get('/m/'.$photo->ulid)->assertNotFound();
+            $this->getJson('/api/media/by-ulid/'.$photo->ulid)->assertNotFound();
+            $this->getJson('/api/media/'.$photo->id)->assertNotFound();
+            $this->get('/api/media/by-ulid/'.$photo->ulid.'/asset/original')->assertNotFound();
+            $this->get('/api/media/'.$video->id.'/hls/master.m3u8')->assertNotFound();
+            $this->assertFalse($photo->audienceAllows($user));
+            $this->assertFalse($photo->isViewableBy($user));
+            $this->assertFalse(Media::query()->viewableBy($user)->whereKey($photo->id)->exists());
+        }
+        $this->actingAs($owner)->patchJson('/api/media/'.$photo->id, ['title' => 'Hidden gallery edit'])->assertNotFound();
+        $this->patchJson('/api/media/bulk', ['media_ids' => [$photo->id], 'title' => 'Hidden bulk edit'])->assertNotFound();
+        $this->deleteJson('/api/media/bulk', ['media_ids' => [$photo->id]])->assertNotFound();
+        $this->assertSame($photo->title, $photo->fresh()->title);
+        $this->assertFalse(Media::query()->viewableBy(null)->whereKey($photo->id)->exists());
+        $this->actingAs($viewer)->postJson('/api/favorites', ['type' => 'media', 'id' => $photo->id])->assertForbidden();
+        $this->postJson('/api/library/save', ['media_ulid' => $video->ulid])->assertNotFound();
+        $this->getJson('/api/library/items/'.$saved)->assertOk()->assertJsonPath('data.available', true);
+        $this->get('/api/library/items/'.$saved.'/assets/original')->assertOk()->assertStreamedContent('retained-photo');
+        $this->actingAs($admin)->get('/api/media/by-ulid/'.$photo->ulid.'/asset/original')->assertOk()->assertStreamedContent('retained-photo');
+        $this->patchJson('/api/media/'.$photo->id, ['title' => str_repeat('x', 256)])->assertNotFound();
+        $this->assertTrue(Gate::forUser($admin)->allows('view', $photo));
+        $this->assertTrue(Media::query()->viewableBy($admin)->whereKey($photo->id)->exists());
+    }
+
+    public function test_disabled_profiles_preserve_event_media_and_core_profile_pictures(): void
+    {
+        Storage::fake('photos');
+        User::factory()->approved()->admin()->create();
+        $owner = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $event = Event::create(['name' => 'Welcome', 'visibility' => 'everyone', 'timezone' => 'UTC']);
+        $media = Media::factory()->for($owner)->approved()->create(['purpose' => MediaPurpose::Event, 'event_id' => $event->id]);
+        $avatar = Media::factory()->for($owner)->profilePicture()->approved()->create();
+        config(['instance.modules.profiles' => false, 'instance.modules.events' => true]);
+        $this->actingAs($viewer)->getJson('/api/events/media/'.$media->ulid)->assertOk();
+        foreach ([$media, $avatar] as $item) {
+            $this->assertTrue(Gate::forUser($owner)->allows('view', $item));
+            $this->assertTrue($item->isViewableBy($owner));
+            $this->assertTrue(Media::query()->viewableBy($owner)->whereKey($item->id)->exists());
+        }
     }
 }

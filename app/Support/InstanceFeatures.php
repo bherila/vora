@@ -28,7 +28,7 @@ final class InstanceFeatures
             'stories' => ['stories', 's/*', 'api/c/*/stories', 'api/users/*/stories', 'api/explore/stories', 'api/stories', 'api/stories/*', 'api/authorship-invites', 'api/authorship-invites/*', 'admin/stories', 'api/admin/stories', 'api/admin/stories/*'],
             'chat' => ['messages', 'messages/*', 'api/chat', 'api/chat/*'],
             'community' => ['feed', 'media', 'dashboard', 'api/c/*/posts', 'api/users/*/posts', 'api/feed', 'explore', 'api/explore', 'api/explore/*', 'me/activity', 'api/me/activity', 'api/me/activity/*', 'api/side-rail', 'api/side-rail/*', 'api/onboarding/*', 'api/posts', 'api/posts/*', 'p/*', 'api/media/by-ulid/*/discussion', 'admin/posts', 'api/admin/posts', 'api/admin/posts/*', 'api/admin/post-comments', 'api/admin/post-comments/*'],
-            'profiles' => ['api/media', 'me', 'users', 'users/*', 'api/users', 'api/users/*'],
+            'profiles' => ['api/media', 'api/media/bulk', 'me', 'users', 'users/*', 'api/users', 'api/users/*'],
             'interests' => ['interests/*', 'api/interests', 'api/interests/*', 'admin/interests', 'api/admin/interests', 'api/admin/interests/*', 'api/admin/interest-requests', 'api/admin/interest-requests/*'],
         ];
 

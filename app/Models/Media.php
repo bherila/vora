@@ -7,6 +7,7 @@ use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Services\Events\EventAccess;
+use App\Support\InstanceFeatures;
 use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
 use App\Traits\SerializesDatesAsLocal;
@@ -186,6 +187,10 @@ class Media extends Model
     /** Event publication access is independent of the generic media audience. */
     public function audienceAllows(User $viewer): bool
     {
+        if ($this->isGalleryMedia() && ! $viewer->isAdmin() && ! InstanceFeatures::enabled('profiles')) {
+            return false;
+        }
+
         if ($this->purpose === MediaPurpose::Event && $viewer->id !== $this->user_id
             && ! app(EventAccess::class)->canView($viewer, $this->event)) {
             return false;
@@ -196,6 +201,10 @@ class Media extends Model
 
     public function isViewableBy(?User $viewer): bool
     {
+        if ($this->isGalleryMedia() && ! $viewer?->isAdmin() && ! InstanceFeatures::enabled('profiles')) {
+            return false;
+        }
+
         if ($this->purpose === MediaPurpose::Event && $viewer !== null && ! $viewer->isAdmin()
             && ($viewer->trashed() || ! $viewer->isActive() || ! $viewer->isApproved())) {
             return false;
@@ -213,6 +222,10 @@ class Media extends Model
         $this->scopeAudienceViewableBy($query, $viewer);
         if ($viewer?->isAdmin()) {
             return $query;
+        }
+
+        if (! InstanceFeatures::enabled('profiles')) {
+            $query->where('media.purpose', '!=', MediaPurpose::Gallery->value);
         }
 
         return $query->where(function (Builder $visible) use ($viewer): void {
