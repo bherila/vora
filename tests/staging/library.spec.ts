@@ -1,6 +1,3 @@
-import { Buffer } from 'node:buffer';
-import { readFileSync } from 'node:fs';
-
 import { type APIRequestContext, type BrowserContext, expect, type Page, type Request, type Response, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
@@ -373,19 +370,15 @@ test('Event profile real media inherits restricted access, visible favorites and
     await uploader.goto(`/events?event_ulid=${shared.ulid}`);
     await uploader.getByRole('button', { name: 'Add photos & videos', exact: true }).click();
     const batch = uploader.getByRole('dialog');
-    const photoBytes = readFileSync(new URL('./.fixtures/photo.png', import.meta.url));
     let batchReservations = 0;
     const countReservation = (sent: Request): void => {
       if (sent.method() === 'POST' && new URL(sent.url()).pathname === `/api/events/${shared.ulid}/uploads`) batchReservations += 1;
     };
     uploader.on('request', countReservation);
     try {
-      await batch.locator('input[type="file"]').setInputFiles([
-        { name: `batch-first-${suffix}.png`, mimeType: 'image/png', buffer: photoBytes },
-        { name: 'unsupported.txt', mimeType: 'text/plain', buffer: Buffer.from('Not media') },
-        { name: `batch-last-${suffix}.png`, mimeType: 'image/png', buffer: photoBytes },
-      ]);
-      await expect(batch.getByRole('img', { name: `Preview of batch-first-${suffix}.png`, exact: true })).toBeVisible();
+      await batch.locator('input[type="file"]').setInputFiles(['batch-first.png', 'unsupported.txt', 'batch-last.png']
+        .map((name) => new URL(`./.fixtures/${name}`, import.meta.url).pathname));
+      await expect(batch.getByRole('img', { name: 'Preview of batch-first.png', exact: true })).toBeVisible();
       await batch.getByRole('button', { name: 'Upload', exact: true }).click();
       await expect(batch.getByRole('status').filter({ hasText: '2 of 3 uploaded' })).toBeVisible();
       await expect(batch.getByRole('alert')).toContainText('Only image and video files');
