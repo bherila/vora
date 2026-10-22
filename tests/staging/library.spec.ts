@@ -1,9 +1,11 @@
-import { type APIRequestContext, type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { type APIRequestContext, type BrowserContext, expect, type Page, type Response, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
+let expectMultipartVideo = false;
 
 test.beforeAll(async ({ request }, testInfo) => {
   mailUrl = String(testInfo.config.metadata.mailUrl);
+  expectMultipartVideo = testInfo.config.metadata.expectMultipartVideo === true;
   expect((await request.get(`${mailUrl}/api/v1/messages?limit=1`)).ok()).toBeTruthy();
 });
 const PASSWORD = 'Local-Staging-Only-2026!';
@@ -12,7 +14,12 @@ const EMAILS = ['admin', 'recipient', 'outsider'].map((role) => `${role}@staging
 interface MailSummary { ID: string; To: { Address: string }[]; }
 interface Account { id: number; email: string; is_admin: boolean; is_deleted: boolean; storage_limit_bytes: number | null; }
 interface Item { ulid: string; title: string; source: string; media: { video?: { status: string; master_url: string | null } } | null; }
-interface Upload { data: { id: number; ulid: string }; upload_url: string; upload_headers: Record<string, string>; }
+interface Upload {
+  data: { id: number; ulid: string };
+  upload_url: string;
+  upload_headers: Record<string, string>;
+  multipart: { enabled: boolean; threshold_bytes: number; part_size_bytes: number };
+}
 interface Result<T> { status: number; body: T; }
 
 async function api<T>(page: Page, method: string, path: string, body?: unknown): Promise<Result<T>> {
@@ -108,17 +115,56 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
   await dialog.locator('input[type="file"]').setInputFiles(new URL(`./.fixtures/${filename}`, import.meta.url).pathname);
   await dialog.getByPlaceholder('Title (optional)', { exact: true }).fill(title);
   const pendingResponse = page.waitForResponse((response) => response.url().endsWith('/api/library/uploads') && response.request().method() === 'POST');
-  const completeResponse = page.waitForResponse((response) => /\/api\/media\/[0-9]+\/complete$/.test(response.url()) && response.request().method() === 'POST');
-  const objectPut = page.waitForResponse((response) => response.request().method() === 'PUT' && new URL(response.url()).port === '19000');
-  await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
-  const pending = await pendingResponse;
-  expect(pending.ok()).toBeTruthy();
-  const result = await pending.json() as Upload;
-  expect(['127.0.0.1', 'localhost', '[::1]']).toContain(new URL(result.upload_url).hostname);
-  expect((await objectPut).ok(), 'Real browser PUT to private object storage, including CORS').toBeTruthy();
-  expect((await completeResponse).ok()).toBeTruthy();
-  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
-  return result;
+  const completeResponse = page.waitForResponse((response) => /\/api\/media\/[0-9]+\/(?:multipart\/)?complete$/.test(response.url()) && response.request().method() === 'POST');
+  const objectPuts: Response[] = [];
+  const capturePut = (response: Response): void => {
+    if (response.request().method() === 'PUT' && new URL(response.url()).port === '19000') objectPuts.push(response);
+  };
+  page.on('response', capturePut);
+  try {
+    await dialog.getByRole('button', { name: 'Upload', exact: true }).click();
+    const pending = await pendingResponse;
+    expect(pending.ok()).toBeTruthy();
+    const result = await pending.json() as Upload;
+    // FileDropzone clears its native input after retaining the File in React.
+    // Read the selected size from the actual form request instead of that input.
+    const fixtureBytes = (pending.request().postDataJSON() as { size: number }).size;
+    expect(fixtureBytes, 'The real upload fixture must contain bytes').toBeGreaterThan(0);
+    if (expectMultipartVideo) {
+      if (type === 'photo') expect(fixtureBytes, 'Tiny direct-upload photo fixture').toBeLessThan(1024);
+      else expect(fixtureBytes, 'Video fixture exceeds the opt-in multipart threshold').toBeGreaterThan(1024);
+    }
+    const source = new URL(result.upload_url);
+    expect(['127.0.0.1', 'localhost', '[::1]']).toContain(source.hostname);
+    const completed = await completeResponse;
+    expect(completed.ok()).toBeTruthy();
+    const multipart = new URL(completed.url()).pathname.endsWith('/multipart/complete');
+    if (type === 'photo') expect(multipart, 'Photos use direct completion').toBe(false);
+    if (expectMultipartVideo) {
+      expect(result.multipart.threshold_bytes, 'Opt-in staging multipart configuration reaches the app').toBe(1024);
+      expect(multipart, 'The real video upload must exercise multipart completion').toBe(type === 'video');
+    }
+    const sourcePuts = objectPuts.filter((response) => response.ok() && new URL(response.url()).pathname === source.pathname);
+    expect(sourcePuts.length, 'One successful source PUT for the small fixture, excluding thumbnails and failed attempts').toBe(1);
+    const sourcePut = sourcePuts[0];
+    expect(sourcePut.ok(), 'Real source PUT including browser CORS succeeds').toBeTruthy();
+    const partUrl = new URL(sourcePut.url());
+    expect(partUrl.searchParams.has('uploadId'), 'Only multipart PUTs carry an upload ID').toBe(multipart);
+    if (multipart) {
+      expect(fixtureBytes, 'The multipart video fixture fits in one real S3 part').toBeLessThan(result.multipart.part_size_bytes);
+      expect(partUrl.searchParams.get('partNumber'), 'Real S3 multipart part number').toBe('1');
+      const etag = await sourcePut.headerValue('etag');
+      expect(Boolean(etag), 'The real multipart part response contains an ETag').toBe(true);
+      const payload = completed.request().postDataJSON() as { parts: { part_number: number; etag: string }[] };
+      expect(payload.parts.length, 'Multipart completion submits one uploaded part').toBe(1);
+      expect(payload.parts[0].part_number).toBe(1);
+      expect(payload.parts[0].etag === etag, 'The browser can read the CORS-exposed part ETag and submit it for completion').toBe(true);
+    }
+    await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+    return result;
+  } finally {
+    page.off('response', capturePut);
+  }
 }
 
 async function findItem(page: Page, collection: string, title: string): Promise<Item> {

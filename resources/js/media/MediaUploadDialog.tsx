@@ -15,7 +15,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { fetchWrapper } from '@/fetchWrapper';
 import { useActiveIdentityId } from '@/identity';
 import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
@@ -25,9 +24,12 @@ import {
   type MultipartUploadSession,
   putToSignedUrl,
   readMultipartSession,
+  removeMultipartSession,
   saveMultipartSession,
   uploadMultipartFile,
+  withRetries,
 } from '@/media/upload';
+import { postUpload, UploadHttpError } from '@/media/uploadRequest';
 import { activeRestriction } from '@/restrictions';
 
 /** A character the upload can be associated with (privacy is inherited from it). */
@@ -107,30 +109,49 @@ async function buildDerivatives(file: File, type: 'photo' | 'video'): Promise<De
   }
 }
 
-function multipartSessionKey(file: File): string {
-  return `vora:media:multipart:${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+function multipartSessionKey(fileHash: string | null, scope: string): string {
+  // Metadata can collide for different files. Never resume without verified bytes.
+  return `vora:media:multipart:v2:${scope}:${fileHash ?? crypto.randomUUID()}`;
 }
 
 async function beginMultipartSession(
   created: StoreResponse | null,
   sessionKey: string,
+  context: string,
+  signal: AbortSignal,
 ): Promise<MultipartUploadSession> {
   if (created === null) {
     throw new Error('Upload session is missing.');
   }
 
-  const init = (await fetchWrapper.post(`/api/media/${created.data.id}/multipart/init`, {})) as InitMultipartResponse;
+  const init = await postUpload<InitMultipartResponse>(`/api/media/${created.data.id}/multipart/init`, {}, signal);
   const session = {
     mediaId: created.data.id,
     uploadId: init.data.upload_id,
     partSizeBytes: init.data.part_size_bytes,
     completedParts: [],
     createdAt: new Date().toISOString(),
+    context,
   };
 
   saveMultipartSession(sessionKey, session);
 
   return session;
+}
+
+/** Release only an owned pending reservation; a ready conflict never deletes it. */
+async function releaseStoredSession(session: MultipartUploadSession, key: string): Promise<boolean> {
+  let ready = false;
+  try {
+    await postUpload(`/api/media/${session.mediaId}/cancel-upload`, {});
+  } catch (error) {
+    if (!(error instanceof UploadHttpError)) throw error;
+    if (error.status === 409) ready = true;
+    else if (error.status !== 404) throw error;
+  }
+  // Keep recoverable state if cancellation failed for any other reason.
+  removeMultipartSession(key);
+  return ready;
 }
 
 async function uploadThumbnailBestEffort(
@@ -142,8 +163,9 @@ async function uploadThumbnailBestEffort(
     return;
   }
 
+  const { thumbnail_upload_url: url, thumbnail_upload_headers: headers } = created;
   try {
-    await putToSignedUrl(created.thumbnail_upload_url, thumbnail, created.thumbnail_upload_headers, () => {}, { signal });
+    await withRetries(() => putToSignedUrl(url, thumbnail, headers, () => {}, { signal }), signal);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw err;
@@ -258,17 +280,18 @@ export function MediaUploadDialog({
         if (type === null) {
           continue;
         }
-        setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
+        setUploadLabel(`Preparing ${index + 1} of ${pending.length}: ${selectedFile.name}`);
         setProgress(0);
         const [{ thumbnail, perceptualHash }, fileHash] = await Promise.all([
           buildDerivatives(selectedFile, type),
-          computeFileHash(selectedFile),
+          computeFileHash(selectedFile, (fraction) => setProgress(fraction * 100), abortController.signal),
         ]);
 
-        const sessionKey = isLibrary
-          ? `library:${libraryCollectionUlid ?? 'all'}:${multipartSessionKey(selectedFile)}`
-          : multipartSessionKey(selectedFile);
-        const existingSession = readMultipartSession(sessionKey);
+        abortController.signal.throwIfAborted();
+        setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
+        setProgress(0);
+        const scope = isLibrary ? `library:${libraryCollectionUlid ?? 'all'}` : `gallery:${selectedCharacterId ?? 'account'}`;
+        const sessionKey = multipartSessionKey(fileHash, scope);
         const uploadPayload = {
           type,
           filename: selectedFile.name,
@@ -292,55 +315,100 @@ export function MediaUploadDialog({
             character_id: selectedCharacterId,
           }),
         };
-        const created = existingSession === null
-          ? (await fetchWrapper.post(isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload)) as StoreResponse
-          : null;
-        disposableUploadId = created?.data.id ?? null;
+        const context = JSON.stringify({
+          audience: 'audience' in uploadPayload ? uploadPayload.audience : null,
+          audience_user_ids: [...new Set('audience_user_ids' in uploadPayload ? uploadPayload.audience_user_ids : [])].sort((a, b) => a - b),
+          discoverable: 'discoverable' in uploadPayload ? uploadPayload.discoverable : null,
+          announce: uploadPayload.announce,
+          character_id: 'character_id' in uploadPayload ? uploadPayload.character_id : null,
+          title: uploadPayload.title,
+          interest_ids: [...new Set(uploadPayload.interest_ids)].sort((a, b) => a - b),
+          collection_ulid: isLibrary ? libraryCollectionUlid : null,
+        });
+        // Metadata-only keys cannot establish matching bytes, but their old
+        // reservations must be released before a replacement can consume quota.
+        const legacyKey = `${isLibrary ? `library:${libraryCollectionUlid ?? 'all'}:` : ''}vora:media:multipart:${selectedFile.name}:${selectedFile.size}:${selectedFile.lastModified}:${selectedFile.type}`;
+        const legacySession = readMultipartSession(legacyKey);
+        if (legacySession !== null) await releaseStoredSession(legacySession, legacyKey);
+
+        let existingSession = fileHash === null ? null : readMultipartSession(sessionKey);
+        if (existingSession !== null && existingSession.context !== context) {
+          const ready = await releaseStoredSession(existingSession, sessionKey);
+          existingSession = null;
+          if (ready) {
+            throw new Error('This upload already completed with different or unverified settings. Update the existing item’s settings before trying again.');
+          }
+        }
+        const createUpload = async (): Promise<StoreResponse> => {
+          const result = await postUpload<StoreResponse>(
+            isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
+          );
+          disposableUploadId = result.data.id;
+          return result;
+        };
+        const created = existingSession === null ? await createUpload() : null;
 
         const shouldMultipart = existingSession !== null
           || (created?.multipart.enabled === true && selectedFile.size >= created.multipart.threshold_bytes);
 
         if (shouldMultipart) {
-          const session = existingSession ?? await beginMultipartSession(created, sessionKey);
-          // A started multipart session can resume after a transient failure.
-          disposableUploadId = null;
-          await uploadMultipartFile(selectedFile, {
+          const runMultipart = (session: MultipartUploadSession, target: StoreResponse | null): Promise<void> => uploadMultipartFile(selectedFile, {
             sessionKey,
             session,
             signal: abortController.signal,
             onProgress: (fraction) => setProgress(fraction * 100),
             presignParts: async (parts: MultipartPartToSign[]) => {
-              const response = (await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/parts`, {
+              const response = await postUpload<PresignMultipartPartsResponse>(`/api/media/${session.mediaId}/multipart/parts`, {
                 upload_id: session.uploadId,
                 part_numbers: parts.map((part) => part.partNumber),
                 part_sizes: Object.fromEntries(parts.map((part) => [part.partNumber, part.sizeBytes])),
-              })) as PresignMultipartPartsResponse;
+              }, abortController.signal);
 
               return response.data;
             },
             complete: async (parts: CompletedMultipartPart[]) => {
-              if (created !== null) {
-                await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
+              if (target !== null) {
+                await uploadThumbnailBestEffort(target, thumbnail, abortController.signal);
               }
 
-              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/complete`, {
+              await postUpload(`/api/media/${session.mediaId}/multipart/complete`, {
                 upload_id: session.uploadId,
                 parts,
-              });
+              }, abortController.signal);
             },
             abort: async () => {
-              await fetchWrapper.post(`/api/media/${session.mediaId}/multipart/abort`, {
-                upload_id: session.uploadId,
-              });
+              // Explicit cancellation also removes the incomplete Library item
+              // and prevents a late direct PUT from completing this upload.
+              await postUpload(`/api/media/${session.mediaId}/cancel-upload`, {});
             },
           });
+          try {
+            const session = existingSession ?? await beginMultipartSession(created, sessionKey, context, abortController.signal);
+            // Retain failed sessions only when their content hash makes them resumable.
+            if (fileHash !== null) disposableUploadId = null;
+            await runMultipart(session, created);
+          } catch (err) {
+            if (existingSession === null || !(err instanceof UploadHttpError) || ![404, 422].includes(err.status)) throw err;
+            // Matching bytes and settings plus an owner-only ready conflict
+            // recover a lost completion response without allocating new media.
+            const alreadyComplete = await releaseStoredSession(existingSession, sessionKey);
+            if (!alreadyComplete) {
+              abortController.signal.throwIfAborted();
+              const replacement = await createUpload();
+              const session = await beginMultipartSession(replacement, sessionKey, context, abortController.signal);
+              disposableUploadId = null;
+              await runMultipart(session, replacement);
+            }
+          } finally {
+            if (fileHash === null) removeMultipartSession(sessionKey);
+          }
         } else if (created !== null) {
-          await putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
+          await withRetries(() => putToSignedUrl(created.upload_url, selectedFile, created.upload_headers, (fraction) => {
             setProgress(fraction * 100);
-          }, { signal: abortController.signal });
+          }, { signal: abortController.signal }), abortController.signal);
 
           await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
-          await fetchWrapper.post(`/api/media/${created.data.id}/complete`, {});
+          await withRetries(() => postUpload(`/api/media/${created.data.id}/complete`, {}, abortController.signal), abortController.signal);
         }
         disposableUploadId = null;
         completedCount += 1;
@@ -353,7 +421,7 @@ export function MediaUploadDialog({
     } catch (err) {
       if (disposableUploadId !== null) {
         try {
-          await fetchWrapper.post(`/api/media/${disposableUploadId}/cancel-upload`, {});
+          await postUpload(`/api/media/${disposableUploadId}/cancel-upload`, {});
         } catch {
           // A completed upload is protected by the server. Other abandoned
           // uploads remain visible to scheduled cleanup if cancellation fails.

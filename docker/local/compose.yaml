@@ -26,6 +26,7 @@ x-app-environment: &app-environment
   AWS_USE_PATH_STYLE_ENDPOINT: "true"
   PHOTOS_BUCKET: vora-staging-photos
   HLS_BUCKET: vora-staging-hls
+  MEDIA_MULTIPART_THRESHOLD_BYTES: ${LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES:-104857600}
   WEBAUTHN_RP_NAME: Vora Local Staging
   WEBAUTHN_ALLOWED_ORIGINS: http://127.0.0.1:18080
 

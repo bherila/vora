@@ -50,7 +50,7 @@ permissions:
 
 jobs:
   real-media:
-    name: Docker uploads, FFmpeg HLS, quotas and retained saves
+    name: Docker direct/multipart uploads, HLS, quotas and retained saves
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
@@ -58,6 +58,8 @@ jobs:
       ALLOW_DISPOSABLE_ACCOUNT_PURGE: '1'
       STAGING_APP_URL: http://127.0.0.1:18080
       STAGING_MAIL_URL: http://127.0.0.1:18025
+      # Tiny real fixtures cover both upload transports without large videos.
+      LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES: '1024'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

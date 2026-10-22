@@ -1,4 +1,3 @@
-import Hls from 'hls.js';
 import { useEffect, useRef } from 'react';
 
 import { safeSameOriginUrl } from '@/security/dom-url';
@@ -16,10 +15,9 @@ interface HlsVideoPlayerProps {
 }
 
 /**
- * Plays an adaptive-bitrate HLS stream through hls.js when Media Source
- * Extensions are available, otherwise native HLS. `src` points at the
- * authenticated playback proxy, which serves manifests and 302-redirects segments
- * to presigned R2 URLs.
+ * Loads hls.js on demand and prefers its Media Source Extensions playback,
+ * using native HLS when MSE is unavailable. `src` points at the authenticated
+ * playback proxy, which serves manifests and redirects segments to signed URLs.
  */
 export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -42,35 +40,51 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       return;
     }
 
-    // Native HLS capability checks can overstate support (including Chromium).
-    // Prefer hls.js/MSE as recommended by hls.js, retaining native-only support.
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          onErrorRef.current?.();
+    let stopped = false;
+    let cleanup: (() => void) | undefined;
+    const stop = (): void => {
+      stopped = true;
+      cleanup?.();
+      cleanup = undefined;
+    };
+    const fail = (): void => {
+      if (!stopped) {
+        stop();
+        onErrorRef.current?.();
+      }
+    };
+
+    void import('hls.js').then(({ default: Hls }) => {
+      if (stopped) {
+        return;
+      }
+      // Chromium can report native HLS support yet fail on valid streams.
+      // Keep the hls.js-recommended MSE preference when loading it on demand.
+      if (Hls.isSupported()) {
+        const hls = new Hls({ enableWorker: true });
+        cleanup = () => hls.destroy();
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal) {
+            fail();
+          }
+        });
+        hls.loadSource(safeSource);
+        if (!stopped) {
+          hls.attachMedia(video);
         }
-      });
-      hls.loadSource(safeSource);
-      hls.attachMedia(video);
-      return () => {
-        hls.destroy();
-      };
-    }
+        return;
+      }
 
-    // Native HLS remains available on browsers without supported MSE.
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = safeSource;
-      const handleNativeError = () => onErrorRef.current?.();
-      video.addEventListener('error', handleNativeError);
-      return () => {
-        video.removeEventListener('error', handleNativeError);
-      };
-    }
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.addEventListener('error', fail);
+        cleanup = () => video.removeEventListener('error', fail);
+        video.src = safeSource;
+        return;
+      }
+      fail();
+    }).catch(fail);
 
-    // Neither native HLS nor MSE support.
-    onErrorRef.current?.();
-    return;
+    return stop;
   }, [src]);
 
   return <video ref={videoRef} controls playsInline className={className} />;
