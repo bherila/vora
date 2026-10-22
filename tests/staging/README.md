@@ -55,6 +55,20 @@ HTML report, and run identifiers stay under ignored `artifacts/`. Local artifact
 remain on this machine. The CI workflow uploads its disposable reports and service
 logs for seven days; these may contain test session cookies and signed loopback URLs.
 
+CI sets `LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES=1024` for the disposable app and
+runner. The generated photo is smaller than 1 KiB and uses direct upload; the
+short video is larger than 1 KiB and exercises one real S3 multipart part. The
+runner checks multipart completion and verifies that the browser submits the
+actual part response ETag, covering CORS header exposure. Assertions report
+counts and booleans without printing signed object URLs.
+
+Local staging keeps the normal 100 MiB multipart threshold by default. To opt
+into the same small-fixture multipart coverage, set
+`LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES=1024` when recreating the stack with
+`docker compose ... up -d`, and pass that variable to the acceptance command too.
+Playwright reads the expectation from configuration metadata; it must match the
+running app's threshold. No larger media fixtures are needed.
+
 Playback polling allows the application's normal two-minute negative HLS cache
 and local FFmpeg processing to complete. The test timeout is six minutes.
 Passing validates this local MinIO/transcoder contract, not production R2,
