@@ -10,7 +10,7 @@ class LibraryBulkRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user() !== null && (! in_array($this->input('action'), ['add', 'move'], true)
-            || $this->user()->library_enabled);
+            || $this->user()->canUseLibrary());
     }
 
     /** @return array<string, mixed> */

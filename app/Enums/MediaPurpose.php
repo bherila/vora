@@ -12,6 +12,7 @@ enum MediaPurpose: string
     case Gallery = 'gallery';
     case ProfilePicture = 'profile_picture';
     case Library = 'library';
+    case Event = 'event';
 
     /**
      * @return list<string>

@@ -10,7 +10,7 @@ class LibraryCollectionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->library_enabled === true;
+        return $this->user()?->canUseLibrary() === true;
     }
 
     /** @return array<string, mixed> */

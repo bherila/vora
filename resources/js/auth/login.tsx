@@ -34,7 +34,7 @@ function LoginPage() {
       if (response.requires_2fa && response.attempt_token) {
         window.location.replace(`/login/two-factor/${response.attempt_token}`);
       } else if (response.success) {
-        window.location.replace(response.redirect || '/feed');
+        window.location.replace(response.redirect || '/');
       } else {
         setError(response.message || 'Login failed. Please try again.');
       }

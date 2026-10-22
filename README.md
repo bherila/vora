@@ -128,12 +128,18 @@ The GitHub Actions deployment workflow installs Composer and pnpm dependencies,
 builds Vite assets, syncs the Laravel app to the server, and runs:
 
 ```bash
-php artisan migrate --force --no-interaction
 php artisan config:clear
 php artisan config:cache
+php artisan ops:instance-profile --expect=vora
+php artisan migrate --force --no-interaction
+php artisan schema:assert-persona
+php artisan view:clear
 ```
 
-See `.github/workflows/deploy.yml` for the current production deployment flow.
+See `.github/workflows/deploy.yml` for the primary production trigger. The reusable
+`release-instance.yml` workflow tests and builds once, then transfers that exact
+release to a selected GitHub environment. See [Event instances](docs/event-instances.md)
+for deployment profiles, isolated storage, and additional targets.
 
 ### Shared cPanel scheduler and queue
 

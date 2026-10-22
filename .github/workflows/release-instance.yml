@@ -1,0 +1,179 @@
+name: Release instance
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      primary:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment containing this instance's deployment settings
+        required: true
+        type: environment
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-instance-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Verify PHP
+        run: php --version
+
+      - name: Install Composer (with dev)
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Build frontend and run tests
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          pnpm run test
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit --configuration phpunit.xml
+
+      - name: Verify deployment filesystem safety
+        run: python3 tests/scripts/test_deploy_instance.py
+
+      - name: Prepare tested release
+        run: |
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          cat htaccess-append.txt >> public/.htaccess
+          tar --exclude='bootstrap/cache/config.php' -czf release.tgz app bootstrap config database public resources routes vendor artisan composer.json composer.lock scripts/deploy-instance-remote.sh
+
+      - name: Retain tested release
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: instance-release
+          path: release.tgz
+          retention-days: 7
+
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    needs: test
+    environment: ${{ inputs.environment }}
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || (inputs.primary && 'laravel') || '' }}
+      DEPLOY_PHP_BINARY: ${{ vars.DEPLOY_PHP_BINARY || (inputs.primary && '/opt/cpanel/ea-php85/root/usr/bin/php') || '' }}
+      DEPLOY_WEB_ROOTS: ${{ vars.DEPLOY_WEB_ROOTS || (inputs.primary && 'public_html,web') || '' }}
+      DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL || (inputs.primary && 'https://macrophile.me') || '' }}
+      DEPLOY_PROFILE: ${{ vars.DEPLOY_PROFILE || (inputs.primary && 'vora') || '' }}
+
+    steps:
+      - name: Check instance deployment switch
+        id: target
+        env:
+          DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+        run: |
+          if [ "$DEPLOY_ENABLED" = true ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deployment is disabled for this environment."
+          fi
+
+      - uses: actions/download-artifact@v5
+        if: steps.target.outputs.enabled == 'true'
+        with:
+          name: instance-release
+
+      - name: Validate target and configure SSH
+        if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$SSH_USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]
+          valid_relative_path() {
+            [[ "$1" =~ ^[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)*$ && "$1" != . && "$1" != *..* && "$1" != */./* && "$1" != */. ]]
+          }
+          valid_relative_path "$DEPLOY_PATH"
+          [[ "$DEPLOY_PHP_BINARY" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEPLOY_PHP_BINARY" != *..* ]]
+          IFS=',' read -r -a roots <<< "$DEPLOY_WEB_ROOTS"
+          for root in "${roots[@]}"; do
+            test -z "$root" || valid_relative_path "$root"
+          done
+          [[ "$DEPLOY_HEALTH_URL" =~ ^https://[^/[:space:]]+/?$ ]]
+          [[ "$DEPLOY_PROFILE" == vora || "$DEPLOY_PROFILE" == event ]]
+          [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]]
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          mkdir release
+          tar -xzf release.tgz -C release
+
+      - name: Transfer tested release
+        if: steps.target.outputs.enabled == 'true'
+        run: |
+          rsync -a --delete --exclude='.env' --exclude='storage' \
+            -e "ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4" \
+            release/ "$SSH_USERNAME@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Configure, verify profile, migrate and refresh web roots
+        if: steps.target.outputs.enabled == 'true'
+        run: |
+          ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "$SSH_USERNAME@$SSH_HOST" \
+            "bash '$DEPLOY_PATH/scripts/deploy-instance-remote.sh' '$DEPLOY_PATH' '$DEPLOY_PHP_BINARY' '$DEPLOY_PROFILE' '$DEPLOY_WEB_ROOTS'"
+
+      - name: Verify instance health
+        if: steps.target.outputs.enabled == 'true'
+        run: |
+          for path in /up / /login; do
+            url="${DEPLOY_HEALTH_URL%/}${path}"
+            status=$(curl --fail-with-body --silent --show-error \
+              --location --max-redirs 3 \
+              --retry 4 --retry-delay 3 --retry-all-errors --max-time 15 \
+              --output /dev/null --write-out '%{http_code}' "$url")
+            test "$status" = 200
+            echo "Health check passed: $url"
+          done
+
+      - name: Verify scheduler and queue health
+        if: steps.target.outputs.enabled == 'true'
+        run: |
+          for attempt in 1 2 3 4; do
+            if ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+              "$SSH_USERNAME@$SSH_HOST" \
+              "cd '$DEPLOY_PATH' && '$DEPLOY_PHP_BINARY' artisan ops:queue-health --json"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              sleep 20
+            fi
+          done
+          exit 1

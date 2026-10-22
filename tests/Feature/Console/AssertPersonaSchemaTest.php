@@ -41,13 +41,19 @@ class AssertPersonaSchemaTest extends TestCase
 
     public function test_production_deploy_asserts_persona_schema_before_refreshing_web_roots(): void
     {
-        $workflow = file_get_contents(base_path('.github/workflows/deploy.yml'));
+        $trigger = file_get_contents(base_path('.github/workflows/deploy.yml'));
+        $workflow = file_get_contents(base_path('.github/workflows/release-instance.yml'));
+        $script = file_get_contents(base_path('scripts/deploy-instance-remote.sh'));
 
+        $this->assertIsString($trigger);
         $this->assertIsString($workflow);
+        $this->assertIsString($script);
+        $this->assertStringContainsString('uses: ./.github/workflows/release-instance.yml', $trigger);
+        $this->assertStringContainsString('scripts/deploy-instance-remote.sh', $workflow);
 
-        $migration = strpos($workflow, 'artisan migrate --force --no-interaction');
-        $assertion = strpos($workflow, 'artisan schema:assert-persona');
-        $webRootRefresh = strpos($workflow, 'ln -s laravel/public public_html');
+        $migration = strpos($script, 'artisan migrate --force --no-interaction');
+        $assertion = strpos($script, 'artisan schema:assert-persona');
+        $webRootRefresh = strpos($script, 'ln -sfnT');
 
         $this->assertNotFalse($migration, 'The deploy must run migrations.');
         $this->assertNotFalse($assertion, 'The deploy must assert the persona schema.');

@@ -3,6 +3,7 @@ name: vora-local-staging
 x-app-environment: &app-environment
   APP_NAME: Vora Local Staging
   APP_ENV: staging
+  APP_PROFILE: ${LOCAL_STAGING_APP_PROFILE:-vora}
   APP_DEBUG: "false"
   APP_URL: http://127.0.0.1:18080
   APP_KEY: base64:yvKptnlsS+pVh5AkIHr6d3RucNmkbq/jfS4ceWSg8ZI=

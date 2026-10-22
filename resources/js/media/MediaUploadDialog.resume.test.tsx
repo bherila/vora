@@ -365,4 +365,29 @@ describe('MediaUploadDialog content-verified resume', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
   });
+  it('creates event uploads with a separate resume scope and no gallery publication fields', async () => {
+    const implementation = post.getMockImplementation()!;
+    post.mockImplementation(async (url, body, signal) => url === '/api/events/event-one/uploads'
+      ? createdUpload() : implementation(url, body, signal));
+    // An existing gallery session with identical bytes must remain untouched.
+    storage.saveMultipartSession(resumeKey, existingSession);
+    const refresh = jest.fn();
+    render(<MediaUploadDialog characters={[]} lastInterestIds={[9]} eventUlid="event-one" libraryCollectionUlid={null} onUploaded={refresh} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Upload media' }));
+    fireEvent.change(screen.getByLabelText('Choose uploads'), { target: { files: [new File(['first'], 'video.mp4', { type: 'video/mp4', lastModified: 1234 })] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledWith('/api/events/event-one/uploads', {
+      type: 'video', filename: 'video.mp4', content_type: 'video/mp4', size: 5,
+      title: 'video', has_thumbnail: false, thumbnail_size: null,
+      perceptual_hash: null, file_hash: originalHash,
+    }, expect.any(AbortSignal));
+    expect(multipart).toHaveBeenCalledWith(expect.any(File), expect.objectContaining({
+      sessionKey: `vora:media:multipart:v2:event:event-one:${originalHash}`,
+      session: expect.objectContaining({ context: expect.stringContaining('"event_ulid":"event-one"') }),
+    }));
+    expect(storage.readMultipartSession(resumeKey)).toEqual(existingSession);
+    expect(post).not.toHaveBeenCalledWith('/api/library/uploads', expect.anything(), expect.anything());
+  });
+
 });

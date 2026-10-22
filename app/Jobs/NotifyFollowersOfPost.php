@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\FollowedUserPosted;
 use App\Services\Post\AnnouncementPostService;
 use App\Support\FollowGraph;
+use App\Support\InstanceFeatures;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -33,6 +34,10 @@ class NotifyFollowersOfPost implements ShouldQueue
 
     public function handle(): void
     {
+        if (! InstanceFeatures::enabled('community')) {
+            return;
+        }
+
         $post = Post::withTrashed()->find($this->post->id);
         if (! $post instanceof Post || $post->trashed() || ! $post->isApprovedContent()) {
             return;

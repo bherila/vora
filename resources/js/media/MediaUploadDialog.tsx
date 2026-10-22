@@ -189,6 +189,8 @@ interface MediaUploadDialogProps {
   triggerVariant?: 'default' | 'outline';
   /** Defined (including null) for private Library uploads. */
   libraryCollectionUlid?: string | null;
+  /** Upload to an event, with access inherited from its attendee list. */
+  eventUlid?: string;
 }
 
 /**
@@ -205,11 +207,13 @@ export function MediaUploadDialog({
   triggerSize = 'default',
   triggerVariant = 'default',
   libraryCollectionUlid,
+  eventUlid,
 }: MediaUploadDialogProps) {
   const uploadRestriction = activeRestriction('media.upload');
   const activeIdentityId = useActiveIdentityId();
-  const isLibrary = libraryCollectionUlid !== undefined;
-  const resolvedDefaultCharacterId = isLibrary ? null : defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
+  const isEvent = eventUlid !== undefined;
+  const isLibrary = !isEvent && libraryCollectionUlid !== undefined;
+  const resolvedDefaultCharacterId = isLibrary || isEvent ? null : defaultCharacterId === undefined ? activeIdentityId : defaultCharacterId;
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [characterId, setCharacterId] = useState(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
@@ -290,7 +294,7 @@ export function MediaUploadDialog({
         abortController.signal.throwIfAborted();
         setUploadLabel(`Uploading ${index + 1} of ${pending.length}: ${selectedFile.name}`);
         setProgress(0);
-        const scope = isLibrary ? `library:${libraryCollectionUlid ?? 'all'}` : `gallery:${selectedCharacterId ?? 'account'}`;
+        const scope = isEvent ? `event:${eventUlid}` : isLibrary ? `library:${libraryCollectionUlid ?? 'all'}` : `gallery:${selectedCharacterId ?? 'account'}`;
         const sessionKey = multipartSessionKey(fileHash, scope);
         const uploadPayload = {
           type,
@@ -298,13 +302,12 @@ export function MediaUploadDialog({
           content_type: selectedFile.type,
           size: selectedFile.size,
           title: item.title.trim() || null,
-          interest_ids: uploadInterestIds,
           has_thumbnail: thumbnail !== null,
           thumbnail_size: thumbnail?.size ?? null,
           perceptual_hash: perceptualHash,
           file_hash: fileHash,
-          announce,
-          ...(isLibrary ? {
+          ...(!isEvent ? { interest_ids: uploadInterestIds, announce } : {}),
+          ...(isEvent ? {} : isLibrary ? {
             audience: 'specific', audience_user_ids: [], discoverable: false, announce: false,
             collection_ulid: libraryCollectionUlid,
           } : selectedCharacterId === null ? {
@@ -319,15 +322,16 @@ export function MediaUploadDialog({
           audience: 'audience' in uploadPayload ? uploadPayload.audience : null,
           audience_user_ids: [...new Set('audience_user_ids' in uploadPayload ? uploadPayload.audience_user_ids : [])].sort((a, b) => a - b),
           discoverable: 'discoverable' in uploadPayload ? uploadPayload.discoverable : null,
-          announce: uploadPayload.announce,
+          announce: 'announce' in uploadPayload ? uploadPayload.announce : false,
           character_id: 'character_id' in uploadPayload ? uploadPayload.character_id : null,
           title: uploadPayload.title,
-          interest_ids: [...new Set(uploadPayload.interest_ids)].sort((a, b) => a - b),
+          interest_ids: [...new Set('interest_ids' in uploadPayload ? uploadPayload.interest_ids : [])].sort((a, b) => a - b),
           collection_ulid: isLibrary ? libraryCollectionUlid : null,
+          ...(isEvent ? { event_ulid: eventUlid } : {}),
         });
         // Metadata-only keys cannot establish matching bytes, but their old
         // reservations must be released before a replacement can consume quota.
-        const legacyKey = `${isLibrary ? `library:${libraryCollectionUlid ?? 'all'}:` : ''}vora:media:multipart:${selectedFile.name}:${selectedFile.size}:${selectedFile.lastModified}:${selectedFile.type}`;
+        const legacyKey = `${isEvent ? `event:${eventUlid}:` : isLibrary ? `library:${libraryCollectionUlid ?? 'all'}:` : ''}vora:media:multipart:${selectedFile.name}:${selectedFile.size}:${selectedFile.lastModified}:${selectedFile.type}`;
         const legacySession = readMultipartSession(legacyKey);
         if (legacySession !== null) await releaseStoredSession(legacySession, legacyKey);
 
@@ -341,7 +345,7 @@ export function MediaUploadDialog({
         }
         const createUpload = async (): Promise<StoreResponse> => {
           const result = await postUpload<StoreResponse>(
-            isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
+            isEvent ? `/api/events/${encodeURIComponent(eventUlid)}/uploads` : isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
           );
           disposableUploadId = result.data.id;
           return result;
@@ -486,7 +490,7 @@ export function MediaUploadDialog({
               ))}
             </div>
           )}
-          {characters.length > 0 && (
+          {!isEvent && characters.length > 0 && (
             <label className="grid gap-1">
               <span className="text-sm">Character</span>
               <select
@@ -502,7 +506,9 @@ export function MediaUploadDialog({
               </select>
             </label>
           )}
-          {isLibrary ? (
+          {isEvent ? (
+            <p className="text-sm text-muted-foreground">Uploads are shared with people who can access this event after review. Event access controls who can view them.</p>
+          ) : isLibrary ? (
             <p className="text-sm text-muted-foreground">
               Uploads stay in your private Library. If you selected a shared collection, its recipients can view and save new uploads after review.
             </p>
@@ -530,7 +536,7 @@ export function MediaUploadDialog({
           ) : (
             <p className="text-sm text-muted-foreground">This upload uses the selected character's privacy setting.</p>
           )}
-          {!isLibrary && <><div className="grid gap-1">
+          {!isLibrary && !isEvent && <><div className="grid gap-1">
             <span className="text-sm">Interests</span>
             <InterestPicker value={uploadInterestIds} onChange={setUploadInterestIds} disabled={uploading} />
           </div>

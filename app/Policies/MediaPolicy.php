@@ -2,9 +2,12 @@
 
 namespace App\Policies;
 
+use App\Enums\MediaPurpose;
 use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Events\EventAccess;
+use App\Support\InstanceFeatures;
 
 class MediaPolicy
 {
@@ -24,19 +27,33 @@ class MediaPolicy
      */
     public function view(User $user, Media $media): bool
     {
-        if ($media->trashed()) {
+        if ($media->trashed() || ($media->isGalleryMedia() && ! $user->isAdmin() && ! InstanceFeatures::enabled('profiles'))) {
             return false;
         }
 
+        if ($media->purpose === MediaPurpose::Event && ($user->trashed() || ! $user->isActive() || ! $user->isApproved())) {
+            return false;
+        }
         if ($media->user_id === $user->id) {
             return true;
+        }
+        if ($media->purpose === MediaPurpose::Event && (! $media->isReady()
+            || ! app(EventAccess::class)->canView($user, $media->event))) {
+            return false;
         }
 
         // Media owned by a deleted, deactivated, or disabled account is hidden
         // from other users on every path (direct ULID/HLS links included).
         // Admins bypass this via before(). Mirrors StoryPolicy::view.
-        $owner = User::withTrashed()->find($media->user_id);
-        if ($owner === null || $owner->trashed() || ! $owner->isActive()) {
+        $owner = $media->purpose === MediaPurpose::Event && $media->relationLoaded('user') ? $media->user : null;
+        if ($owner === null || array_diff(
+            ['approved_at', 'deleted_at', 'deactivated_at', 'is_disabled', 'banned_at', 'ban_hides_content'],
+            array_keys($owner->getAttributes()),
+        ) !== []) {
+            $owner = User::withTrashed()->find($media->user_id);
+        }
+        if ($owner === null || $owner->trashed() || ! $owner->isActive()
+            || ($media->purpose === MediaPurpose::Event && ! $owner->isApproved())) {
             return false;
         }
 
@@ -59,7 +76,7 @@ class MediaPolicy
      */
     public function viewById(User $user, Media $media): bool
     {
-        if ($media->trashed()) {
+        if ($media->trashed() || ($media->isGalleryMedia() && ! $user->isAdmin() && ! InstanceFeatures::enabled('profiles'))) {
             return false;
         }
 

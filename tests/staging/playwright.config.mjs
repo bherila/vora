@@ -14,6 +14,7 @@ export default defineConfig({
   testDir: '.', testMatch: '*.spec.ts', workers: 1, retries: 0, timeout: 360_000,
   outputDir: './artifacts/results',
   metadata: {
+    profile: process.env.LOCAL_STAGING_APP_PROFILE ?? 'vora',
     mailUrl: process.env.STAGING_MAIL_URL ?? 'http://127.0.0.1:18025',
     expectMultipartVideo: process.env.LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES === '1024',
   },

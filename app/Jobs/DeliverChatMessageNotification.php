@@ -7,6 +7,7 @@ use App\Models\ChatParticipant;
 use App\Models\User;
 use App\Notifications\ChatMessageWakeup;
 use App\Services\Chat\ChatGate;
+use App\Support\InstanceFeatures;
 use App\Support\MuteGraph;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,6 +37,10 @@ final class DeliverChatMessageNotification implements ShouldQueue
 
     public function handle(ChatGate $gate): void
     {
+        if (! InstanceFeatures::enabled('chat')) {
+            return;
+        }
+
         $message = ChatMessage::query()
             ->with(['conversation.participants.user', 'sender'])
             ->where('ulid', $this->messageUlid)

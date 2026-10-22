@@ -9,7 +9,7 @@ class LibraryUploadRequest extends StoreMediaRequest
 {
     public function authorize(): bool
     {
-        return parent::authorize() && $this->user()?->library_enabled === true;
+        return parent::authorize() && $this->user()?->canUseLibrary() === true;
     }
 
     protected function prepareForValidation(): void

@@ -63,7 +63,7 @@ export function SaveToLibraryButton({ mediaUlid, itemUlid, savedUlid = null, onS
         <DialogHeader>
           <DialogTitle>Save to your Library</DialogTitle>
           <DialogDescription>
-            Keep access here even if the original uploader removes the item, leaves Vora, or stops sharing it with you.
+            Keep access here even if the original uploader removes the item, deletes their account, or stops sharing it with you.
           </DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

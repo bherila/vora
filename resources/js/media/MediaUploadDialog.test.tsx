@@ -84,4 +84,13 @@ describe('MediaUploadDialog identity and announcement defaults', () => {
       name: "Share this to your followers' feeds. Unchecking keeps the upload private to your profile.",
     })).toBeChecked();
   });
+  it('hides identity and publication settings when uploads inherit event access', () => {
+    render(<MediaUploadDialog characters={characters} lastInterestIds={[1]} eventUlid="event-one" onUploaded={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Upload media' }));
+    expect(screen.queryByRole('combobox', { name: 'Character' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByText('Interests')).toBeNull();
+    expect(screen.getByText(/Event access controls who can view them/)).toBeInTheDocument();
+  });
+
 });

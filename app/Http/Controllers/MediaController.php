@@ -21,6 +21,7 @@ use App\Models\Favorite;
 use App\Models\Media;
 use App\Models\MediaPlaybackAuditLog;
 use App\Models\User;
+use App\Services\Events\EventAccess;
 use App\Services\Favorites\FavoriteService;
 use App\Services\Library\LibraryAccess;
 use App\Services\Media\HlsService;
@@ -36,11 +37,19 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
-class MediaController extends Controller
+class MediaController extends Controller implements HasMiddleware
 {
+    /** @return list<Middleware> */
+    public static function middleware(): array
+    {
+        return [new Middleware('module:profiles', only: ['update'])];
+    }
+
     public function __construct(
         private readonly MediaUploadService $uploads,
         private readonly MediaService $media,
@@ -55,8 +64,15 @@ class MediaController extends Controller
     /**
      * A shareable single-media view page (resolved client-side by ulid).
      */
-    public function viewPage(Request $request, string $ulid): View
+    public function viewPage(Request $request, string $ulid): View|RedirectResponse
     {
+        $eventMedia = Media::query()->where('ulid', $ulid)->where('purpose', MediaPurpose::Event->value)->first();
+        if ($eventMedia instanceof Media) {
+            abort_unless(app(EventAccess::class)->enabled() && $request->user()?->can('view', $eventMedia), 404);
+
+            return redirect('/events?media='.$eventMedia->ulid);
+        }
+
         return view('media.show', ['initialData' => [
             'mediaView' => $this->findByUlidPayload($request, $ulid),
         ]]);
@@ -258,7 +274,8 @@ class MediaController extends Controller
     public function cancelUpload(Request $request, Media $media): JsonResponse
     {
         $this->authorizeOr404('complete', $media);
-        abort_unless($media->user_id === $request->user()->id && $media->supportsMultipartUpload(), 404, 'Not found.');
+        abort_unless($media->user_id === $request->user()->id
+            && ($media->supportsMultipartUpload() || $media->purpose === MediaPurpose::ProfilePicture), 404, 'Not found.');
         if (! $this->uploads->cancelPendingUpload($request->user(), $media)) {
             return response()->json(['success' => false, 'message' => 'A completed upload cannot be canceled.'], 409);
         }
@@ -351,7 +368,7 @@ class MediaController extends Controller
             ->where('favoritable_id', $media->id)
             ->exists();
         $payload['favorite_count'] = $this->favorites->countFor($media);
-        $payload['can_save_to_library'] = $viewer instanceof User && $viewer->library_enabled
+        $payload['can_save_to_library'] = $viewer instanceof User && $viewer->canUseLibrary()
             && app(LibraryAccess::class)->canSaveMedia($viewer, $media);
         $payload['library_item_ulid'] = $viewer instanceof User
             ? $viewer->libraryItems()->where('media_id', $media->id)->value('ulid') : null;
@@ -405,7 +422,7 @@ class MediaController extends Controller
     {
         $this->authorizeOr404('delete', $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! in_array($media->purpose, [MediaPurpose::Gallery, MediaPurpose::Event], true)) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -573,7 +590,7 @@ class MediaController extends Controller
         $this->authorizeOr404('view', $media);
         $this->denyRestrictedNonOwnerView($request, $media);
 
-        if (! $media->isGalleryMedia()) {
+        if (! in_array($media->purpose, [MediaPurpose::Gallery, MediaPurpose::Event], true)) {
             return response()->json(['success' => false, 'message' => 'Not found.'], 404);
         }
 
@@ -603,7 +620,7 @@ class MediaController extends Controller
 
             return response($manifest['body'], 200, [
                 'Content-Type' => $manifest['contentType'],
-                'Cache-Control' => 'private, max-age=10',
+                'Cache-Control' => $media->purpose === MediaPurpose::Event ? 'private, no-store' : 'private, max-age=10',
             ]);
         }
 

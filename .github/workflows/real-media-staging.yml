@@ -34,6 +34,13 @@ on:
       - 'config/media.php'
       - 'config/filesystems.php'
       - 'routes/web.php'
+      - 'routes/events.php'
+      - 'config/instance.php'
+      - 'app/Support/InstanceFeatures.php'
+      - 'app/Services/Events/**'
+      - 'app/Http/Controllers/Events/**'
+      - 'resources/js/events/**'
+      - 'resources/views/events/**'
       - 'composer.json'
       - 'composer.lock'
       - 'package.json'
@@ -53,7 +60,12 @@ jobs:
     name: Docker direct/multipart uploads, HLS, quotas and retained saves
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [vora, event]
     env:
+      LOCAL_STAGING_APP_PROFILE: ${{ matrix.profile }}
       LOCAL_STAGING_ACCEPTANCE: '1'
       ALLOW_DISPOSABLE_ACCOUNT_PURGE: '1'
       STAGING_APP_URL: http://127.0.0.1:18080
@@ -135,7 +147,8 @@ jobs:
           node tests/staging/check-startup.mjs
 
       - name: Run normal SMTP-authenticated real-media acceptance
-        timeout-minutes: 7
+        # Event runs the Library journey plus its own membership/retention journey.
+        timeout-minutes: 14
         run: pnpm exec playwright test --config tests/staging/playwright.config.mjs
 
       - name: Collect disposable service diagnostics
@@ -149,7 +162,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: real-media-staging
+          name: real-media-staging-${{ matrix.profile }}
           path: tests/staging/artifacts/
           if-no-files-found: ignore
           retention-days: 7

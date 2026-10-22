@@ -2,8 +2,10 @@ import { type APIRequestContext, type BrowserContext, expect, type Page, type Re
 
 let mailUrl = 'http://127.0.0.1:18025';
 let expectMultipartVideo = false;
+let eventProfile = false;
 
 test.beforeAll(async ({ request }, testInfo) => {
+  eventProfile = testInfo.config.metadata.profile === 'event';
   mailUrl = String(testInfo.config.metadata.mailUrl);
   expectMultipartVideo = testInfo.config.metadata.expectMultipartVideo === true;
   expect((await request.get(`${mailUrl}/api/v1/messages?limit=1`)).ok()).toBeTruthy();
@@ -67,7 +69,7 @@ async function login(page: Page, request: APIRequestContext, email: string): Pro
   }, { timeout: 30_000, message: `Real SMTP two-factor email for ${email}` }).toBeTruthy();
   await page.getByLabel('Verification Code').fill(code);
   await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
-  await expect(page).toHaveURL(/\/feed$/);
+  await expect(page).toHaveURL(eventProfile ? /\/events$/ : /\/feed$/);
   await page.goto('/library');
 }
 
@@ -107,14 +109,14 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
   return uploader!;
 }
 
-async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string): Promise<Upload> {
+async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string): Promise<Upload> {
   const filename = type === 'photo' ? 'photo.png' : 'video.mp4';
-  await page.goto(`/library?collection=${collection}`);
-  await page.getByRole('button', { name: 'Upload media', exact: true }).click();
+  await page.goto(eventUlid ? `/events?event_ulid=${eventUlid}` : `/library?collection=${collection}`);
+  await page.getByRole('button', { name: eventUlid ? /^Upload to / : 'Upload media', exact: !eventUlid }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type="file"]').setInputFiles(new URL(`./.fixtures/${filename}`, import.meta.url).pathname);
   await dialog.getByPlaceholder('Title (optional)', { exact: true }).fill(title);
-  const pendingResponse = page.waitForResponse((response) => response.url().endsWith('/api/library/uploads') && response.request().method() === 'POST');
+  const pendingResponse = page.waitForResponse((response) => response.url().endsWith(eventUlid ? `/api/events/${eventUlid}/uploads` : '/api/library/uploads') && response.request().method() === 'POST');
   const completeResponse = page.waitForResponse((response) => /\/api\/media\/[0-9]+\/(?:multipart\/)?complete$/.test(response.url()) && response.request().method() === 'POST');
   const objectPuts: Response[] = [];
   const capturePut = (response: Response): void => {
@@ -331,3 +333,86 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
   }
 });
 
+
+interface EventMedia { id: number; ulid: string; url: string | null; thumbnail_url: string | null; video?: { status: string; master_url: string | null }; download_url: string; }
+
+test('Event profile real media inherits restricted access, visible favorites and private retained Saves', async ({ browser, request }, testInfo) => {
+  test.skip(!eventProfile, 'Event deployment profile acceptance');
+  const contexts: BrowserContext[] = [];
+  try {
+    const pages: Page[] = [];
+    for (const email of EMAILS) {
+      const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL });
+      contexts.push(context);
+      const page = await context.newPage();
+      await login(page, request, email);
+      pages.push(page);
+    }
+    const [admin, recipient, outsider] = pages;
+    const accounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
+    const adminId = accounts.find((account) => account.email === 'admin@staging.invalid')!.id;
+    const recipientId = accounts.find((account) => account.email === 'recipient@staging.invalid')!.id;
+    const suffix = String(Date.now());
+    const uploaderContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL });
+    contexts.push(uploaderContext);
+    const uploader = await uploaderContext.newPage();
+    const account = await registerUploader(uploader, admin, request, adminId, suffix);
+    // Event profile grants Library access without the primary deployment's premium flag.
+    await success(admin, 'PATCH', `/api/admin/users/${account.id}`, { library_enabled: false });
+    const members = [account.id, recipientId];
+    const restricted = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
+      name: `Private gathering ${suffix}`, description: 'Selected attendees', visibility: 'specific', timezone: 'America/New_York', member_ids: members,
+    })).data;
+    const shared = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
+      name: `All attendees ${suffix}`, visibility: 'everyone', timezone: 'UTC', member_ids: [],
+    })).data;
+    expect((await success<{ data: { ulid: string }[] }>(outsider, 'GET', '/api/events')).data.map((event) => event.ulid)).not.toContain(restricted.ulid);
+    for (const path of ['/api/chat/conversations', '/api/characters', '/api/users', '/api/stories']) {
+      expect((await api(outsider, 'GET', path)).status).toBe(404);
+    }
+    const photo = await upload(uploader, 'photo', `Event photo ${suffix}`, '', restricted.ulid);
+    const video = await upload(uploader, 'video', `Event video ${suffix}`, '', restricted.ulid);
+    const publicPhoto = await upload(uploader, 'photo', `Shared event ${suffix}`, '', shared.ulid);
+    expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
+    for (const media of [photo, video, publicPhoto]) await success(admin, 'POST', `/api/admin/media/${media.data.id}/moderate`, { action: 'approve' });
+    const photoDetail = (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).data;
+    await recipient.goto(`/events?media=${photo.data.ulid}`);
+    await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    expect((await recipient.request.get(photoDetail.download_url)).headers()['content-disposition']).toContain('attachment');
+    await expect.poll(async () => (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${video.data.ulid}`)).data.video?.status,
+      { timeout: 160_000, intervals: [2_000, 5_000, 10_000] }).toBe('ready');
+    await recipient.goto(`/events?media=${video.data.ulid}`);
+    const player = recipient.getByRole('dialog').locator('video');
+    await expect.poll(() => player.evaluate((element: HTMLVideoElement) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+    await player.evaluate(async (element: HTMLVideoElement) => { element.muted = true; await element.play(); });
+    await expect.poll(() => player.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0.5);
+    await player.evaluate((element: HTMLVideoElement) => element.pause());
+    await success(recipient, 'POST', '/api/favorites', { type: 'media', id: video.data.id });
+    await success(admin, 'PUT', '/api/admin/events/settings', { featured_curator_ids: [recipientId] });
+    const visibleIds = async (page: Page, query: string): Promise<string[]> => (await success<{ data: EventMedia[] }>(page, 'GET', `/api/events/media?${query}`)).data.map((item) => item.ulid);
+    expect(await visibleIds(uploader, 'featured=1')).toContain(video.data.ulid);
+    expect(await visibleIds(outsider, `favorites_of=${recipientId}`)).not.toContain(video.data.ulid);
+    expect(await visibleIds(outsider, `event_ulid=${shared.ulid}`)).toContain(publicPhoto.data.ulid);
+    const savedPhoto = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { media_ulid: photo.data.ulid })).data;
+    const savedVideo = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { media_ulid: video.data.ulid })).data;
+    await success(admin, 'PATCH', `/api/admin/events/${restricted.ulid}`, { member_ids: [account.id] });
+    for (const media of [photo, video]) {
+      expect((await api(recipient, 'GET', `/api/events/media/${media.data.ulid}`)).status).toBe(404);
+      expect((await recipient.request.get(`/api/events/media/${media.data.ulid}/download`)).status()).toBe(404);
+    }
+    if (photoDetail.url) expect((await recipient.request.get(photoDetail.url)).status()).toBe(404);
+    expect((await recipient.request.get(`/api/media/${video.data.id}/hls/master.m3u8`)).status()).toBe(404);
+    expect(await visibleIds(recipient, 'featured=1')).not.toContain(video.data.ulid);
+    await playable(recipient, savedVideo.ulid);
+    expect((await api(outsider, 'GET', `/api/library/items/${savedPhoto.ulid}`)).status).toBe(404);
+    const disposable = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data.find((entry) => entry.id === account.id);
+    expect(disposable?.email).toBe(`library-run-${suffix}@staging.invalid`);
+    expect(disposable?.is_admin).toBe(false);
+    await success(admin, 'DELETE', `/api/admin/users/${account.id}`);
+    await playable(recipient, savedVideo.ulid);
+    await recipient.screenshot({ path: testInfo.outputPath('event-retained-real-hls.png'), fullPage: true });
+    await success(recipient, 'POST', '/api/library/items/bulk', { action: 'delete', item_ulids: [savedPhoto.ulid, savedVideo.ulid] });
+  } finally {
+    for (const context of contexts) await context.close();
+  }
+});
