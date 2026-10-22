@@ -25,6 +25,7 @@ describe('SaveToLibraryButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save to Library' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText(/Keep access here even if the original uploader/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Items saved from someone else stay private to you, including in shared collections/)).toBeInTheDocument();
     await screen.findByRole('option', { name: 'My collection' });
     expect(screen.queryByRole('option', { name: 'Someone else’s collection' })).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Collection (optional)'), { target: { value: 'mine' } });

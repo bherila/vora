@@ -69,6 +69,7 @@ class LibraryController extends Controller
         if ($search = $request->validated('q')) {
             $query->where(fn (Builder $q) => $q->where('title', 'like', '%'.$search.'%')->orWhere('body', 'like', '%'.$search.'%'));
         }
+        $query->where(fn (Builder $visible) => $visible->where('library_items.user_id', $user->id)->orWhere('source', '!=', 'saved'));
         $restricted = app(RestrictionGate::class)->denies($user, RestrictionCapability::MediaView);
         $query->where(function (Builder $q) use ($user, $restricted): void {
             $q->where('library_items.user_id', $user->id)->orWhereNull('media_id')
@@ -179,6 +180,7 @@ class LibraryController extends Controller
     {
         $item = $request->user()->libraryItems()->where('ulid', $ulid)->firstOrFail();
         $ids = $request->validated('user_ids');
+        abort_if($item->source === 'saved' && $ids !== [], 422, 'Saved items stay private in your Library.');
         abort_unless($request->user()->library_enabled || array_diff($ids, $item->members()->pluck('users.id')->all()) === [], 403, 'Library storage is not enabled.');
         $item->members()->sync($ids);
 

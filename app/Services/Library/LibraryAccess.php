@@ -42,7 +42,9 @@ class LibraryAccess
             return true;
         }
 
-        if (! $this->canReceiveFrom($viewer, $item->owner)) {
+        // A durable Save retains the saver's access, never a right to reshare
+        // someone else's media or note beyond the original owner's audience.
+        if ($item->source === 'saved' || ! $this->canReceiveFrom($viewer, $item->owner)) {
             return false;
         }
 
@@ -73,6 +75,7 @@ class LibraryAccess
     {
         $query = LibraryItem::query()
             ->where('library_items.user_id', '!=', $viewer->id)
+            ->where('source', '!=', 'saved')
             ->where(function (Builder $shared) use ($viewer): void {
                 $shared->whereHas('members', fn (Builder $members) => $members->where('users.id', $viewer->id))
                     ->orWhereHas('collections.members', fn (Builder $members) => $members->where('users.id', $viewer->id));

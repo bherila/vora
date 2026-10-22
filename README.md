@@ -31,7 +31,8 @@ taxonomy, and user interest ratings.
 - **Private Library**: selectively enabled cloud storage for uploaded or saved
   media and notes, organized into private collections with optional links to
   existing personas. Users explicitly share items or collections with named
-  recipients. Saved files survive the original uploader's account deletion
+  recipients. Items saved from someone else stay private to the saver, including
+  in shared collections. Saved files survive the original uploader's account deletion
   through independent references to the same stored file. Original-file usage
   is visible in Library and Settings; admins enable storage per account.
 

@@ -219,6 +219,7 @@ class LibraryTest extends TestCase
         $this->postJson('/api/library/uploads', [])->assertForbidden();
         $admin = User::factory()->approved()->admin()->create();
         $this->actingAs($admin)->patchJson('/api/admin/users/'.$user->id, ['library_enabled' => true])->assertOk();
+        $media = $this->photo($user);
         $ulid = $this->save($user->refresh(), $media);
         $this->actingAs($user)->putJson('/api/library/items/'.$ulid.'/sharing', ['user_ids' => [$recipient->id]])->assertOk();
         $user->forceFill(['library_enabled' => false])->save();

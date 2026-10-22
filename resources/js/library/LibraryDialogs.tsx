@@ -61,7 +61,7 @@ export function LibraryShareDialog({ target, onClose, onChanged }: ShareDialogPr
           Selected people can view and save this content. Saved items remain in their Libraries if you stop sharing or delete your account.
         </DialogDescription>
       </DialogHeader>
-      {target.kind === 'collections' && <p className="text-sm text-muted-foreground">Sharing includes all current and future items added to this collection, including notes.</p>}
+      {target.kind === 'collections' && <p className="text-sm text-muted-foreground">Sharing includes all current and future items you upload or write, including notes. Items saved from someone else remain private to you.</p>}
       {target.kind === 'items' && <p className="text-sm text-muted-foreground">These are direct recipients. People with access through a shared collection can also view this item.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <UserPicker selectedIds={ids} onChange={setIds} disabled={busy} />

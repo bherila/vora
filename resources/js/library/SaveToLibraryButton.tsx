@@ -72,7 +72,7 @@ export function SaveToLibraryButton({ mediaUlid, itemUlid, savedUlid = null, onS
           <option value="">Just save to Library</option>
           {collections.map((entry) => <option key={entry.ulid} value={entry.ulid}>{entry.name}{entry.member_ids.length > 0 ? ' (shared)' : ''}</option>)}
         </select>
-        <p className="text-sm text-muted-foreground">Saved items start private. Adding one to a shared collection makes it visible to that collection&apos;s recipients.</p>
+        <p className="text-sm text-muted-foreground">Items saved from someone else stay private to you, including in shared collections. Your own uploads and original notes can be shared.</p>
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
           <Button disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save to Library'}</Button>

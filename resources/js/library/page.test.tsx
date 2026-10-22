@@ -74,7 +74,7 @@ describe('LibraryPage', () => {
     window.history.replaceState({}, '', '/library?collection=my-collection');
     collections = [{ ...collection, member_ids: [8] }];
     render(<LibraryPage />);
-    await screen.findByText(/Current and future items, including notes/);
+    await screen.findByText(/Current and future items you upload or write, including notes/);
     fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText(/This note will be visible to this collection/)).toBeInTheDocument();
@@ -106,5 +106,17 @@ describe('LibraryPage', () => {
     await waitFor(() => expect(remove).toHaveBeenCalledWith('/api/library/items/my-note/collections/my-collection'));
     expect(within(dialog).getByText('Private text received elsewhere.')).toBeInTheDocument();
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps saved items private while allowing organization into shared collections', async () => {
+    currentNote = { ...note, source: 'saved' };
+    collections = [{ ...collection, member_ids: [8] }];
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Received note' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Saved items are visible only to you, including in shared collections/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Share' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Remove from Received from Lyra' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 });

@@ -180,7 +180,7 @@ export function LibraryPage() {
         {selectedCollection?.description && <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{selectedCollection.description}</p>}
         {selectedCollection?.related_persona && <p className="text-sm">Related to <a className="underline underline-offset-4" href={selectedCollection.related_persona.href}>{selectedCollection.related_persona.display_name}</a></p>}
         {selectedCollection?.related_persona_unavailable && <p className="text-sm text-muted-foreground">The related persona is unavailable. Your collection and files remain accessible.</p>}
-        {selectedCollection?.owned && selectedCollection.member_ids.length > 0 && <p className="text-sm text-muted-foreground">This collection is shared. Current and future items, including notes, are visible to its recipients and can be saved by them.</p>}
+        {selectedCollection?.owned && selectedCollection.member_ids.length > 0 && <p className="text-sm text-muted-foreground">This collection is shared. Current and future items you upload or write, including notes, are visible to its recipients and can be saved by them. Items saved from someone else stay private to you.</p>}
         <Label htmlFor="library-search" className="sr-only">Search Library items</Label>
         <Input id="library-search" placeholder="Search titles and notes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

@@ -33,9 +33,12 @@ The owner chooses who may see an item once it has been approved.
 - Persona-authored media inherits that persona's audience. A Library
   collection's related-persona link is organizational only and grants no access.
 
-Library sharing uses explicit item/collection recipients. All current and future
-items in a shared collection are included; notes stay private unless explicitly
-shared or placed in such a collection. Viewing permits durable Save for accounts
+Library sharing uses explicit item/collection recipients. Current and future
+uploads and original notes in a shared collection are included. Items saved from
+someone else remain private to their saver, including in a shared collection;
+they cannot be reshared to bypass the source audience or block graph. Original
+notes stay private unless explicitly shared or placed in a shared collection.
+Viewing permits durable Save for accounts
 with Library storage enabled. Revocation prevents further access through the
 share, but does not remove existing independent saves. Saved media is still
 subject to moderation, and has no access to the source discussion or metadata.

@@ -95,8 +95,11 @@ remain bookmarks; the separate **Save to Library** action guarantees retention.
   Removing the target persona or its account does not remove the collection or
   its files, or revoke its creator's access.
 - The collection owner explicitly chooses recipients. Private notes remain
-  private unless deliberately shared. Collection sharing must explain whether
-  it includes future additions. Anyone with ordinary viewing access and Library
+  private unless deliberately shared. Collection sharing includes current and
+  future uploads and original notes. Items saved from someone else stay private
+  to the saver, even when organized into a shared collection; they cannot be
+  reshared directly or used to grant access beyond the source audience.
+  Anyone with ordinary viewing access and Library
   storage enabled can choose
   durable Save; there is no separate uploader-controlled save permission.
   Revoking viewing access stops future saves but does not remove existing saves.
@@ -132,4 +135,6 @@ The authenticated API lives under `/api/library`: collection and item operations
 current account's items and collections. Asset and HLS routes authorize through
 the viewer's own reference or an explicit share on every request, independently
 of the original publication's audience. Moderation takedowns still deny saved
-playback. No public bearer link or new identity profile is created by sharing.
+playback. Saved items authorize only their saver; direct and collection grants
+cannot make them viewable or saveable by another account. No public bearer link
+or new identity profile is created by sharing.

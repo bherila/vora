@@ -94,7 +94,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
       <DialogContent className="max-h-[90svh] overflow-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</DialogTitle>
-          <DialogDescription>{item.owned ? 'In your private Library. Only people you share with can view it.' : 'Shared with you.'}</DialogDescription>
+          <DialogDescription>{item.owned ? item.source === 'saved' ? 'Saved items are visible only to you, including in shared collections.' : 'In your private Library. Only people you share with can view it.' : 'Shared with you.'}</DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!item.available ? <p className="rounded-md border p-6 text-sm text-muted-foreground">This media is currently unavailable.</p> : item.media ? <>
@@ -107,7 +107,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
           {!item.owned && enabled && item.available && <SaveToLibraryButton itemUlid={item.ulid} onSaved={onChanged} />}
           {item.owned && <>
             {enabled && <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(!editing)}>Edit</Button>}
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => onShare(itemShareTarget(item))}>Share</Button>
+            {item.source !== 'saved' && <Button variant="outline" size="sm" disabled={busy} onClick={() => onShare(itemShareTarget(item))}>Share</Button>}
             <Button variant="destructive" size="sm" disabled={busy} onClick={() => setRemoveOpen(true)}>Remove from Library</Button>
           </>}
         </div>
@@ -132,7 +132,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
               </select>
               <Button variant="outline" disabled={busy || !collection} onClick={() => void membership(collection, false)}>Add</Button>
             </div>
-            {ownCollections.some((entry) => entry.ulid === collection && entry.member_ids.length > 0) && <p className="text-sm text-muted-foreground">Adding this item shares it with this collection&apos;s recipients. They can save it to their Libraries.</p>}
+            {item.source !== 'saved' && ownCollections.some((entry) => entry.ulid === collection && entry.member_ids.length > 0) && <p className="text-sm text-muted-foreground">Adding this item shares it with this collection&apos;s recipients. They can save it to their Libraries.</p>}
           </>}
         </section>}
       </DialogContent>

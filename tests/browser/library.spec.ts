@@ -37,7 +37,7 @@ test('private collections share explicitly and saved media survives its uploader
 
     await page.getByRole('button', { name: 'Share collection', exact: true }).click();
     const sharing = page.getByRole('dialog');
-    await expect(sharing.getByText(/all current and future items/)).toBeVisible();
+    await expect(sharing.getByText(/all current and future items you upload or write/)).toBeVisible();
     await sharing.getByLabel('Specific people').fill(`Alice ${suffix}`);
     await sharing.getByRole('checkbox', { name: `Alice ${suffix}`, exact: true }).check();
     await sharing.getByRole('button', { name: 'Save sharing', exact: true }).click();
@@ -64,6 +64,23 @@ test('private collections share explicitly and saved media survives its uploader
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'Shared library photo', exact: true })).toBeVisible();
     const image = page.getByRole('dialog').getByRole('img', { name: 'Shared library photo', exact: true });
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Share', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog').getByText(/Saved items are visible only to you/)).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.goto(`/library?collection=${collectionUlid}`);
+    await page.getByRole('button', { name: 'Share collection', exact: true }).click();
+    await expect(page.getByRole('dialog').getByText(/Items saved from someone else remain private to you/)).toBeVisible();
+    await page.getByRole('dialog').getByLabel('Specific people').fill(`Alice ${suffix}`);
+    await page.getByRole('dialog').getByRole('checkbox', { name: `Alice ${suffix}`, exact: true }).check();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save sharing', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await alice.goto(`/library?collection=${collectionUlid}`);
+    await expect(alice.getByRole('button', { name: 'Open Received note', exact: true })).toBeVisible();
+    await expect(alice.getByRole('button', { name: 'Open Shared library photo', exact: true })).toHaveCount(0);
+    const savedItemUlid = new URL(savedHref ?? '', page.url()).searchParams.get('item');
+    expect(savedItemUlid).toBeTruthy();
+    expect((await alice.request.get(`/api/library/items/${savedItemUlid}`)).status()).toBe(404);
+    expect((await alice.request.get(`/api/library/items/${savedItemUlid}/assets/original`)).status()).toBe(404);
 
     const purge = await request.post('/__browser/library-purge-uploader', { headers: { 'x-browser-owner': String(accounts.alice.id) } });
     expect(purge.ok()).toBeTruthy();
