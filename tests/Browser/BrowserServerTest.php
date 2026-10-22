@@ -3,10 +3,14 @@
 namespace Tests\Browser;
 
 use App\Enums\Audience;
+use App\Enums\MediaPurpose;
 use App\Models\Character;
+use App\Models\Event;
+use App\Models\Favorite;
 use App\Models\Media;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Events\EventSettings;
 use App\Services\FileStorageService;
 use App\Services\Story\StoryService;
 use App\Services\UserAccountService;
@@ -48,6 +52,7 @@ class BrowserServerTest extends TestCase
             'session.secure' => false,
         ]);
         $admin = User::factory()->admin()->create(['display_name' => 'Browser Admin']);
+        $defaultInstance = config('instance');
         Notification::fake([VerifyEmail::class]);
         // Object storage is faked; media requests still use normal policies
         // and protected asset routes, including after access is revoked.
@@ -80,6 +85,10 @@ class BrowserServerTest extends TestCase
         while (($line = fgets(STDIN)) !== false) {
             $input = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
             $requests++;
+
+            if (in_array($input['path'], ['/__browser/registration', '/__browser/fixtures'], true)) {
+                config(['instance' => $defaultInstance]);
+            }
 
             if ($input['path'] === '/__browser/registration') {
                 $this->emitJson($input['id'], [
@@ -173,6 +182,36 @@ class BrowserServerTest extends TestCase
                     'title' => 'Shared library photo', 'mime_type' => 'image/png', 'size_bytes' => strlen($image),
                 ]);
                 $this->emitJson($input['id'], ['media' => ['ulid' => $media->ulid], 'persona' => ['ulid' => $persona->ulid, 'display_name' => $persona->display_name]]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/event-fixtures') {
+                config(['instance' => [
+                    'profile' => 'event',
+                    'modules' => array_fill_keys(['events', 'library', 'favorites'], true)
+                        + array_fill_keys(['personas', 'stories', 'chat', 'community', 'profiles', 'interests'], false),
+                ]]);
+                $owner = User::query()->findOrFail($input['headers']['x-browser-owner'] ?? '');
+                $saver = User::query()->findOrFail($input['headers']['x-browser-saver'] ?? '');
+                $event = Event::create(['name' => 'Welcome party', 'visibility' => 'everyone', 'timezone' => 'UTC']);
+                $privateEvent = Event::create(['name' => 'Private shower', 'visibility' => 'specific', 'timezone' => 'UTC']);
+                $privateEvent->members()->attach($owner);
+                $media = [];
+                foreach (range(1, 12) as $index) {
+                    $item = Media::factory()->for($owner)->approved()->create([
+                        'title' => 'Welcome photo '.$index, 'purpose' => MediaPurpose::Event,
+                        'event_id' => $event->id, 'mime_type' => 'image/png',
+                        'audience' => Audience::Everyone, 'discoverable' => false, 'size_bytes' => strlen($image),
+                    ]);
+                    $media[] = ['id' => $item->id, 'ulid' => $item->ulid, 'title' => $item->title];
+                }
+                Favorite::create(['user_id' => $saver->id, 'favoritable_type' => (new Media)->getMorphClass(), 'favoritable_id' => $media[0]['id']]);
+                $this->app->make(EventSettings::class)->setFeaturedCuratorIds([$saver->id]);
+                $this->emitJson($input['id'], [
+                    'event' => ['ulid' => $event->ulid, 'name' => $event->name],
+                    'private_event' => ['ulid' => $privateEvent->ulid], 'media' => $media,
+                ]);
 
                 continue;
             }

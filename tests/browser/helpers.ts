@@ -29,7 +29,7 @@ export async function contentFixtures(page: Page, owner: TestAccount): Promise<C
   return response.json() as Promise<ContentFixtures>;
 }
 
-export async function login(page: Page, account: Pick<TestAccount, 'email'>, name: string): Promise<void> {
+export async function login(page: Page, account: Pick<TestAccount, 'email'>, name: string, destination: RegExp = /\/feed$/): Promise<void> {
   page.on('pageerror', (error) => console.error(error));
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(account.email);
@@ -44,7 +44,7 @@ export async function login(page: Page, account: Pick<TestAccount, 'email'>, nam
   const { code } = await response.json() as { code: string };
   await page.getByLabel('Verification Code').fill(code);
   await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
-  await expect(page).toHaveURL(/\/feed$/);
+  await expect(page).toHaveURL(destination);
   await expect(page.getByRole('button', { name: `Account and identity menu (currently ${name})` })).toBeVisible();
 }
 

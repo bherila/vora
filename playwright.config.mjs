@@ -14,6 +14,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    { name: 'iphone-webkit', testMatch: '**/events.spec.ts', use: { ...devices['iPhone 13'] } },
   ],
   webServer: {
     command: 'node tests/browser/server.mjs',
