@@ -34,7 +34,9 @@ taxonomy, and user interest ratings.
   recipients. Items saved from someone else stay private to the saver, including
   in shared collections. Saved files survive the original uploader's account deletion
   through independent references to the same stored file. Original-file usage
-  is visible in Library and Settings; admins enable storage per account.
+  is visible in Library and Settings; admins enable storage and set optional
+  account limits. Pending uploads reserve space, and users see allowance warnings.
+  Bulk actions organize or remove selected items without copying stored files.
 
 ## Tech Stack
 
@@ -73,6 +75,11 @@ Or run them separately:
 php artisan serve
 pnpm run dev
 ```
+
+For isolated local development and media integration checks, use the reusable
+[Docker staging setup](docker/local/README.md). It includes the normal app,
+private S3-compatible storage, real FFmpeg HLS, captured email, and disposable
+accounts. Initialization is explicit; stopping the services preserves their data.
 
 ## Validation
 

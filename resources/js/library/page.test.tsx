@@ -33,6 +33,7 @@ describe('LibraryPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent });
     window.history.replaceState({}, '', '/library');
     collections = [collection];
     currentNote = note;
@@ -119,4 +120,101 @@ describe('LibraryPage', () => {
     expect(within(dialog).getByRole('button', { name: 'Remove from Received from Lyra' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
+  it('selects only owned items on the current page and clears selection when searching', async () => {
+    const originalGet = get.getMockImplementation()!;
+    get.mockImplementation(async (url) => url.startsWith('/api/library/items?')
+      ? { data: [currentNote, { ...currentNote, ulid: 'shared-note', title: 'Shared note', owned: false }], meta: { has_more: false } }
+      : originalGet(url));
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all on this page' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select Shared note' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Search Library items'), { target: { value: 'another query' } });
+    await waitFor(() => expect(screen.queryByLabelText('Selected Library items')).toBeNull());
+    expect((await screen.findByRole('checkbox', { name: 'Select Received note' }))).not.toBeChecked();
+  });
+
+  it('clears current-page selection when changing pages', async () => {
+    const originalGet = get.getMockImplementation()!;
+    get.mockImplementation(async (url) => {
+      if (!url.startsWith('/api/library/items?')) return originalGet(url);
+      const secondPage = url.includes('page=2');
+      return { data: [{ ...note, ulid: secondPage ? 'page-two' : note.ulid, title: secondPage ? 'Next page note' : note.title }], meta: { has_more: !secondPage } };
+    });
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Received note' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByRole('checkbox', { name: 'Select Next page note' })).not.toBeChecked();
+    expect(screen.queryByLabelText('Selected Library items')).toBeNull();
+  });
+
+  it('adds selected items to a shared collection with explicit sharing disclosure', async () => {
+    collections = [{ ...collection, member_ids: [8] }];
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Received note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to collection' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Destination collection'), { target: { value: collection.ulid } });
+    expect(within(dialog).getByText(/Your uploads and notes become visible/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Saved items stay private/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add to collection' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/items/bulk', { action: 'add', item_ulids: [note.ulid], collection_ulid: collection.ulid }));
+    await waitFor(() => expect(screen.queryByLabelText('Selected Library items')).toBeNull());
+  });
+
+  it('requires confirmation for bulk Library deletion and supports removing while disabled', async () => {
+    bootstrap.mockReturnValue({ library: { enabled: false, storage_usage: EMPTY_STORAGE_USAGE } });
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Received note' }));
+    expect(screen.queryByRole('button', { name: 'Add to collection' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from Library' }));
+    expect(post).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/all your collections/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/keep their own saved items/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove from Library' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/items/bulk', { action: 'delete', item_ulids: [note.ulid] }));
+  });
+
+  it('moves from the current collection without detaching other memberships', async () => {
+    window.history.replaceState({}, '', '/library?collection=my-collection');
+    const destination = { ...collection, ulid: 'destination', name: 'New place' };
+    collections = [collection, destination, { ...collection, ulid: 'foreign', name: 'Foreign place', owned: false }];
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Received note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to collection' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Other collection memberships remain/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('option', { name: collection.name })).toBeNull();
+    expect(within(dialog).queryByRole('option', { name: 'Foreign place' })).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Destination collection'), { target: { value: destination.ulid } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move to collection' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/items/bulk', { action: 'move', item_ulids: [note.ulid], collection_ulid: destination.ulid, source_collection_ulid: collection.ulid }));
+  });
+
+  it('keeps a failed bulk selection available for retry without claiming success', async () => {
+    post.mockRejectedValue('Access changed. Reload and try again.');
+    window.history.replaceState({}, '', '/library?collection=my-collection');
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Received note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from collection' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove from collection' }));
+    await within(dialog).findByText('Access changed. Reload and try again.');
+    expect(post).toHaveBeenCalledWith('/api/library/items/bulk', { action: 'remove', item_ulids: [note.ulid], source_collection_ulid: collection.ulid });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
+  it('does not offer bulk controls in a shared collection with no owned items', async () => {
+    window.history.replaceState({}, '', '/library?collection=my-collection');
+    collections = [{ ...collection, owned: false }];
+    currentNote = { ...note, owned: false };
+    render(<LibraryPage />);
+    await screen.findByRole('button', { name: 'Open Received note' });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByLabelText('Selected Library items')).toBeNull();
+  });
+
 });

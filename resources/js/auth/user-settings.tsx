@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { type Audience } from '@/lib/audience';
+import { StorageQuotaSummary } from '@/library/StorageQuotaSummary';
 import { type AccountStorageUsage, EMPTY_STORAGE_USAGE } from '@/library/types';
 import { formatBytes } from '@/media/types';
 import {
@@ -877,6 +878,7 @@ export function UserSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <StorageQuotaSummary usage={initialData.storage_usage} />
               <dl className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <dt className="text-sm text-muted-foreground">Active files ({initialData.storage_usage.active_file_count})</dt>

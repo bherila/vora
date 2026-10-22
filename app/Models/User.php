@@ -98,6 +98,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_admin' => 'boolean',
             'is_disabled' => 'boolean',
             'library_enabled' => 'boolean',
+            'storage_limit_bytes' => 'integer',
             'can_receive_invites' => 'boolean',
             'ban_hides_content' => 'boolean',
             'trusted_inviter' => 'boolean',

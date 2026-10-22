@@ -65,10 +65,25 @@ file from usage. Completed files without a recorded size are counted in
 `unknown_size_file_count` and excluded from byte totals.
 
 This measures logical original-file usage, not the object-storage bill:
-thumbnails, reviewed copies, HLS derivatives, and unfinished uploads are excluded.
-There is no quota enforcement or billing yet. Storage creation is controlled by
-the admin-managed `users.library_enabled` flag, which is off by default and
-cannot be set through registration or ordinary account settings.
+thumbnails, reviewed copies, and HLS derivatives are excluded. Unfinished uploads
+reserve their declared original size separately until completion, cancellation,
+or stale-upload cleanup.
+
+Admins can set `users.storage_limit_bytes` in Admin Users: null means unlimited,
+and zero prevents additional media storage. Limits apply to active uploaded and
+saved originals plus upload reservations, counted once per account. Deleted
+uploads held for admin retention remain measured but do not use the allowance.
+Notes and viewing shares consume no allowance. Library and Settings show the
+limit, available space, reservations, and warnings at 90% or when full. Unknown
+active file sizes block new storage under a finite limit until verified.
+
+Uploads and durable Saves serialize on the account before checking capacity;
+completion verifies actual object size before replacing its reservation. Failed
+direct uploads cancel their pending record so retries do not reserve space twice.
+Reading, removing files, and revoking sharing remain available above the limit.
+There is no billing integration. Storage creation is also controlled by the
+admin-managed `users.library_enabled` flag, which is off by default and cannot
+be set through registration or ordinary account settings.
 
 ## Private Library and durable Save
 
@@ -78,6 +93,15 @@ playback. The account menu links to Library. Admins enable new uploads, saves,
 notes, and collection creation from Admin Users. Disabling storage preserves
 existing viewing, removal, and access-revocation operations. Recipients need
 no storage entitlement to view an explicitly shared item or collection.
+
+The Library supports selection of owned items on the current page. Bulk actions
+add items to a collection, move only the current collection membership, remove
+collection membership, or remove items from the Library after confirmation.
+Other collection memberships survive a move. Selection resets on search, page,
+and section changes. `POST /api/library/items/bulk` accepts at most 100 opaque
+item identifiers and validates every item, collection, and source membership
+before changing anything. Removing membership or items remains available when
+storage is disabled. Adding saved items to a shared collection keeps them private.
 
 The migration makes `media.user_id` nullable so the stored media row can outlive
 its uploader. `library_items` are independent account-owned references to that

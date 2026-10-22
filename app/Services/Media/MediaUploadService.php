@@ -9,6 +9,7 @@ use App\Enums\ModerationStatus;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -17,7 +18,10 @@ use Illuminate\Support\Str;
  */
 class MediaUploadService
 {
-    public function __construct(private readonly FileStorageService $storage) {}
+    public function __construct(
+        private readonly FileStorageService $storage,
+        private readonly AccountStorageQuota $quota,
+    ) {}
 
     /**
      * Map of known MIME types to a canonical file extension, used to build the
@@ -72,70 +76,74 @@ class MediaUploadService
         bool $announceOnApproval = false,
         ?int $thumbnailSizeBytes = null,
     ): array {
-        // Each presigned PUT is bound to an exact byte length, so the sizes
-        // must be known up front (the request validates them against limits).
-        if ($expectedSizeBytes === null || $expectedSizeBytes < 1) {
-            throw new \InvalidArgumentException('An upload must declare its size before it can be presigned.');
-        }
-        $wantsThumbnail = $wantsThumbnail && $thumbnailSizeBytes !== null && $thumbnailSizeBytes > 0;
+        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes): array {
+            $user = $this->quota->lock($user);
+            $this->quota->assertCanGrow($user, $expectedSizeBytes);
+            // Each presigned PUT is bound to an exact byte length, so the sizes
+            // must be known up front (the request validates them against limits).
+            if ($expectedSizeBytes === null || $expectedSizeBytes < 1) {
+                throw new \InvalidArgumentException('An upload must declare its size before it can be presigned.');
+            }
+            $wantsThumbnail = $wantsThumbnail && $thumbnailSizeBytes !== null && $thumbnailSizeBytes > 0;
 
-        $ulid = (string) Str::ulid();
-        $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
-        $thumbnailKey = $wantsThumbnail ? $this->buildThumbnailKey($user, $ulid) : null;
+            $ulid = (string) Str::ulid();
+            $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
+            $thumbnailKey = $wantsThumbnail ? $this->buildThumbnailKey($user, $ulid) : null;
 
-        $media = new Media([
-            'user_id' => $user->id,
-            'character_id' => $characterId,
-            'ulid' => $ulid,
-            'type' => $type,
-            'purpose' => $purpose,
-            'disk' => $type->disk(),
-            'object_key' => $key,
-            'thumbnail_key' => $thumbnailKey,
-            'original_filename' => $filename,
-            'mime_type' => $mimeType,
-            'perceptual_hash' => $perceptualHash,
-            'file_hash' => $fileHash,
-            'title' => $title,
-            'upload_status' => 'pending',
-            'multipart_expected_size_bytes' => $expectedSizeBytes,
-            'audience' => $audience,
-            'discoverable' => $discoverable,
-            'announce_on_approval' => $announceOnApproval,
-        ]);
-        $media->save();
+            $media = new Media([
+                'user_id' => $user->id,
+                'character_id' => $characterId,
+                'ulid' => $ulid,
+                'type' => $type,
+                'purpose' => $purpose,
+                'disk' => $type->disk(),
+                'object_key' => $key,
+                'thumbnail_key' => $thumbnailKey,
+                'original_filename' => $filename,
+                'mime_type' => $mimeType,
+                'perceptual_hash' => $perceptualHash,
+                'file_hash' => $fileHash,
+                'title' => $title,
+                'upload_status' => 'pending',
+                'multipart_expected_size_bytes' => $expectedSizeBytes,
+                'audience' => $audience,
+                'discoverable' => $discoverable,
+                'announce_on_approval' => $announceOnApproval,
+            ]);
+            $media->save();
 
-        if ($purpose === MediaPurpose::Gallery && $interestIds !== []) {
-            $media->interests()->sync($interestIds);
-        }
+            if ($purpose === MediaPurpose::Gallery && $interestIds !== []) {
+                $media->interests()->sync($interestIds);
+            }
 
-        if ($purpose === MediaPurpose::Gallery) {
-            // Remember the selection so the next upload can pre-fill it.
-            $user->last_media_interest_ids = array_values($interestIds);
-            $user->save();
-        }
+            if ($purpose === MediaPurpose::Gallery) {
+                // Remember the selection so the next upload can pre-fill it.
+                $user->last_media_interest_ids = array_values($interestIds);
+                $user->save();
+            }
 
-        $ttl = (int) config('media.upload_url_ttl', 30);
+            $ttl = (int) config('media.upload_url_ttl', 30);
 
-        $signed = $this->storage->getSignedUploadUrl($media->disk, $key, $mimeType, $expectedSizeBytes, $ttl);
+            $signed = $this->storage->getSignedUploadUrl($media->disk, $key, $mimeType, $expectedSizeBytes, $ttl);
 
-        $thumbnailSigned = $thumbnailKey !== null
-            ? $this->storage->getSignedUploadUrl(
-                (string) config('media.thumbnail_disk'),
-                $thumbnailKey,
-                self::THUMBNAIL_MIME,
-                (int) $thumbnailSizeBytes,
-                $ttl,
-            )
-            : null;
+            $thumbnailSigned = $thumbnailKey !== null
+                ? $this->storage->getSignedUploadUrl(
+                    (string) config('media.thumbnail_disk'),
+                    $thumbnailKey,
+                    self::THUMBNAIL_MIME,
+                    (int) $thumbnailSizeBytes,
+                    $ttl,
+                )
+                : null;
 
-        return [
-            'media' => $media,
-            'upload_url' => $signed['url'],
-            'upload_headers' => $signed['headers'],
-            'thumbnail_upload_url' => $thumbnailSigned['url'] ?? null,
-            'thumbnail_upload_headers' => $thumbnailSigned['headers'] ?? null,
-        ];
+            return [
+                'media' => $media,
+                'upload_url' => $signed['url'],
+                'upload_headers' => $signed['headers'],
+                'thumbnail_upload_url' => $thumbnailSigned['url'] ?? null,
+                'thumbnail_upload_headers' => $thumbnailSigned['headers'] ?? null,
+            ];
+        });
     }
 
     /**
@@ -148,12 +156,21 @@ class MediaUploadService
      */
     public function completeUpload(Media $media): bool
     {
+        return DB::transaction(function () use ($media): bool {
+            $this->lockUpload($media);
+
+            return $this->completeUploadLocked($media);
+        });
+    }
+
+    private function completeUploadLocked(Media $media): bool
+    {
         // Already completed — don't re-run (and don't reset an existing review).
         if ($media->isReady()) {
             return true;
         }
 
-        if (! $this->storage->fileExists($media->disk, $media->object_key)) {
+        if ($media->trashed() || ! $this->storage->fileExists($media->disk, $media->object_key)) {
             return false;
         }
 
@@ -162,7 +179,11 @@ class MediaUploadService
         // Reject an object that exceeds the type's limit: delete it and the row.
         // Drop the thumbnail too — once the row is gone, prune can no longer
         // discover the orphaned thumbnail key.
-        if ($size !== null && $size > $media->type->maxBytes()) {
+        $owner = $media->user_id === null ? null : User::withTrashed()->find($media->user_id);
+        $withinQuota = ! $owner instanceof User || $this->quota->allows(
+            $owner, $size, (int) $media->multipart_expected_size_bytes,
+        );
+        if (! $withinQuota || ($size !== null && $size > $media->type->maxBytes())) {
             $this->storage->deleteFile($media->disk, $media->object_key);
 
             if ($media->thumbnail_key !== null) {
@@ -221,7 +242,16 @@ class MediaUploadService
      */
     public function initMultipartUpload(Media $media): ?array
     {
-        if ($media->isReady() || $media->multipart_expected_size_bytes === null) {
+        return DB::transaction(function () use ($media): ?array {
+            $this->lockUpload($media);
+
+            return $this->initMultipartUploadLocked($media);
+        });
+    }
+
+    private function initMultipartUploadLocked(Media $media): ?array
+    {
+        if ($media->trashed() || $media->isReady() || $media->multipart_expected_size_bytes === null) {
             return null;
         }
 
@@ -312,7 +342,16 @@ class MediaUploadService
      */
     public function completeMultipartUpload(Media $media, string $uploadId, array $parts): bool
     {
-        if ($media->multipart_upload_id !== $uploadId || $media->isReady() || $parts === []) {
+        return DB::transaction(function () use ($media, $uploadId, $parts): bool {
+            $this->lockUpload($media);
+
+            return $this->completeMultipartUploadLocked($media, $uploadId, $parts);
+        });
+    }
+
+    private function completeMultipartUploadLocked(Media $media, string $uploadId, array $parts): bool
+    {
+        if ($media->trashed() || $media->multipart_upload_id !== $uploadId || $media->isReady() || $parts === []) {
             return false;
         }
 
@@ -325,7 +364,6 @@ class MediaUploadService
         $media->refresh();
         $media->multipart_upload_id = null;
         $media->multipart_part_size_bytes = null;
-        $media->multipart_expected_size_bytes = null;
         $media->multipart_max_part_number = null;
         $media->multipart_initiated_at = null;
         $media->save();
@@ -334,6 +372,15 @@ class MediaUploadService
     }
 
     public function abortMultipartUpload(Media $media, string $uploadId): bool
+    {
+        return DB::transaction(function () use ($media, $uploadId): bool {
+            $this->lockUpload($media);
+
+            return $this->abortMultipartUploadLocked($media, $uploadId);
+        });
+    }
+
+    private function abortMultipartUploadLocked(Media $media, string $uploadId): bool
     {
         if ($media->multipart_upload_id !== $uploadId) {
             return false;
@@ -351,6 +398,46 @@ class MediaUploadService
         }
 
         return true;
+    }
+
+    public function cancelPendingUpload(User $user, Media $media): bool
+    {
+        return DB::transaction(function () use ($user, $media): bool {
+            $this->quota->lock($user);
+            $this->lockUpload($media);
+            abort_unless($media->user_id === $user->id && $media->supportsMultipartUpload(), 404, 'Not found.');
+            if ($media->isReady()) {
+                return false;
+            }
+
+            $this->abortActiveMultipartUpload($media);
+            $user->libraryItems()->where('media_id', $media->id)->delete();
+            $media->forceFill([
+                'multipart_upload_id' => null,
+                'multipart_part_size_bytes' => null,
+                'multipart_expected_size_bytes' => null,
+                'multipart_max_part_number' => null,
+                'multipart_initiated_at' => null,
+            ])->save();
+            // Retain the row so prune can remove objects from a late presigned
+            // PUT; no completion may make this canceled upload ready.
+            if (! $media->trashed()) {
+                $media->delete();
+            }
+
+            return true;
+        });
+    }
+
+    private function lockUpload(Media $media): void
+    {
+        // A locking read must precede any consistent read, otherwise MariaDB
+        // could retain a usage snapshot from before a concurrent upload.
+        if ($media->user_id !== null) {
+            $this->quota->lockId($media->user_id);
+        }
+        Media::withTrashed()->whereKey($media->id)->lockForUpdate()->firstOrFail();
+        $media->refresh();
     }
 
     private function abortActiveMultipartUpload(Media $media): void

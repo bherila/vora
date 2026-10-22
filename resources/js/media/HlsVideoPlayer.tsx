@@ -1,3 +1,4 @@
+import Hls from 'hls.js';
 import { useEffect, useRef } from 'react';
 
 import { safeSameOriginUrl } from '@/security/dom-url';
@@ -15,8 +16,8 @@ interface HlsVideoPlayerProps {
 }
 
 /**
- * Plays an adaptive-bitrate HLS stream. Safari/iOS play HLS natively; everywhere
- * else we lazily attach hls.js (Media Source Extensions). `src` points at the
+ * Plays an adaptive-bitrate HLS stream through hls.js when Media Source
+ * Extensions are available, otherwise native HLS. `src` points at the
  * authenticated playback proxy, which serves manifests and 302-redirects segments
  * to presigned R2 URLs.
  */
@@ -41,7 +42,23 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       return;
     }
 
-    // Native HLS (Safari, iOS): point the element at the manifest.
+    // Native HLS capability checks can overstate support (including Chromium).
+    // Prefer hls.js/MSE as recommended by hls.js, retaining native-only support.
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          onErrorRef.current?.();
+        }
+      });
+      hls.loadSource(safeSource);
+      hls.attachMedia(video);
+      return () => {
+        hls.destroy();
+      };
+    }
+
+    // Native HLS remains available on browsers without supported MSE.
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = safeSource;
       const handleNativeError = () => onErrorRef.current?.();
@@ -51,40 +68,9 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
       };
     }
 
-    // Everywhere else, load hls.js (Media Source Extensions) on demand so iOS
-    // and Safari never download it.
-    let cancelled = false;
-    let destroy: (() => void) | null = null;
-    void import('hls.js').then(({ default: Hls }) => {
-      if (cancelled) {
-        return;
-      }
-      if (!Hls.isSupported()) {
-        // Neither native HLS nor MSE support.
-        onErrorRef.current?.();
-        return;
-      }
-      const hls = new Hls({ enableWorker: true });
-      destroy = () => hls.destroy();
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          onErrorRef.current?.();
-        }
-      });
-      hls.loadSource(safeSource);
-      hls.attachMedia(video);
-    }).catch(() => {
-      if (!cancelled) {
-        destroy?.();
-        destroy = null;
-        onErrorRef.current?.();
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      destroy?.();
-    };
+    // Neither native HLS nor MSE support.
+    onErrorRef.current?.();
+    return;
   }, [src]);
 
   return <video ref={videoRef} controls playsInline className={className} />;

@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+auth.json
+vendor
+node_modules
+public/build
+public/hot
+test-results
+playwright-report
+storage
+bootstrap/cache/*.php
+database/*.sqlite*
+**/__pycache__
+tests/staging/.fixtures
+tests/staging/artifacts

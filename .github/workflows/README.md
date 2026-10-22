@@ -54,6 +54,16 @@ failing check requires inspection of the cPanel cron and
 retried or removed. The command can also be run manually without starting a
 recurring GitHub Actions workflow.
 
+## Real media staging acceptance
+
+`real-media-staging.yml` builds the reusable Docker stack and tests normal SMTP
+two-factor login, real photo/video uploads, FFmpeg HLS playback, quota limits,
+bulk organization, durable saves after uploader deletion, and final-reference
+cleanup. It uses generated media, disposable accounts, isolated SQLite and
+private MinIO buckets, with no production credentials. Images build sequentially
+with layer caching; services stop after the run and reports are retained for
+seven days. See [the runner instructions](../../tests/staging/README.md).
+
 ## Migration amendments (CI guard)
 
 `ci.yml` fails a pull request that **modifies** an existing file under

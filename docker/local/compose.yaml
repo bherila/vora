@@ -1,0 +1,107 @@
+name: vora-local-staging
+
+x-app-environment: &app-environment
+  APP_NAME: Vora Local Staging
+  APP_ENV: staging
+  APP_DEBUG: "false"
+  APP_URL: http://127.0.0.1:18080
+  APP_KEY: base64:yvKptnlsS+pVh5AkIHr6d3RucNmkbq/jfS4ceWSg8ZI=
+  LOCAL_STAGING_ENABLED: "1"
+  DB_CONNECTION: sqlite
+  DB_DATABASE: /var/lib/vora-staging/database.sqlite
+  SESSION_DRIVER: database
+  CACHE_STORE: database
+  QUEUE_CONNECTION: database
+  LOG_CHANNEL: stderr
+  MAIL_MAILER: smtp
+  MAIL_HOST: mail
+  MAIL_PORT: "1025"
+  MAIL_FROM_ADDRESS: vora@staging.invalid
+  MAIL_FROM_NAME: Vora Local Staging
+  AWS_ACCESS_KEY_ID: vora-local-staging
+  AWS_SECRET_ACCESS_KEY: disposable-storage-password
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET: vora-staging-videos
+  AWS_ENDPOINT: http://127.0.0.1:19000
+  AWS_USE_PATH_STYLE_ENDPOINT: "true"
+  PHOTOS_BUCKET: vora-staging-photos
+  HLS_BUCKET: vora-staging-hls
+  WEBAUTHN_RP_NAME: Vora Local Staging
+  WEBAUTHN_ALLOWED_ORIGINS: http://127.0.0.1:18080
+
+services:
+  app:
+    image: vora-local-staging-app
+    cpus: 1.0
+    mem_limit: 1g
+    build:
+      context: ../..
+      dockerfile: docker/local/Dockerfile
+      target: app
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:19000:19000"
+      - "127.0.0.1:19001:19001"
+    volumes:
+      - database:/var/lib/vora-staging
+      - app-storage:/app/storage
+    depends_on:
+      - mail
+
+  object-store:
+    image: vora-local-staging-minio
+    cpus: 1.0
+    mem_limit: 1g
+    build:
+      context: ../..
+      dockerfile: docker/local/Minio.Dockerfile
+    network_mode: service:app
+    command: server /data --address :19000 --console-address :19001
+    environment:
+      MINIO_ROOT_USER: vora-local-staging
+      MINIO_ROOT_PASSWORD: disposable-storage-password
+      MINIO_API_CORS_ALLOW_ORIGIN: http://127.0.0.1:18080
+      GOMAXPROCS: "1"
+    volumes:
+      - object-storage:/data
+    depends_on:
+      - app
+
+  transcoder:
+    cpus: 1.0
+    mem_limit: 1g
+    build:
+      context: ../..
+      dockerfile: docker/local/Dockerfile
+      target: transcoder
+    network_mode: service:app
+    environment:
+      LOCAL_STAGING_ENABLED: "1"
+    depends_on:
+      - object-store
+
+  mail:
+    image: axllent/mailpit:v1.27
+    cpus: 0.25
+    mem_limit: 256m
+    ports:
+      - "127.0.0.1:18025:8025"
+
+  scheduler:
+    image: vora-local-staging-app
+    cpus: 0.5
+    mem_limit: 768m
+    network_mode: service:app
+    environment: *app-environment
+    command: ["sh", "docker/local/schedule.sh"]
+    volumes:
+      - database:/var/lib/vora-staging
+      - app-storage:/app/storage
+    depends_on:
+      - app
+
+volumes:
+  database:
+  app-storage:
+  object-storage:

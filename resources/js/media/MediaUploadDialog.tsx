@@ -255,6 +255,7 @@ export function MediaUploadDialog({
     setUploading(true);
     setProgress(0);
     let completedCount = 0;
+    let disposableUploadId: number | null = null;
     try {
       for (const [index, item] of pending.entries()) {
         const selectedFile = item.file;
@@ -298,9 +299,13 @@ export function MediaUploadDialog({
             character_id: selectedCharacterId,
           }),
         };
-        const createUpload = (): Promise<StoreResponse> => postUpload<StoreResponse>(
-          isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
-        );
+        const createUpload = async (): Promise<StoreResponse> => {
+          const result = await postUpload<StoreResponse>(
+            isLibrary ? '/api/library/uploads' : '/api/media', uploadPayload, abortController.signal,
+          );
+          disposableUploadId = result.data.id;
+          return result;
+        };
         const created = existingSession === null ? await createUpload() : null;
 
         const shouldMultipart = existingSession !== null
@@ -339,15 +344,29 @@ export function MediaUploadDialog({
           });
           try {
             const session = existingSession ?? await beginMultipartSession(created, sessionKey, abortController.signal);
+            // Retain failed sessions only when their content hash makes them resumable.
+            if (fileHash !== null) disposableUploadId = null;
             await runMultipart(session, created);
           } catch (err) {
             if (existingSession === null || !(err instanceof UploadHttpError) || ![404, 422].includes(err.status)) throw err;
-            // Expired, superseded, or owned by a previous account on this browser.
-            // Start a fresh upload instead of getting stuck on stale local state.
+            let alreadyComplete = false;
+            try {
+              await postUpload(`/api/media/${existingSession.mediaId}/cancel-upload`, {});
+            } catch (cancelError) {
+              if (!(cancelError instanceof UploadHttpError)) throw cancelError;
+              if (cancelError.status === 409) alreadyComplete = true;
+              else if (cancelError.status !== 404) throw cancelError;
+            }
+            // Release an owned stale reservation before allocating its replacement.
+            // A ready conflict confirms this account already completed the upload.
             removeMultipartSession(sessionKey);
-            const replacement = await createUpload();
-            const session = await beginMultipartSession(replacement, sessionKey, abortController.signal);
-            await runMultipart(session, replacement);
+            if (!alreadyComplete) {
+              abortController.signal.throwIfAborted();
+              const replacement = await createUpload();
+              const session = await beginMultipartSession(replacement, sessionKey, abortController.signal);
+              disposableUploadId = null;
+              await runMultipart(session, replacement);
+            }
           } finally {
             if (fileHash === null) removeMultipartSession(sessionKey);
           }
@@ -359,6 +378,7 @@ export function MediaUploadDialog({
           await uploadThumbnailBestEffort(created, thumbnail, abortController.signal);
           await withRetries(() => postUpload(`/api/media/${created.data.id}/complete`, {}, abortController.signal), abortController.signal);
         }
+        disposableUploadId = null;
         completedCount += 1;
       }
 
@@ -367,10 +387,18 @@ export function MediaUploadDialog({
       resetForm();
       onUploaded();
     } catch (err) {
+      if (disposableUploadId !== null) {
+        try {
+          await postUpload(`/api/media/${disposableUploadId}/cancel-upload`, {});
+        } catch {
+          // A completed upload is protected by the server. Other abandoned
+          // uploads remain visible to scheduled cleanup if cancellation fails.
+        }
+      }
       if (completedCount > 0) {
         setPending(pending.slice(completedCount));
-        onUploaded();
       }
+      onUploaded();
 
       if (err instanceof DOMException && err.name === 'AbortError') {
         toast.info(completedCount > 0 ? `${completedCount} upload${completedCount === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');

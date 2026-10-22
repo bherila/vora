@@ -30,6 +30,7 @@ use App\Http\Controllers\Follow\FollowController;
 use App\Http\Controllers\IdentityController;
 use App\Http\Controllers\InterestController;
 use App\Http\Controllers\InviteController;
+use App\Http\Controllers\LibraryBulkController;
 use App\Http\Controllers\LibraryContentController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\MediaAssetController;
@@ -225,6 +226,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/notes', [LibraryController::class, 'storeNote']);
         Route::post('/uploads', [LibraryController::class, 'upload']);
         Route::post('/save', [LibraryController::class, 'save']);
+        Route::post('/items/bulk', LibraryBulkController::class);
         Route::get('/personas', [LibraryController::class, 'personas']);
         Route::get('/collections', [LibraryController::class, 'collections']);
         Route::post('/collections', [LibraryController::class, 'storeCollection']);
@@ -354,6 +356,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
             ->where('path', '.*')
             ->name('media.hls');
         Route::post('/{media}/complete', [MediaController::class, 'complete']);
+        Route::post('/{media}/cancel-upload', [MediaController::class, 'cancelUpload']);
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::patch('/{media}', [MediaController::class, 'update']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);

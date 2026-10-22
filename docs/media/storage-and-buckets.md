@@ -11,7 +11,7 @@ hard-code them.
 | --- | --- | --- | --- | --- |
 | Video source | `s3` | the app (uploads) | the transcoder (read-only) | `AWS_*` |
 | Photo store | `photos` | the app (uploads) | the app (signed views) | `PHOTOS_*` |
-| HLS output | `hls` | the transcoder | the app (read-only) | `HLS_*` |
+| HLS output | `hls` | the transcoder | the app (read/delete for permanent cleanup) | `HLS_*` |
 
 Photos live in their own bucket so the video transcoder never wastes work
 scanning images it would ignore.

@@ -1,91 +1,95 @@
-import { act, fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
+import Hls from 'hls.js';
 
 import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
 
-let mockModuleLoads = 0;
-const mockSupported = jest.fn(() => true);
-const mockAttach = jest.fn();
-const mockLoad = jest.fn();
-const mockDestroy = jest.fn();
-const mockOn = jest.fn();
-const mockConstruct = jest.fn();
+jest.mock('hls.js', () => ({
+  __esModule: true,
+  default: Object.assign(jest.fn().mockImplementation(() => ({
+    on: jest.fn(), loadSource: jest.fn(), attachMedia: jest.fn(), destroy: jest.fn(),
+  })), { isSupported: jest.fn(), Events: { ERROR: 'hlsError' } }),
+}));
 
-jest.mock('hls.js', () => {
-  mockModuleLoads += 1;
-  return {
-    __esModule: true,
-    default: Object.assign(function MockHls() {
-      mockConstruct();
-      return { attachMedia: mockAttach, loadSource: mockLoad, destroy: mockDestroy, on: mockOn };
-    }, { isSupported: mockSupported, Events: { ERROR: 'error' } }),
-  };
-});
+interface HlsDouble {
+  on: jest.Mock;
+  loadSource: jest.Mock;
+  attachMedia: jest.Mock;
+  destroy: jest.Mock;
+}
 
-afterEach(() => {
-  jest.restoreAllMocks();
-  jest.clearAllMocks();
-  mockSupported.mockReturnValue(true);
-  mockAttach.mockReset();
-});
+function hlsInstance(): HlsDouble {
+  return jest.mocked(Hls).mock.results[0]?.value as HlsDouble;
+}
 
-it('uses native HLS without loading hls.js', () => {
-  jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
-  const onError = jest.fn();
-  const { container } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
-  const video = container.querySelector('video')!;
-  expect(video).toHaveAttribute('src', 'http://localhost/api/media/7/hls/master.m3u8');
-  expect(mockModuleLoads).toBe(0);
-  fireEvent.error(video);
-  expect(onError).toHaveBeenCalledTimes(1);
-});
+describe('HlsVideoPlayer', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(Hls.isSupported).mockReturnValue(false);
+    jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
+  });
 
-it('rejects script URLs before loading a player or assigning a source', () => {
-  const onError = jest.fn();
-  const { container } = render(<HlsVideoPlayer src="javascript:alert(1)" onError={onError} />);
-  expect(container.querySelector('video')).not.toHaveAttribute('src');
-  expect(onError).toHaveBeenCalledTimes(1);
-  expect(mockModuleLoads).toBe(0);
-});
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
-it('loads hls.js for MSE, forwards fatal errors, and destroys on unmount', async () => {
-  jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
-  const onError = jest.fn();
-  const { unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
-  await waitFor(() => expect(mockAttach).toHaveBeenCalledTimes(1));
-  expect(mockLoad).toHaveBeenCalledWith('http://localhost/api/media/7/hls/master.m3u8');
-  const [, handleError] = mockOn.mock.calls[0] as unknown as [string, (event: string, data: { fatal: boolean }) => void];
-  act(() => handleError('error', { fatal: false }));
-  expect(onError).not.toHaveBeenCalled();
-  act(() => handleError('error', { fatal: true }));
-  expect(onError).toHaveBeenCalledTimes(1);
-  unmount();
-  expect(mockDestroy).toHaveBeenCalledTimes(1);
-});
+  it('uses hls.js when MSE and native HLS both claim support', () => {
+    jest.mocked(Hls.isSupported).mockReturnValue(true);
+    const { container } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" />);
+    const video = container.querySelector('video');
 
-it('reports unsupported playback after the lazy import', async () => {
-  jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
-  mockSupported.mockReturnValue(false);
-  const onError = jest.fn();
-  render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
-  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
-  expect(mockConstruct).not.toHaveBeenCalled();
-});
+    expect(Hls).toHaveBeenCalledWith({ enableWorker: true });
+    expect(hlsInstance().loadSource).toHaveBeenCalledWith('http://localhost/api/media/7/hls/master.m3u8');
+    expect(hlsInstance().attachMedia).toHaveBeenCalledWith(video);
+    expect(video).not.toHaveAttribute('src');
+  });
 
-it('does not attach a player if unmounted while the import is pending', async () => {
-  jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
-  const { unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" />);
-  unmount();
-  await act(async () => { await Promise.resolve(); });
-  expect(mockConstruct).not.toHaveBeenCalled();
-});
+  it('uses native HLS when MSE is unavailable and removes its error listener on unmount', () => {
+    const onError = jest.fn();
+    const { container, unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
+    const video = container.querySelector('video')!;
 
-it('cleans up and reports initialization failures', async () => {
-  jest.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
-  mockAttach.mockImplementation(() => { throw new Error('MSE unavailable'); });
-  const onError = jest.fn();
-  const { unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
-  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
-  expect(mockDestroy).toHaveBeenCalledTimes(1);
-  unmount();
-  expect(mockDestroy).toHaveBeenCalledTimes(1);
+    expect(video).toHaveAttribute('src', 'http://localhost/api/media/7/hls/master.m3u8');
+    expect(Hls).not.toHaveBeenCalled();
+    fireEvent.error(video);
+    expect(onError).toHaveBeenCalledTimes(1);
+    unmount();
+    fireEvent.error(video);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports only fatal hls.js errors and destroys its instance on unmount', () => {
+    jest.mocked(Hls.isSupported).mockReturnValue(true);
+    const onError = jest.fn();
+    const { unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
+    const instance = hlsInstance();
+    const [event, report] = instance.on.mock.calls[0] as [string, (event: string, data: { fatal: boolean }) => void];
+
+    expect(event).toBe(Hls.Events.ERROR);
+    report(event, { fatal: false });
+    expect(onError).not.toHaveBeenCalled();
+    report(event, { fatal: true });
+    expect(onError).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(instance.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports unavailable playback when neither MSE nor native HLS is supported', () => {
+    jest.mocked(HTMLMediaElement.prototype.canPlayType).mockReturnValue('');
+    const onError = jest.fn();
+    const { container } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onError={onError} />);
+
+    expect(container.querySelector('video')).not.toHaveAttribute('src');
+    expect(Hls).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['javascript:alert(1)', 'https://other.invalid/master.m3u8'])('rejects unsafe manifest %s before either playback path', async (source) => {
+    jest.mocked(Hls.isSupported).mockReturnValue(true);
+    const onError = jest.fn();
+    const { container } = render(<HlsVideoPlayer src={source} onError={onError} />);
+
+    expect(container.querySelector('video')).not.toHaveAttribute('src');
+    expect(Hls).not.toHaveBeenCalled();
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  });
 });
