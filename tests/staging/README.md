@@ -62,6 +62,13 @@ runner checks multipart completion and verifies that the browser submits the
 actual part response ETag, covering CORS header exposure. Assertions report
 counts and booleans without printing signed object URLs.
 
+The journey also sets a finite site-wide quota before registering its disposable
+uploader, confirms that account inherits it, then changes the default to zero.
+Existing uploads remain readable while further uploads are refused. The
+recipient's explicit unlimited override permits Saves despite the zero default,
+and its later custom quota still enforces capacity. The original site default
+and recipient override are restored before closing the browser contexts.
+
 Local staging keeps the normal 100 MiB multipart threshold by default. To opt
 into the same small-fixture multipart coverage, set
 `LOCAL_STAGING_MULTIPART_THRESHOLD_BYTES=1024` when recreating the stack with
