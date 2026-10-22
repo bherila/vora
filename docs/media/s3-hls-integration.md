@@ -51,13 +51,16 @@ works.
 
 The transcoder deduplicates output by **content hash**: multiple identical (or
 lower-quality) source uploads can map to a single transcoded output. Therefore
-the app must **never delete anything in the HLS-output bucket** — doing so could
-break another upload that shares the same content.
+cleanup must preserve outputs shared by another media row, including retained
+deleted rows and durable Library saves.
 
-On delete, the app removes only the **source** object (see
-`MediaService::delete()`). The transcoder owns cleanup of transcoded output via
-its own reference-counted pass, which only removes an output once no remaining
-source maps to it.
+`MediaService::delete()` retains objects while Library references remain. On
+final permanent removal it deletes source/reviewed objects and calls
+`HlsService::deleteIfUnreferenced()`. That removes source-private mappings and
+deletes the content-addressed output tree only when no other media row references
+its content ID. The app therefore needs HLS read/delete permissions; a read-only
+HLS token can play content but cannot complete permanent cleanup. The transcoder
+also owns a reference-counted cleanup pass for deleted sources.
 
 > **Operational requirement:** that cleanup must be enabled on the transcoder
 > (`CLEANUP_DELETED_SOURCES=true` in its environment). If it is off, transcoded
@@ -70,6 +73,9 @@ from overwriting the original presigned PUT key after approval and having a late
 transcode expose unreviewed bytes.
 
 `resources/js/media/HlsVideoPlayer.tsx` plays the adaptive HLS stream via hls.js
-(native HLS on Safari/iOS) against the proxy `master_url`, falling back to the
-signed source URL on unrecoverable error. The HLS bucket needs a CORS policy
+(native HLS on Safari/iOS) against the proxy `master_url`. Playback failures do
+not fall back to the original source file. The HLS bucket needs a CORS policy
 allowing `GET`/`HEAD` so the browser can fetch the 302-redirected segments.
+
+Use [Private Library rollout checks](library-rollout.md) for an isolated real
+upload, transcoding, retained-access, and final-reference cleanup procedure.

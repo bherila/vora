@@ -36,14 +36,15 @@ see [media/storage-and-buckets.md](media/storage-and-buckets.md)):
 | Role (env var) | Purpose | App access | Transcoder access |
 | --- | --- | --- | --- |
 | video source (`AWS_BUCKET`) | raw uploaded videos (transcoder source) | read/write | read-only |
-| HLS output (`HLS_BUCKET`) | HLS renditions (transcoder output) | read-only | read/write |
+| HLS output (`HLS_BUCKET`) | HLS renditions (transcoder output) | read/delete for permanent cleanup | read/write |
 
 - The HLS-output bucket has a **CORS** policy allowing `GET`/`HEAD` from any
   origin, required for hls.js to fetch segments via cross-origin XHR. (The
   presigned, expiring segment URL is the access capability; CORS only lets a
   browser that already holds one read the bytes.)
 - Two **least-privilege** scoped R2 API tokens back this:
-  - **vora app** — RW on the video-source bucket, read on the HLS-output bucket.
+  - **vora app** — RW on the video-source bucket, read/delete on the HLS-output
+    bucket for reference-aware permanent cleanup.
   - **vora transcoder** — read on the video-source bucket, RW on the HLS-output bucket.
 
 ### Transcoder output layout (in the HLS-output bucket)
@@ -70,7 +71,7 @@ AWS_ACCESS_KEY_ID=…        AWS_SECRET_ACCESS_KEY=…
 AWS_BUCKET=…               AWS_ENDPOINT=…
 AWS_DEFAULT_REGION=auto    AWS_USE_PATH_STYLE_ENDPOINT=true
 
-# HLS output bucket (app read-only)
+# HLS output bucket (app reads playback and deletes unreferenced output)
 HLS_ACCESS_KEY_ID=…        HLS_SECRET_ACCESS_KEY=…
 HLS_BUCKET=…               HLS_ENDPOINT=…
 HLS_REGION=auto            HLS_USE_PATH_STYLE_ENDPOINT=true
@@ -88,7 +89,7 @@ with ffmpeg, and writes HLS to the destination bucket. It is content-addressed,
 deduplicating, and uses a destination-bucket lock so overlapping runs are safe.
 
 It runs on a shared Ubuntu host under a dedicated, login-locked service user
-(`/home/<user>/s3-hls`), with read-only/RW credentials scoped exactly as above in
+(`/home/<user>/s3-hls`), with source-read/output-RW credentials scoped as above in
 `local/.env` (chmod 600). The cron schedule is **staggered** (`7,22,37,52 * * * *`)
 off the other transcoder on that host and wrapped in `nice -n 19 ionice -c3` so
 video encoding stays out of the way of co-located workloads. Logs rotate weekly
