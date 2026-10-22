@@ -286,6 +286,7 @@ class EventModuleTest extends TestCase
         $this->assertFalse($media->fresh()->isApprovedContent());
         $this->actingAs($member)->getJson('/api/events/media')->assertOk()->assertJsonCount(0, 'data');
         $restricted = $this->account();
+        $event->members()->attach($restricted->id);
         UserRestriction::factory()->for($restricted)->capability(RestrictionCapability::MediaUpload)->create();
         $this->actingAs($restricted)->postJson($url, $payload)->assertForbidden();
     }
