@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 class AccountStorageUsage
 {
+    public function __construct(private readonly AccountStorageLimit $limits) {}
+
     /**
      * Logical original-file usage, counted once per account and stored media row.
      * Sharing alone consumes no recipient storage. Derivatives are excluded;
@@ -45,7 +47,7 @@ class AccountStorageUsage
         $retainedBytes = (int) $totals->retained_bytes;
 
         $reservedBytes = (int) $user->media()->where('upload_status', 'pending')->sum('multipart_expected_size_bytes');
-        $limit = $user->storage_limit_bytes;
+        $limit = $this->limits->forUser($user);
         $usedBytes = $activeBytes + $reservedBytes;
         $unknown = (int) $totals->active_unknown_size_file_count;
         $warning = $limit === null ? null : ($unknown > 0 ? 'unknown_size'

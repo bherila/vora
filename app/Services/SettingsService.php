@@ -18,6 +18,10 @@ class SettingsService
 
     public const DEFAULT_NEW_USER_INVITE_EXPIRY_DAYS = 'default_new_user_invite_expiry_days';
 
+    public const DEFAULT_STORAGE_LIMIT_BYTES = 'default_storage_limit_bytes';
+
+    public const MAX_STORAGE_LIMIT_BYTES = 9007199254740991;
+
     private const CACHE_PREFIX = 'setting:';
 
     public function publicSignupsEnabled(): bool
@@ -35,6 +39,23 @@ class SettingsService
         $value = $this->get(self::DEFAULT_NEW_USER_INVITE_EXPIRY_DAYS);
 
         return $value === null || $value === '' ? null : (int) $value;
+    }
+
+    public function defaultStorageLimitBytes(): ?int
+    {
+        // Cache an empty sentinel for unlimited too: Cache::rememberForever
+        // treats a cached null as a miss and would query settings repeatedly.
+        $value = $this->get(self::DEFAULT_STORAGE_LIMIT_BYTES, '');
+
+        return $value === null || $value === '' ? null : (int) $value;
+    }
+
+    public function setDefaultStorageLimitBytes(?int $bytes): void
+    {
+        if ($bytes !== null && ($bytes < 0 || $bytes > self::MAX_STORAGE_LIMIT_BYTES)) {
+            throw new \InvalidArgumentException('Storage limits must be non-negative safe integers.');
+        }
+        $this->set(self::DEFAULT_STORAGE_LIMIT_BYTES, $bytes);
     }
 
     public function get(string $key, ?string $default = null): ?string

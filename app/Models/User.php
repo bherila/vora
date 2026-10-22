@@ -99,6 +99,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_disabled' => 'boolean',
             'library_enabled' => 'boolean',
             'storage_limit_bytes' => 'integer',
+            'storage_unlimited' => 'boolean',
             'can_receive_invites' => 'boolean',
             'ban_hides_content' => 'boolean',
             'trusted_inviter' => 'boolean',
