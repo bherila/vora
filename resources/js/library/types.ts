@@ -9,11 +9,20 @@ export interface AccountStorageUsage {
   active_file_count: number;
   retained_file_count: number;
   unknown_size_file_count: number;
+  active_unknown_size_file_count: number;
+  limit_bytes: number | null;
+  reserved_bytes: number;
+  used_bytes: number;
+  remaining_bytes: number | null;
+  over_limit: boolean;
+  warning: 'near_limit' | 'limit_reached' | 'unknown_size' | null;
 }
 
 export const EMPTY_STORAGE_USAGE: AccountStorageUsage = {
   active_bytes: 0, uploaded_bytes: 0, saved_bytes: 0, retained_bytes: 0,
   total_bytes: 0, active_file_count: 0, retained_file_count: 0, unknown_size_file_count: 0,
+  active_unknown_size_file_count: 0, limit_bytes: null, reserved_bytes: 0, used_bytes: 0,
+  remaining_bytes: null, over_limit: false, warning: null,
 };
 
 export interface LibraryPersona {

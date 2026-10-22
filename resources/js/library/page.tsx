@@ -16,6 +16,7 @@ import { readInitialData } from '@/initialData';
 import { LibraryBulkActions } from '@/library/LibraryBulkActions';
 import { LibraryCollectionDialog, LibraryNoteDialog, LibraryShareDialog, type ShareTarget } from '@/library/LibraryDialogs';
 import { LibraryItemDialog, LibraryItemPreview } from '@/library/LibraryItemDialog';
+import { StorageQuotaSummary } from '@/library/StorageQuotaSummary';
 import { type AccountStorageUsage, EMPTY_STORAGE_USAGE, type LibraryCollection, libraryError, type LibraryItem } from '@/library/types';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import { formatBytes, type PagedResponse } from '@/media/types';
@@ -155,7 +156,8 @@ export function LibraryPage() {
     </header>
     {!enabled && <Alert><AlertDescription>Library storage is enabled selectively by an administrator. You can still view shared content and manage items already in your Library.</AlertDescription></Alert>}
     <div className="rounded-lg border px-4 py-3 text-sm">
-      <p className="font-medium">{formatBytes(usage.total_bytes)} in your account</p>
+      <StorageQuotaSummary usage={usage} />
+      <p className="mt-3 border-t pt-3 font-medium">Stored originals, including retention: {formatBytes(usage.total_bytes)}</p>
       <p className="text-muted-foreground">Uploaded originals: {formatBytes(usage.uploaded_bytes)} · Saved originals: {formatBytes(usage.saved_bytes)} · Retained deleted uploads: {formatBytes(usage.retained_bytes)}</p>
       <p className="mt-1 text-xs text-muted-foreground">Each original counts once in your account, even in several collections. Processed copies are excluded.</p>
       {usage.unknown_size_file_count > 0 && <p className="mt-1 text-xs text-muted-foreground">Sizes are unavailable for {usage.unknown_size_file_count} files and excluded from these totals.</p>}

@@ -5,11 +5,12 @@ namespace App\Services\Library;
 use App\Models\LibraryCollection;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Media\AccountStorageQuota;
 use Illuminate\Support\Facades\DB;
 
 class LibraryBulkService
 {
-    public function __construct(private readonly LibraryService $library) {}
+    public function __construct(private readonly LibraryService $library, private readonly AccountStorageQuota $quota) {}
 
     /** @param list<string> $ulids */
     public function apply(User $user, string $action, array $ulids, ?string $targetUlid, ?string $sourceUlid): int
@@ -23,6 +24,7 @@ class LibraryBulkService
             : [];
 
         return DB::transaction(function () use ($user, $action, $ulids, $targetUlid, $sourceUlid, $mediaIds): int {
+            $user = $this->quota->lock($user);
             $target = $this->collection($user, $targetUlid);
             $source = $this->collection($user, $sourceUlid);
 
