@@ -41,6 +41,8 @@ export CI="${CI:-1}"
 export COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_NO_INTERACTION=1
 exec </dev/null
 export PATH="$HOME/.local/bin:$PATH"
+# Node's built-in fetch ignores HTTP(S)_PROXY unless asked; pnpm and other Node tools use it.
+export NODE_USE_ENV_PROXY=1
 
 cd "$REPO_ROOT"
 
@@ -103,18 +105,68 @@ NODE
 }
 
 ensure_pnpm() {
-  if command -v pnpm >/dev/null 2>&1; then
-    log "pnpm already installed: $(pnpm --version)"
+  local package_manager
+  package_manager="$(pnpm_package_manager)"
+
+  local wanted="${package_manager#pnpm@}"
+  wanted="${wanted%%+*}"
+
+  # With no packageManager pin the helper above defaults to a bare major (pnpm@10): there is no
+  # exact version to match, so keep any installed pnpm and otherwise install through Corepack.
+  if [[ ! "$wanted" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    if command -v pnpm >/dev/null 2>&1; then
+      log "pnpm already installed: $(pnpm --version)"
+      return 0
+    fi
+    log "Installing pnpm via Corepack"
+    need_cmd corepack
+    mkdir -p "$HOME/.local/bin"
+    corepack enable --install-directory "$HOME/.local/bin"
+    corepack prepare "$package_manager" --activate
+    pnpm --version
     return 0
   fi
 
-  log "Installing pnpm via Corepack"
+  # A pnpm whose own version differs from packageManager tries to switch by downloading the
+  # wanted release (@pnpm/exe.<platform>) with Node's built-in fetch, which ignores the sandbox
+  # egress proxy, so even `pnpm --version` fails. Never let a version check trigger that.
+  local current=""
+  if command -v pnpm >/dev/null 2>&1; then
+    current="$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null || true)"
+  fi
+  if [[ "$current" == "$wanted" ]]; then
+    log "pnpm $wanted already installed"
+    return 0
+  fi
 
-  need_cmd corepack
-  mkdir -p "$HOME/.local/bin"
-  corepack enable --install-directory "$HOME/.local/bin"
-  corepack prepare "$(pnpm_package_manager)" --activate
-  pnpm --version
+  # npm honours the proxy and CA settings the sandbox provides, so install the exact version
+  # through npm into ~/.local (first on PATH) rather than letting pnpm or Corepack fetch it.
+  log "Installing pnpm $wanted via npm (found: ${current:-none})"
+  need_cmd npm
+  mkdir -p "$HOME/.local"
+  if npm install --global --prefix "$HOME/.local" --no-audit --no-fund "pnpm@$wanted"; then
+    hash -r
+    current="$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null || true)"
+  fi
+
+  if [[ "$current" != "$wanted" ]]; then
+    log "Installing pnpm $wanted via Corepack"
+    need_cmd corepack
+    mkdir -p "$HOME/.local/bin"
+    corepack enable --install-directory "$HOME/.local/bin"
+    corepack prepare "$package_manager" --activate
+    hash -r
+    current="$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null || true)"
+  fi
+
+  if [[ "$current" != "$wanted" ]]; then
+    echo "ERROR: could not install pnpm $wanted (have: ${current:-none}). The lockfile is pinned to it via packageManager." >&2
+    exit 1
+  fi
+
+  # The exact version is on PATH; nothing should try to switch versions from here on.
+  export npm_config_manage_package_manager_versions=false
+  log "pnpm $(pnpm --version)"
 }
 
 has_github_dependencies() {
