@@ -27,6 +27,9 @@ it.each(['https://evil.example', '//evil.example', '/events/join/../logout', `${
 it.each(['sign-in', 'verify', 'two-factor'] as const)('explains the %s admission stage without Event metadata', (stage) => {
   initialData.mockReturnValue({ eventJoin: { continue_url: joiningUrl } });
   render(<EventJoiningNotice stage={stage} />);
-  expect(screen.getByRole('alert')).toHaveTextContent(/Event/);
-  if (stage === 'sign-in') expect(screen.getByRole('alert')).toHaveTextContent('separate personal signup invitation');
+  expect(screen.getByRole('alert')).toHaveTextContent(/event/i);
+  if (stage === 'sign-in') {
+    expect(screen.getByRole('alert')).toHaveTextContent('keep your place in this browser');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('invitation');
+  }
 });

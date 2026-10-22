@@ -8,6 +8,7 @@ use App\Services\Events\EventAccess;
 use App\Services\Events\EventJoining;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class EventJoinController extends Controller
 {
@@ -20,7 +21,7 @@ class EventJoinController extends Controller
         return redirect()->route($request->user() ? 'events.join.continue' : 'login');
     }
 
-    public function continue(Request $request, EventJoining $joining, EventAccess $access): RedirectResponse
+    public function continue(Request $request, EventJoining $joining, EventAccess $access): RedirectResponse|Response
     {
         $ulid = $joining->ulid($request);
         if ($ulid === null) {
@@ -32,7 +33,9 @@ class EventJoinController extends Controller
 
         $joining->forget($request);
         $event = $access->visibleTo(Event::query(), $request->user())->where('ulid', $ulid)->first();
-        abort_if($event === null, 404, 'Not found.');
+        if ($event === null) {
+            return response()->view('events.unavailable', [], 404);
+        }
 
         return redirect()->route('events.index', ['event_ulid' => $event->ulid]);
     }

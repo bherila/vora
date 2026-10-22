@@ -18,7 +18,7 @@ export function EventJoiningNotice({ stage }: EventJoiningNoticeProps) {
   if (!getEventJoiningUrl()) return null;
 
   const message = stage === 'sign-in'
-    ? 'You’re joining an Event. Your place will be kept while you sign in or create an account. If public sign-ups are closed, ask the organizer for a separate personal signup invitation; this Event link does not grant signup or restricted Event access.'
+    ? 'Sign in or create an account to continue to your event. We’ll keep your place in this browser.'
     : stage === 'verify'
       ? 'Your Event link is saved in this browser. Verify your email, then complete account approval if required to continue.'
       : stage === 'approval'

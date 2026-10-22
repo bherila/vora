@@ -127,10 +127,16 @@ class EventJoiningTest extends TestCase
             $this->get($join)->assertRedirect(route('login'));
         }
         $user = User::factory()->approved()->create();
+        $bodies = [];
         foreach ([$this->joinUrl($event), $missing] as $join) {
             $this->actingAs($user)->get($join)->assertRedirect(route('events.join.continue'));
-            $this->get('/events/continue')->assertNotFound()->assertDontSee($event->name)->assertDontSee($event->description);
+            $response = $this->get('/events/continue')->assertNotFound()->assertViewIs('events.unavailable')
+                ->assertSee('This event isn’t available to your account. Check the link or ask the organizer for access.')
+                ->assertSee('href="/events"', false)->assertDontSee($event->name)->assertDontSee($event->description)
+                ->assertDontSee($event->ulid)->assertDontSee(basename($missing));
+            $bodies[] = $response->getContent();
         }
+        $this->assertSame($bodies[0], $bodies[1]);
         $this->assertDatabaseCount('event_user', 0);
     }
 
