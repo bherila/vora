@@ -9,6 +9,10 @@ Make the smallest coherent change that solves the problem. Include adjacent low-
 Treat user requests as the minimum bar, not a ceiling: finish the adjacent checks
 and low-risk cleanup needed for the result to hold up in review.
 
+Keep instance-specific domains, host/account names, and deployment paths in
+private operational records and GitHub environment secrets. Use reserved example
+domains and generic instance names in documentation and tests.
+
 If `scripts/wt/{create,bootstrap,remove}.sh` exist, use them instead of raw
 `git worktree add`, `composer install`, or `pnpm install` for fresh worktrees.
 Never run `npm`, `npm ci`, or `npx` in this repo.
