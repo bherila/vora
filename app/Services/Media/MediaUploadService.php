@@ -11,6 +11,7 @@ use App\Models\Media;
 use App\Models\User;
 use App\Services\Events\EventAccess;
 use App\Services\FileStorageService;
+use App\Support\HeifPhoto;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -35,6 +36,8 @@ class MediaUploadService
         'image/webp' => 'webp',
         'image/gif' => 'gif',
         'image/avif' => 'avif',
+        'image/heic' => 'heic',
+        'image/heif' => 'heif',
         'video/mp4' => 'mp4',
         'video/quicktime' => 'mov',
         'video/webm' => 'webm',
@@ -101,6 +104,9 @@ class MediaUploadService
                 throw new \InvalidArgumentException('An upload must declare its size before it can be presigned.');
             }
             $wantsThumbnail = $wantsThumbnail && $thumbnailSizeBytes !== null && $thumbnailSizeBytes > 0;
+            if ($type === MediaType::Photo && HeifPhoto::isMimeType($mimeType) && ! $wantsThumbnail) {
+                throw new \InvalidArgumentException('HEIC/HEIF photos require a JPEG display preview.');
+            }
 
             $ulid = (string) Str::ulid();
             $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
@@ -211,6 +217,12 @@ class MediaUploadService
 
             $media->forceDelete();
 
+            return false;
+        }
+
+        // A HEIC original is not viewable in every browser. Its bounded JPEG
+        // display derivative must land before this upload can enter review.
+        if ($media->requiresPhotoPreview() && ! $this->hasValidHeifPreview($media)) {
             return false;
         }
 
@@ -480,6 +492,43 @@ class MediaUploadService
         }
 
         $this->storage->abortMultipartUpload($media->disk, $media->object_key, $media->multipart_upload_id);
+    }
+
+    private function hasValidHeifPreview(Media $media): bool
+    {
+        if ($media->thumbnail_key === null) {
+            return false;
+        }
+        $disk = (string) config('media.thumbnail_disk');
+        $limit = (int) config('media.thumbnail.max_bytes');
+        $size = $this->storage->getFileSize($disk, $media->thumbnail_key);
+        if ($size === null || $size < 1 || $limit < 1 || $size > $limit) {
+            return false;
+        }
+        $source = $this->storage->readStream($media->disk, $media->object_key);
+        if (! is_resource($source)) {
+            return false;
+        }
+        try {
+            $header = fread($source, 4096);
+        } finally {
+            fclose($source);
+        }
+        if ($header === false || ! HeifPhoto::hasStillImageBrand($header)) {
+            return false;
+        }
+        $preview = $this->storage->readStream($disk, $media->thumbnail_key);
+        if (! is_resource($preview)) {
+            return false;
+        }
+        try {
+            // Do not trust HEAD alone: an outstanding presign may overwrite it.
+            $bytes = stream_get_contents($preview, $limit + 1);
+        } finally {
+            fclose($preview);
+        }
+
+        return $bytes !== false && strlen($bytes) <= $limit && HeifPhoto::isJpegPreview($bytes);
     }
 
     private function buildObjectKey(User $user, string $ulid, string $filename, string $mimeType): string

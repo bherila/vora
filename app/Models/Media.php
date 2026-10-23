@@ -7,6 +7,7 @@ use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Enums\ModerationStatus;
 use App\Services\Events\EventAccess;
+use App\Support\HeifPhoto;
 use App\Support\InstanceFeatures;
 use App\Traits\HasPrivacyPolicy;
 use App\Traits\Moderatable;
@@ -269,6 +270,22 @@ class Media extends Model
     public function isReady(): bool
     {
         return $this->upload_status === 'ready';
+    }
+
+    public function requiresPhotoPreview(): bool
+    {
+        return $this->type === MediaType::Photo && HeifPhoto::isMimeType($this->mime_type);
+    }
+
+    /** Privacy-safe download names are independent of the uploader's filename. */
+    public function downloadExtension(): string
+    {
+        return match (strtolower($this->mime_type)) {
+            'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp', 'image/avif' => 'avif',
+            'image/heic' => 'heic', 'image/heif' => 'heif',
+            'video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/webm' => 'webm', 'video/x-matroska' => 'mkv',
+            default => 'jpg',
+        };
     }
 
     public function playbackObjectKey(): string

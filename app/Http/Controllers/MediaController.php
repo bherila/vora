@@ -297,7 +297,9 @@ class MediaController extends Controller implements HasMiddleware
         if (! $this->uploads->completeUpload($media)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Upload could not be verified — the file is missing, exceeds the size limit, or would exceed your account storage limit.',
+                'message' => $media->requiresPhotoPreview()
+                    ? 'The HEIC/HEIF photo or its JPEG preview could not be verified. Please retry this photo.'
+                    : 'Upload could not be verified — the file is missing, exceeds the size limit, or would exceed your account storage limit.',
             ], 422);
         }
 

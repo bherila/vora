@@ -84,6 +84,8 @@ return [
             'image/webp',
             'image/gif',
             'image/avif',
+            'image/heic',
+            'image/heif',
         ],
     ],
 

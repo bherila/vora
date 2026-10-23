@@ -41,6 +41,9 @@ class CloudflareCspPreset implements Preset
                 // Signed video preview URLs and HLS segments.
                 ...$mediaOrigins,
             ])
+            // The bundled HEIC decoder uses a same-origin worker and its own
+            // trusted blob worker, without eval or WebAssembly permissions.
+            ->add(Directive::WORKER, [Keyword::SELF, 'blob:'])
             ->add(Directive::STYLE, Keyword::SELF)
             ->add(Directive::OBJECT, Keyword::NONE)
             ->add(Directive::BASE, Keyword::SELF)

@@ -6,6 +6,7 @@ use App\Enums\MediaType;
 use App\Enums\RestrictionCapability;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
 use App\Services\Moderation\RestrictionGate;
+use App\Support\HeifPhoto;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -46,6 +47,10 @@ class StoreCharacterProfilePictureRequest extends FormRequest
             // Skip the allowlist check — the `string` rule already yields a 422.
             if (is_string($contentType) && $contentType !== '' && ! $type->allowsMimeType($contentType)) {
                 $validator->errors()->add('content_type', 'Character profile pictures must be uploaded as an allowed image type.');
+            }
+
+            if (is_string($contentType) && HeifPhoto::isMimeType($contentType)) {
+                $validator->errors()->add('content_type', 'Export this HEIC/HEIF profile picture as JPEG before uploading.');
             }
 
             $size = $this->input('size');

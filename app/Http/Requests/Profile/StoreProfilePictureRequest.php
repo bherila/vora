@@ -5,6 +5,7 @@ namespace App\Http\Requests\Profile;
 use App\Enums\MediaType;
 use App\Enums\RestrictionCapability;
 use App\Services\Moderation\RestrictionGate;
+use App\Support\HeifPhoto;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -40,6 +41,10 @@ class StoreProfilePictureRequest extends FormRequest
             // non-string (e.g. an array) would raise "Array to string conversion".
             if (is_string($contentType) && $contentType !== '' && ! $type->allowsMimeType($contentType)) {
                 $validator->errors()->add('content_type', 'Profile pictures must be uploaded as an image.');
+            }
+
+            if (is_string($contentType) && HeifPhoto::isMimeType($contentType)) {
+                $validator->errors()->add('content_type', 'Export this HEIC/HEIF profile picture as JPEG before uploading.');
             }
 
             $size = $this->input('size');
