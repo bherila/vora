@@ -61,6 +61,22 @@ describe('Event photo versions', () => {
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/events/media/heic-original/variants?page=1'));
   });
 
+  it('returns to the last available page when versions are removed during pagination', async () => {
+    jest.mocked(fetchWrapper.get).mockResolvedValueOnce({ ...response, meta: { ...meta, last_page: 2, has_more: true, total: 25 } })
+      .mockResolvedValueOnce({ data: [], preferred_ulid: preferred.ulid, meta: { ...meta, current_page: 2 } });
+    render(<PhotoVersionsChooser item={item} onChoose={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show versions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'More versions' }));
+    expect(await screen.findByRole('button', { name: 'View version 1 · JPEG · Sam' })).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenNthCalledWith(2, '/api/events/media/heic-original/variants?page=2');
+    expect(fetchWrapper.get).toHaveBeenNthCalledWith(3, '/api/events/media/heic-original/variants?page=1');
+    expect(screen.queryByText('No other versions are available.')).toBeNull();
+    expect(screen.queryByLabelText('Version pages')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide versions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show versions' }));
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenNthCalledWith(4, '/api/events/media/heic-original/variants?page=1'));
+  });
+
   it('keeps errors recoverable without exposing stale version actions', async () => {
     jest.mocked(fetchWrapper.get).mockRejectedValueOnce('These versions are no longer available.');
     render(<PhotoVersionsChooser item={item} onChoose={jest.fn()} />);

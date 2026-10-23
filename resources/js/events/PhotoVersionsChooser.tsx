@@ -59,9 +59,17 @@ export function PhotoVersionsChooser({ item, onChoose, disabled = false }: Photo
     setError('');
     setResult(null);
     fetchWrapper.get(`/api/events/media/${encodeURIComponent(item.ulid)}/variants?page=${page}`)
-      .then((response: VariantsResponse) => { if (active) setResult(response); })
-      .catch((error: unknown) => { if (active) setError(eventError(error)); })
-      .finally(() => { if (active) setLoading(false); });
+      .then((response: VariantsResponse) => {
+        if (!active) return;
+        const lastPage = Math.max(1, response.meta.last_page);
+        if (page > lastPage) {
+          setPage(lastPage);
+          return;
+        }
+        setResult(response);
+        setLoading(false);
+      })
+      .catch((error: unknown) => { if (active) { setError(eventError(error)); setLoading(false); } });
     return () => { active = false; };
   }, [item.ulid, open, page, revision]);
 
