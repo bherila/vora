@@ -19,6 +19,7 @@ import { LibraryCollectionDialog, LibraryNoteDialog, LibraryShareDialog, type Sh
 import { LibraryItemDialog, LibraryItemPreview } from '@/library/LibraryItemDialog';
 import { StorageQuotaSummary } from '@/library/StorageQuotaSummary';
 import { type AccountStorageUsage, EMPTY_STORAGE_USAGE, type LibraryCollection, libraryError, type LibraryItem } from '@/library/types';
+import { BulkTransferActions } from '@/media/BulkTransferActions';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import { formatBytes, type PagedResponse } from '@/media/types';
 
@@ -63,7 +64,10 @@ export function LibraryPage() {
   const [initialItemUlid] = useState(params.get('item'));
   const canAddHere = enabled && (!selectedCollection || selectedCollection.owned) && section !== 'shared';
   const refresh = (): void => setRevision((value) => value + 1);
-  const selectableItems = items.filter((item) => item.owned);
+  const selectableItems = items.filter((item) => item.owned || item.available);
+  const selected = items.filter((item) => selectedItems.includes(item.ulid));
+  const allSelectedOwned = selected.every((item) => item.owned);
+  const selectedFiles = selected.filter((item) => item.available && item.media?.upload_status === 'ready');
 
   useEffect(() => { setSelectedItems([]); }, [section, collectionUlid, query, page, revision]);
 
@@ -197,11 +201,14 @@ export function LibraryPage() {
         <Input id="library-search" placeholder="Search titles and notes" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         {!loading && selectableItems.length > 0 && <Label className="flex items-center gap-2 text-sm"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedItems(checked ? selectableItems.map((item) => item.ulid) : [])} />Select all on this page</Label>}
-        {!loading && selectedItems.length > 0 && <LibraryBulkActions itemUlids={selectedItems} collections={collections} currentCollection={selectedCollection} enabled={enabled} onChanged={refresh} onClear={() => setSelectedItems([])} />}
+        {!loading && selectedItems.length > 0 && <>
+          {allSelectedOwned && <LibraryBulkActions itemUlids={selectedItems} collections={collections} currentCollection={selectedCollection} enabled={enabled} onChanged={refresh} onClear={() => setSelectedItems([])} />}
+          {(!allSelectedOwned || selectedFiles.length > 0) && <BulkTransferActions source="library" ulids={selectedItems} saveUlids={selected.filter((item) => !item.owned).map((item) => item.ulid)} downloadUlids={selectedFiles.map((item) => item.ulid)} canSave={enabled && !allSelectedOwned} showSummary={!allSelectedOwned} onSaved={refresh} {...(!allSelectedOwned ? { onClear: () => setSelectedItems([]) } : {})} />}
+        </>}
         {loading ? <p role="status" className="py-8 text-sm text-muted-foreground">Loading Library…</p> : items.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center"><p className="font-medium">No items here yet.</p><p className="mt-2 text-sm text-muted-foreground">Upload media, add a note, or choose Save to Library on a media page.</p></div> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => <Card key={item.ulid} className="overflow-hidden py-0">
             <button type="button" aria-label={`Open ${item.title || 'untitled item'}`} className="flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-muted" onClick={() => void openItem(item.ulid)}><LibraryItemPreview item={item} /></button>
-            <CardContent className="space-y-2 p-4"><div className="flex items-center gap-2">{item.owned && <Checkbox aria-label={`Select ${item.title || 'untitled item'}`} checked={selectedItems.includes(item.ulid)} onCheckedChange={(checked) => setSelectedItems((current) => checked ? [...current, item.ulid] : current.filter((ulid) => ulid !== item.ulid))} />}<h3 className="truncate font-medium">{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</h3></div><div className="flex flex-wrap gap-1"><Badge variant="secondary">{item.body !== null ? 'Note' : item.media?.type ?? 'Media'}</Badge><Badge variant="outline">{item.owned ? item.source === 'saved' ? 'Saved' : 'Yours' : 'Shared with you'}</Badge></div></CardContent>
+            <CardContent className="space-y-2 p-4"><div className="flex items-center gap-2">{(item.owned || item.available) && <Checkbox aria-label={`Select ${item.title || 'untitled item'}`} checked={selectedItems.includes(item.ulid)} onCheckedChange={(checked) => setSelectedItems((current) => checked ? [...current, item.ulid] : current.filter((ulid) => ulid !== item.ulid))} />}<h3 className="truncate font-medium">{item.title || (item.body !== null ? 'Untitled note' : 'Untitled media')}</h3></div><div className="flex flex-wrap gap-1"><Badge variant="secondary">{item.body !== null ? 'Note' : item.media?.type ?? 'Media'}</Badge><Badge variant="outline">{item.owned ? item.source === 'saved' ? 'Saved' : 'Yours' : 'Shared with you'}</Badge></div></CardContent>
           </Card>)}
         </div>}
         {(page > 1 || hasMore) && <div className="flex items-center justify-between"><Button variant="outline" disabled={loading || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</Button><span className="text-sm">Page {page}</span><Button variant="outline" disabled={loading || !hasMore} onClick={() => setPage((value) => value + 1)}>Next</Button></div>}

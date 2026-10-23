@@ -31,7 +31,7 @@ function mockRequests() {
 }
 
 describe('EventsPage', () => {
-  beforeEach(() => { jest.resetAllMocks(); window.scrollTo = jest.fn(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
+  beforeEach(() => { jest.resetAllMocks(); Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent }); window.scrollTo = jest.fn(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
 
   it('loads visible events and requires an explicit event before upload', async () => {
     render(<EventsPage />);
@@ -44,6 +44,24 @@ describe('EventsPage', () => {
     expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-event', 'event-one');
     expect(screen.getByText('All attendees', { selector: '[data-slot=badge]' })).toBeInTheDocument();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
+  });
+
+  it('selects current-page ready media, saves it privately and resets selection on filters', async () => {
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url.startsWith('/api/events/media?') ? {
+      data: [{ ...media, can_save_to_library: true }, { ...media, id: 12, ulid: 'pending-one', title: 'Pending upload', upload_status: 'pending' }], meta,
+    } : implementation(url));
+    jest.mocked(fetchWrapper.post).mockRejectedValueOnce('Storage limit reached.');
+    render(<EventsPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all on this page' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select Pending upload' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected to Library' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage limit reached');
+    expect(fetchWrapper.post).toHaveBeenCalledWith('/api/events/media/bulk-save', { ulids: ['media-one'] });
+    fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
+    await waitFor(() => expect(screen.queryByLabelText('Save or download selected items')).toBeNull());
+    expect(await screen.findByRole('checkbox', { name: 'Select Welcome video' })).not.toBeChecked();
   });
 
   it('retains event and favorite filters through pagination and browser history', async () => {

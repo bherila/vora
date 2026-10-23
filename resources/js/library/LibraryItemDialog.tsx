@@ -107,6 +107,7 @@ export function LibraryItemDialog({ item: initialItem, collections, enabled, onC
           <p className="text-xs text-muted-foreground">{item.media.type} · {formatBytes(item.media.size_bytes)}</p>
         </> : <p className="whitespace-pre-wrap break-words rounded-md border p-4">{item.body}</p>}
         <div className="flex flex-wrap gap-2">
+          {item.available && item.media?.upload_status === 'ready' && <a href={`/api/library/items/${encodeURIComponent(item.ulid)}/download`} download className="text-sm underline underline-offset-4">Download</a>}
           {!item.owned && enabled && item.available && <SaveToLibraryButton itemUlid={item.ulid} onSaved={onChanged} />}
           {item.owned && <>
             {enabled && <Button variant="outline" size="sm" disabled={busy} onClick={() => setEditing(!editing)}>Edit</Button>}

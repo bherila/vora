@@ -51,6 +51,9 @@ return [
         // external s3-hls transcoder, which renders HLS into the "hls" disk below.
         's3' => [
             'driver' => 's3',
+            // Laravel defaults this off: readStream would otherwise buffer the
+            // whole SDK GetObject response before yielding a resource.
+            'stream_reads' => true,
             'key' => env('AWS_ACCESS_KEY_ID'),
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('AWS_DEFAULT_REGION'),
@@ -70,6 +73,7 @@ return [
         // rather than producing empty config.
         'photos' => [
             'driver' => 's3',
+            'stream_reads' => true,
             'key' => env('PHOTOS_ACCESS_KEY_ID') ?: env('AWS_ACCESS_KEY_ID'),
             'secret' => env('PHOTOS_SECRET_ACCESS_KEY') ?: env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('PHOTOS_REGION') ?: env('AWS_DEFAULT_REGION'),
@@ -86,6 +90,7 @@ return [
         // and output trees only after their final media reference is released.
         'hls' => [
             'driver' => 's3',
+            'stream_reads' => true,
             'key' => env('HLS_ACCESS_KEY_ID') ?: env('AWS_ACCESS_KEY_ID'),
             'secret' => env('HLS_SECRET_ACCESS_KEY') ?: env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('HLS_REGION') ?: env('AWS_DEFAULT_REGION'),

@@ -77,6 +77,39 @@ Approved playback and public/discovery URLs use these reviewed copies. The
 original upload keys remain client-overwritable until their presigned URLs
 expire, so they are never the trust anchor after review.
 
+## Selected saves and downloads
+
+Event galleries and Library shared items support saving a current-page selection
+privately. Up to 100 selected references are checked and saved in one transaction;
+quota or access failure rolls back the entire operation. Saved files are not
+copied and retain the existing independent-reference retention rules.
+
+ZIP downloads accept up to 50 selected files and 2 GiB of actual object bytes.
+Larger videos remain available through individual Download actions, including
+retained Library files. Preparing an archive checks every selected item's normal
+access and original-object read permission, then returns a session/account-bound,
+single-use ticket lasting five minutes. Downloading rechecks the entire selection
+before response output and each entry before reading it. A later revocation or
+storage failure aborts the ZIP instead of skipping files or appending an error
+page. Files already delivered while authorized cannot be recalled.
+
+The browser's download manager receives the archive directly; JavaScript never
+buffers it as a Blob. Server reads and output chunks are capped at 64 KiB, with
+S3 `stream_reads=true` ensuring the SDK does not buffer whole originals first.
+ZipStream uses STORE, single-pass headers and ZIP64; PHP still reserves its fixed
+16 MiB internal read buffer. A 50 MiB synthetic-file regression checks less than
+24 MiB of additional peak memory and bounded reads/output. Archive metadata is
+bounded by the 50-entry limit, and only one source stream is held open at a time.
+
+ZIP preparation is throttled to five requests per minute. A per-account cache
+lock rejects parallel ZIP streams, with a one-hour lease; streaming checks a
+30-minute deadline between entries/output chunks and sets a 30-second network
+read timeout where supported. Blocking HTTP backpressure remains subject to the
+web server's own timeouts. The lock is released on completion/interruption and
+at request termination. Source filenames stay private: other users' files use
+opaque media ULIDs with accurate MIME extensions, while an uploader's own ZIP
+entries retain sanitized camera filenames in distinct per-media directories.
+
 ## Signed URLs
 
 Owner/admin views use signed storage URLs where allowed. Visitor-facing images

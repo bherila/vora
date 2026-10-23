@@ -7,6 +7,7 @@ import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDialogs';
@@ -14,6 +15,7 @@ import { EVENT_REFRESH_LIMIT, eventMediaStatus, eventRefreshDelay, mediaNeedsRef
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
+import { BulkTransferActions } from '@/media/BulkTransferActions';
 import { MediaGrid } from '@/media/MediaGrid';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import type { PageMeta } from '@/media/types';
@@ -41,6 +43,7 @@ export function EventsPage() {
   const [attendees, setAttendees] = useState<EventAttendee[]>([]);
   const [settings, setSettings] = useState<EventSettings | null>(null);
   const [items, setItems] = useState<EventMediaItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -79,9 +82,15 @@ export function EventsPage() {
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
   const selectedEvent = events.find((event) => event.ulid === eventUlid);
   const selectedAttendee = attendees.find((attendee) => String(attendee.id) === attendeeId);
+  const selectableItems = items.filter((item) => item.upload_status === 'ready');
+  const selectedItems = selectableItems.filter((item) => selectedIds.includes(item.id));
   const isEventIndex = section === 'events' && !attendeeIndex && !attendeeId;
   const showMedia = !isEventIndex && !attendeeIndex;
   const refresh = (): void => setRevision((value) => value + 1);
+  useEffect(() => { setSelectedIds([]); }, [location]);
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id && item.upload_status === 'ready')));
+  }, [items]);
   const replaceLocation = (url: string): void => {
     window.history.replaceState(window.history.state, '', url);
     setLocation(window.location.pathname + window.location.search);
@@ -323,7 +332,9 @@ export function EventsPage() {
         {attendees.map((attendee) => <Card key={attendee.id}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold">{attendee.display_name}</h2><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: null, page: null, item: null }, `/attendees/${attendee.id}`)}>View uploads by {attendee.display_name}</a>{favoritesEnabled && <a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: String(attendee.id), page: null, item: null }, '/events')}>View favorites by {attendee.display_name}</a>}</CardContent></Card>)}
       </section> : !isEventIndex && <section className="space-y-4" aria-label="Event media">
         <h2 className="text-lg font-semibold">{mediaHeading}</h2>
-        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute. New uploads will be reviewed before others see them.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : <MediaGrid items={items} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
+        {!loading && selectableItems.length > 0 && <Label className="flex items-center gap-2 text-sm"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedIds(checked ? selectableItems.map((item) => item.id) : [])} />Select all on this page</Label>}
+        {!loading && selectedItems.length > 0 && <BulkTransferActions source="events" ulids={selectedItems.map((item) => item.ulid)} downloadUlids={selectedItems.map((item) => item.ulid)} canSave={moduleEnabled('library') && selectedItems.some((item) => item.can_save_to_library)} onSaved={() => { setSelectedIds([]); refresh(); }} onClear={() => setSelectedIds([])} />}
+        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute. New uploads will be reviewed before others see them.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : <MediaGrid items={items} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
           const item = items.find((entry) => entry.id === media.id);
           return item && <div className="flex flex-wrap items-center gap-2">{favoritesEnabled && <FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} />}<span className="text-xs text-muted-foreground">{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''} · {eventMediaStatus(item)}</span></div>;
         }} />}

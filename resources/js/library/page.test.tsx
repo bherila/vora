@@ -120,15 +120,31 @@ describe('LibraryPage', () => {
     expect(within(dialog).getByRole('button', { name: 'Remove from Received from Lyra' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
-  it('selects only owned items on the current page and clears selection when searching', async () => {
+
+  it('offers an individual original download for a retained video even when new storage is disabled', async () => {
+    bootstrap.mockReturnValue({ library: { enabled: false, storage_usage: EMPTY_STORAGE_USAGE } });
+    currentNote = { ...note, source: 'saved', body: null, media: {
+      id: 11, ulid: 'video-one', character_id: null, type: 'video', purpose: 'event', title: 'Saved video',
+      mime_type: 'video/mp4', size_bytes: 3 * 1024 ** 3, audience: 'specific', discoverable: false,
+      upload_status: 'ready', url: null, thumbnail_url: null, video: null, interests: [], character: null, created_at: null,
+    } };
+    render(<LibraryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Received note' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: 'Download' })).toHaveAttribute('href', '/api/library/items/my-note/download');
+  });
+  it('selects owned and shared items, saves only shared references and clears selection when searching', async () => {
     const originalGet = get.getMockImplementation()!;
     get.mockImplementation(async (url) => url.startsWith('/api/library/items?')
       ? { data: [currentNote, { ...currentNote, ulid: 'shared-note', title: 'Shared note', owned: false }], meta: { has_more: false } }
       : originalGet(url));
     render(<LibraryPage />);
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all on this page' }));
-    expect(screen.getByText('1 selected')).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Select Shared note' })).toBeNull();
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select Shared note' })).toBeChecked();
+    expect(screen.queryByRole('button', { name: 'Remove from Library' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected to Library' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/library/items/bulk-save', { ulids: ['shared-note'] }));
     fireEvent.change(screen.getByLabelText('Search Library items'), { target: { value: 'another query' } });
     await waitFor(() => expect(screen.queryByLabelText('Selected Library items')).toBeNull());
     expect((await screen.findByRole('checkbox', { name: 'Select Received note' }))).not.toBeChecked();
@@ -207,13 +223,16 @@ describe('LibraryPage', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument();
   });
 
-  it('does not offer bulk controls in a shared collection with no owned items', async () => {
+  it('offers bulk Save for shared items while hiding ownership-only organization actions', async () => {
     window.history.replaceState({}, '', '/library?collection=my-collection');
     collections = [{ ...collection, owned: false }];
     currentNote = { ...note, owned: false };
     render(<LibraryPage />);
     await screen.findByRole('button', { name: 'Open Received note' });
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Received note' }));
+    expect(screen.getByRole('button', { name: 'Save selected to Library' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove from Library' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add to collection' })).toBeNull();
     expect(screen.queryByLabelText('Selected Library items')).toBeNull();
   });
 
