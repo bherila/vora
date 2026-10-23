@@ -217,7 +217,7 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
     const fixtureBytes = (pending.request().postDataJSON() as { size: number }).size;
     expect(fixtureBytes, 'The real upload fixture must contain bytes').toBeGreaterThan(0);
     if (expectMultipartVideo) {
-      if (type === 'photo') expect(fixtureBytes, 'Tiny direct-upload photo fixture').toBeLessThan(1024);
+      if (type === 'photo') expect(fixtureBytes, 'Small direct-upload photo fixture').toBeLessThan(16 * 1024);
       else expect(fixtureBytes, 'Video fixture exceeds the opt-in multipart threshold').toBeGreaterThan(1024);
     }
     const source = new URL(result.upload_url);
@@ -422,7 +422,55 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
 });
 
 
-interface EventMedia { id: number; ulid: string; url: string | null; thumbnail_url: string | null; video?: { status: string; master_url: string | null }; download_url: string; }
+interface EventMedia {
+  id: number; ulid: string; url: string | null; thumbnail_url: string | null;
+  video?: { status: string; master_url: string | null }; download_url: string;
+  photo_versions?: { visible_count: number; preferred_ulid: string; is_preferred: boolean } | null;
+  photo_details?: { width: number | null; height: number | null; has_gps: boolean; has_capture_time: boolean; has_camera: boolean } | null;
+}
+
+async function checkPhotoVersions(admin: Page, uploader: Page, viewer: Page, viewerId: number, suffix: string): Promise<void> {
+  const event = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
+    name: `Photo versions ${suffix}`, visibility: 'everyone', timezone: 'UTC', member_ids: [],
+  })).data;
+  const heic = await upload(uploader, 'photo', `Camera original ${suffix}`, '', event.ulid, 'photo.heic');
+  const jpeg = await upload(uploader, 'photo', `Location copy ${suffix}`, '', event.ulid, 'photo-location.jpg');
+  const gallery = async (): Promise<EventMedia[]> => (await success<{ data: EventMedia[] }>(viewer, 'GET', `/api/events/media?event_ulid=${event.ulid}`)).data;
+  const metadataPreferred = await gallery();
+  expect(metadataPreferred.map((item) => item.ulid), 'Equal-resolution versions collapse to the metadata-rich original').toEqual([jpeg.data.ulid]);
+  expect(metadataPreferred[0].photo_details).toEqual(expect.objectContaining({ width: 64, height: 48, has_gps: true, has_capture_time: true, has_camera: true }));
+  expect(metadataPreferred[0].photo_versions).toEqual({ visible_count: 2, preferred_ulid: jpeg.data.ulid, is_preferred: true });
+  const png = await upload(uploader, 'photo', `Larger copy ${suffix}`, '', event.ulid, 'photo-larger.png');
+  const resolutionPreferred = await gallery();
+  expect(resolutionPreferred.map((item) => item.ulid), 'Resolution outranks metadata without deleting any version').toEqual([png.data.ulid]);
+  expect(resolutionPreferred[0].photo_details).toEqual(expect.objectContaining({ width: 128, height: 96 }));
+  expect(resolutionPreferred[0].photo_versions).toEqual({ visible_count: 3, preferred_ulid: png.data.ulid, is_preferred: true });
+  const versions = await success<{ data: EventMedia[]; preferred_ulid: string }>(viewer, 'GET', `/api/events/media/${heic.data.ulid}/variants`);
+  expect(versions.data.map((item) => item.ulid)).toEqual([png.data.ulid, jpeg.data.ulid, heic.data.ulid]);
+  expect(versions.preferred_ulid).toBe(png.data.ulid);
+  for (const version of versions.data) expect((await viewer.request.get(version.download_url)).status()).toBe(200);
+  const original = (await success<{ data: EventMedia }>(viewer, 'GET', `/api/events/media/${heic.data.ulid}`)).data;
+  await expectOriginalHeic(viewer, await viewer.request.get(original.download_url));
+  const jpegDownload = await viewer.request.get(versions.data[1].download_url);
+  expect(new TextDecoder().decode(await jpegDownload.body())).toContain('Exif\0\0');
+  expect(JSON.stringify(versions)).not.toMatch(/GPSLatitude|GPSLongitude|latitude|longitude|2026:10:22/);
+  await viewer.goto(`/events?event_ulid=${event.ulid}&item=${png.data.ulid}`);
+  await viewer.getByRole('dialog').getByRole('button', { name: 'Show versions', exact: true }).click();
+  await viewer.getByRole('region', { name: 'Photo versions', exact: true }).getByRole('button', { name: /^View version 3 · HEIC · / }).click();
+  await expect(viewer).toHaveURL(new RegExp(`item=${heic.data.ulid}`));
+  await expect(viewer.getByRole('dialog').getByRole('link', { name: 'Download', exact: true })).toHaveAttribute('href', `/api/events/media/${heic.data.ulid}/download`);
+  const saving = viewer.waitForResponse((response) => response.url().endsWith('/api/library/save') && response.request().method() === 'POST');
+  await viewer.getByRole('dialog').getByRole('button', { name: 'Save to my collection', exact: true }).click();
+  const saved = await saving;
+  expect(saved.ok()).toBeTruthy();
+  expect(saved.request().postDataJSON()).toEqual(expect.objectContaining({ media_ulid: heic.data.ulid }));
+  const savedItem = (await saved.json() as { data: { ulid: string } }).data;
+  await success(viewer, 'POST', '/api/library/items/bulk', { action: 'delete', item_ulids: [savedItem.ulid] });
+  await success(viewer, 'POST', '/api/favorites', { type: 'media', id: heic.data.id });
+  const favorite = await success<{ data: EventMedia[] }>(viewer, 'GET', `/api/events/media?event_ulid=${event.ulid}&favorites_of=${viewerId}`);
+  expect(favorite.data.map((item) => item.ulid), 'Favorites retain the selected original even when another version is preferred').toEqual([heic.data.ulid]);
+  expect((await success<{ data: EventMedia }>(viewer, 'GET', `/api/events/media/${heic.data.ulid}`)).data.ulid).toBe(heic.data.ulid);
+}
 
 test('Event profile real media inherits restricted access, visible favorites and private retained Saves', async ({ browser, request }, testInfo) => {
   test.skip(!eventProfile, 'Event deployment profile acceptance');
@@ -499,6 +547,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
     expect((await api(recipient, 'GET', `/api/events/media/${publicPhoto.data.ulid}`)).status,
       'An admin-exempt attendee publishes new Event uploads without a manual review action').toBe(200);
+    await checkPhotoVersions(admin, uploader, recipient, recipientId, suffix);
     await approveHeicOriginal(admin, photo.data.id);
     await success(admin, 'POST', `/api/admin/media/${video.data.id}/moderate`, { action: 'approve' });
     const photoDetail = (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).data;
