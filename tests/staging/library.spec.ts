@@ -456,7 +456,7 @@ async function checkPhotoVersions(admin: Page, uploader: Page, viewer: Page, vie
   expect(JSON.stringify(versions)).not.toMatch(/GPSLatitude|GPSLongitude|latitude|longitude|2026:10:22/);
   await viewer.goto(`/events?event_ulid=${event.ulid}&item=${png.data.ulid}`);
   await viewer.getByRole('dialog').getByRole('button', { name: 'Show versions', exact: true }).click();
-  await viewer.getByRole('region', { name: 'Photo versions', exact: true }).getByRole('button', { name: /^View version 3 · HEIC · / }).click();
+  await viewer.getByRole('region', { name: 'Photo versions', exact: true }).getByRole('button', { name: /^View version 3 · HEI[CF] · / }).click();
   await expect(viewer).toHaveURL(new RegExp(`item=${heic.data.ulid}`));
   await expect(viewer.getByRole('dialog').getByRole('link', { name: 'Download', exact: true })).toHaveAttribute('href', `/api/events/media/${heic.data.ulid}/download`);
   const saving = viewer.waitForResponse((response) => response.url().endsWith('/api/library/save') && response.request().method() === 'POST');
