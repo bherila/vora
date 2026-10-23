@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
+import { HeifOriginalReview } from '@/admin/HeifOriginalReview';
 import { ProtectedImage } from '@/components/protected-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
+import { isHeifMimeType } from '@/media/heifPhoto';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { type AdminMediaItem, formatBytes, type ModerationStatusValue, type PagedResponse } from '@/media/types';
 
@@ -49,6 +51,7 @@ export function AdminMediaPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  const [checkedOriginals, setCheckedOriginals] = useState<Record<number, string>>({});
   const [scanStatus, setScanStatus] = useState<DuplicateScanStatus | null>(null);
 
   // page 1 replaces the list (filter change / after a moderation action); higher
@@ -57,6 +60,7 @@ export function AdminMediaPage() {
     if (nextPage > 1) {
       setLoadingMore(true);
     } else {
+      setCheckedOriginals({});
       setLoading(true);
     }
     try {
@@ -83,6 +87,10 @@ export function AdminMediaPage() {
   }, [filter]);
 
   const moderate = async (item: AdminMediaItem, action: 'approve' | 'reject'): Promise<void> => {
+    if (action === 'approve' && isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== item.download_url) {
+      toast.error('Check the stored original before approving this HEIC/HEIF photo.');
+      return;
+    }
     setBusy((current) => ({ ...current, [item.id]: true }));
     try {
       await fetchWrapper.post(`/api/admin/media/${item.id}/moderate`, {
@@ -146,7 +154,9 @@ export function AdminMediaPage() {
               </CardHeader>
               <CardContent className="grid gap-3">
                 <div className="overflow-hidden rounded-md bg-muted">
-                  <MediaPlayer item={item} className="max-h-64 w-full object-contain" />
+                  {isHeifMimeType(item.mime_type)
+                    ? <HeifOriginalReview key={item.download_url} item={item} onVerified={() => { const url = item.download_url; if (url !== null) setCheckedOriginals((current) => ({ ...current, [item.id]: url })); }} />
+                    : <MediaPlayer item={item} className="max-h-64 w-full object-contain" />}
                 </div>
                 {item.thumbnail_url && (
                   <div className="grid gap-1">
@@ -210,7 +220,7 @@ export function AdminMediaPage() {
                 {item.moderation_notes && (
                   <p className="text-xs">Notes: {item.moderation_notes}</p>
                 )}
-                {item.type === 'video' && item.download_url && (
+                {(item.type === 'video' || isHeifMimeType(item.mime_type)) && item.download_url && (
                   <Button asChild size="sm" variant="outline">
                     <a href={item.download_url} download={item.original_filename} target="_blank" rel="noreferrer">
                       <Download className="h-4 w-4" />
@@ -224,7 +234,7 @@ export function AdminMediaPage() {
                   placeholder="Review notes (optional)"
                 />
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" disabled={busy[item.id]} onClick={() => void moderate(item, 'approve')}>
+                  <Button type="button" size="sm" disabled={busy[item.id] || (isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== item.download_url)} onClick={() => void moderate(item, 'approve')}>
                     Approve
                   </Button>
                   <Button

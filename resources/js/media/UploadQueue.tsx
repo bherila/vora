@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { heifMimeType } from '@/media/heifPhoto';
 import { mediaTypeForFile } from '@/media/types';
 import { type UploadReservation } from '@/media/uploadMediaFile';
 import { safeLocalBlobUrl } from '@/security/dom-url';
@@ -31,6 +32,7 @@ interface FilePreviewProps {
 function FilePreview({ file }: FilePreviewProps) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (heifMimeType(file) !== null) return;
     if (typeof URL.createObjectURL !== 'function' || mediaTypeForFile(file) === null) return;
     const preview = URL.createObjectURL(file);
     setUrl(safeLocalBlobUrl(preview));
@@ -38,6 +40,7 @@ function FilePreview({ file }: FilePreviewProps) {
   }, [file]);
 
   const type = mediaTypeForFile(file);
+  if (heifMimeType(file) !== null) return <div role="img" aria-label={`HEIC/HEIF photo ${file.name}; preview prepared during upload`} className="flex size-16 shrink-0 items-center justify-center rounded-md bg-muted p-1 text-center text-xs text-muted-foreground">HEIC/HEIF photo</div>;
   return <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-xs text-muted-foreground">
     {url === null ? (type === 'video' ? 'Video' : type === 'photo' ? 'Photo' : 'File') : type === 'video'
       ? <video src={url} muted playsInline preload="metadata" aria-label={`Preview of ${file.name}`} className="size-full object-cover" />
@@ -50,7 +53,7 @@ function statusLabel(item: QueuedUpload): string {
     case 'queued': return 'Waiting';
     case 'preparing': return `Preparing · ${Math.round(item.progress)}%`;
     case 'uploading': return `Uploading · ${Math.round(item.progress)}%`;
-    case 'completed': return 'Uploaded · awaiting review';
+    case 'completed': return 'Uploaded';
     case 'failed': return 'Failed';
     case 'canceled': return 'Canceled';
   }

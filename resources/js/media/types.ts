@@ -1,4 +1,5 @@
 import type { Audience } from '@/lib/audience';
+import { heifMimeType } from '@/media/heifPhoto';
 
 export type { Audience };
 export type MediaTypeValue = 'photo' | 'video';
@@ -123,7 +124,7 @@ export interface AdminMediaItem extends MediaItem {
 }
 
 export function mediaTypeForFile(file: File): MediaTypeValue | null {
-  if (file.type.startsWith('image/')) {
+  if (heifMimeType(file) !== null || file.type.startsWith('image/')) {
     return 'photo';
   }
   if (file.type.startsWith('video/')) {

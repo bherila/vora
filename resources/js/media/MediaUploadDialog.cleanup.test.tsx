@@ -211,7 +211,7 @@ describe('MediaUploadDialog reservation cleanup', () => {
     expect(post).not.toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.getAllByPlaceholderText('Title (optional)')).toHaveLength(2);
-    expect(screen.getByText('Uploaded · awaiting review')).toBeInTheDocument();
+    expect(screen.getByText('Uploaded')).toBeInTheDocument();
     expect(screen.getByText('Second upload failed.')).toBeInTheDocument();
   });
 });

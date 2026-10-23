@@ -264,13 +264,13 @@ export function MediaUploadDialog({
         </DialogHeader>
         <form onSubmit={(event) => void upload(event)} className="grid min-w-0 grid-cols-1 gap-4">
           <FileDropzone
-            accept="image/*,video/*"
+            accept="image/*,video/*,.heic,.heif"
             files={pending.map((item) => item.file)}
             label="Drop photos or videos here"
             multiple
             onFilesChange={handleFilesChange}
             disabled={locked}
-            helperText="Choose photos and videos together. You can review them before uploading."
+            helperText="Choose photos and videos together. HEIC/HEIF originals are kept with JPEG previews."
           />
           {isEvent && <div className="grid gap-2 rounded-md border p-3">
             {eventOptions !== undefined ? <label className="grid gap-1 text-sm">Destination event
