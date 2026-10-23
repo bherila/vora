@@ -52,6 +52,7 @@ export function AdminMediaPage() {
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   const [checkedOriginals, setCheckedOriginals] = useState<Record<number, string>>({});
+  const [reviewEpoch, setReviewEpoch] = useState(0);
   const [scanStatus, setScanStatus] = useState<DuplicateScanStatus | null>(null);
 
   // page 1 replaces the list (filter change / after a moderation action); higher
@@ -61,6 +62,7 @@ export function AdminMediaPage() {
       setLoadingMore(true);
     } else {
       setCheckedOriginals({});
+      setReviewEpoch((value) => value + 1);
       setLoading(true);
     }
     try {
@@ -87,7 +89,7 @@ export function AdminMediaPage() {
   }, [filter]);
 
   const moderate = async (item: AdminMediaItem, action: 'approve' | 'reject'): Promise<void> => {
-    if (action === 'approve' && isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== item.download_url) {
+    if (action === 'approve' && isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== `${reviewEpoch}:${item.download_url}`) {
       toast.error('Check the stored original before approving this HEIC/HEIF photo.');
       return;
     }
@@ -155,7 +157,7 @@ export function AdminMediaPage() {
               <CardContent className="grid gap-3">
                 <div className="overflow-hidden rounded-md bg-muted">
                   {isHeifMimeType(item.mime_type)
-                    ? <HeifOriginalReview key={item.download_url} item={item} onVerified={() => { const url = item.download_url; if (url !== null) setCheckedOriginals((current) => ({ ...current, [item.id]: url })); }} />
+                    ? <HeifOriginalReview key={`${reviewEpoch}:${item.download_url}`} item={item} onVerified={() => { if (item.download_url !== null) setCheckedOriginals((current) => ({ ...current, [item.id]: `${reviewEpoch}:${item.download_url}` })); }} />
                     : <MediaPlayer item={item} className="max-h-64 w-full object-contain" />}
                 </div>
                 {item.thumbnail_url && (
@@ -234,7 +236,7 @@ export function AdminMediaPage() {
                   placeholder="Review notes (optional)"
                 />
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" disabled={busy[item.id] || (isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== item.download_url)} onClick={() => void moderate(item, 'approve')}>
+                  <Button type="button" size="sm" disabled={busy[item.id] || (isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== `${reviewEpoch}:${item.download_url}`)} onClick={() => void moderate(item, 'approve')}>
                     Approve
                   </Button>
                   <Button

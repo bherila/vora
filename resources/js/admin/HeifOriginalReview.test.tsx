@@ -50,6 +50,7 @@ test('approval requires independently fetching, decoding and displaying the stor
   fireEvent.click(approve);
   await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/41/moderate', { action: 'approve', notes: null }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled());
+  expect(await screen.findByRole('button', { name: 'Check original' })).toBeEnabled();
   view.unmount();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(`blob:${window.location.origin}/verified-photo`);
 });

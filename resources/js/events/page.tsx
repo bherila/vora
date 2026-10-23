@@ -293,7 +293,7 @@ export function EventsPage() {
     <Toaster />
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Event photos & videos</h1><p className="mt-1 text-sm text-muted-foreground">Browse the moments attendees shared, or add your own.</p></div>
-      {!initialLoading && !error && <MediaUploadDialog eventOptions={events} eventUlid={selectedEvent?.ulid} characters={[]} lastInterestIds={[]} onUploaded={refresh} triggerLabel="Add photos & videos" />}
+      {!initialLoading && !error && <MediaUploadDialog eventOptions={events} eventUlid={selectedEvent?.ulid} eventUploadsRequireReview={settings?.uploads_require_review ?? true} characters={[]} lastInterestIds={[]} onUploaded={refresh} triggerLabel="Add photos & videos" />}
     </header>
     <nav aria-label="Event navigation" className="flex flex-wrap items-center gap-2">
       <a href={allMediaUrl} aria-current={showMedia && !filtersActive && !eventUlid ? 'page' : undefined} className="rounded-md bg-muted px-3 py-2 text-sm hover:bg-accent">All media</a>
@@ -324,7 +324,7 @@ export function EventsPage() {
         {selectedEvent.description && <p className="whitespace-pre-wrap text-sm">{selectedEvent.description}</p>}
         {eventDate(selectedEvent) && <p className="text-sm text-muted-foreground">{eventDate(selectedEvent)}</p>}
         <Badge variant="outline">{selectedEvent.visibility === 'everyone' ? 'All attendees' : 'Selected attendees only'}</Badge>
-        <p className="text-xs text-muted-foreground">New uploads appear to other attendees after review.</p>
+        <p className="text-xs text-muted-foreground">{settings?.uploads_require_review === false ? 'Your account can publish completed Event uploads without review. Videos may still be processing.' : 'New uploads appear to other attendees after review.'}</p>
       </section>}
       {eventUlid && !selectedEvent && <p role="alert" className="text-sm text-destructive">This event is unavailable or you do not have access.</p>}
       {attendeeIndex ? <section aria-label="Attendee galleries" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -340,7 +340,7 @@ export function EventsPage() {
         }} />}
         {meta && meta.last_page > 1 && <nav className="flex items-center justify-between gap-3" aria-label="Media pages"><Button variant="outline" disabled={page <= 1 || loading} onClick={() => navigate(pageUrl(params, { page: String(page - 1), item: null }))}>Previous</Button><span className="text-sm">Page {meta.current_page} of {meta.last_page}</span><Button variant="outline" disabled={!meta.has_more || loading} onClick={() => navigate(pageUrl(params, { page: String(page + 1), item: null }))}>Next</Button></nav>}
       </section>}
-      {settings?.is_admin && <details className="rounded border p-3"><summary className="cursor-pointer text-sm font-medium">Manage events</summary><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => setEditor(null)}>Create event</Button>{favoritesEnabled && <Button variant="outline" onClick={() => setCuratorsOpen(true)}>Manage featured curators</Button>}</div></details>}
+      {settings?.is_admin && <details className="rounded border p-3"><summary className="cursor-pointer text-sm font-medium">Manage events</summary><div className="mt-3 flex flex-wrap items-center gap-2"><Button onClick={() => setEditor(null)}>Create event</Button><a className="text-sm underline" href="/events/organizer">Manage attendees</a>{favoritesEnabled && <Button variant="outline" onClick={() => setCuratorsOpen(true)}>Manage featured curators</Button>}</div></details>}
     </>}
     {detailLoading && <p role="status">Loading media details…</p>}
     {detailError && <div role="alert" className="flex items-center gap-3 text-sm text-destructive"><p>{detailError}</p><Button variant="outline" onClick={() => setDetailRevision((value) => value + 1)}>Try again</Button><Button variant="outline" onClick={closeItem}>Dismiss</Button></div>}

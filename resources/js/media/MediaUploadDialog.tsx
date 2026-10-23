@@ -58,6 +58,7 @@ interface MediaUploadDialogProps {
   eventUlid?: string | undefined;
   /** Presence keeps this flow in Event context, including when the list is empty. */
   eventOptions?: EventUploadOption[] | undefined;
+  eventUploadsRequireReview?: boolean;
 }
 
 /**
@@ -76,6 +77,7 @@ export function MediaUploadDialog({
   libraryCollectionUlid,
   eventUlid,
   eventOptions,
+  eventUploadsRequireReview = true,
 }: MediaUploadDialogProps) {
   const uploadRestriction = activeRestriction('media.upload');
   const activeIdentityId = useActiveIdentityId();
@@ -237,7 +239,7 @@ export function MediaUploadDialog({
       if (canceled) {
         toast.info(totalCompleted > 0 ? `${totalCompleted} upload${totalCompleted === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');
       } else if (totalCompleted === pending.length) {
-        toast.success(pending.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
+        toast.success(isEvent ? 'Upload complete. Each item shows its sharing and processing status.' : pending.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
         setOpen(false);
         resetForm();
       } else {
@@ -280,7 +282,7 @@ export function MediaUploadDialog({
                 {eventOptions.map((option) => <option key={option.ulid} value={option.ulid}>{option.name}</option>)}
               </select>
             </label> : <p className="text-sm font-medium">Destination: this event</p>}
-            {selectedEvent ? <p className="text-sm text-muted-foreground">{selectedEvent.name}: {selectedEvent.visibility === 'specific' ? 'Only selected attendees can view uploads after review.' : 'All approved attendees can view uploads after review.'}</p>
+            {selectedEvent ? <p className="text-sm text-muted-foreground">{selectedEvent.name}: {selectedEvent.visibility === 'specific' ? 'Only selected attendees can view uploads.' : 'All approved attendees can view uploads.'}</p>
               : eventOptions?.length === 0 ? <p className="text-sm text-muted-foreground">No events are available for uploads. Ask an administrator to add an event or grant access.</p>
                 : !hasEvent && <p className="text-sm text-muted-foreground">{selectedEventUlid ? 'The selected event is no longer available. Choose another event.' : 'Choose where these photos and videos belong.'}</p>}
           </div>}
@@ -305,7 +307,7 @@ export function MediaUploadDialog({
             </label>
           )}
           {isEvent ? (
-            <p className="text-sm text-muted-foreground">Uploads are shared with people who can access this event after review. Event access controls who can view them.</p>
+            <p className="text-sm text-muted-foreground">{eventUploadsRequireReview ? 'Uploads are shared with people who can access this event after review.' : 'Your account can publish completed Event uploads without review. Each item shows its current status.'} Event access controls who can view them.</p>
           ) : isLibrary ? (
             <p className="text-sm text-muted-foreground">
               Uploads stay in your private Library. If you selected a shared collection, its recipients can view and save new uploads after review.
