@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { type APIRequestContext, type BrowserContext, expect, type Page, type Request, type Response, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
@@ -109,8 +111,8 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
   return uploader!;
 }
 
-async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string): Promise<Upload> {
-  const filename = type === 'photo' ? 'photo.png' : 'video.mp4';
+async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string, photoFilename = 'photo.png'): Promise<Upload> {
+  const filename = type === 'photo' ? photoFilename : 'video.mp4';
   await page.goto(eventUlid ? `/events?event_ulid=${eventUlid}` : `/library?collection=${collection}`);
   await page.getByRole('button', { name: eventUlid ? 'Add photos & videos' : 'Upload media', exact: true }).click();
   const dialog = page.getByRole('dialog');
@@ -256,7 +258,7 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(uploader, 'PUT', `/api/library/collections/${collection.ulid}/sharing`, { user_ids: [recipientAccount.id] });
     const photoTitle = `Staging photo ${suffix}`;
     const videoTitle = `Staging video ${suffix}`;
-    const photo = await upload(uploader, 'photo', photoTitle, collection.ulid);
+    const photo = await upload(uploader, 'photo', photoTitle, collection.ulid, undefined, 'photo.heic');
     const video = await upload(uploader, 'video', videoTitle, collection.ulid);
     const photoItem = await findItem(uploader, collection.ulid, photoTitle);
     const videoItem = await findItem(uploader, collection.ulid, videoTitle);
@@ -266,6 +268,9 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await recipient.goto(`/library?item=${photoItem.ulid}`);
     const image = recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true });
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    const originalPhoto = await recipient.request.get(`/api/library/items/${photoItem.ulid}/assets/original`);
+    expect(originalPhoto.status()).toBe(200);
+    expect(await originalPhoto.body()).toEqual(readFileSync(new URL('./.fixtures/photo.heic', import.meta.url)));
     await playable(recipient, videoItem.ulid);
     // A changed default affects existing inheriting accounts. The recipient's
     // explicit unlimited override still permits durable Saves under a zero default.
@@ -306,6 +311,8 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(admin, 'DELETE', `/api/admin/users/${uploaderAccount.id}`);
     await recipient.goto(`/library?item=${savedPhoto.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true }).evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    expect(await (await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/assets/original`)).body())
+      .toEqual(readFileSync(new URL('./.fixtures/photo.heic', import.meta.url)));
     await playable(recipient, savedVideo.ulid);
     const segmentUrl = await retainedSegmentUrl(recipient, savedVideo.ulid);
     expect((await outsider.request.get(`/api/library/items/${savedVideo.ulid}/hls/master.m3u8`)).status()).toBe(404);
@@ -395,7 +402,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     for (const path of ['/api/chat/conversations', '/api/characters', '/api/users', '/api/stories']) {
       expect((await api(outsider, 'GET', path)).status).toBe(404);
     }
-    const photo = await upload(uploader, 'photo', `Event photo ${suffix}`, '', restricted.ulid);
+    const photo = await upload(uploader, 'photo', `Event photo ${suffix}`, '', restricted.ulid, 'photo.heic');
     const video = await upload(uploader, 'video', `Event video ${suffix}`, '', restricted.ulid);
     const publicPhoto = await upload(uploader, 'photo', `Shared event ${suffix}`, '', shared.ulid);
     expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
@@ -403,7 +410,9 @@ test('Event profile real media inherits restricted access, visible favorites and
     const photoDetail = (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).data;
     await recipient.goto(`/events?media=${photo.data.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
-    expect((await recipient.request.get(photoDetail.download_url)).headers()['content-disposition']).toContain('attachment');
+    const downloadedPhoto = await recipient.request.get(photoDetail.download_url);
+    expect(downloadedPhoto.headers()['content-disposition']).toContain('.heic');
+    expect(await downloadedPhoto.body()).toEqual(readFileSync(new URL('./.fixtures/photo.heic', import.meta.url)));
     await expect.poll(async () => (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${video.data.ulid}`)).data.video?.status,
       { timeout: 160_000, intervals: [2_000, 5_000, 10_000] }).toBe('ready');
     await recipient.goto(`/events?media=${video.data.ulid}`);
@@ -434,6 +443,10 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect(disposable?.email).toBe(`library-run-${suffix}@staging.invalid`);
     expect(disposable?.is_admin).toBe(false);
     await success(admin, 'DELETE', `/api/admin/users/${account.id}`);
+    await recipient.goto(`/library?item=${savedPhoto.ulid}`);
+    await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    expect(await (await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/assets/original`)).body())
+      .toEqual(readFileSync(new URL('./.fixtures/photo.heic', import.meta.url)));
     await playable(recipient, savedVideo.ulid);
     await recipient.screenshot({ path: testInfo.outputPath('event-retained-real-hls.png'), fullPage: true });
     await success(recipient, 'POST', '/api/library/items/bulk', { action: 'delete', item_ulids: [savedPhoto.ulid, savedVideo.ulid] });
