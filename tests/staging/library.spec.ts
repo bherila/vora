@@ -505,7 +505,8 @@ test('Event profile real media inherits restricted access, visible favorites and
     await recipient.goto(`/events?media=${photo.data.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
     const downloadedPhoto = await recipient.request.get(photoDetail.download_url);
-    expect(downloadedPhoto.headers()['content-disposition']).toContain('.heic');
+    const photoExtension = downloadedPhoto.headers()['content-type'].split(';')[0] === 'image/heif' ? 'heif' : 'heic';
+    expect(downloadedPhoto.headers()['content-disposition']).toContain(`.${photoExtension}`);
     await expectOriginalHeic(recipient, downloadedPhoto);
     await expect.poll(async () => (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${video.data.ulid}`)).data.video?.status,
       { timeout: 160_000, intervals: [2_000, 5_000, 10_000] }).toBe('ready');
@@ -529,7 +530,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     const download = await downloading;
     expect(download.suggestedFilename()).toBe('selected-media.zip');
     expect(await download.failure()).toBeNull();
-    expect((await zipEntryNames(download)).sort()).toEqual([`media-${photo.data.ulid}.heic`, `media-${video.data.ulid}.mp4`].sort());
+    expect((await zipEntryNames(download)).sort()).toEqual([`media-${photo.data.ulid}.${photoExtension}`, `media-${video.data.ulid}.mp4`].sort());
     const bulkSaved = recipient.waitForResponse((response) => response.url().endsWith('/api/events/media/bulk-save') && response.request().method() === 'POST');
     await recipient.getByRole('button', { name: 'Save selected to my collection', exact: true }).click();
     expect((await bulkSaved).ok()).toBeTruthy();
@@ -556,7 +557,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
     await expectOriginalHeic(recipient, await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/assets/original`));
     const retainedDownload = await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/download`);
-    expect(retainedDownload.headers()['content-disposition']).toContain('.heic');
+    expect(retainedDownload.headers()['content-disposition']).toContain(`.${photoExtension}`);
     await expectOriginalHeic(recipient, retainedDownload);
     await playable(recipient, savedVideo.ulid);
     await recipient.screenshot({ path: testInfo.outputPath('event-retained-real-hls.png'), fullPage: true });
