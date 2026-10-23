@@ -196,7 +196,6 @@ export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChoos
       </div>
       {mediaNeedsRefresh(item) && <p className="text-xs text-muted-foreground">{refreshPaused ? 'Automatic updates have paused.' : 'Status updates automatically for a short time.'} {onRefresh && <button type="button" className="underline underline-offset-4" onClick={onRefresh}>Check for updates</button>}</p>}
       {item.type === 'photo' && <PhotoDetails item={item} />}
-      {item.type === 'photo' && onChooseVersion && <PhotoVersionsChooser item={item} onChoose={onChooseVersion} disabled={busy || navigationBusy || confirmDelete} />}
       <div className="flex flex-wrap items-center gap-2">
         {moduleEnabled('favorites') && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
         {moduleEnabled('library') && (item.can_save_to_library || item.library_item_ulid) && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}
@@ -204,6 +203,7 @@ export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChoos
         {item.owned && !confirmDelete && <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Delete my upload</Button>}
       </div>
       <p className="text-xs text-muted-foreground">Favorites are visible to attendees who can access the media. Items saved to your collection stay private and retain access; downloads are stored on your device.</p>
+      {item.type === 'photo' && onChooseVersion && <PhotoVersionsChooser item={item} onChoose={onChooseVersion} disabled={busy || navigationBusy || confirmDelete} />}
       {confirmDelete && <div className="grid gap-3 rounded border border-destructive p-3">
         <p className="text-sm">Delete this upload from the event? Items already saved to another account’s collection retain access.</p>
         <div className="flex gap-2"><Button variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep upload</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>{busy ? 'Deleting…' : 'Confirm delete'}</Button></div>
