@@ -4,6 +4,7 @@ use App\Http\Controllers\Events\EventAdminController;
 use App\Http\Controllers\Events\EventController;
 use App\Http\Controllers\Events\EventJoinController;
 use App\Http\Controllers\Events\EventMediaController;
+use App\Http\Controllers\Events\EventOrganizerController;
 use App\Models\Event;
 use App\Services\Events\EventAccess;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,9 @@ Route::middleware(['auth', 'approved', 'module:events'])->group(function (): voi
     Route::get('/api/events/media/{ulid}', [EventMediaController::class, 'show']);
     Route::post('/api/events/{event:ulid}/uploads', [EventMediaController::class, 'upload']);
     Route::middleware('can:admin-only')->group(function (): void {
+        Route::get('/events/organizer', [EventOrganizerController::class, 'page'])->name('events.organizer');
+        Route::get('/api/admin/events/attendees', [EventOrganizerController::class, 'index']);
+        Route::put('/api/admin/events/attendees/{user}/access', [EventOrganizerController::class, 'access']);
         Route::post('/api/admin/events', [EventAdminController::class, 'store']);
         Route::patch('/api/admin/events/{event:ulid}', [EventAdminController::class, 'update']);
         Route::put('/api/admin/events/settings', [EventAdminController::class, 'settings'])->middleware('module:favorites');

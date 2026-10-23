@@ -51,6 +51,7 @@ export default defineConfig({
                 'resources/js/media/view.tsx',
                 'resources/js/library/page.tsx',
                 'resources/js/events/page.tsx',
+                'resources/js/events/organizer.tsx',
                 'resources/js/stories/page.tsx',
                 'resources/js/stories/reader.tsx',
             ],
