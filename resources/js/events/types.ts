@@ -23,6 +23,7 @@ export interface EventSettings {
   featured_curators: EventAttendee[];
   is_admin: boolean;
   viewer_id: number;
+  uploads_require_review?: boolean;
 }
 
 export interface EventMediaItem extends MediaItem {

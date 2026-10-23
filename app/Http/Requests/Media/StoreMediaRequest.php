@@ -7,6 +7,7 @@ use App\Enums\RestrictionCapability;
 use App\Http\Requests\Concerns\ValidatesAudience;
 use App\Models\Character;
 use App\Services\Moderation\RestrictionGate;
+use App\Support\HeifPhoto;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -76,9 +77,14 @@ class StoreMediaRequest extends FormRequest
 
             $type = MediaType::from($typeValue);
 
-            $contentType = (string) $this->input('content_type');
+            $contentType = $this->input('content_type');
+            $contentType = is_string($contentType) ? $contentType : '';
             if ($contentType !== '' && ! $type->allowsMimeType($contentType)) {
                 $validator->errors()->add('content_type', 'This file type is not allowed for '.$typeValue.' uploads.');
+            }
+
+            if ($type === MediaType::Photo && HeifPhoto::isMimeType($contentType) && ! $this->boolean('has_thumbnail')) {
+                $validator->errors()->add('has_thumbnail', 'A JPEG preview is required for HEIC/HEIF photos. Please retry this photo.');
             }
 
             $size = $this->input('size');

@@ -1,4 +1,4 @@
-import { type APIRequestContext, type BrowserContext, expect, type Page, type Request, type Response, test } from '@playwright/test';
+import { type APIRequestContext, type APIResponse, type BrowserContext, type Download, expect, type Page, type Request, type Response, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
 let expectMultipartVideo = false;
@@ -11,10 +11,11 @@ test.beforeAll(async ({ request }, testInfo) => {
   expect((await request.get(`${mailUrl}/api/v1/messages?limit=1`)).ok()).toBeTruthy();
 });
 const PASSWORD = 'Local-Staging-Only-2026!';
+const HEIC_SHA256 = '8892ba2bdbb14b22dc4b54927d55688a697dc558c51e7b1b03cfe30e822b2c9f';
 const EMAILS = ['admin', 'recipient', 'outsider'].map((role) => `${role}@staging.invalid`);
 
 interface MailSummary { ID: string; To: { Address: string }[]; }
-interface Account { id: number; email: string; is_admin: boolean; is_deleted: boolean; storage_limit_bytes: number | null; storage_unlimited: boolean; }
+interface Account { id: number; display_name: string; email: string; is_admin: boolean; is_deleted: boolean; storage_limit_bytes: number | null; storage_unlimited: boolean; }
 interface Item { ulid: string; title: string; source: string; media: { video?: { status: string; master_url: string | null } } | null; }
 interface Upload {
   data: { id: number; ulid: string };
@@ -23,6 +24,49 @@ interface Upload {
   multipart: { enabled: boolean; threshold_bytes: number; part_size_bytes: number };
 }
 interface Result<T> { status: number; body: T; }
+
+async function expectOriginalHeic(page: Page, response: APIResponse): Promise<void> {
+  expect(response.status()).toBe(200);
+  const bytes = Array.from(new Uint8Array(await response.body()));
+  const hash = await page.evaluate(async (original) => {
+    const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(original));
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }, bytes);
+  expect(hash, 'Original HEIC bytes survive preview conversion, review and durable Save').toBe(HEIC_SHA256);
+}
+
+async function zipEntryNames(download: Download): Promise<string[]> {
+  const stream = await download.createReadStream();
+  expect(stream).not.toBeNull();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  // CI inspects only tiny synthetic fixtures, never buffers user archives.
+  for await (const chunk of stream! as AsyncIterable<Uint8Array>) {
+    size += chunk.byteLength;
+    expect(size).toBeLessThan(1024 * 1024);
+    chunks.push(new Uint8Array(chunk));
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const view = new DataView(bytes.buffer);
+  // No ZIP comment: the end record supplies the central directory's exact
+  // offset, so compressed/source bytes cannot masquerade as filename records.
+  const end = size - 22;
+  expect(view.getUint32(end, true)).toBe(0x06054b50);
+  const count = view.getUint16(end + 10, true);
+  let cursor = view.getUint32(end + 16, true);
+  const names: string[] = [];
+  for (let index = 0; index < count; index++) {
+    expect(view.getUint32(cursor, true)).toBe(0x02014b50);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    names.push(new TextDecoder().decode(bytes.slice(cursor + 46, cursor + 46 + nameLength)));
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  return names;
+}
 
 async function api<T>(page: Page, method: string, path: string, body?: unknown): Promise<Result<T>> {
   if (!path.startsWith('/api/')) throw new Error('Acceptance API helper only accepts normal application API paths.');
@@ -73,7 +117,7 @@ async function login(page: Page, request: APIRequestContext, email: string): Pro
   await page.goto('/library');
 }
 
-async function registerUploader(page: Page, admin: Page, request: APIRequestContext, adminId: number, suffix: string): Promise<Account> {
+async function registerUploader(page: Page, admin: Page, request: APIRequestContext, adminId: number, suffix: string, organizerApproval = false): Promise<Account> {
   const email = `library-run-${suffix}@staging.invalid`;
   await success(admin, 'POST', `/api/admin/users/${adminId}/invites`, { quantity: 1, expires_in_days: 1 });
   const invite = (await success<{ data: { uuid: string } }>(admin, 'POST', '/api/invites', {})).data.uuid;
@@ -97,7 +141,13 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
   const accounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
   const uploader = accounts.find((entry) => entry.email === email);
   expect(uploader).toBeTruthy();
-  await success(admin, 'POST', `/api/admin/users/${uploader!.id}/approve`, {});
+  if (organizerApproval) {
+    await organizerSearch(admin, email);
+    await admin.getByRole('button', { name: `Approve ${uploader!.display_name}`, exact: true }).click();
+    await expect(admin.getByRole('button', { name: `Edit Event access for ${uploader!.display_name}`, exact: true })).toBeEnabled();
+  } else {
+    await success(admin, 'POST', `/api/admin/users/${uploader!.id}/approve`, {});
+  }
   await success(admin, 'PATCH', `/api/admin/users/${uploader!.id}`, { library_enabled: true });
   await page.goto('/library');
   await page.evaluate(async () => {
@@ -109,8 +159,42 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
   return uploader!;
 }
 
-async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string): Promise<Upload> {
-  const filename = type === 'photo' ? 'photo.png' : 'video.mp4';
+async function organizerSearch(admin: Page, email: string): Promise<void> {
+  await admin.goto('/events/organizer');
+  await admin.getByLabel('Search attendees', { exact: true }).fill(email);
+  const loaded = admin.waitForResponse((response) => new URL(response.url()).pathname === '/api/admin/events/attendees'
+    && new URL(response.url()).searchParams.get('search') === email);
+  await admin.getByRole('button', { name: 'Search', exact: true }).click();
+  expect((await loaded).ok()).toBeTruthy();
+  await expect(admin.getByText(email, { exact: true })).toBeVisible();
+}
+
+async function setEventAccess(admin: Page, attendee: Account, eventName: string, checked: boolean): Promise<void> {
+  await organizerSearch(admin, attendee.email);
+  await admin.getByRole('button', { name: `Edit Event access for ${attendee.display_name}`, exact: true }).click();
+  const dialog = admin.getByRole('dialog');
+  await dialog.getByRole('checkbox', { name: eventName, exact: true }).setChecked(checked);
+  await dialog.getByRole('button', { name: 'Save Event access', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+async function approveHeicOriginal(admin: Page, mediaId: number): Promise<void> {
+  await admin.goto('/admin/media');
+  const card = admin.locator(`#media-${mediaId}`);
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+  await card.getByRole('button', { name: 'Check original', exact: true }).click();
+  const original = card.getByRole('img', { name: 'Verified preview decoded from the stored original', exact: true });
+  await expect.poll(() => original.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(card.getByRole('button', { name: 'Approve', exact: true })).toBeEnabled();
+  const reviewed = admin.waitForResponse((response) => response.url().endsWith(`/api/admin/media/${mediaId}/moderate`) && response.request().method() === 'POST');
+  await card.getByRole('button', { name: 'Approve', exact: true }).click();
+  expect((await reviewed).ok()).toBeTruthy();
+  await expect(card).toHaveCount(0);
+}
+
+async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string, photoFilename = 'photo.png'): Promise<Upload> {
+  const filename = type === 'photo' ? photoFilename : 'video.mp4';
   await page.goto(eventUlid ? `/events?event_ulid=${eventUlid}` : `/library?collection=${collection}`);
   await page.getByRole('button', { name: eventUlid ? 'Add photos & videos' : 'Upload media', exact: true }).click();
   const dialog = page.getByRole('dialog');
@@ -256,16 +340,19 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(uploader, 'PUT', `/api/library/collections/${collection.ulid}/sharing`, { user_ids: [recipientAccount.id] });
     const photoTitle = `Staging photo ${suffix}`;
     const videoTitle = `Staging video ${suffix}`;
-    const photo = await upload(uploader, 'photo', photoTitle, collection.ulid);
+    const photo = await upload(uploader, 'photo', photoTitle, collection.ulid, undefined, 'photo.heic');
     const video = await upload(uploader, 'video', videoTitle, collection.ulid);
     const photoItem = await findItem(uploader, collection.ulid, photoTitle);
     const videoItem = await findItem(uploader, collection.ulid, videoTitle);
     expect((await api(recipient, 'GET', `/api/library/items/${photoItem.ulid}`)).status).toBe(404);
     expect((await api(outsider, 'GET', `/api/library/items/${videoItem.ulid}`)).status).toBe(404);
-    for (const media of [photo, video]) await success(admin, 'POST', `/api/admin/media/${media.data.id}/moderate`, { action: 'approve' });
+    await approveHeicOriginal(admin, photo.data.id);
+    await success(admin, 'POST', `/api/admin/media/${video.data.id}/moderate`, { action: 'approve' });
     await recipient.goto(`/library?item=${photoItem.ulid}`);
     const image = recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true });
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    const originalPhoto = await recipient.request.get(`/api/library/items/${photoItem.ulid}/assets/original`);
+    await expectOriginalHeic(recipient, originalPhoto);
     await playable(recipient, videoItem.ulid);
     // A changed default affects existing inheriting accounts. The recipient's
     // explicit unlimited override still permits durable Saves under a zero default.
@@ -306,6 +393,7 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(admin, 'DELETE', `/api/admin/users/${uploaderAccount.id}`);
     await recipient.goto(`/library?item=${savedPhoto.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true }).evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    await expectOriginalHeic(recipient, await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/assets/original`));
     await playable(recipient, savedVideo.ulid);
     const segmentUrl = await retainedSegmentUrl(recipient, savedVideo.ulid);
     expect((await outsider.request.get(`/api/library/items/${savedVideo.ulid}/hls/master.m3u8`)).status()).toBe(404);
@@ -356,13 +444,16 @@ test('Event profile real media inherits restricted access, visible favorites and
     const uploaderContext = await browser.newContext({ baseURL: testInfo.project.use.baseURL });
     contexts.push(uploaderContext);
     const uploader = await uploaderContext.newPage();
-    const account = await registerUploader(uploader, admin, request, adminId, suffix);
+    const account = await registerUploader(uploader, admin, request, adminId, suffix, true);
     // Event profile grants Library access without the primary deployment's premium flag.
     await success(admin, 'PATCH', `/api/admin/users/${account.id}`, { library_enabled: false });
-    const members = [account.id, recipientId];
+    const recipientAccount = accounts.find((entry) => entry.id === recipientId)!;
+    const restrictedName = `Private gathering ${suffix}`;
     const restricted = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
-      name: `Private gathering ${suffix}`, description: 'Selected attendees', visibility: 'specific', timezone: 'America/New_York', member_ids: members,
+      name: restrictedName, description: 'Selected attendees', visibility: 'specific', timezone: 'America/New_York', member_ids: [account.id],
     })).data;
+    // Membership is an internal organizer action; no email/join link grants it.
+    await setEventAccess(admin, recipientAccount, restrictedName, true);
     const shared = (await success<{ data: { ulid: string } }>(admin, 'POST', '/api/admin/events', {
       name: `All attendees ${suffix}`, visibility: 'everyone', timezone: 'UTC', member_ids: [],
     })).data;
@@ -395,15 +486,28 @@ test('Event profile real media inherits restricted access, visible favorites and
     for (const path of ['/api/chat/conversations', '/api/characters', '/api/users', '/api/stories']) {
       expect((await api(outsider, 'GET', path)).status).toBe(404);
     }
-    const photo = await upload(uploader, 'photo', `Event photo ${suffix}`, '', restricted.ulid);
-    const video = await upload(uploader, 'video', `Event video ${suffix}`, '', restricted.ulid);
+    const photoTitle = `Event photo ${suffix}`;
+    const videoTitle = `Event video ${suffix}`;
+    const photo = await upload(uploader, 'photo', photoTitle, '', restricted.ulid, 'photo.heic');
+    const video = await upload(uploader, 'video', videoTitle, '', restricted.ulid);
+    await organizerSearch(admin, account.email);
+    const exemptionSaved = admin.waitForResponse((response) => response.url().endsWith(`/api/admin/users/${account.id}`) && response.request().method() === 'PATCH');
+    await admin.getByRole('checkbox', { name: `Skip upload review for ${account.display_name}`, exact: true }).click();
+    expect((await exemptionSaved).ok()).toBeTruthy();
+    await expect(admin.getByRole('checkbox', { name: `Skip upload review for ${account.display_name}`, exact: true })).toBeChecked();
     const publicPhoto = await upload(uploader, 'photo', `Shared event ${suffix}`, '', shared.ulid);
     expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
-    for (const media of [photo, video, publicPhoto]) await success(admin, 'POST', `/api/admin/media/${media.data.id}/moderate`, { action: 'approve' });
+    expect((await api(recipient, 'GET', `/api/events/media/${publicPhoto.data.ulid}`)).status,
+      'An admin-exempt attendee publishes new Event uploads without a manual review action').toBe(200);
+    await approveHeicOriginal(admin, photo.data.id);
+    await success(admin, 'POST', `/api/admin/media/${video.data.id}/moderate`, { action: 'approve' });
     const photoDetail = (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).data;
     await recipient.goto(`/events?media=${photo.data.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
-    expect((await recipient.request.get(photoDetail.download_url)).headers()['content-disposition']).toContain('attachment');
+    const downloadedPhoto = await recipient.request.get(photoDetail.download_url);
+    const photoExtension = downloadedPhoto.headers()['content-type'].split(';')[0] === 'image/heif' ? 'heif' : 'heic';
+    expect(downloadedPhoto.headers()['content-disposition']).toContain(`.${photoExtension}`);
+    await expectOriginalHeic(recipient, downloadedPhoto);
     await expect.poll(async () => (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${video.data.ulid}`)).data.video?.status,
       { timeout: 160_000, intervals: [2_000, 5_000, 10_000] }).toBe('ready');
     await recipient.goto(`/events?media=${video.data.ulid}`);
@@ -418,9 +522,24 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect(await visibleIds(uploader, 'featured=1')).toContain(video.data.ulid);
     expect(await visibleIds(outsider, `favorites_of=${recipientId}`)).not.toContain(video.data.ulid);
     expect(await visibleIds(outsider, `event_ulid=${shared.ulid}`)).toContain(publicPhoto.data.ulid);
-    const savedPhoto = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { media_ulid: photo.data.ulid })).data;
-    const savedVideo = (await success<{ data: Item }>(recipient, 'POST', '/api/library/save', { media_ulid: video.data.ulid })).data;
-    await success(admin, 'PATCH', `/api/admin/events/${restricted.ulid}`, { member_ids: [account.id] });
+    await recipient.goto(`/events?event_ulid=${restricted.ulid}`);
+    await recipient.getByRole('checkbox', { name: `Select ${photoTitle}`, exact: true }).check();
+    await recipient.getByRole('checkbox', { name: `Select ${videoTitle}`, exact: true }).check();
+    const downloading = recipient.waitForEvent('download');
+    await recipient.getByRole('button', { name: 'Download selected (ZIP)', exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe('selected-media.zip');
+    expect(await download.failure()).toBeNull();
+    expect((await zipEntryNames(download)).sort()).toEqual([`media-${photo.data.ulid}.${photoExtension}`, `media-${video.data.ulid}.mp4`].sort());
+    const bulkSaved = recipient.waitForResponse((response) => response.url().endsWith('/api/events/media/bulk-save') && response.request().method() === 'POST');
+    await recipient.getByRole('button', { name: 'Save selected to my collection', exact: true }).click();
+    expect((await bulkSaved).ok()).toBeTruthy();
+    const savedItems = (await success<{ data: Item[] }>(recipient, 'GET', '/api/library/items')).data;
+    const savedPhoto = savedItems.find((item) => item.title === photoTitle)!;
+    const savedVideo = savedItems.find((item) => item.title === videoTitle)!;
+    expect(savedPhoto).toBeTruthy();
+    expect(savedVideo).toBeTruthy();
+    await setEventAccess(admin, recipientAccount, restrictedName, false);
     for (const media of [photo, video]) {
       expect((await api(recipient, 'GET', `/api/events/media/${media.data.ulid}`)).status).toBe(404);
       expect((await recipient.request.get(`/api/events/media/${media.data.ulid}/download`)).status()).toBe(404);
@@ -434,6 +553,12 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect(disposable?.email).toBe(`library-run-${suffix}@staging.invalid`);
     expect(disposable?.is_admin).toBe(false);
     await success(admin, 'DELETE', `/api/admin/users/${account.id}`);
+    await recipient.goto(`/library?item=${savedPhoto.ulid}`);
+    await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+    await expectOriginalHeic(recipient, await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/assets/original`));
+    const retainedDownload = await recipient.request.get(`/api/library/items/${savedPhoto.ulid}/download`);
+    expect(retainedDownload.headers()['content-disposition']).toContain(`.${photoExtension}`);
+    await expectOriginalHeic(recipient, retainedDownload);
     await playable(recipient, savedVideo.ulid);
     await recipient.screenshot({ path: testInfo.outputPath('event-retained-real-hls.png'), fullPage: true });
     await success(recipient, 'POST', '/api/library/items/bulk', { action: 'delete', item_ulids: [savedPhoto.ulid, savedVideo.ulid] });

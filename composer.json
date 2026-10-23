@@ -16,6 +16,7 @@
         "laravel/framework": "^13.35.0",
         "laravel/tinker": "^3.0.2",
         "league/flysystem-aws-s3-v3": "^3.35.3",
+        "maennchen/zipstream-php": "^3.2",
         "spatie/laravel-csp": "^3.29.0",
         "symfony/yaml": "~8.0.15"
     },

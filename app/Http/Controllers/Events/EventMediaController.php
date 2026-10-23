@@ -127,10 +127,7 @@ class EventMediaController extends Controller
         abort_unless($media instanceof Media && $media->isReady(), 404, 'Not found.');
         $stream = $storage->readStream($media->disk, $media->playbackObjectKey());
         abort_unless(is_resource($stream), 404, 'Not found.');
-        $extension = match ($media->mime_type) {
-            'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp', 'image/avif' => 'avif',
-            'video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/webm' => 'webm', 'video/x-matroska' => 'mkv', default => 'jpg',
-        };
+        $extension = $media->downloadExtension();
 
         return response()->stream(static function () use ($stream): void {
             try {

@@ -143,6 +143,10 @@ class AdminUserController extends Controller
             $user->library_enabled = (bool) $data['library_enabled'];
         }
 
+        if (array_key_exists('event_uploads_auto_approved', $data)) {
+            $user->event_uploads_auto_approved = (bool) $data['event_uploads_auto_approved'];
+        }
+
         if (array_key_exists('storage_unlimited', $data)) {
             $user->storage_unlimited = (bool) $data['storage_unlimited'];
             if ($user->storage_unlimited) {
@@ -319,6 +323,7 @@ class AdminUserController extends Controller
             'deactivated_at' => $user->deactivated_at?->toIso8601String(),
             'deleted_at' => $user->deleted_at?->toIso8601String(),
             'is_approved' => $user->isApproved(),
+            'event_uploads_auto_approved' => (bool) $user->event_uploads_auto_approved,
             'email_verified' => $user->hasVerifiedEmail(),
             'id_verified' => $user->id_verified_at !== null,
             'birth_date_verified' => $user->id_verified_at !== null,

@@ -53,6 +53,7 @@ interface AdminUser {
   can_receive_invites: boolean;
   trusted_inviter: boolean;
   library_enabled: boolean;
+  event_uploads_auto_approved: boolean;
   storage_limit_bytes: number | null;
   storage_unlimited: boolean;
   effective_storage_limit_bytes: number | null;
@@ -213,6 +214,19 @@ export function AdminUsersPage() {
       await loadUsers();
     } catch (error) {
       setError(typeof error === 'string' ? error : 'Failed to update Library access.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleEventUploadApproval = async (user: AdminUser): Promise<void> => {
+    setActionLoading(user.id);
+    setError('');
+    try {
+      await patchUser(user.id, { event_uploads_auto_approved: !user.event_uploads_auto_approved });
+      await loadUsers();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to update Event upload review.');
     } finally {
       setActionLoading(null);
     }
@@ -456,6 +470,8 @@ export function AdminUsersPage() {
         <p className="text-sm text-muted-foreground">Applies to accounts using the site default, including new accounts. Custom limits and Unlimited overrides stay as set. {eventProfile ? 'Library access is available to all attendees.' : 'Library access is enabled separately.'}</p>
       </section>
 
+      {moduleEnabled('events') && <p className="mb-4 text-sm text-muted-foreground">Event upload review exemptions apply when future uploads finish. Other media still needs review. Removing an exemption keeps already approved items approved.</p>}
+
       {loading ? (
         <p className="text-muted-foreground">Loading users...</p>
       ) : (
@@ -501,6 +517,7 @@ export function AdminUsersPage() {
                     {user.email_verified && <Badge variant="outline">Verified</Badge>}
                     {!user.email_verified && <Badge variant="outline">Email Unverified</Badge>}
                     {user.id_verified && <Badge>ID/Age Verified</Badge>}
+                    {moduleEnabled('events') && user.event_uploads_auto_approved && <Badge variant="outline">Event uploads auto-approved</Badge>}
                     {user.name_locked && <Badge variant="outline">Real Name Locked</Badge>}
                     {user.email_locked && <Badge variant="outline">Email Locked</Badge>}
                     {user.is_banned && (
@@ -601,6 +618,9 @@ export function AdminUsersPage() {
                         </Button>
                         {!eventProfile && moduleEnabled('library') && <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
                           {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
+                        </Button>}
+                        {moduleEnabled('events') && <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleEventUploadApproval(user)}>
+                          {user.event_uploads_auto_approved ? 'Require Event upload review' : 'Skip Event upload review'}
                         </Button>}
                         <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => setStorageTarget(user)}>Set storage limit</Button>
                         <Button

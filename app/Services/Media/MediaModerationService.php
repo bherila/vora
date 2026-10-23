@@ -10,7 +10,8 @@ class MediaModerationService
 {
     public function __construct(private readonly FileStorageService $storage) {}
 
-    public function approve(Media $media, User $admin, ?string $notes = null): bool
+    /** Null moderator is reserved for server-authorized automatic approval. */
+    public function approve(Media $media, ?User $admin, ?string $notes = null): bool
     {
         if (! $media->isReady() || ! $this->storage->fileExists($media->disk, $media->object_key)) {
             return false;

@@ -36,7 +36,15 @@ be moved directly into the device's camera roll.
 
 The existing verified-email, account approval, two-factor authentication,
 eligibility, quota, and media review policies apply. New uploads await media
-review before other attendees can see them. Event membership does not bypass
+review before other attendees can see them unless an administrator enables
+**Skip Event upload review** for that uploader in **Admin → Users** or
+**Manage attendees**. The
+exemption defaults off and applies only to new Event upload completions, using
+the same immutable reviewed copies as manual approval. Gallery, profile and
+private Library uploads still need review. Removing an exemption keeps already
+approved items approved; existing pending or rejected media are not reapproved.
+If reviewed-copy storage fails, the completed upload remains awaiting review.
+Event membership does not bypass
 moderation or account restrictions. Set the instance’s default storage quota in
 Admin → Users; unset account quotas inherit it, and explicit account overrides
 still apply. Uploads and durable Saves both count toward account usage. An
@@ -55,6 +63,55 @@ Policy changes apply to existing sessions immediately: attendees who no longer
 qualify see an explanation and can still manage, export or remove their account.
 Administrators retain access to change the policy. The built-in Terms reflect the
 current settings; review custom Terms when changing admission policy.
+
+## Organizer attendee management
+
+Administrators open **Manage attendees** at `/events/organizer` to search accounts,
+filter pending approvals, approve verified eligible attendees, change selected
+Event access, and control per-attendee upload review. Email addresses and these
+controls are visible only to administrators. Membership changes affect the
+selected attendee without replacing anyone else's grants. Everyone Events remain
+accessible to all approved eligible attendees; administrators can access every
+Event regardless of explicit selections. Previously Saved items retain their
+private access when membership is removed.
+
+Account signup invitations and Event membership are separate. A joining link or
+an email invitation does not grant selected-attendee access. Organizers manage
+those grants inside the app after account admission.
+
+## Phone photos and original files
+
+Still HEIC and HEIF photos preserve the original upload bytes. The browser
+generates a JPEG display preview, at most 2048 pixels on its longest edge and
+5 MiB. Browsers without native HEIC support load the bundled decoder when needed.
+Conversion is sequential and cancellable; the app server does not decode images.
+A failed conversion affects only that file in a batch. HEIC sequences are not
+accepted as still photos; upload a still photo and video separately for paired
+media.
+
+Preview and original follow the same private access, immutable review snapshots,
+and durable-Save lifecycle. Downloads return the original HEIC/HEIF bytes.
+Administrators check the stored original through an independent browser decode
+before approving HEIC media; an uploader-supplied preview alone does not establish
+what the original contains.
+
+## Bulk Save and download
+
+Select accessible Event media to Save privately or download originals as a ZIP.
+Library selections support the same actions where applicable. Bulk Save uses
+ordinary quota and retained-reference rules, applies atomically, and does not
+copy stored media. ZIP requests support at most **50 files and 2 GiB** total.
+Larger videos can be downloaded individually, including retained Library items.
+Shared downloads use opaque filenames to protect uploader filename metadata.
+
+Archives stream to the browser's download manager without a server archive file
+or a JavaScript Blob containing the archive. S3 reads use streaming mode;
+underlying reads are capped at 64 KiB, files use ZIP STORE, and directory memory
+is bounded by file count. The ZIP library also uses a fixed internal buffer; a
+large synthetic-source regression checks working memory, rather than claiming
+memory use is exactly one chunk. Selections are checked before streaming and
+between files. Revocation, storage failure or disconnect stops the archive.
+Downloads use short-lived session-bound tickets and a per-user concurrency lock.
 
 ## Joining links and admission
 

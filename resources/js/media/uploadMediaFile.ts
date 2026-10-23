@@ -1,3 +1,4 @@
+import { heifMimeType, normalizeHeifFile, prepareHeifPreview } from '@/media/heifPhoto';
 import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import { type CompletedMultipartPart, type MultipartPartToSign, type MultipartUploadSession, putToSignedUrl, readMultipartSession, removeMultipartSession, saveMultipartSession, uploadMultipartFile, withRetries } from '@/media/upload';
@@ -31,9 +32,17 @@ interface Derivatives {
 
 /**
  * Best-effort client-side thumbnail/poster (and, for photos, a perceptual hash).
- * Never throws: a failure just means the item uploads without a thumbnail.
+ * Ordinary thumbnail failures are optional; HEIC photos require a JPEG display preview.
  */
-async function buildDerivatives(file: File, type: 'photo' | 'video'): Promise<Derivatives> {
+async function buildDerivatives(file: File, type: 'photo' | 'video', signal: AbortSignal): Promise<Derivatives> {
+  if (heifMimeType(file) !== null) {
+    const thumbnail = await prepareHeifPreview(file, signal);
+    let perceptualHash: string | null = null;
+    if (supportsClientDerivatives()) {
+      try { perceptualHash = (await generatePhotoDerivatives(new File([thumbnail], 'preview.jpg', { type: 'image/jpeg' }))).perceptualHash; } catch { /* Hashing remains best-effort. */ }
+    }
+    return { thumbnail, perceptualHash };
+  }
   if (!supportsClientDerivatives()) {
     return { thumbnail: null, perceptualHash: null };
   }
@@ -97,8 +106,10 @@ async function uploadThumbnailBestEffort(
   created: StoreResponse,
   thumbnail: Blob | null,
   signal: AbortSignal,
+  required = false,
 ): Promise<void> {
   if (!thumbnail || !created.thumbnail_upload_url || !created.thumbnail_upload_headers) {
+    if (required) throw new Error('The HEIC/HEIF JPEG preview could not be uploaded. Please retry this photo.');
     return;
   }
 
@@ -109,7 +120,8 @@ async function uploadThumbnailBestEffort(
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw err;
     }
-    /* ignore — thumbnail is optional */
+    if (required) throw new Error('The HEIC/HEIF JPEG preview could not be uploaded. Please retry this photo.');
+    /* Other thumbnails are optional. */
   }
 }
 
@@ -176,7 +188,7 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
       }
       pendingMediaId = null;
     }
-    const selectedFile = file;
+    const selectedFile = normalizeHeifFile(file);
     const type = mediaTypeForFile(selectedFile);
     if (type === null) {
       throw new Error('Only image and video files can be uploaded.');
@@ -184,7 +196,7 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
     phase = 'preparing';
     setProgress(0);
     const [{ thumbnail, perceptualHash }, fileHash] = await Promise.all([
-      buildDerivatives(selectedFile, type),
+      buildDerivatives(selectedFile, type, signal),
       computeFileHash(selectedFile, (fraction) => setProgress(fraction * 100), signal),
     ]);
 
@@ -285,7 +297,7 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
         },
         complete: async (parts: CompletedMultipartPart[]) => {
           if (target !== null) {
-            await uploadThumbnailBestEffort(target, thumbnail, signal);
+            await uploadThumbnailBestEffort(target, thumbnail, signal, heifMimeType(selectedFile) !== null);
           }
 
           await postUpload(`/api/media/${session.mediaId}/multipart/complete`, {
@@ -327,7 +339,7 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
         setProgress(fraction * 100);
       }, { signal }), signal);
 
-      await uploadThumbnailBestEffort(created, thumbnail, signal);
+      await uploadThumbnailBestEffort(created, thumbnail, signal, heifMimeType(selectedFile) !== null);
       await withRetries(() => postUpload(`/api/media/${created.data.id}/complete`, {}, signal), signal);
     }
 

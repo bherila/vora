@@ -3,9 +3,16 @@ import { expect, type Page, test } from '@playwright/test';
 import { acceptFollow, login, peerContext, type TestAccounts } from './helpers';
 
 async function comment(page: Page, body: string): Promise<void> {
-  await page.getByPlaceholder('Write a comment', { exact: true }).fill(body);
+  const composer = page.getByPlaceholder('Write a comment', { exact: true });
+  await composer.fill(body);
+  const posted = page.waitForResponse((response) =>
+    /\/api\/posts\/\d+\/comments$/.test(new URL(response.url()).pathname) && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Post comment', exact: true }).click();
-  await expect(page.getByText(body, { exact: true })).toBeVisible();
+  expect((await posted).status()).toBe(201);
+  await expect(page.locator('p').filter({ hasText: body })).toHaveText(body);
+  await expect(page.locator('p').filter({ hasText: body })).toBeVisible();
+  await expect(composer).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Post comment', exact: true })).toBeVisible();
 }
 
 test('contributors can delete their comments and replies after losing private discussion access', async ({ browser, page, request }) => {

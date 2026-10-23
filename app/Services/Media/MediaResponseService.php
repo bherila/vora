@@ -39,7 +39,7 @@ class MediaResponseService
         $ttl = (int) config('media.view_url_ttl', 60);
 
         $shouldSignOriginal = ! $media->type->isVideo() || $includeOriginalVideoUrl;
-        if ($shouldSignOriginal) {
+        if ($shouldSignOriginal && ! $media->requiresPhotoPreview()) {
             $extras['url'] = $this->storage->getSignedViewUrl(
                 $media->disk,
                 $media->playbackObjectKey(),
@@ -56,6 +56,10 @@ class MediaResponseService
                 $ttl,
                 'image/jpeg',
             );
+        }
+
+        if ($media->requiresPhotoPreview()) {
+            $extras['url'] = $extras['thumbnail_url'];
         }
 
         if ($media->type->isVideo()) {
@@ -136,6 +140,9 @@ class MediaResponseService
             return null;
         }
 
+        if ($media->requiresPhotoPreview() && $media->playbackThumbnailKey() === null) {
+            return null;
+        }
         $variant = $media->playbackThumbnailKey() !== null ? 'thumbnail' : 'original';
 
         return route('media.asset', ['ulid' => $media->ulid, 'variant' => $variant], false);
@@ -151,10 +158,10 @@ class MediaResponseService
             return $extras;
         }
 
-        if (! $media->type->isVideo()) {
+        if (! $media->type->isVideo() && (! $media->requiresPhotoPreview() || $media->playbackThumbnailKey() !== null)) {
             $extras['url'] = route('media.asset', [
                 'ulid' => $media->ulid,
-                'variant' => 'original',
+                'variant' => $media->requiresPhotoPreview() ? 'thumbnail' : 'original',
             ], false);
         }
 

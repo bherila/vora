@@ -14,6 +14,7 @@ interface MediaGridProps {
   getHref?: (item: MediaItem) => string | null;
   selectedIds?: number[];
   onSelectionChange?: (ids: number[]) => void;
+  canSelect?: (item: MediaItem) => boolean;
 }
 
 /**
@@ -28,6 +29,7 @@ export function MediaGrid({
   getHref = (item) => `/m/${item.ulid}`,
   selectedIds = [],
   onSelectionChange,
+  canSelect = () => true,
 }: MediaGridProps) {
   const selected = new Set(selectedIds);
   const gridColumns = thumbnailSize === 'large'
@@ -50,7 +52,7 @@ export function MediaGrid({
           actions={renderActions?.(item)}
           href={getHref(item)}
           selected={selected.has(item.id)}
-          onSelectedChange={onSelectionChange ? (checked) => toggle(item, checked) : undefined}
+          onSelectedChange={onSelectionChange && canSelect(item) ? (checked) => toggle(item, checked) : undefined}
         />
       ))}
     </div>

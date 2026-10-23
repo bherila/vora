@@ -31,14 +31,16 @@ class AdminMediaResponseService
         $playbackKey = $media->playbackObjectKey();
         $ttl = (int) config('media.view_url_ttl', 60);
 
-        $extras['url'] = $this->storage->getSignedViewUrl(
-            $media->disk,
-            $playbackKey,
-            $ttl,
-            $media->mime_type,
-        );
+        if (! $media->requiresPhotoPreview()) {
+            $extras['url'] = $this->storage->getSignedViewUrl(
+                $media->disk,
+                $playbackKey,
+                $ttl,
+                $media->mime_type,
+            );
+        }
 
-        if ($downloadAll || $media->type->isVideo()) {
+        if ($downloadAll || $media->type->isVideo() || $media->requiresPhotoPreview()) {
             $extras['download_url'] = $this->storage->getSignedDownloadUrl(
                 $media->disk,
                 $playbackKey,
@@ -55,6 +57,10 @@ class AdminMediaResponseService
                 $ttl,
                 'image/jpeg',
             );
+        }
+
+        if ($media->requiresPhotoPreview()) {
+            $extras['url'] = $extras['thumbnail_url'];
         }
 
         if ($media->type->isVideo()) {

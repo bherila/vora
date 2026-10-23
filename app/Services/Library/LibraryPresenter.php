@@ -90,7 +90,8 @@ class LibraryPresenter
             'type' => $media->type->value, 'purpose' => 'library',
             'title' => $item->title, 'mime_type' => $media->mime_type, 'size_bytes' => $media->size_bytes,
             'audience' => 'specific', 'discoverable' => false, 'upload_status' => $media->upload_status,
-            'url' => $media->type->isVideo() ? null : route('library.asset', ['ulid' => $item->ulid, 'variant' => 'original'], false),
+            'url' => $media->type->isVideo() || ($media->requiresPhotoPreview() && $media->playbackThumbnailKey() === null) ? null
+                : route('library.asset', ['ulid' => $item->ulid, 'variant' => $media->requiresPhotoPreview() ? 'thumbnail' : 'original'], false),
             'thumbnail_url' => $media->playbackThumbnailKey() === null ? null
                 : route('library.asset', ['ulid' => $item->ulid, 'variant' => 'thumbnail'], false),
             'video' => $video, 'created_at' => $item->created_at?->toIso8601String(),

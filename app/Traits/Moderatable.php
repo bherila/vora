@@ -47,7 +47,8 @@ trait Moderatable
         return $this->moderation_status === ModerationStatus::Rejected;
     }
 
-    public function approve(User $admin, ?string $notes = null): void
+    /** Null attributes an internally authorized automatic approval to the system. */
+    public function approve(?User $admin, ?string $notes = null): void
     {
         $this->setModeration(ModerationStatus::Approved, $admin, $notes);
     }
@@ -57,10 +58,10 @@ trait Moderatable
         $this->setModeration(ModerationStatus::Rejected, $admin, $notes);
     }
 
-    protected function setModeration(ModerationStatus $status, User $admin, ?string $notes): void
+    protected function setModeration(ModerationStatus $status, ?User $admin, ?string $notes): void
     {
         $this->moderation_status = $status;
-        $this->moderated_by_user_id = $admin->id;
+        $this->moderated_by_user_id = $admin?->id;
         $this->moderated_at = now();
         $this->moderation_notes = $notes;
         $this->save();

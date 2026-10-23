@@ -77,17 +77,52 @@ Approved playback and public/discovery URLs use these reviewed copies. The
 original upload keys remain client-overwritable until their presigned URLs
 expire, so they are never the trust anchor after review.
 
+## Selected saves and downloads
+
+Event galleries and Library shared items support saving a current-page selection
+privately. Up to 100 selected references are checked and saved in one transaction;
+quota or access failure rolls back the entire operation. Saved files are not
+copied and retain the existing independent-reference retention rules.
+
+ZIP downloads accept up to 50 selected files and 2 GiB of actual object bytes.
+Larger videos remain available through individual Download actions, including
+retained Library files. Preparing an archive checks every selected item's normal
+access and original-object read permission, then returns a session/account-bound,
+single-use ticket lasting five minutes. Downloading rechecks the entire selection
+before response output and each entry before reading it. A later revocation or
+storage failure aborts the ZIP instead of skipping files or appending an error
+page. Files already delivered while authorized cannot be recalled.
+
+The browser's download manager receives the archive directly; JavaScript never
+buffers it as a Blob. Server reads and output chunks are capped at 64 KiB, with
+S3 `stream_reads=true` ensuring the SDK does not buffer whole originals first.
+ZipStream uses STORE, single-pass headers and ZIP64; PHP still reserves its fixed
+16 MiB internal read buffer. A 50 MiB synthetic-file regression checks less than
+24 MiB of additional peak memory and bounded reads/output. Archive metadata is
+bounded by the 50-entry limit, and only one source stream is held open at a time.
+
+ZIP preparation is throttled to five requests per minute. A per-account cache
+lock rejects parallel ZIP streams, with a one-hour lease; streaming checks a
+30-minute deadline between entries/output chunks and sets a 30-second network
+read timeout where supported. Blocking HTTP backpressure remains subject to the
+web server's own timeouts. The lock is released on completion/interruption and
+at request termination. Source filenames stay private: other users' files use
+opaque media ULIDs with accurate MIME extensions, while an uploader's own ZIP
+entries retain sanitized camera filenames in distinct per-media directories.
+
 ## Signed URLs
 
-The app never serves object bytes itself. `FileStorageService` issues:
+Owner/admin views use signed storage URLs where allowed. Visitor-facing images
+and private Library media stream through authorized application routes so object
+keys and uploader identifiers stay private. `FileStorageService` issues:
 
 - **Presigned PUT URLs** for direct browser uploads (`getSignedUploadUrl`).
 - **Presigned multipart part URLs** for large resumable video uploads.
 - **Signed inline view URLs** for displaying photos, uploader/admin source
   video access, and HLS segments (`getSignedViewUrl`).
-- **Signed download URLs** for admin source-video review/download
-  (`getSignedDownloadUrl`). Non-admin, non-uploader viewers never receive source
-  video URLs; they view videos through the HLS proxy only.
+- **Signed download URLs** for admin original photo/video review/download
+  (`getSignedDownloadUrl`). Video playback uses the HLS proxy; explicit Event
+  and Library downloads separately enforce their original-file access rules.
 
 Their lifetimes are `MEDIA_UPLOAD_URL_TTL` and `MEDIA_VIEW_URL_TTL` minutes.
 
@@ -115,6 +150,41 @@ whose abort request never reached the app.
 
 ## CSP
 
-`app/Csp/CloudflareCspPolicy.php` adds the configured R2 endpoint origins to
+`app/Csp/CloudflareCspPreset.php` adds the configured R2 endpoint origins to
 `connect-src` (uploads, playlist fetches), `img-src`, and `media-src`. The
 origins are derived from the disk endpoint config, so no hosts are hard-coded.
+
+## HEIC/HEIF photos
+
+Still HEVC photos (`image/heic` and `image/heif`) retain their exact original
+bytes, filename, content hash and logical quota size. The browser prepares a
+JPEG display preview, at most 2048 pixels on its longest edge and 5 MiB, before
+requesting an upload reservation. If the browser exports JPEG from a camera
+file, its JPEG MIME takes precedence over a historical `.HEIC` filename. Empty
+or octet-stream MIME metadata can be normalized from `.heic`/`.heif` filenames.
+Image sequences and other HEIF codecs are rejected with a per-file explanation.
+
+The JPEG uses the existing thumbnail slot; no extra media row or physical copy
+of the original is created by Save. Completion checks the source's bounded
+still-image container header and the landed JPEG's bytes/dimensions before
+allowing review. These checks do not decode the HEIC on the application server
+or prove the uploaded preview corresponds to its original. Admin review labels
+the uploader preview and requires **Check original**: the admin browser fetches
+the authorized stored original and decodes it independently before enabling
+Approve. A failed/unavailable original stays unapprovable in this interface.
+HEIC previews are required rather than best-effort: a missing, invalid or failed
+preview cannot silently become a ready upload. Other photo/video thumbnails keep
+their existing optional behavior. The same preview/reviewed-thumbnail keys follow
+existing moderation snapshots, access revocation, durable Saves and final-reference
+cleanup. Display URLs use the JPEG; explicit downloads use the preserved original
+or its immutable reviewed snapshot, never the JPEG display derivative.
+
+Conversion tries native browser decoding first. A lazy, bundled `heic-to/csp`
+fallback runs in a disposable worker; cancellation/timeouts terminate the worker
+and conversions are serialized to avoid several full-size pixel buffers. No
+private photo is sent to an external conversion service, and no Imagick/libheif
+installation is needed on PHP hosts. The CSP permits same-origin/blob workers
+without adding JavaScript eval or WebAssembly eval permissions. The unmodified
+heic-to dependency's LGPL license is distributed at
+`public/licenses/heic-to-LICENSE.txt`; its version/source are pinned in the pnpm
+lockfile and [upstream source](https://github.com/hoppergee/heic-to).

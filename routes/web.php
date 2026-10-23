@@ -22,6 +22,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PendingApprovalController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
+use App\Http\Controllers\BulkTransferController;
 use App\Http\Controllers\CanonicalDiscussionController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterProfileController;
@@ -226,12 +227,15 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
 
     Route::get('/library', [LibraryController::class, 'page'])->name('library');
+    Route::get('/api/bulk-downloads/{token}', [BulkTransferController::class, 'download'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:10,1')->name('bulk-transfer.download');
     Route::prefix('api/library')->group(function () {
         Route::get('/items', [LibraryController::class, 'index']);
         Route::post('/notes', [LibraryController::class, 'storeNote']);
         Route::post('/uploads', [LibraryController::class, 'upload']);
         Route::post('/save', [LibraryController::class, 'save']);
         Route::post('/items/bulk', LibraryBulkController::class);
+        Route::post('/items/bulk-save', [BulkTransferController::class, 'save'])->middleware('throttle:10,1')->name('bulk-transfer.library.save');
+        Route::post('/items/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1')->name('bulk-transfer.library.prepare');
         Route::get('/personas', [LibraryController::class, 'personas']);
         Route::get('/collections', [LibraryController::class, 'collections']);
         Route::post('/collections', [LibraryController::class, 'storeCollection']);
@@ -245,6 +249,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/items/{ulid}/collections', [LibraryController::class, 'addMembership']);
         Route::delete('/items/{ulid}/collections/{collectionUlid}', [LibraryController::class, 'removeMembership']);
         Route::get('/items/{ulid}/assets/{variant}', [LibraryContentController::class, 'asset'])->name('library.asset');
+        Route::get('/items/{ulid}/download', [BulkTransferController::class, 'downloadItem'])->middleware('throttle:20,1')->name('library.download');
         Route::get('/items/{ulid}/hls/{path?}', [LibraryContentController::class, 'hls'])
             ->where('path', '.*')->name('library.hls');
     });

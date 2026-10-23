@@ -28,6 +28,7 @@ class AdminUserUpdateRequest extends FormRequest
             'can_receive_invites' => ['sometimes', 'boolean'],
             'trusted_inviter' => ['sometimes', 'boolean'],
             'library_enabled' => ['sometimes', 'boolean'],
+            'event_uploads_auto_approved' => ['sometimes', 'boolean'],
             'storage_limit_bytes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:'.SettingsService::MAX_STORAGE_LIMIT_BYTES],
             'storage_unlimited' => ['sometimes', 'boolean'],
             'birth_date' => app(AgeEligibility::class)->birthDateRules(adminCorrection: true),

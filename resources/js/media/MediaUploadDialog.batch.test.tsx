@@ -79,6 +79,13 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: jest.fn() });
   });
 
+  it('labels HEIC photos without offering a broken native preview before preparation', () => {
+    openUpload({ eventOptions: events });
+    choose([new File(['heic'], 'camera.HEIC', { type: 'image/heic' })]);
+    expect(screen.getByRole('img', { name: /HEIC\/HEIF photo camera.HEIC/ })).toHaveTextContent('HEIC/HEIF photo');
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it('chooses an Event inside the dialog, shows its audience and never falls back to Gallery', async () => {
     const { refresh } = openUpload({ eventOptions: events });
     choose([photos[0]!]);
@@ -113,7 +120,7 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     submit();
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(screen.getByText('2 of 3 uploaded')).toBeInTheDocument();
-    expect(screen.getAllByText('Uploaded · awaiting review')).toHaveLength(2);
+    expect(screen.getAllByText('Uploaded')).toHaveLength(2);
     expect(screen.getByText('Second photo failed.')).toBeInTheDocument();
     expect(screen.getByLabelText('Destination event')).toBeDisabled();
     expect(post).toHaveBeenCalledWith('/api/media/42/cancel-upload', {});
@@ -138,7 +145,7 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove notes.txt' }));
     await waitFor(() => expect(screen.queryByText('notes.txt')).not.toBeInTheDocument());
     expect(screen.getByText('2 of 2 uploaded')).toBeInTheDocument();
-    expect(screen.getAllByText('Uploaded · awaiting review')).toHaveLength(2);
+    expect(screen.getAllByText('Uploaded')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Done' })).toBeEnabled();
   });
 
