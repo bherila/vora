@@ -20,12 +20,12 @@ class ReleaseWorkflowSourceTest(unittest.TestCase):
         }, text=True, capture_output=True, check=False)
 
     def test_cross_repository_call_requires_an_explicit_vora_ref(self):
-        result = self.source_guard('bherila/kath', '')
+        result = self.source_guard('example/event-instance', '')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('must set source_ref', result.stdout)
 
     def test_cross_repository_call_accepts_an_explicit_vora_commit(self):
-        self.assertEqual(self.source_guard('bherila/kath', 'a' * 40).returncode, 0)
+        self.assertEqual(self.source_guard('example/event-instance', 'a' * 40).returncode, 0)
 
     def test_primary_release_can_keep_the_triggering_commit_default(self):
         self.assertEqual(self.source_guard('bherila/vora', '').returncode, 0)

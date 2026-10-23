@@ -110,10 +110,10 @@ jobs:
     env:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || (inputs.primary && 'laravel') || '' }}
-      DEPLOY_PHP_BINARY: ${{ vars.DEPLOY_PHP_BINARY || (inputs.primary && '/opt/cpanel/ea-php85/root/usr/bin/php') || '' }}
-      DEPLOY_WEB_ROOTS: ${{ vars.DEPLOY_WEB_ROOTS || (inputs.primary && 'public_html,web') || '' }}
-      DEPLOY_HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL || (inputs.primary && 'https://macrophile.me') || '' }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PHP_BINARY: ${{ secrets.DEPLOY_PHP_BINARY }}
+      DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
+      DEPLOY_HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
       DEPLOY_PROFILE: ${{ vars.DEPLOY_PROFILE || (inputs.primary && 'vora') || '' }}
 
     steps:

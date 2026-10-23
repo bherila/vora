@@ -157,19 +157,26 @@ running a release and configure its own secrets:
 
 - `SSH_HOST`, `SSH_USERNAME`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`.
 
-Configure environment variables:
+Store deployment targets as environment secrets so public workflow logs mask
+their values. Keep concrete deployment details in private operational records;
+the examples below are placeholders.
+
+| Secret | Example | Meaning |
+| --- | --- | --- |
+| `DEPLOY_PATH` | `event-app` | Application path relative to SSH user's home |
+| `DEPLOY_PHP_BINARY` | `/usr/bin/php` | PHP executable |
+| `DEPLOY_WEB_ROOTS` | `event.example.com` | Optional comma-separated web root paths relative to home |
+| `DEPLOY_HEALTH_URL` | `https://event.example.com` | Public origin checked after deployment |
+
+Configure environment variables separately:
 
 | Variable | Example | Meaning |
 | --- | --- | --- |
 | `DEPLOY_ENABLED` | `true` | Enables the deployment job |
 | `DEPLOY_PROFILE` | `event` | Must match the server's `APP_PROFILE` |
-| `DEPLOY_PATH` | `event-app` | Application path relative to SSH user's home |
-| `DEPLOY_PHP_BINARY` | `/opt/cpanel/ea-php85/root/usr/bin/php` | PHP executable |
-| `DEPLOY_WEB_ROOTS` | `event.example.com` | Optional comma-separated web root paths relative to home |
-| `DEPLOY_HEALTH_URL` | `https://event.example.com` | Public origin checked after deployment |
 
-The legacy primary target retains its existing defaults. Other environments must
-provide paths, profile, PHP binary, and health URL explicitly. Existing web root
+All environments must provide target paths, PHP binary, and health URL explicitly.
+Existing web root
 directories are never removed: configured web roots must be absent or symlinks.
 Alternatively leave `DEPLOY_WEB_ROOTS` empty and configure the web server's document
 root directly to the application's `public` directory. Provision the application
