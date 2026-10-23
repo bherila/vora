@@ -74,7 +74,7 @@ export function PhotoVersionsChooser({ item, onChoose, disabled = false }: Photo
       <Button type="button" variant="outline" size="sm" aria-expanded={open} aria-controls={panelId} disabled={disabled} onClick={() => setOpen((value) => !value)}>{open ? 'Hide versions' : 'Show versions'}</Button>
     </div>
     {open && <div id={panelId} className="grid gap-3">
-      <p className="text-xs text-muted-foreground">Similar photos are grouped together. The preferred version balances resolution and embedded metadata. All originals remain available. Saving, favoriting and downloading apply to the version you are viewing.</p>
+      <p className="text-xs text-muted-foreground">Similar photos are grouped together. We prefer higher resolution, then richer embedded metadata. All originals remain available. Saving, favoriting and downloading apply to the version you are viewing.</p>
       {loading && <p role="status" className="text-sm">Loading versions…</p>}
       {error && <div role="alert" className="grid gap-2 text-sm text-destructive"><p>{error}</p><Button type="button" variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>Try versions again</Button></div>}
       {result && <>
