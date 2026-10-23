@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AdminStoryController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminUserRestrictionController;
 use App\Http\Controllers\Admin\AdminWaitlistController;
+use App\Http\Controllers\Auth\AgeEligibilityController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PendingApprovalController;
@@ -123,6 +124,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/mutes', [MuteController::class, 'store']);
     Route::delete('/api/mutes', [MuteController::class, 'destroy']);
 
+    Route::get('/age-eligibility', AgeEligibilityController::class)->name('age.eligibility');
     Route::get('/pending-approval', PendingApprovalController::class)->name('approval.pending');
     Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();

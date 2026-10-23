@@ -75,9 +75,11 @@ class MediaModerationService
     private function reviewedObjectKey(Media $media): string
     {
         $prefix = trim((string) config('media.key_prefix', 'uploads'), '/');
+        $reviewedPrefix = $media->type->isVideo() ? config('media.reviewed_key_prefix') : null;
+        $reviewedPrefix = $reviewedPrefix ? trim((string) $reviewedPrefix, '/') : $prefix.'/reviewed';
         $extension = pathinfo($media->object_key, PATHINFO_EXTENSION) ?: 'bin';
 
-        return $prefix.'/reviewed/'.$media->user_id.'/'.$media->ulid.'.'.$extension;
+        return $reviewedPrefix.'/'.$media->user_id.'/'.$media->ulid.'.'.$extension;
     }
 
     private function reviewedThumbnailKey(Media $media): string

@@ -66,8 +66,14 @@ test('attendees discover uploads, browse photos and Save privately without an or
   await viewer.getByRole('button', { name: 'Previous item', exact: true }).click();
   await expect(viewer.getByRole('heading')).toHaveText(firstTitle ?? '');
   if (!testInfo.project.use.isMobile) {
+    // Each item remounts its dialog. The heading can render before Base UI's
+    // autofocus runs; wait for keyboard readiness rather than sending to body.
+    await expect(viewer.getByRole('button', { name: 'Next item', exact: true })).toBeEnabled();
+    await expect.poll(() => viewer.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('ArrowRight');
     await expect(viewer.getByRole('heading')).toHaveText(secondTitle!);
+    await expect(viewer.getByRole('button', { name: 'Previous item', exact: true })).toBeEnabled();
+    await expect.poll(() => viewer.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('ArrowLeft');
     await expect(viewer.getByRole('heading')).toHaveText(firstTitle ?? '');
   }

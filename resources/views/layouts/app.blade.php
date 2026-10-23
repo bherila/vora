@@ -120,7 +120,7 @@
         ['label' => 'Log in', 'href' => route('login', [], false), 'variant' => 'link'],
         ['label' => 'Sign up', 'href' => route('register', [], false), 'variant' => 'primary'],
       ];
-      $__payload = ['instance' => ['profile' => config('instance.profile'), 'modules' => config('instance.modules'), 'home_path' => \App\Support\InstanceFeatures::homePath()], 'restrictions' => $__restrictions, 'navbar' => [
+      $__payload = ['agePolicy' => app(\App\Services\Auth\AgeEligibility::class)->policy(), 'instance' => ['profile' => config('instance.profile'), 'modules' => config('instance.modules'), 'home_path' => \App\Support\InstanceFeatures::homePath()], 'restrictions' => $__restrictions, 'navbar' => [
         'brand' => ['label' => config('app.name'), 'href' => route('home', [], false)],
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,

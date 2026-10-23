@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\Auth\AgeEligibility;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -20,7 +21,7 @@ class RegisterRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'display_name' => ['required', 'string', 'max:255'],
-            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
+            'birth_date' => app(AgeEligibility::class)->birthDateRules(),
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
             'invite' => ['nullable', 'string', 'uuid'],

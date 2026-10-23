@@ -71,6 +71,8 @@ class AdminInviteController extends Controller
             'success' => true,
             'data' => [
                 'settings' => [
+                    'minimum_age' => $this->settings->minimumAge(),
+                    'age_verification_required' => $this->settings->ageVerificationRequired(),
                     'public_signups_enabled' => $this->settings->publicSignupsEnabled(),
                     'default_new_user_invites' => $this->settings->defaultNewUserInvites(),
                     'default_new_user_invite_expiry_days' => $this->settings->defaultNewUserInviteExpiryDays(),
@@ -87,6 +89,13 @@ class AdminInviteController extends Controller
     public function updateSettings(AdminSignupSettingsRequest $request): JsonResponse
     {
         $data = $request->validated();
+
+        if (array_key_exists('minimum_age', $data)) {
+            $this->settings->set(SettingsService::MINIMUM_AGE, $data['minimum_age'] === null ? '' : (int) $data['minimum_age']);
+        }
+        if (array_key_exists('age_verification_required', $data)) {
+            $this->settings->set(SettingsService::AGE_VERIFICATION_REQUIRED, (bool) $data['age_verification_required']);
+        }
 
         if (array_key_exists('public_signups_enabled', $data)) {
             $this->settings->set(SettingsService::PUBLIC_SIGNUPS_ENABLED, (bool) $data['public_signups_enabled']);
@@ -106,6 +115,8 @@ class AdminInviteController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
+                'minimum_age' => $this->settings->minimumAge(),
+                'age_verification_required' => $this->settings->ageVerificationRequired(),
                 'public_signups_enabled' => $this->settings->publicSignupsEnabled(),
                 'default_new_user_invites' => $this->settings->defaultNewUserInvites(),
                 'default_new_user_invite_expiry_days' => $this->settings->defaultNewUserInviteExpiryDays(),

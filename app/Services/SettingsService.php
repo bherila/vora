@@ -20,6 +20,10 @@ class SettingsService
 
     public const DEFAULT_STORAGE_LIMIT_BYTES = 'default_storage_limit_bytes';
 
+    public const MINIMUM_AGE = 'minimum_age';
+
+    public const AGE_VERIFICATION_REQUIRED = 'age_verification_required';
+
     public const MAX_STORAGE_LIMIT_BYTES = 9007199254740991;
 
     private const CACHE_PREFIX = 'setting:';
@@ -48,6 +52,18 @@ class SettingsService
         $value = $this->get(self::DEFAULT_STORAGE_LIMIT_BYTES, '');
 
         return $value === null || $value === '' ? null : (int) $value;
+    }
+
+    public function minimumAge(): ?int
+    {
+        $value = $this->get(self::MINIMUM_AGE, '18');
+
+        return $value === '' ? null : (int) $value;
+    }
+
+    public function ageVerificationRequired(): bool
+    {
+        return $this->getBool(self::AGE_VERIFICATION_REQUIRED);
     }
 
     public function setDefaultStorageLimitBytes(?int $bytes): void

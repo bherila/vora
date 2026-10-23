@@ -44,6 +44,18 @@ uploader retains private management access
 to their own files if their Event membership changes. Deleting Events is not
 exposed: changing visibility or membership preserves their media's access boundary.
 
+Administrators set the minimum account age and optional manual age confirmation
+in **Invites & Signups**. Defaults remain 18 years and no manual verification.
+Leave the minimum blank to disable it; birth dates remain required for registration
+and invitation requests. This software policy does not determine legal eligibility.
+When manual verification is enabled, an administrator confirms the attendee's age
+using the existing verification control in **Users**; the site does not collect
+identity-document uploads. Changing a recorded birth date clears prior verification.
+Policy changes apply to existing sessions immediately: attendees who no longer
+qualify see an explanation and can still manage, export or remove their account.
+Administrators retain access to change the policy. The built-in Terms reflect the
+current settings; review custom Terms when changing admission policy.
+
 ## Joining links and admission
 
 Use an Event's **Copy joining link** action to copy `/events/join/{ULID}` on
@@ -77,8 +89,10 @@ checks.
 
 The primary `prod` deployment continues automatically on `main`. Additional
 instances use **Release instance → Run workflow** with a GitHub environment name
-and the intended branch/tag. Create the environment before running a release and
-configure its own secrets:
+and the intended branch/tag, or set `source_ref` to a Vora commit, tag, or branch.
+When omitted within the Vora repository, the exact workflow-triggering commit is
+built, preserving the primary production behavior. Create the environment before
+running a release and configure its own secrets:
 
 - `SSH_HOST`, `SSH_USERNAME`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`.
 
@@ -102,6 +116,27 @@ directory with its own `.env` first. The workflow preserves `.env` and `storage`
 checks the configured profile, applies migrations, clears compiled views, and
 checks public pages plus scheduler/queue health. Configure a scheduler cron for
 each application's own path as shown in the README before its first release.
+
+An instance repository can call the public reusable workflow. Pin both the
+workflow version and `source_ref` to reviewed Vora commit SHAs; they select the
+deployment logic and application source respectively:
+
+```yaml
+jobs:
+  release:
+    uses: bherila/vora/.github/workflows/release-instance.yml@VORA_WORKFLOW_COMMIT_SHA
+    with:
+      environment: wedding
+      source_ref: VORA_APPLICATION_COMMIT_SHA
+    secrets: inherit
+```
+
+The caller needs `contents: read` permission. Create the selected GitHub
+environment, deployment variables, and SSH secrets in the calling repository.
+Cross-repository calls must supply `source_ref`: the workflow always checks out
+`bherila/vora`, never the caller's source or commit. The build job records the
+resolved Vora commit in the workflow summary. `primary` remains false for these
+additional instances, so primary production target defaults do not apply.
 
 Use separate database credentials and buckets even on a shared host. Set
 `AWS_BUCKET` for video inputs, `PHOTOS_BUCKET` for photos, and `HLS_BUCKET` for HLS

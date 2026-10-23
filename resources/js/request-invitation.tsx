@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ageRequirementMessage, ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
 import { DatePicker } from '@/components/date-picker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -9,17 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
-
-function getAdultBirthDateLimit(): string {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - 18);
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
 
 interface WaitlistGeo {
   country?: string;
@@ -61,7 +51,8 @@ function formatLocation(geo: WaitlistGeo): string {
 
 function RequestInvitationPage() {
   const initialData = getInitialData();
-  const adultBirthDateLimit = getAdultBirthDateLimit();
+  const agePolicy = getAgePolicy();
+  const latestBirthDate = agePolicy.latest_birth_date;
 
   const [email, setEmail] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -87,8 +78,8 @@ function RequestInvitationPage() {
       return;
     }
 
-    if (birthDate > adultBirthDateLimit) {
-      setError('You must be at least 18 years old to request an invitation.');
+    if (birthDate > latestBirthDate) {
+      setError(ageRequirementMessage(agePolicy));
       setLoading(false);
       return;
     }
@@ -218,11 +209,11 @@ function RequestInvitationPage() {
                 <DatePicker
                   id="birth_date"
                   value={birthDate}
-                  max={adultBirthDateLimit}
+                  max={latestBirthDate}
                   onChange={setBirthDate}
                   placeholder="Select birth date"
                 />
-                <p className="text-xs text-muted-foreground">You must be at least 18 years old to join.</p>
+                <p className="text-xs text-muted-foreground">{ageRequirementMessage(agePolicy)} {ageVerificationMessage(agePolicy)}</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="interests">About you</Label>

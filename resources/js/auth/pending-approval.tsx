@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
+import { ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
@@ -44,7 +45,7 @@ function PendingApprovalPage() {
             {sourceMessage} Our team will review your account and notify you once approved.
           </p>
           <p className="text-center text-sm text-muted-foreground">
-            ID verification will be required to verify your age before age-restricted content is available.
+            {ageVerificationMessage(getAgePolicy())}
           </p>
           <Button asChild className="w-full"><a href="/pending-approval">Check approval and continue</a></Button>
           <Button

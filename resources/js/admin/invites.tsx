@@ -12,6 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { fetchWrapper } from '@/fetchWrapper';
 
 interface SignupSettings {
+  minimum_age: number | null;
+  age_verification_required: boolean;
   public_signups_enabled: boolean;
   default_new_user_invites: number;
   default_new_user_invite_expiry_days: number | null;
@@ -79,7 +81,7 @@ function TreeNode({ user, childrenByParent }: TreeNodeProps) {
   );
 }
 
-function AdminInvitesPage() {
+export function AdminInvitesPage() {
   const [data, setData] = useState<InvitesData | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -87,6 +89,8 @@ function AdminInvitesPage() {
 
   // Settings form state.
   const [publicSignups, setPublicSignups] = useState(true);
+  const [minimumAge, setMinimumAge] = useState('18');
+  const [ageVerificationRequired, setAgeVerificationRequired] = useState(false);
   const [defaultInvites, setDefaultInvites] = useState('0');
   const [defaultExpiryDays, setDefaultExpiryDays] = useState('');
 
@@ -100,6 +104,8 @@ function AdminInvitesPage() {
       if (response.success) {
         const payload = response.data as InvitesData;
         setData(payload);
+        setMinimumAge(payload.settings.minimum_age === null ? '' : String(payload.settings.minimum_age ?? 18));
+        setAgeVerificationRequired(payload.settings.age_verification_required === true);
         setPublicSignups(payload.settings.public_signups_enabled);
         setDefaultInvites(String(payload.settings.default_new_user_invites));
         setDefaultExpiryDays(
@@ -118,11 +124,14 @@ function AdminInvitesPage() {
   }, []);
 
   const saveSettings = async (nextPublicSignups: boolean) => {
+    if (data === null) return;
     setError('');
     setNotice('');
     setBusy(true);
     try {
       await fetchWrapper.put('/api/admin/invites/settings', {
+        minimum_age: minimumAge.trim() === '' ? null : Number(minimumAge),
+        age_verification_required: ageVerificationRequired,
         public_signups_enabled: nextPublicSignups,
         default_new_user_invites: Number(defaultInvites) || 0,
         default_new_user_invite_expiry_days: defaultExpiryDays.trim() === '' ? null : Number(defaultExpiryDays),
@@ -201,11 +210,21 @@ function AdminInvitesPage() {
             <Checkbox
               checked={publicSignups}
               onCheckedChange={(checked) => void saveSettings(checked === true)}
-              disabled={busy}
+              disabled={busy || data === null}
             />
             Allow public sign-ups
           </label>
 
+          <div className="space-y-2">
+            <Label htmlFor="minimum-age">Minimum account age (years)</Label>
+            <Input id="minimum-age" type="number" min={1} max={120} placeholder="No minimum" value={minimumAge} onChange={(event) => setMinimumAge(event.target.value)} disabled={busy} />
+            <p className="text-sm text-muted-foreground">Leave blank to disable the minimum. Changes also apply to existing accounts. These are site settings, not a determination of legal eligibility.</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={ageVerificationRequired} onCheckedChange={(checked) => setAgeVerificationRequired(checked === true)} disabled={busy} />
+            Require administrator age verification
+          </label>
+          <p className="text-sm text-muted-foreground">When enabled, approved attendees wait for an administrator to confirm their age in Users before accessing shared content. Administrators keep access to manage the site. Email verification and account approval still apply.</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="default-invites">Invites granted to each new user</Label>
@@ -229,7 +248,7 @@ function AdminInvitesPage() {
               />
             </div>
           </div>
-          <Button type="button" onClick={() => void saveSettings(publicSignups)} disabled={busy}>
+          <Button type="button" onClick={() => void saveSettings(publicSignups)} disabled={busy || data === null}>
             Save defaults
           </Button>
         </CardContent>

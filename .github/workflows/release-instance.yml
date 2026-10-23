@@ -9,12 +9,20 @@ on:
       primary:
         type: boolean
         default: false
+      source_ref:
+        description: Vora commit, tag, or branch; required for cross-repository callers
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       environment:
         description: GitHub environment containing this instance's deployment settings
         required: true
         type: environment
+      source_ref:
+        description: Vora commit, tag, or branch (defaults to the selected workflow commit)
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -28,7 +36,26 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
+      - name: Validate release source
+        env:
+          CALLER_REPOSITORY: ${{ github.repository }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        shell: bash
+        run: |
+          if [ "$CALLER_REPOSITORY" != bherila/vora ] && [ -z "$SOURCE_REF" ]; then
+            echo "::error::Cross-repository callers must set source_ref to a Vora commit, tag, or branch."
+            exit 1
+          fi
+
       - uses: actions/checkout@v6
+        with:
+          # A reusable workflow otherwise checks out its caller's repository.
+          repository: bherila/vora
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Record release source
+        run: |
+          printf 'Vora source commit: `%s`\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2

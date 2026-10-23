@@ -9,7 +9,7 @@ class DefaultStaticPages
      * default policy text below actually changes, so "Last updated" reflects the
      * document revision rather than the current request date.
      */
-    public const REVISION_DATE = 'June 16, 2026';
+    public const REVISION_DATE = 'October 22, 2026';
 
     /**
      * @return array<string, array<string, mixed>>
@@ -124,7 +124,7 @@ By accessing or using {{app_name}}, you agree to these Terms of Service and our 
 
 ## 2. Eligibility and accounts
 
-You must be at least 18 years old or the age of majority in your local jurisdiction, whichever is higher, and legally able to enter into these terms. You are responsible for accurate account information, safeguarding credentials, enabling appropriate security settings, and all activity under your account. We may approve, deny, suspend, deactivate, or terminate accounts as permitted by these terms.
+{{age_eligibility}} You must be legally able to use the service under applicable requirements, with a parent or guardian’s involvement where required. You are responsible for accurate account information, safeguarding credentials, enabling appropriate security settings, and all activity under your account. We may approve, deny, suspend, deactivate, or terminate accounts as permitted by these terms.
 
 ## 3. User content
 

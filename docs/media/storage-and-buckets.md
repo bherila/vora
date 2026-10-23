@@ -59,6 +59,14 @@ When an admin approves media, the app copies the reviewed source object to:
 <MEDIA_KEY_PREFIX>/reviewed/<user-id>/<ulid>.<ext>
 ```
 
+`MEDIA_REVIEWED_KEY_PREFIX` optionally overrides this directory for **approved
+videos only**. For an existing bucket whose transcoder scans `videos/`, set
+`MEDIA_KEY_PREFIX=uploads` and `MEDIA_REVIEWED_KEY_PREFIX=videos/reviewed`. This
+keeps unfinished uploads and photos outside the scan prefix while allowing the
+existing source/HLS bucket pair to handle approved new videos. Without an
+override, reviewed video paths retain the default shown above. Existing media
+keys are stored on their rows and are not moved by changing these settings.
+
 Client-generated thumbnails/posters are copied to:
 
 ```
