@@ -4,7 +4,7 @@ import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDial
 import type { EventMediaItem, EventProfile } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 
-jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
+jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: ({ item }: { item: { type: string } }) => item.type === 'video' ? <video controls aria-label="Playback controls" /> : <div>Media player</div> }));
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => <button>Favorite</button> }));
 jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: () => <button>Save to Library</button> }));
@@ -115,6 +115,13 @@ describe('Event administration and media actions', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowRight', altKey: true });
     expect(navigate).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Previous item' })).toBeDisabled();
+  });
+
+  it('leaves arrow keys in the versions chooser alone instead of navigating the gallery', () => {
+    const navigate = jest.fn();
+    render(<EventMediaDialog item={{ ...item, photo_versions: { visible_count: 2, preferred_ulid: item.ulid, is_preferred: true } }} onClose={jest.fn()} onDeleted={jest.fn()} onNavigate={navigate} onChooseVersion={jest.fn()} hasNext />);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Show versions' }), { key: 'ArrowRight' });
+    expect(navigate).not.toHaveBeenCalled();
   });
 
 });

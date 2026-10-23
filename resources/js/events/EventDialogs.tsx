@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { eventMediaStatus, mediaNeedsRefresh } from '@/events/media-status';
+import { PhotoDetails, PhotoVersionsChooser } from '@/events/PhotoVersionsChooser';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
@@ -131,6 +132,7 @@ interface EventMediaDialogProps {
   onClose: () => void;
   onDeleted: () => void;
   onNavigate?: (direction: -1 | 1) => void;
+  onChooseVersion?: (ulid: string) => void;
   hasPrevious?: boolean;
   hasNext?: boolean;
   navigationBusy?: boolean;
@@ -139,14 +141,14 @@ interface EventMediaDialogProps {
   refreshPaused?: boolean;
 }
 
-export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, hasPrevious = false, hasNext = false, navigationBusy = false, position, onRefresh, refreshPaused = false }: EventMediaDialogProps) {
+export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChooseVersion, hasPrevious = false, hasNext = false, navigationBusy = false, position, onRefresh, refreshPaused = false }: EventMediaDialogProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const downloadUrl = safeInternalUrl(item.download_url);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const interactive = (target: EventTarget): boolean => target instanceof Element
-    && !!target.closest('video,input,textarea,select,[contenteditable="true"],[role="slider"],[data-video-controls]');
+    && !!target.closest('video,input,textarea,select,[contenteditable="true"],[role="slider"],[data-video-controls],[aria-label="Photo versions"]');
   const navigate = (direction: -1 | 1): void => {
     if (!busy && !navigationBusy && !confirmDelete && (direction === -1 ? hasPrevious : hasNext)) onNavigate?.(direction);
   };
@@ -193,6 +195,8 @@ export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, hasPrev
         <MediaPlayer item={item} className="max-h-[65vh] w-full object-contain" />
       </div>
       {mediaNeedsRefresh(item) && <p className="text-xs text-muted-foreground">{refreshPaused ? 'Automatic updates have paused.' : 'Status updates automatically for a short time.'} {onRefresh && <button type="button" className="underline underline-offset-4" onClick={onRefresh}>Check for updates</button>}</p>}
+      {item.type === 'photo' && <PhotoDetails item={item} />}
+      {item.type === 'photo' && onChooseVersion && <PhotoVersionsChooser item={item} onChoose={onChooseVersion} disabled={busy || navigationBusy || confirmDelete} />}
       <div className="flex flex-wrap items-center gap-2">
         {moduleEnabled('favorites') && <FavoriteButton type="media" id={item.id} initialFavorited={item.favorited} />}
         {moduleEnabled('library') && (item.can_save_to_library || item.library_item_ulid) && <SaveToLibraryButton mediaUlid={item.ulid} savedUlid={item.library_item_ulid ?? null} />}

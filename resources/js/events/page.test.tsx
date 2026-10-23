@@ -8,8 +8,8 @@ import { readInitialData } from '@/initialData';
 jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 jest.mock('@/initialData', () => ({ readInitialData: jest.fn() }));
 jest.mock('sonner', () => ({ Toaster: () => null, toast: { success: jest.fn(), error: jest.fn() } }));
-jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => <button>Favorite</button> }));
-jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: () => <button>Save to Library</button> }));
+jest.mock('@/components/favorite-button', () => ({ FavoriteButton: ({ id }: { id: number }) => <button data-media-id={id}>Favorite</button> }));
+jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: ({ mediaUlid }: { mediaUlid: string }) => <button data-media-ulid={mediaUlid}>Save to Library</button> }));
 jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: ({ item }: { item: { video: { master_url: string } } }) => <div data-testid="player">{item.video?.master_url}</div> }));
 jest.mock('@/media/MediaUploadDialog', () => ({ MediaUploadDialog: ({ eventUlid, eventOptions, triggerLabel }: { eventUlid?: string; eventOptions: unknown[]; triggerLabel: string }) => <button data-event={eventUlid ?? ''} data-options={eventOptions.length}>{triggerLabel}</button> }));
 
@@ -100,6 +100,57 @@ describe('EventsPage', () => {
     expect(within(dialog).getByRole('link', { name: 'Download' })).toHaveAttribute('href', '/api/events/media/media-one/download');
     expect(within(dialog).getByRole('button', { name: 'Save to Library' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Delete my upload' })).toBeNull();
+  });
+
+  it('switches photo versions without changing their concrete Save, favorite and download targets', async () => {
+    const group = { visible_count: 2, preferred_ulid: 'media-one', is_preferred: true };
+    const preferred = { ...media, title: 'Preferred photo', type: 'photo', mime_type: 'image/jpeg', photo_versions: group };
+    const original = { ...preferred, id: 12, ulid: 'heic-original', title: 'Original HEIC', mime_type: 'image/heic', photo_versions: { ...group, is_preferred: false }, can_save_to_library: true, download_url: '/api/events/media/heic-original/download' };
+    const next = { ...media, id: 13, ulid: 'next-photo', title: 'Next photo' };
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/events/media?')) return { data: [preferred, next], meta: { ...meta, total: 2, last_page: 1, has_more: false } };
+      if (url === '/api/events/media/media-one') return { data: preferred };
+      if (url === '/api/events/media/heic-original') return { data: original };
+      if (url === '/api/events/media/next-photo') return { data: next };
+      if (url === '/api/events/media/media-one/variants?page=1') return { data: [preferred, original], meta: { ...meta, total: 2, last_page: 1, has_more: false }, preferred_ulid: preferred.ulid };
+      return implementation(url);
+    });
+    render(<EventsPage />);
+    expect(await screen.findByText('2 versions · Preferred')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Open Preferred photo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show versions' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View version 2 · HEIC · Sam' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Original HEIC' });
+    expect(window.location.search).toContain('item=heic-original');
+    expect(within(dialog).getByRole('button', { name: 'Favorite' })).toHaveAttribute('data-media-id', '12');
+    expect(within(dialog).getByRole('button', { name: 'Save to Library' })).toHaveAttribute('data-media-ulid', 'heic-original');
+    expect(within(dialog).getByRole('link', { name: 'Download' })).toHaveAttribute('href', '/api/events/media/heic-original/download');
+    expect(within(dialog).getByText('Item 1 of 2')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Previous item' })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Next item' }));
+    expect(await screen.findByRole('dialog', { name: 'Next photo' })).toBeInTheDocument();
+  });
+
+  it('keeps gallery navigation when a filtered card is a nonpreferred member of the chosen group', async () => {
+    window.history.replaceState({}, '', '/events?favorites_of=7&item=preferred-original');
+    const group = { visible_count: 3, preferred_ulid: 'preferred-original', is_preferred: false };
+    const filtered = { ...media, photo_versions: group };
+    const preferred = { ...media, id: 12, ulid: 'preferred-original', title: 'Preferred original', photo_versions: { ...group, is_preferred: true } };
+    const next = { ...media, id: 13, ulid: 'next-photo', title: 'Next filtered photo' };
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url.startsWith('/api/events/media?')) return { data: [filtered, next], meta: { ...meta, total: 2, last_page: 1, has_more: false } };
+      if (url === '/api/events/media/preferred-original') return { data: preferred };
+      if (url === '/api/events/media/next-photo') return { data: next };
+      return implementation(url);
+    });
+    render(<EventsPage />);
+    const dialog = await screen.findByRole('dialog', { name: 'Preferred original' });
+    expect(within(dialog).getByText('Item 1 of 2')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Next item' }));
+    expect(await screen.findByRole('dialog', { name: 'Next filtered photo' })).toBeInTheDocument();
+    expect(window.location.search).toContain('favorites_of=7');
   });
 
   it('opens favorite links and clears a denied media request without starting playback', async () => {
