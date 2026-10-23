@@ -31,6 +31,8 @@ export interface PhotoDerivatives {
   thumbnail: Blob;
   /** Base64-encoded 32-byte perceptual hash of the normalized image. */
   perceptualHash: string;
+  width?: number;
+  height?: number;
 }
 
 /**
@@ -100,7 +102,7 @@ export async function generatePhotoDerivatives(file: File): Promise<PhotoDerivat
       resizeToMaxEdge(bitmap, THUMBNAIL_MAX_EDGE, THUMBNAIL_QUALITY),
       computePerceptualHash(bitmap),
     ]);
-    return { thumbnail, perceptualHash };
+    return { thumbnail, perceptualHash, width: bitmap.width, height: bitmap.height };
   } finally {
     bitmap.close();
   }

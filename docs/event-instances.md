@@ -95,6 +95,10 @@ Administrators check the stored original through an independent browser decode
 before approving HEIC media; an uploader-supplied preview alone does not establish
 what the original contains.
 
+The Event gallery groups likely cross-format photo versions while preserving
+every original and its metadata. See [Event photo versions](event-photo-versions.md)
+for matching limits, preferred-version ranking and private Save behavior.
+
 ## Bulk Save and download
 
 Select accessible Event media to Save privately or download originals as a ZIP.

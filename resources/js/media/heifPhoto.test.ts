@@ -1,6 +1,6 @@
 import { decodeHeifInWorker } from '@/media/heifDecoderClient';
 
-import { heifMimeType, normalizeHeifFile, prepareHeifPreview } from './heifPhoto';
+import { heifMimeType, normalizeHeifFile, prepareHeifPhoto, prepareHeifPreview } from './heifPhoto';
 
 jest.mock('@/media/heifDecoderClient', () => ({ decodeHeifInWorker: jest.fn() }));
 
@@ -65,6 +65,15 @@ test('prefers the browser decoder without starting a fallback worker', async () 
   const pixels = bitmap(1200, 800); nativeDecode.mockResolvedValue(pixels);
   await prepareHeifPreview(photo(), new AbortController().signal);
   expect(decode).not.toHaveBeenCalled();
+  expect(pixels.close).toHaveBeenCalledTimes(1);
+});
+
+test('reports original resolution from the same decode before downscaling the JPEG preview', async () => {
+  const pixels = bitmap(4000, 3000); decode.mockResolvedValue(pixels);
+  const prepared = await prepareHeifPhoto(photo(), new AbortController().signal);
+  expect([prepared.width, prepared.height, prepared.preview.type]).toEqual([4000, 3000, 'image/jpeg']);
+  expect(drawImage).toHaveBeenCalledWith(pixels, 0, 0, 2048, 1536);
+  expect(decode).toHaveBeenCalledTimes(1);
   expect(pixels.close).toHaveBeenCalledTimes(1);
 });
 

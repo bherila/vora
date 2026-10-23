@@ -32,6 +32,8 @@ export interface EventMediaItem extends MediaItem {
   owned: boolean;
   download_url: string | null;
   favorited: boolean;
+  photo_versions?: { visible_count: number; preferred_ulid: string; is_preferred: boolean } | null;
+  photo_details?: { width: number | null; height: number | null; metadata_known: boolean; has_gps: boolean; has_capture_time: boolean; has_camera: boolean } | null;
 }
 
 export function eventError(error: unknown): string {

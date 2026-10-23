@@ -1,5 +1,6 @@
-import { heifMimeType, normalizeHeifFile, prepareHeifPreview } from '@/media/heifPhoto';
+import { heifMimeType, normalizeHeifFile, prepareHeifPhoto } from '@/media/heifPhoto';
 import { computeFileHash, generatePhotoDerivatives, generateVideoPoster, supportsClientDerivatives } from '@/media/imageProcessing';
+import { readPhotoMetadata } from '@/media/photoMetadata';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import { type CompletedMultipartPart, type MultipartPartToSign, type MultipartUploadSession, putToSignedUrl, readMultipartSession, removeMultipartSession, saveMultipartSession, uploadMultipartFile, withRetries } from '@/media/upload';
 import { postUpload, UploadHttpError } from '@/media/uploadRequest';
@@ -28,6 +29,8 @@ interface PresignMultipartPartsResponse {
 interface Derivatives {
   thumbnail: Blob | null;
   perceptualHash: string | null;
+  width: number | null;
+  height: number | null;
 }
 
 /**
@@ -36,24 +39,24 @@ interface Derivatives {
  */
 async function buildDerivatives(file: File, type: 'photo' | 'video', signal: AbortSignal): Promise<Derivatives> {
   if (heifMimeType(file) !== null) {
-    const thumbnail = await prepareHeifPreview(file, signal);
+    const { preview: thumbnail, width, height } = await prepareHeifPhoto(file, signal);
     let perceptualHash: string | null = null;
     if (supportsClientDerivatives()) {
       try { perceptualHash = (await generatePhotoDerivatives(new File([thumbnail], 'preview.jpg', { type: 'image/jpeg' }))).perceptualHash; } catch { /* Hashing remains best-effort. */ }
     }
-    return { thumbnail, perceptualHash };
+    return { thumbnail, perceptualHash, width, height };
   }
   if (!supportsClientDerivatives()) {
-    return { thumbnail: null, perceptualHash: null };
+    return { thumbnail: null, perceptualHash: null, width: null, height: null };
   }
   try {
     if (type === 'photo') {
-      const { thumbnail, perceptualHash } = await generatePhotoDerivatives(file);
-      return { thumbnail, perceptualHash };
+      const { thumbnail, perceptualHash, width, height } = await generatePhotoDerivatives(file);
+      return { thumbnail, perceptualHash, width: width ?? null, height: height ?? null };
     }
-    return { thumbnail: await generateVideoPoster(file), perceptualHash: null };
+    return { thumbnail: await generateVideoPoster(file), perceptualHash: null, width: null, height: null };
   } catch {
-    return { thumbnail: null, perceptualHash: null };
+    return { thumbnail: null, perceptualHash: null, width: null, height: null };
   }
 }
 
@@ -193,11 +196,13 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
     if (type === null) {
       throw new Error('Only image and video files can be uploaded.');
     }
+    const inspectMetadata = isEvent && type === 'photo' && ['image/jpeg', 'image/png', 'image/heic', 'image/heif'].includes(selectedFile.type);
     phase = 'preparing';
     setProgress(0);
-    const [{ thumbnail, perceptualHash }, fileHash] = await Promise.all([
+    const [{ thumbnail, perceptualHash, width, height }, fileHash, metadata] = await Promise.all([
       buildDerivatives(selectedFile, type, signal),
       computeFileHash(selectedFile, (fraction) => setProgress(fraction * 100), signal),
+      inspectMetadata ? readPhotoMetadata(selectedFile, signal) : Promise.resolve(null),
     ]);
 
     signal.throwIfAborted();
@@ -216,6 +221,9 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
       thumbnail_size: thumbnail?.size ?? null,
       perceptual_hash: perceptualHash,
       file_hash: fileHash,
+      ...(inspectMetadata ? { photo_metadata: { width, height, ...(metadata === null ? {} : {
+        has_gps: metadata.has_gps, has_capture_time: metadata.has_capture_time, has_camera: metadata.has_camera,
+      }) } } : {}),
       ...(!isEvent ? { interest_ids: uploadInterestIds, announce } : {}),
       ...(isEvent ? {} : isLibrary ? {
         audience: 'specific', audience_user_ids: [], discoverable: false, announce: false,

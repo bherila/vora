@@ -8,10 +8,12 @@ use App\Enums\MediaType;
 use App\Enums\RestrictionCapability;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Events\EventMediaRequest;
+use App\Http\Requests\Events\EventPhotoVariantsRequest;
 use App\Http\Requests\Events\EventUploadRequest;
 use App\Models\Event;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Events\EventPhotoVersions;
 use App\Services\Events\EventPresenter;
 use App\Services\Events\EventSettings;
 use App\Services\Favorites\FavoriteService;
@@ -34,6 +36,7 @@ class EventMediaController extends Controller
         private readonly FavoriteService $favorites,
         private readonly EventSettings $settings,
         private readonly RestrictionGate $restrictions,
+        private readonly EventPhotoVersions $photoVersions,
     ) {}
 
     /** @return Builder<Media> */
@@ -76,14 +79,15 @@ class EventMediaController extends Controller
                 ->whereColumn('favorites.favoritable_id', 'media.id')->where('favorites.favoritable_type', (new Media)->getMorphClass())
                 ->whereIn('favorites.user_id', $curators));
         }
-        $page = $query->latest('media.created_at')->orderByDesc('media.id')->paginate(24);
+        $page = $this->photoVersions->collapse($query)->latest('media.created_at')->orderByDesc('media.id')->paginate(24);
+        $versions = $this->photoVersions->summaries($viewer, $page->getCollection());
         $saved = $viewer->libraryItems()->whereIn('media_id', $page->getCollection()->modelKeys())->pluck('ulid', 'media_id');
         $favorited = InstanceFeatures::enabled('favorites')
             ? array_flip($this->favorites->favoritedIdsFor($viewer, 'media', $page->getCollection()->modelKeys())) : [];
 
         return response()->json([
             'success' => true,
-            'data' => $page->getCollection()->map(fn (Media $media): array => $this->presenter->media($media, $viewer, isset($favorited[$media->id]), libraryItemUlid: $saved[$media->id] ?? null)),
+            'data' => $page->getCollection()->map(fn (Media $media): array => $this->presenter->media($media, $viewer, isset($favorited[$media->id]), libraryItemUlid: $saved[$media->id] ?? null, photoVersions: $versions[$media->id] ?? null)),
             'meta' => PaginationMeta::from($page),
         ]);
     }
@@ -96,7 +100,29 @@ class EventMediaController extends Controller
             && $this->favorites->favoritedIdsFor($request->user(), 'media', [$media->id]) !== [];
         $libraryItemUlid = $request->user()->libraryItems()->where('media_id', $media->id)->value('ulid');
 
-        return response()->json(['success' => true, 'data' => $this->presenter->media($media, $request->user(), $favorited, resolveHls: true, libraryItemUlid: $libraryItemUlid)]);
+        $versions = $this->photoVersions->summaries($request->user(), collect([$media]));
+
+        return response()->json(['success' => true, 'data' => $this->presenter->media($media, $request->user(), $favorited, resolveHls: true, libraryItemUlid: $libraryItemUlid, photoVersions: $versions[$media->id] ?? null)]);
+    }
+
+    public function variants(EventPhotoVariantsRequest $request, string $ulid): JsonResponse
+    {
+        $viewer = $request->user();
+        $anchor = $this->photoVersions->visiblePhotos($viewer)->where('ulid', $ulid)->first();
+        abort_unless($anchor instanceof Media, 404, 'Not found.');
+        $query = $this->photoVersions->inGroup($this->photoVersions->visiblePhotos($viewer), $anchor);
+        $preferred = $this->photoVersions->preferredOrder(clone $query)->value('media.ulid');
+        $page = $this->photoVersions->preferredOrder($query)->with(['event.members:id', 'user', 'interests'])->paginate(24);
+        $versions = $this->photoVersions->summaries($viewer, $page->getCollection());
+        $saved = $viewer->libraryItems()->whereIn('media_id', $page->getCollection()->modelKeys())->pluck('ulid', 'media_id');
+        $favorited = InstanceFeatures::enabled('favorites')
+            ? array_flip($this->favorites->favoritedIdsFor($viewer, 'media', $page->getCollection()->modelKeys())) : [];
+
+        return response()->json([
+            'success' => true,
+            'data' => $page->getCollection()->map(fn (Media $media): array => $this->presenter->media($media, $viewer, isset($favorited[$media->id]), libraryItemUlid: $saved[$media->id] ?? null, photoVersions: $versions[$media->id] ?? null)),
+            'meta' => PaginationMeta::from($page), 'preferred_ulid' => $preferred,
+        ]);
     }
 
     public function upload(EventUploadRequest $request, Event $event, MediaUploadService $uploads): JsonResponse
@@ -107,6 +133,7 @@ class EventMediaController extends Controller
             wantsThumbnail: $request->boolean('has_thumbnail'), perceptualHash: $request->validated('perceptual_hash'),
             purpose: MediaPurpose::Event, discoverable: false, fileHash: $request->validated('file_hash'),
             expectedSizeBytes: (int) $request->validated('size'), thumbnailSizeBytes: $request->validated('thumbnail_size'), eventId: $event->id,
+            photoMetadata: $request->validated('type') === 'photo' ? $request->validated('photo_metadata') : null,
         );
         $media = $result['media']->load(['event.members:id', 'user', 'interests']);
 
