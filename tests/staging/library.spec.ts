@@ -178,6 +178,21 @@ async function setEventAccess(admin: Page, attendee: Account, eventName: string,
   await expect(dialog).toHaveCount(0);
 }
 
+async function approveHeicOriginal(admin: Page, mediaId: number): Promise<void> {
+  await admin.goto('/admin/media');
+  const card = admin.locator(`#media-${mediaId}`);
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+  await card.getByRole('button', { name: 'Check original', exact: true }).click();
+  const original = card.getByRole('img', { name: 'Verified preview decoded from the stored original', exact: true });
+  await expect.poll(() => original.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(card.getByRole('button', { name: 'Approve', exact: true })).toBeEnabled();
+  const reviewed = admin.waitForResponse((response) => response.url().endsWith(`/api/admin/media/${mediaId}/moderate`) && response.request().method() === 'POST');
+  await card.getByRole('button', { name: 'Approve', exact: true }).click();
+  expect((await reviewed).ok()).toBeTruthy();
+  await expect(card).toHaveCount(0);
+}
+
 async function upload(page: Page, type: 'photo' | 'video', title: string, collection: string, eventUlid?: string, photoFilename = 'photo.png'): Promise<Upload> {
   const filename = type === 'photo' ? photoFilename : 'video.mp4';
   await page.goto(eventUlid ? `/events?event_ulid=${eventUlid}` : `/library?collection=${collection}`);
@@ -331,7 +346,8 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     const videoItem = await findItem(uploader, collection.ulid, videoTitle);
     expect((await api(recipient, 'GET', `/api/library/items/${photoItem.ulid}`)).status).toBe(404);
     expect((await api(outsider, 'GET', `/api/library/items/${videoItem.ulid}`)).status).toBe(404);
-    for (const media of [photo, video]) await success(admin, 'POST', `/api/admin/media/${media.data.id}/moderate`, { action: 'approve' });
+    await approveHeicOriginal(admin, photo.data.id);
+    await success(admin, 'POST', `/api/admin/media/${video.data.id}/moderate`, { action: 'approve' });
     await recipient.goto(`/library?item=${photoItem.ulid}`);
     const image = recipient.getByRole('dialog').getByRole('img', { name: photoTitle, exact: true });
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
@@ -481,7 +497,8 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
     expect((await api(recipient, 'GET', `/api/events/media/${publicPhoto.data.ulid}`)).status,
       'An admin-exempt attendee publishes new Event uploads without a manual review action').toBe(200);
-    for (const media of [photo, video]) await success(admin, 'POST', `/api/admin/media/${media.data.id}/moderate`, { action: 'approve' });
+    await approveHeicOriginal(admin, photo.data.id);
+    await success(admin, 'POST', `/api/admin/media/${video.data.id}/moderate`, { action: 'approve' });
     const photoDetail = (await success<{ data: EventMedia }>(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).data;
     await recipient.goto(`/events?media=${photo.data.ulid}`);
     await expect.poll(() => recipient.getByRole('dialog').getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
