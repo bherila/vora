@@ -31,6 +31,7 @@ Route::middleware(['auth', 'approved', 'module:events'])->group(function (): voi
     Route::post('/api/events/media/bulk-save', [BulkTransferController::class, 'save'])->middleware(['module:library', 'throttle:10,1'])->name('bulk-transfer.events.save');
     Route::post('/api/events/media/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1')->name('bulk-transfer.events.prepare');
     Route::get('/api/events/media/{ulid}/download', [EventMediaController::class, 'download'])->name('events.media.download');
+    Route::get('/api/events/media/{ulid}/variants', [EventMediaController::class, 'variants']);
     Route::get('/api/events/media/{ulid}', [EventMediaController::class, 'show']);
     Route::post('/api/events/{event:ulid}/uploads', [EventMediaController::class, 'upload']);
     Route::middleware('can:admin-only')->group(function (): void {

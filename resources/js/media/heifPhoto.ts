@@ -81,7 +81,7 @@ async function decodePhoto(file: File, signal: AbortSignal): Promise<DecodedPhot
 let previousConversion: Promise<void> = Promise.resolve();
 
 /** Only one conversion holds full-size pixels, even if several dialogs are open. */
-export async function prepareHeifPreview(file: File, signal: AbortSignal): Promise<Blob> {
+export async function prepareHeifPhoto(file: File, signal: AbortSignal): Promise<{ preview: Blob; width: number; height: number }> {
   let release = (): void => {};
   const previous = previousConversion;
   previousConversion = new Promise<void>((resolve) => { release = resolve; });
@@ -109,8 +109,13 @@ export async function prepareHeifPreview(file: File, signal: AbortSignal): Promi
         }, 'image/jpeg', 0.88));
         signal.throwIfAborted();
         if (preview.size < 1 || preview.size > PREVIEW_MAX_BYTES || preview.type !== 'image/jpeg') throw new Error('The HEIC/HEIF preview is too large. Export this photo as JPEG and try again.');
-        return preview;
+        return { preview, width: decoded.width, height: decoded.height };
       } finally { canvas.width = 1; canvas.height = 1; }
     } finally { decoded.close(); }
   } finally { release(); }
+}
+
+/** Compatibility for preview-only review UI; upload preparation uses original dimensions. */
+export async function prepareHeifPreview(file: File, signal: AbortSignal): Promise<Blob> {
+  return (await prepareHeifPhoto(file, signal)).preview;
 }

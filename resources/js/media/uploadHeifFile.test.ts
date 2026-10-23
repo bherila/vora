@@ -2,11 +2,11 @@ import { computeFileHash } from '@/media/imageProcessing';
 import { putToSignedUrl } from '@/media/upload';
 import { postUpload } from '@/media/uploadRequest';
 
-import { prepareHeifPreview } from './heifPhoto';
+import { prepareHeifPhoto } from './heifPhoto';
 import { uploadMediaFile } from './uploadMediaFile';
 
 jest.mock('@/media/heifPhoto', () => ({
-  ...jest.requireActual<typeof import('@/media/heifPhoto')>('@/media/heifPhoto'), prepareHeifPreview: jest.fn(),
+  ...jest.requireActual<typeof import('@/media/heifPhoto')>('@/media/heifPhoto'), prepareHeifPhoto: jest.fn(),
 }));
 jest.mock('@/media/imageProcessing', () => ({ supportsClientDerivatives: () => false, computeFileHash: jest.fn().mockResolvedValue('original-hash') }));
 jest.mock('@/media/uploadRequest', () => ({ ...jest.requireActual<typeof import('@/media/uploadRequest')>('@/media/uploadRequest'), postUpload: jest.fn() }));
@@ -17,7 +17,7 @@ jest.mock('@/media/upload', () => ({
 
 const post = jest.mocked(postUpload);
 const put = jest.mocked(putToSignedUrl);
-const preview = jest.mocked(prepareHeifPreview);
+const preview = jest.mocked(prepareHeifPhoto);
 const original = new File(['untouched-heic-original'], 'photo.HEIC', { type: 'image/heic' });
 
 function upload(file = original): Promise<void> {
@@ -26,7 +26,7 @@ function upload(file = original): Promise<void> {
 
 beforeEach(() => {
   jest.clearAllMocks(); window.localStorage.clear();
-  preview.mockResolvedValue(new Blob(['jpeg-preview'], { type: 'image/jpeg' }));
+  preview.mockResolvedValue({ preview: new Blob(['jpeg-preview'], { type: 'image/jpeg' }), width: 4000, height: 3000 });
   put.mockResolvedValue();
   post.mockImplementation(async (url) => url.endsWith('/uploads') ? {
     data: { id: 41 }, upload_url: 'https://storage.test/original', upload_headers: { 'Content-Type': 'image/heic' },
@@ -37,7 +37,7 @@ beforeEach(() => {
 
 test('uploads the unchanged original and a separate required JPEG, charging/resuming by original bytes', async () => {
   await upload();
-  expect(post).toHaveBeenCalledWith('/api/events/event-one/uploads', expect.objectContaining({ filename: 'photo.HEIC', content_type: 'image/heic', size: original.size, has_thumbnail: true, thumbnail_size: 12, file_hash: 'original-hash' }), expect.any(AbortSignal));
+  expect(post).toHaveBeenCalledWith('/api/events/event-one/uploads', expect.objectContaining({ filename: 'photo.HEIC', content_type: 'image/heic', size: original.size, has_thumbnail: true, thumbnail_size: 12, file_hash: 'original-hash', photo_metadata: { width: 4000, height: 3000 } }), expect.any(AbortSignal));
   expect(put.mock.calls[0]?.[1]).toBe(original);
   expect(put.mock.calls[1]?.[1]).toBeInstanceOf(Blob);
   expect(jest.mocked(computeFileHash)).toHaveBeenCalledWith(original, expect.any(Function), expect.any(AbortSignal));

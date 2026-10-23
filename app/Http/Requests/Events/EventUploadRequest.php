@@ -31,6 +31,12 @@ class EventUploadRequest extends StoreMediaRequest
             ...parent::rules(),
             'character_id' => ['prohibited'], 'event_id' => ['prohibited'], 'event_ulid' => ['prohibited'],
             'purpose' => ['prohibited'], 'collection_ulid' => ['prohibited'], 'interest_ids' => ['prohibited'],
+            'photo_metadata' => ['sometimes', 'array:width,height,has_gps,has_capture_time,has_camera', 'prohibited_unless:type,photo'],
+            'photo_metadata.width' => ['nullable', 'required_with:photo_metadata.height', 'integer', 'min:1', 'max:100000'],
+            'photo_metadata.height' => ['nullable', 'required_with:photo_metadata.width', 'integer', 'min:1', 'max:100000'],
+            'photo_metadata.has_gps' => ['sometimes', 'boolean'],
+            'photo_metadata.has_capture_time' => ['sometimes', 'boolean'],
+            'photo_metadata.has_camera' => ['sometimes', 'boolean'],
         ];
     }
 }

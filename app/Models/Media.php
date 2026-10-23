@@ -124,6 +124,11 @@ class Media extends Model
             'multipart_initiated_at' => 'datetime',
             'character_id' => 'integer',
             'event_id' => 'integer',
+            'photo_width' => 'integer',
+            'photo_height' => 'integer',
+            'photo_pixel_area' => 'integer',
+            'photo_metadata_score' => 'integer',
+            'photo_metadata' => 'array',
         ];
     }
 

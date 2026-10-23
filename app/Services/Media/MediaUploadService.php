@@ -10,6 +10,7 @@ use App\Models\Event;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\Events\EventAccess;
+use App\Services\Events\EventPhotoVersions;
 use App\Services\FileStorageService;
 use App\Support\HeifPhoto;
 use Illuminate\Support\Facades\DB;
@@ -81,8 +82,9 @@ class MediaUploadService
         bool $announceOnApproval = false,
         ?int $thumbnailSizeBytes = null,
         ?int $eventId = null,
+        ?array $photoMetadata = null,
     ): array {
-        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes, $eventId): array {
+        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes, $eventId, $photoMetadata): array {
             $user = $this->quota->lock($user);
             if ($purpose === MediaPurpose::Event) {
                 // Bind the immutable event ACL before an object key or URL can
@@ -111,6 +113,9 @@ class MediaUploadService
             $ulid = (string) Str::ulid();
             $key = $this->buildObjectKey($user, $ulid, $filename, $mimeType);
             $thumbnailKey = $wantsThumbnail ? $this->buildThumbnailKey($user, $ulid) : null;
+            if ($purpose === MediaPurpose::Event && $type === MediaType::Photo && EventPhotoVersions::supportsMime($mimeType)) {
+                $perceptualHash = EventPhotoVersions::normalizeHash($perceptualHash);
+            }
 
             $media = new Media([
                 'user_id' => $user->id,
@@ -133,6 +138,9 @@ class MediaUploadService
                 'discoverable' => $discoverable,
                 'announce_on_approval' => $announceOnApproval,
             ]);
+            if ($purpose === MediaPurpose::Event && $type === MediaType::Photo && EventPhotoVersions::supportsMime($mimeType)) {
+                $media->forceFill(EventPhotoVersions::metadataAttributes($photoMetadata));
+            }
             $media->save();
 
             if ($purpose === MediaPurpose::Gallery && $interestIds !== []) {
@@ -180,7 +188,7 @@ class MediaUploadService
     public function completeUpload(Media $media): bool
     {
         return DB::transaction(function () use ($media): bool {
-            $this->lockUpload($media);
+            $this->lockUpload($media, lockEvent: true);
 
             return $this->completeUploadLocked($media);
         });
@@ -277,6 +285,8 @@ class MediaUploadService
                 report($exception);
             }
         }
+
+        app(EventPhotoVersions::class)->groupCompletedPhoto($media);
 
         return true;
     }
@@ -387,7 +397,7 @@ class MediaUploadService
     public function completeMultipartUpload(Media $media, string $uploadId, array $parts): bool
     {
         return DB::transaction(function () use ($media, $uploadId, $parts): bool {
-            $this->lockUpload($media);
+            $this->lockUpload($media, lockEvent: true);
 
             return $this->completeMultipartUploadLocked($media, $uploadId, $parts);
         });
@@ -474,12 +484,18 @@ class MediaUploadService
         });
     }
 
-    private function lockUpload(Media $media): void
+    private function lockUpload(Media $media, bool $lockEvent = false): void
     {
         // A locking read must precede any consistent read, otherwise MariaDB
         // could retain a usage snapshot from before a concurrent upload.
         if ($media->user_id !== null) {
             $this->quota->lockId($media->user_id);
+        }
+        if ($lockEvent && $media->purpose === MediaPurpose::Event && $media->type === MediaType::Photo
+            && EventPhotoVersions::supportsMime($media->mime_type) && $media->event_id !== null) {
+            // Serialize grouping before the first consistent Media read. No
+            // older candidate media row is locked or modified while grouping.
+            Event::query()->whereKey($media->event_id)->lockForUpdate()->firstOrFail();
         }
         Media::withTrashed()->whereKey($media->id)->lockForUpdate()->firstOrFail();
         $media->refresh();

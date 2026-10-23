@@ -30,7 +30,7 @@ class EventPresenter
     }
 
     /** @return array<string, mixed> */
-    public function media(Media $media, User $viewer, bool $favorited = false, bool $resolveHls = false, ?string $libraryItemUlid = null): array
+    public function media(Media $media, User $viewer, bool $favorited = false, bool $resolveHls = false, ?string $libraryItemUlid = null, ?array $photoVersions = null): array
     {
         $owned = $media->user_id === $viewer->id;
         $data = $owned ? $this->media->item($media, resolveHls: $resolveHls) : $this->media->visitorItem($media, resolveHls: $resolveHls);
@@ -42,6 +42,14 @@ class EventPresenter
             'can_save_to_library' => $viewer->canUseLibrary() && app(LibraryAccess::class)->canSaveMedia($viewer, $media),
             'library_item_ulid' => $libraryItemUlid,
             'download_url' => $media->isReady() ? route('events.media.download', ['ulid' => $media->ulid], false) : null,
+            'photo_versions' => $photoVersions,
+            'photo_details' => $media->photo_width === null && $media->photo_metadata === null ? null : [
+                'width' => $media->photo_width, 'height' => $media->photo_height,
+                'metadata_known' => $media->photo_metadata !== null,
+                'has_gps' => $media->photo_metadata['has_gps'] ?? false,
+                'has_capture_time' => $media->photo_metadata['has_capture_time'] ?? false,
+                'has_camera' => $media->photo_metadata['has_camera'] ?? false,
+            ],
         ];
     }
 }
