@@ -36,7 +36,14 @@ be moved directly into the device's camera roll.
 
 The existing verified-email, account approval, two-factor authentication,
 eligibility, quota, and media review policies apply. New uploads await media
-review before other attendees can see them. Event membership does not bypass
+review before other attendees can see them unless an administrator enables
+**Skip Event upload review** for that uploader in **Admin → Users**. The
+exemption defaults off and applies only to new Event upload completions, using
+the same immutable reviewed copies as manual approval. Gallery, profile and
+private Library uploads still need review. Removing an exemption keeps already
+approved items approved; existing pending or rejected media are not reapproved.
+If reviewed-copy storage fails, the completed upload remains awaiting review.
+Event membership does not bypass
 moderation or account restrictions. Set the instance’s default storage quota in
 Admin → Users; unset account quotas inherit it, and explicit account overrides
 still apply. Uploads and durable Saves both count toward account usage. An

@@ -47,6 +47,7 @@ class EventSettings
         return [
             'featured_curators' => $this->featuredCurators($viewer)->map(fn (User $user): array => ['id' => $user->id, 'display_name' => $user->display_name])->all(),
             'is_admin' => $viewer->isAdmin(), 'viewer_id' => $viewer->id,
+            'uploads_require_review' => ! InstanceFeatures::enabled('events') || ! $viewer->event_uploads_auto_approved,
         ];
     }
 }

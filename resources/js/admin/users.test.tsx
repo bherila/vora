@@ -6,7 +6,8 @@ import { AdminUsersPage } from '@/admin/users';
 import { fetchWrapper } from '@/fetchWrapper';
 
 let mockProfile: 'vora' | 'event' = 'vora';
-jest.mock('@/instance', () => ({ instanceProfile: () => mockProfile, moduleEnabled: () => true }));
+let mockEventsEnabled = true;
+jest.mock('@/instance', () => ({ instanceProfile: () => mockProfile, moduleEnabled: (module: string) => module !== 'events' || mockEventsEnabled }));
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
@@ -41,6 +42,7 @@ const user = {
   can_receive_invites: true,
   trusted_inviter: false,
   library_enabled: true,
+  event_uploads_auto_approved: false,
   storage_limit_bytes: null,
   storage_unlimited: false,
   effective_storage_limit_bytes: null,
@@ -68,6 +70,7 @@ const user = {
 describe('AdminUsersPage restrictions', () => {
   beforeEach(() => {
     mockProfile = 'vora';
+    mockEventsEnabled = true;
     jest.clearAllMocks();
     jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
     jest.mocked(fetchWrapper.delete).mockResolvedValue({ success: true });
@@ -92,6 +95,7 @@ describe('AdminUsersPage storage defaults', () => {
 
   beforeEach(() => {
     mockProfile = 'vora';
+    mockEventsEnabled = true;
     jest.clearAllMocks();
     jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
     globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: user }) });
@@ -215,6 +219,42 @@ describe('AdminUsersPage storage defaults', () => {
     expect(screen.queryByRole('button', { name: /^(Enable|Disable) Library storage$/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Set storage limit' })).toBeInTheDocument();
     expect(screen.getByText(/Library access is available to all attendees/)).toBeInTheDocument();
+  });
+
+  it('grants and removes Event-only upload review exemptions', async () => {
+    mockProfile = 'event';
+    let exempt = false;
+    jest.mocked(fetchWrapper.get).mockImplementation(async () => ({ success: true, data: [{ ...user, event_uploads_auto_approved: exempt }], settings: { default_storage_limit_bytes: null } }));
+    jest.mocked(globalThis.fetch).mockImplementation(async (_url, options) => {
+      exempt = (JSON.parse(String(options?.body)) as { event_uploads_auto_approved: boolean }).event_uploads_auto_approved;
+      return { ok: true, json: async () => ({ success: true }) } as Response;
+    });
+    render(<AdminUsersPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip Event upload review' }));
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith('/api/admin/users/8', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ event_uploads_auto_approved: true }) })));
+    expect(await screen.findByText('Event uploads auto-approved')).toBeInTheDocument();
+    expect(screen.getByText(/Other media still needs review/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Require Event upload review' }));
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenLastCalledWith('/api/admin/users/8', expect.objectContaining({ body: JSON.stringify({ event_uploads_auto_approved: false }) })));
+    await waitFor(() => expect(screen.queryByText('Event uploads auto-approved')).not.toBeInTheDocument());
+  });
+
+  it('preserves the current exemption and reports a failed admin update', async () => {
+    jest.mocked(globalThis.fetch).mockResolvedValue({ ok: false, json: async () => ({ message: 'Review exemption update failed.' }) } as Response);
+    render(<AdminUsersPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip Event upload review' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Review exemption update failed.');
+    expect(screen.getByRole('button', { name: 'Skip Event upload review' })).toBeEnabled();
+    expect(screen.queryByText('Event uploads auto-approved')).not.toBeInTheDocument();
+  });
+
+  it('hides Event approval controls when the Event module is disabled', async () => {
+    mockEventsEnabled = false;
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, event_uploads_auto_approved: true }], settings: { default_storage_limit_bytes: null } });
+    render(<AdminUsersPage />);
+    await screen.findByRole('button', { name: 'Set storage limit' });
+    expect(screen.queryByRole('button', { name: /Event upload review/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Event uploads auto-approved')).not.toBeInTheDocument();
   });
 
 });

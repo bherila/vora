@@ -251,6 +251,21 @@ class MediaUploadService
         $media->moderation_notes = null;
         $media->save();
 
+        if ($media->purpose === MediaPurpose::Event && $owner instanceof User
+            && $owner->event_uploads_auto_approved && $owner->hasVerifiedEmail()
+            && app(EventAccess::class)->canView($owner, $media->event)) {
+            try {
+                // Use the ordinary immutable reviewed-copy path. A storage or
+                // database failure must leave a completed upload awaiting review.
+                DB::transaction(fn (): bool => app(MediaModerationService::class)->approve(
+                    $media, null, 'Automatically approved: administrator enabled Event upload approval exemption.',
+                ));
+            } catch (\Throwable $exception) {
+                $media->refresh();
+                report($exception);
+            }
+        }
+
         return true;
     }
 
