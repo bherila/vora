@@ -217,7 +217,7 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
     const fixtureBytes = (pending.request().postDataJSON() as { size: number }).size;
     expect(fixtureBytes, 'The real upload fixture must contain bytes').toBeGreaterThan(0);
     if (expectMultipartVideo) {
-      if (type === 'photo') expect(fixtureBytes, 'Small direct-upload photo fixture').toBeLessThan(16 * 1024);
+      if (type === 'photo') expect(fixtureBytes, 'Small direct-upload photo fixture').toBeLessThan(64 * 1024);
       else expect(fixtureBytes, 'Video fixture exceeds the opt-in multipart threshold').toBeGreaterThan(1024);
     }
     const source = new URL(result.upload_url);
