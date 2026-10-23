@@ -94,6 +94,79 @@ describe('CommentThread', () => {
     expect(screen.getByText('Comment 1')).toBeInTheDocument();
   });
 
+  it('clears an unchanged submitted draft and its reply context, including surrounding whitespace', async () => {
+    const root = comment(1);
+    const created = comment(2, { body: 'Submitted reply', parent_id: root.id });
+    jest.spyOn(communityApi, 'comments')
+      .mockResolvedValueOnce({ changed: true, etag: '"initial"', data: [root] })
+      .mockResolvedValue({ changed: true, etag: '"created"', data: [root, created] });
+    const create = jest.spyOn(communityApi, 'comment').mockResolvedValue(created);
+    render(<CommentThread postId={10} initialCount={1} />);
+    await screen.findByText('Comment 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    const composer = screen.getByPlaceholderText('Write a comment');
+    fireEvent.change(composer, { target: { value: '  Submitted reply  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+
+    await waitFor(() => expect(composer).toHaveValue(''));
+    expect(create).toHaveBeenCalledWith(10, 'Submitted reply', root.id);
+    expect(screen.queryByText('Replying to Reader')).not.toBeInTheDocument();
+    expect(screen.getByText('Submitted reply', { selector: 'p' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Post comment' })).toBeDisabled();
+  });
+
+  it('preserves a follow-up draft and its reply context while a previous comment is posting', async () => {
+    const root = comment(1);
+    const created = comment(2, { body: 'First reply', parent_id: root.id });
+    jest.spyOn(communityApi, 'comments')
+      .mockResolvedValueOnce({ changed: true, etag: '"initial"', data: [root] })
+      .mockResolvedValue({ changed: true, etag: '"created"', data: [root, created] });
+    let resolveCreate!: (value: PostComment) => void;
+    const create = jest.spyOn(communityApi, 'comment')
+      .mockReturnValueOnce(new Promise<PostComment>((resolve) => { resolveCreate = resolve; }))
+      .mockResolvedValue(comment(3, { body: 'Follow-up reply', parent_id: root.id }));
+    render(<CommentThread postId={10} initialCount={1} />);
+    await screen.findByText('Comment 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    const composer = screen.getByPlaceholderText('Write a comment');
+    fireEvent.change(composer, { target: { value: 'First reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+    expect(screen.getByRole('button', { name: 'Posting...' })).toBeDisabled();
+    fireEvent.change(composer, { target: { value: 'Follow-up reply' } });
+
+    await act(async () => { resolveCreate(created); });
+
+    expect(screen.getByText('First reply', { selector: 'p' })).toBeInTheDocument();
+    expect(composer).toHaveValue('Follow-up reply');
+    expect(screen.getByText('Replying to Reader')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Post comment' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+    await waitFor(() => expect(create).toHaveBeenLastCalledWith(10, 'Follow-up reply', root.id));
+  });
+
+  it('preserves a newly chosen reply target when the submitted body is unchanged', async () => {
+    const roots = [comment(1), comment(2, { author: { id: 98, display_name: 'Another reader' } })];
+    const created = comment(3, { body: 'Submitted reply', parent_id: 1 });
+    jest.spyOn(communityApi, 'comments')
+      .mockResolvedValueOnce({ changed: true, etag: '"initial"', data: roots })
+      .mockResolvedValue({ changed: true, etag: '"created"', data: [...roots, created] });
+    let resolveCreate!: (value: PostComment) => void;
+    jest.spyOn(communityApi, 'comment').mockReturnValue(new Promise<PostComment>((resolve) => { resolveCreate = resolve; }));
+    render(<CommentThread postId={10} initialCount={2} />);
+    await screen.findByText('Comment 1');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reply' })[0]!);
+    fireEvent.change(screen.getByPlaceholderText('Write a comment'), { target: { value: 'Submitted reply' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reply' })[1]!);
+    await act(async () => { resolveCreate(created); });
+
+    expect(screen.getByPlaceholderText('Write a comment')).toHaveValue('');
+    expect(screen.getByText('Replying to Another reader')).toBeInTheDocument();
+  });
+
   it('refreshes immediately after create and delete outside the three-thread poll pool', async () => {
     const comments = jest.spyOn(communityApi, 'comments').mockImplementation(async (postId) => ({
       changed: true,

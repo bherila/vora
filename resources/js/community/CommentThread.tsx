@@ -34,6 +34,7 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
   const [pendingDelete, setPendingDelete] = useState<PostComment | null>(null);
   const [accessible, setAccessible] = useState(true);
   const etagRef = useRef<string | null>(null);
+  const draftRevisionRef = useRef(0);
 
   const load = useCallback(async (showLoading = false): Promise<void> => {
     if (showLoading) setLoading(true);
@@ -85,14 +86,17 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const trimmed = body.trim();
+    const submittedBody = body;
+    const submittedRevision = draftRevisionRef.current;
+    const trimmed = submittedBody.trim();
     if (!trimmed) return;
     setSaving(true);
     try {
       const created = await communityApi.comment(postId, trimmed, replyTo?.id ?? null);
       setComments((current) => [...current, created]);
-      setBody('');
-      setReplyTo(null);
+      // Posting must not discard a follow-up draft or reply choice made in flight.
+      setBody((current) => current === submittedBody ? '' : current);
+      if (draftRevisionRef.current === submittedRevision) setReplyTo(null);
       // Refresh directly rather than through the bounded poll slot: a fourth
       // open feed card may not own a scheduled slot, but its local write must
       // still reconcile immediately.
@@ -133,7 +137,7 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
         </div>
         {comment.can_delete && <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDelete(comment)} title="Delete comment"><Trash2 className="h-4 w-4" /></Button>}
       </div>
-      {!reply && !comment.deleted && !commentRestriction && <Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(comment)}>Reply</Button>}
+      {!reply && !comment.deleted && !commentRestriction && <Button type="button" size="sm" variant="ghost" onClick={() => { draftRevisionRef.current += 1; setReplyTo(comment); }}>Reply</Button>}
       {!reply && repliesFor(comment.id).map((child) => row(child, true))}
     </div>
   );
@@ -157,8 +161,8 @@ export function CommentThread({ postId, initialCount, enabled = true }: CommentT
         <RestrictionNotice restriction={commentRestriction} />
       ) : (
         <form className="space-y-2" onSubmit={(event) => void submit(event)}>
-          {replyTo && <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"><span>Replying to {replyTo.author?.display_name ?? 'comment'}</span><Button type="button" size="sm" variant="ghost" onClick={() => setReplyTo(null)}>Cancel</Button></div>}
-          <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a comment" rows={3} />
+          {replyTo && <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm"><span>Replying to {replyTo.author?.display_name ?? 'comment'}</span><Button type="button" size="sm" variant="ghost" onClick={() => { draftRevisionRef.current += 1; setReplyTo(null); }}>Cancel</Button></div>}
+          <Textarea value={body} onChange={(event) => { draftRevisionRef.current += 1; setBody(event.target.value); }} placeholder="Write a comment" rows={3} />
           <Button type="submit" disabled={saving || body.trim().length === 0}>{saving ? 'Posting...' : 'Post comment'}</Button>
         </form>
       )}
