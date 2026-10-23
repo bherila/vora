@@ -491,7 +491,9 @@ test('Event profile real media inherits restricted access, visible favorites and
     const photo = await upload(uploader, 'photo', photoTitle, '', restricted.ulid, 'photo.heic');
     const video = await upload(uploader, 'video', videoTitle, '', restricted.ulid);
     await organizerSearch(admin, account.email);
-    await admin.getByRole('checkbox', { name: `Skip upload review for ${account.display_name}`, exact: true }).check();
+    const exemptionSaved = admin.waitForResponse((response) => response.url().endsWith(`/api/admin/users/${account.id}`) && response.request().method() === 'PATCH');
+    await admin.getByRole('checkbox', { name: `Skip upload review for ${account.display_name}`, exact: true }).click();
+    expect((await exemptionSaved).ok()).toBeTruthy();
     await expect(admin.getByRole('checkbox', { name: `Skip upload review for ${account.display_name}`, exact: true })).toBeChecked();
     const publicPhoto = await upload(uploader, 'photo', `Shared event ${suffix}`, '', shared.ulid);
     expect((await api(recipient, 'GET', `/api/events/media/${photo.data.ulid}`)).status).toBe(404);
