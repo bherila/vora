@@ -88,6 +88,18 @@ jobs:
       - name: Install browser runner and real-media fixture tools
         run: |
           pnpm install --frozen-lockfile
+          # Ubuntu 24.04 runner images route Ubuntu sources through this list.
+          # Avoid the Azure mirror that has stalled package downloads until the job deadline.
+          grep -Fq 'mirror+file:/etc/apt/apt-mirrors.txt' /etc/apt/sources.list.d/ubuntu.sources
+          grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          # Persist bounds for both our APT commands and Playwright's dependency installer.
+          sudo tee /etc/apt/apt.conf.d/zz-vora-real-media >/dev/null <<'APT'
+          Acquire::Retries "1";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          APT
+          apt-config dump Acquire::Retries Acquire::http::Timeout Acquire::https::Timeout
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
           pnpm exec playwright install --with-deps chromium
