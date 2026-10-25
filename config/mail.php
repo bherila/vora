@@ -31,7 +31,8 @@ return [
     |
     | Supported: "smtp", "sendmail", "mailgun", "ses", "ses-v2",
     |            "postmark", "resend", "log", "array",
-    |            "failover", "roundrobin"
+    |            "failover", "roundrobin", "brevo" (registered in
+    |            AppServiceProvider)
     |
     */
 
@@ -79,6 +80,21 @@ return [
             'transport' => 'array',
         ],
 
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
+        // Brevo's API first; the SMTP mailer above takes over when Brevo
+        // refuses a message (outage, or the plan's daily send limit).
+        'hybrid' => [
+            'transport' => 'failover',
+            'mailers' => [
+                'brevo',
+                'smtp',
+            ],
+            'retry_after' => 60,
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [
@@ -113,6 +129,13 @@ return [
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Example'),
+    ],
+
+    // Optional: where replies go when the From address is a no-reply sender.
+    // Unset, messages carry no Reply-To and replies go to the From address.
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO_ADDRESS'),
+        'name' => env('MAIL_REPLY_TO_NAME'),
     ],
 
 ];

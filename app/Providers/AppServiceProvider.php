@@ -29,11 +29,15 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Csp\AddCspHeaders;
+use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
+use Symfony\Component\Mailer\Transport\TransportInterface;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -146,5 +150,11 @@ class AppServiceProvider extends ServiceProvider
             $this->app->make(Kernel::class)
                 ->pushMiddleware(AddCspHeaders::class);
         }
+
+        // Laravel has no Brevo transport; MAIL_MAILER=brevo (or hybrid) sends
+        // through Brevo's API via the Symfony bridge, keyed by MAILER_DSN.
+        Mail::extend('brevo', fn (): TransportInterface => (new BrevoTransportFactory)->create(
+            Dsn::fromString((string) config('services.brevo.dsn'))
+        ));
     }
 }
