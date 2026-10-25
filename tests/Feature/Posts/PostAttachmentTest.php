@@ -126,6 +126,27 @@ class PostAttachmentTest extends TestCase
             ->assertOk()->assertJsonCount(1, 'data.attachments');
     }
 
+    public function test_media_preview_is_the_viewer_checked_asset_proxy_not_a_storage_url(): void
+    {
+        $author = User::factory()->approved()->create();
+        $follower = User::factory()->approved()->create();
+        $stranger = User::factory()->approved()->create();
+        $this->follow($follower, $author);
+
+        $media = Media::factory()->for($author)->approved()->audience(Audience::Followers)->create();
+        $post = Post::factory()->for($author)->approved()->create(['audience' => Audience::Everyone]);
+        $this->attach($post, $media);
+
+        $preview = $this->actingAs($follower)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->json('data.attachments.0.thumbnail_url');
+        $this->assertIsString($preview);
+        $this->assertStringStartsWith("/api/media/by-ulid/{$media->ulid}/asset/", $preview);
+
+        // The URL alone grants nothing: someone the media's audience excludes is
+        // refused by the proxy even if the link reaches them.
+        $this->actingAs($stranger)->get($preview)->assertNotFound();
+    }
+
     public function test_intersection_hides_a_restricted_character_attachment(): void
     {
         $author = User::factory()->approved()->create();

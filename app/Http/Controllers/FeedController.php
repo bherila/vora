@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\FollowRequest;
 use App\Models\Interest;
 use App\Models\Post;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Post\FeedQueryService;
+use App\Support\InstanceFeatures;
 use App\Support\Onboarding;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +26,7 @@ class FeedController extends Controller
     public function __construct(
         private readonly MediaResponseService $mediaResponder,
         private readonly FeedQueryService $feeds,
+        private readonly FavoriteService $favorites,
     ) {}
 
     public function page(Request $request): View
@@ -78,6 +81,12 @@ class FeedController extends Controller
             ->cursorPaginate((int) config('media.page_size', 24));
         $canViewNonOwnedMedia = $this->feeds->canViewNonOwnedMedia($viewer);
 
+        // One query for the page's saved state; omitted entirely when the
+        // Favorites module is off so the client offers no Save control.
+        $saved = InstanceFeatures::enabled('favorites')
+            ? array_flip($this->favorites->favoritedIdsFor($viewer, 'post', array_map(fn (Post $post): int => $post->id, $posts->items())))
+            : null;
+
         return [
             'data' => collect($posts->items())
                 ->map(fn (Post $post): array => PostPresenter::view(
@@ -85,7 +94,7 @@ class FeedController extends Controller
                     $viewer,
                     $this->mediaResponder,
                     canViewNonOwnedMedia: $canViewNonOwnedMedia,
-                ))
+                ) + ($saved === null ? [] : ['favorited' => isset($saved[$post->id])]))
                 ->values(),
             'next_cursor' => $posts->nextCursor()?->encode(),
         ];

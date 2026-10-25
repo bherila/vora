@@ -6,9 +6,11 @@ use App\Enums\RestrictionCapability;
 use App\Http\Requests\Post\StorePostRequest;
 use App\Models\Post;
 use App\Models\User;
+use App\Services\Favorites\FavoriteService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\PostService;
+use App\Support\InstanceFeatures;
 use App\Support\PostPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +22,7 @@ class PostController extends Controller
         private readonly PostService $posts,
         private readonly MediaResponseService $mediaResponder,
         private readonly RestrictionGate $restrictions,
+        private readonly FavoriteService $favorites,
     ) {}
 
     /**
@@ -111,7 +114,9 @@ class PostController extends Controller
             $this->mediaResponder,
             canViewNonOwnedMedia: ! ($viewer instanceof User)
                 || ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView),
-        );
+        ) + (InstanceFeatures::enabled('favorites') && $viewer instanceof User
+            ? ['favorited' => $this->favorites->favoritedIdsFor($viewer, 'post', [$post->id]) !== []]
+            : []);
     }
 
     public function destroy(Request $request, Post $post): JsonResponse

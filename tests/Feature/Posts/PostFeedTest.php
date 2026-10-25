@@ -291,4 +291,27 @@ class PostFeedTest extends TestCase
 
         $this->assertNotContains($hidden->ulid, $this->feedUlids($viewer));
     }
+
+    public function test_feed_and_single_post_report_saved_state_only_when_favorites_are_on(): void
+    {
+        User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $author = User::factory()->approved()->create();
+        $this->follow($viewer, $author);
+        $saved = Post::factory()->for($author)->approved()->create();
+        $other = Post::factory()->for($author)->approved()->create();
+
+        $this->actingAs($viewer)->postJson('/api/favorites', ['type' => 'post', 'id' => $saved->id])->assertSuccessful();
+
+        $feed = collect($this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data'))->keyBy('ulid');
+        $this->assertTrue($feed[$saved->ulid]['favorited']);
+        $this->assertFalse($feed[$other->ulid]['favorited']);
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$saved->ulid}")->assertOk()->assertJsonPath('data.favorited', true);
+
+        // Without the module the key is absent, so clients offer no Save control.
+        config(['instance.modules.favorites' => false]);
+        $feed = $this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data');
+        $this->assertArrayNotHasKey('favorited', $feed[0]);
+        $this->assertArrayNotHasKey('favorited', $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$saved->ulid}")->json('data'));
+    }
 }

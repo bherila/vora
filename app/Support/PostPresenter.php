@@ -48,7 +48,7 @@ class PostPresenter
                 ? self::author($post->user, $mediaResponder, $viewer)
                 : null,
             'as_character' => self::asCharacter($post, $viewer, $mediaResponder, $canViewNonOwnedMedia),
-            'attachments' => self::attachments($post, $viewer, $canViewNonOwnedMedia),
+            'attachments' => self::attachments($post, $viewer, $canViewNonOwnedMedia, $mediaResponder),
             'context_interest' => $post->contextInterest === null ? null : [
                 'name' => $post->contextInterest->name,
                 'slug' => $post->contextInterest->slug,
@@ -168,8 +168,12 @@ class PostPresenter
     /**
      * @return list<array<string, mixed>>
      */
-    private static function attachments(Post $post, ?User $viewer, bool $canViewNonOwnedMedia): array
-    {
+    private static function attachments(
+        Post $post,
+        ?User $viewer,
+        bool $canViewNonOwnedMedia,
+        ?MediaResponseService $mediaResponder,
+    ): array {
         if (! $post->relationLoaded('attachments')) {
             return [];
         }
@@ -180,6 +184,7 @@ class PostPresenter
                 $attachment->attachable,
                 $viewer,
                 $canViewNonOwnedMedia,
+                $mediaResponder,
             ))
             ->filter()
             ->values()
@@ -194,6 +199,7 @@ class PostPresenter
         ?Model $attachable,
         ?User $viewer,
         bool $canViewNonOwnedMedia,
+        ?MediaResponseService $mediaResponder,
     ): ?array {
         // Null when the target was deleted out from under the attachment, or when
         // the intersection rule hides a privacy-controlled item from this viewer.
@@ -228,7 +234,9 @@ class PostPresenter
 
         return match (true) {
             $attachable instanceof Character => ['type' => 'character', 'id' => $attachable->id, 'label' => $attachable->display_name],
-            $attachable instanceof Media => ['type' => 'media', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'media_type' => $attachable->type->value, 'label' => $attachable->title],
+            // The preview is the opaque, app-relative asset proxy, which re-checks
+            // the viewer on every request — never a signed storage URL.
+            $attachable instanceof Media => ['type' => 'media', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'media_type' => $attachable->type->value, 'label' => $attachable->title, 'thumbnail_url' => $mediaResponder?->visitorAssetUrl($attachable)],
             $attachable instanceof Story => ['type' => 'story', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'label' => $attachable->title],
             default => null,
         };

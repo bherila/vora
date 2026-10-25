@@ -16,6 +16,8 @@ export interface PostAttachment {
   ulid?: string;
   media_type?: string;
   label: string;
+  /** App-relative, viewer-checked preview for media attachments; null until one exists. */
+  thumbnail_url?: string | null;
 }
 
 export interface PostAuthor {
@@ -49,6 +51,8 @@ export interface CommunityPost {
   created_at: string | null;
   /** Whether the current viewer may report this post (not the author). */
   can_report?: boolean;
+  /** Saved state; absent when the instance has no Favorites module. */
+  favorited?: boolean;
 }
 
 export interface InterestRef {
