@@ -50,9 +50,11 @@ class PostController extends Controller
             ->latest()
             ->get();
 
+        $saved = $this->savedPostIds($user, $posts->modelKeys());
+
         return response()->json([
             'success' => true,
-            'data' => $posts->map(fn (Post $post): array => $this->present($post, $user))->values(),
+            'data' => $posts->map(fn (Post $post): array => $this->present($post, $user, $saved))->values(),
         ]);
     }
 
@@ -105,18 +107,38 @@ class PostController extends Controller
         return $this->present($post, $request->user());
     }
 
-    /** @return array<string, mixed> */
-    private function present(Post $post, ?User $viewer): array
+    /**
+     * Saved post ids for the viewer as a lookup set, in one query; null when
+     * there is no saved state to report (Favorites off, or no viewer).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, int>|null
+     */
+    private function savedPostIds(?User $viewer, array $ids): ?array
     {
+        if (! InstanceFeatures::enabled('favorites') || ! $viewer instanceof User) {
+            return null;
+        }
+
+        return array_flip($this->favorites->favoritedIdsFor($viewer, 'post', $ids));
+    }
+
+    /**
+     * @param  array<int, int>|null|false  $saved  a listing's precomputed {@see savedPostIds()};
+     *                                             false looks up this one post
+     * @return array<string, mixed>
+     */
+    private function present(Post $post, ?User $viewer, array|null|false $saved = false): array
+    {
+        $saved = $saved === false ? $this->savedPostIds($viewer, [$post->id]) : $saved;
+
         return PostPresenter::view(
             $post,
             $viewer,
             $this->mediaResponder,
             canViewNonOwnedMedia: ! ($viewer instanceof User)
                 || ! $this->restrictions->denies($viewer, RestrictionCapability::MediaView),
-        ) + (InstanceFeatures::enabled('favorites') && $viewer instanceof User
-            ? ['favorited' => $this->favorites->favoritedIdsFor($viewer, 'post', [$post->id]) !== []]
-            : []);
+        ) + ($saved === null ? [] : ['favorited' => isset($saved[$post->id])]);
     }
 
     public function destroy(Request $request, Post $post): JsonResponse

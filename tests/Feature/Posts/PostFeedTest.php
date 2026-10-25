@@ -9,6 +9,7 @@ use App\Models\Interest;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PostFeedTest extends TestCase
@@ -313,5 +314,22 @@ class PostFeedTest extends TestCase
         $feed = $this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data');
         $this->assertArrayNotHasKey('favorited', $feed[0]);
         $this->assertArrayNotHasKey('favorited', $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$saved->ulid}")->json('data'));
+    }
+
+    public function test_own_posts_listing_reports_saved_state_with_one_favorites_query(): void
+    {
+        User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $posts = Post::factory()->count(5)->for($viewer)->approved()->create();
+        $this->actingAs($viewer)->postJson('/api/favorites', ['type' => 'post', 'id' => $posts[2]->id])->assertSuccessful();
+
+        DB::enableQueryLog();
+        $data = collect($this->actingAs($viewer)->getJson('/api/posts')->assertOk()->json('data'))->keyBy('id');
+        $favoriteQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'from "favorites"'));
+        DB::disableQueryLog();
+
+        $this->assertCount(1, $favoriteQueries);
+        $this->assertTrue($data[$posts[2]->id]['favorited']);
+        $this->assertFalse($data[$posts[0]->id]['favorited']);
     }
 }
