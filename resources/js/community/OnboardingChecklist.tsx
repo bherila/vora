@@ -122,6 +122,9 @@ export function OnboardingChecklist({ onboarding }: OnboardingChecklistProps) {
   const steps = onboardingSteps(onboarding);
   const done = steps.filter((step) => step.complete).length;
   const nextStep = steps.find((step) => !step.complete) ?? null;
+  // Finishing the last step in this session completes the guide, as the server
+  // will report on the next load.
+  if (nextStep === null) return null;
 
   return (
     <section aria-labelledby={`${listId}-heading`} className="rounded-xl border bg-card p-3 text-card-foreground sm:px-4">
@@ -134,14 +137,12 @@ export function OnboardingChecklist({ onboarding }: OnboardingChecklistProps) {
         </div>
         <p className="min-w-48 flex-1 text-sm text-muted-foreground">
           <span className="font-semibold text-foreground">{done} of {steps.length} done.</span>
-          {nextStep && <> Next: {nextStep.label.charAt(0).toLowerCase() + nextStep.label.slice(1)}.</>}
+          {' '}Next: {nextStep.label.charAt(0).toLowerCase() + nextStep.label.slice(1)}.
         </p>
         <div className="flex items-center gap-1">
-          {nextStep && (
-            <StepAction step={nextStep} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-              {nextStep.next}
-            </StepAction>
-          )}
+          <StepAction step={nextStep} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            {nextStep.next}
+          </StepAction>
           <Button
             type="button"
             size="sm"

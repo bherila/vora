@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 
+import { DayOne, isDayOne } from '@/community/DayOne';
 import { FeedView } from '@/community/FeedView';
 import type { OnboardingData } from '@/community/OnboardingChecklist';
 import type { InterestRef } from '@/community/types';
@@ -14,18 +16,37 @@ export function FeedPage() {
     feedOnboarding?: OnboardingData | null;
     feedInterests?: InterestRef[];
   }>();
-  const onboarding = initialData.feedOnboarding ?? null;
+  const [onboarding, setOnboarding] = useState(initialData.feedOnboarding ?? null);
+  const [dayOne, setDayOne] = useState(() => isDayOne(onboarding));
+  const markPosted = (): void => {
+    setOnboarding((current) => current && { ...current, steps: { ...current.steps, has_posted: true } });
+    setDayOne(false);
+  };
 
+  // The first-run page carries its own follow suggestions, so the rail would
+  // only repeat them; it returns with the ordinary feed.
   return (
     <div className={`${BROWSING_PAGE_WIDTH} px-4`}>
-      <SideRailLayout>
+      <SideRailLayout enabled={!dayOne}>
         <div className="mx-auto max-w-3xl">
-          <h1 className="sr-only">Feed</h1>
-          <FeedView
-            hasFollowing={initialData.feedHasFollowing ?? false}
-            onboarding={onboarding}
-            interests={initialData.feedInterests ?? []}
-          />
+          {dayOne && onboarding ? (
+            <div className="space-y-10">
+              <DayOne onboarding={onboarding} onContinue={() => setDayOne(false)} onPosted={markPosted} />
+              <section aria-labelledby="day-one-public" className="space-y-4">
+                <h2 id="day-one-public" className="border-b pb-2 text-lg font-semibold">Public posts from everyone</h2>
+                <FeedView hasFollowing={false} interests={initialData.feedInterests ?? []} showComposer={false} />
+              </section>
+            </div>
+          ) : (
+            <>
+              <h1 className="sr-only">Feed</h1>
+              <FeedView
+                hasFollowing={initialData.feedHasFollowing ?? false}
+                onboarding={onboarding}
+                interests={initialData.feedInterests ?? []}
+              />
+            </>
+          )}
         </div>
       </SideRailLayout>
       <Toaster position="top-right" richColors closeButton />

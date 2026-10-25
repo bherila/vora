@@ -141,4 +141,10 @@ describe('OnboardingChecklist', () => {
 
     expect(screen.queryByTestId('persona-invitation')).not.toBeInTheDocument();
   });
+
+  it('disappears once every offered step is complete', () => {
+    const { container } = render(<OnboardingChecklist onboarding={onboarding({ steps: { has_avatar: true, has_posted: true } })} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
 });

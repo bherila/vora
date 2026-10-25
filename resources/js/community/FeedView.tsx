@@ -23,6 +23,8 @@ interface FeedViewProps {
   interest?: InterestRef | null;
   /** Selectable contexts on the general feed. */
   interests?: InterestRef[];
+  /** Hide the composer when the page already offers one (the first-run page). */
+  showComposer?: boolean;
 }
 
 function scopeFromLocation(): FeedScope {
@@ -73,7 +75,7 @@ function replaceInterestInLocation(slug: string): void {
  * in the page URL so a reload restores it, while every cursor request carries
  * the same scope independently.
  */
-export function FeedView({ hasFollowing, onboarding = null, interest = null, interests = [] }: FeedViewProps) {
+export function FeedView({ hasFollowing, onboarding = null, interest = null, interests = [], showComposer = true }: FeedViewProps) {
   const contextLocked = interest !== null;
   const [selectedInterestSlug, setSelectedInterestSlug] = useState(
     () => interest?.slug ?? interestFromLocation(),
@@ -186,15 +188,17 @@ export function FeedView({ hasFollowing, onboarding = null, interest = null, int
   return (
     <div className="space-y-5">
       {onboarding && <OnboardingChecklist onboarding={onboarding} />}
-      <PostComposer
-        contextInterest={selectedInterest}
-        lockContext={contextLocked}
-        onCreated={(post) => {
-          if (interestSlug === null || post.context_interest?.slug === interestSlug) {
-            setPosts((current) => [post, ...current]);
-          }
-        }}
-      />
+      {showComposer && (
+        <PostComposer
+          contextInterest={selectedInterest}
+          lockContext={contextLocked}
+          onCreated={(post) => {
+            if (interestSlug === null || post.context_interest?.slug === interestSlug) {
+              setPosts((current) => [post, ...current]);
+            }
+          }}
+        />
+      )}
       <div className="space-y-3">
         <div className="flex gap-6 border-b" role="group" aria-label="Feed scope">
           {followingDisabled ? (

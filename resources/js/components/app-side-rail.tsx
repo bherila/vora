@@ -14,7 +14,7 @@ interface PendingAction {
   href: string;
 }
 
-interface SuggestedPerson {
+export interface SuggestedPerson {
   id: number;
   display_name: string;
   avatar_url: string | null;
@@ -74,7 +74,7 @@ function PersonLink({
   );
 }
 
-function FollowSuggestionButton({ person }: { person: SuggestedPerson }) {
+export function FollowSuggestionButton({ person }: { person: SuggestedPerson }) {
   const [state, setState] = useState<'idle' | 'busy' | 'requested'>('idle');
   const [error, setError] = useState('');
 
