@@ -325,7 +325,8 @@ class PostFeedTest extends TestCase
 
         DB::enableQueryLog();
         $data = collect($this->actingAs($viewer)->getJson('/api/posts')->assertOk()->json('data'))->keyBy('id');
-        $favoriteQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'from "favorites"'));
+        // Identifier quoting differs by driver (SQLite "x", MariaDB `x`).
+        $favoriteQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => preg_match('/\bfrom\s+["`]?favorites["`]?(\s|$)/i', $query['query']) === 1);
         DB::disableQueryLog();
 
         $this->assertCount(1, $favoriteQueries);
