@@ -202,6 +202,12 @@ function userFlags(user: AdminUser, eventProfile: boolean): string[] {
   return flags;
 }
 
+/** `#user-<id>` links (e.g. from duplicate review) name the account to open. */
+function userIdFromHash(hash: string): number | null {
+  const match = /^#user-(\d+)$/.exec(hash);
+  return match ? Number(match[1]) : null;
+}
+
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString() : '—';
 }
@@ -265,8 +271,9 @@ export function AdminUsersPage() {
   // List filtering and the detail panel's selection.
   const [filter, setFilter] = useState<UserFilter>('all');
   const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() => userIdFromHash(window.location.hash));
   const detailRef = useRef<HTMLElement | null>(null);
+  const linkedScrollDone = useRef(false);
 
   const loadUsers = async (): Promise<boolean> => {
     setLoading(true);
@@ -291,6 +298,25 @@ export function AdminUsersPage() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  // Follow in-page account links after load as well as on arrival.
+  useEffect(() => {
+    const onHashChange = (): void => {
+      const id = userIdFromHash(window.location.hash);
+      if (id !== null) setSelectedId(id);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // The list renders after the fetch, too late for the browser's own anchor
+  // jump, so bring a linked account's row into view once it exists.
+  useEffect(() => {
+    if (linkedScrollDone.current || users.length === 0) return;
+    linkedScrollDone.current = true;
+    const id = userIdFromHash(window.location.hash);
+    if (id !== null) document.getElementById(`user-${id}`)?.scrollIntoView?.({ block: 'center' });
+  }, [users]);
 
   const approveUser = async (user: AdminUser) => {
     setActionLoading(user.id);
@@ -590,6 +616,8 @@ export function AdminUsersPage() {
 
   const selectUser = (id: number): void => {
     setSelectedId(id);
+    // Keep the address shareable without adding a history entry per click.
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#user-${id}`);
     // On narrow screens the panel stacks under the list; bring it into view.
     if (window.matchMedia?.('(max-width: 1023px)').matches) {
       detailRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });

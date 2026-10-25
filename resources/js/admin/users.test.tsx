@@ -373,4 +373,20 @@ describe('AdminUsersPage list and detail panel', () => {
     expect(within(panel).queryByRole('heading', { name: 'Event uploads' })).not.toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Enable Library storage' })).toBeInTheDocument();
   });
+
+  it('opens the account named by a #user link and keeps the link in sync', async () => {
+    window.history.replaceState({}, '', '/admin/users#user-23');
+    render(<AdminUsersPage />);
+
+    const panel = await screen.findByRole('complementary', { name: 'User details' });
+    expect(within(panel).getByRole('heading', { name: 'Rook' })).toBeInTheDocument();
+
+    fireEvent.click(within(rowFor('ada@example.test')).getByRole('button', { name: 'Ada' }));
+    expect(window.location.hash).toBe('#user-22');
+
+    window.history.replaceState({}, '', '/admin/users#user-20');
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    await waitFor(() => expect(within(panel).getByRole('heading', { name: 'Daybright' })).toBeInTheDocument());
+    window.history.replaceState({}, '', '/admin/users');
+  });
 });
