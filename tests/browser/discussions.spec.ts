@@ -29,8 +29,8 @@ test('contributors can delete their comments and replies after losing private di
     await expect(bob.getByText('Follow request sent.', { exact: true })).toBeVisible();
     await acceptFollow(page);
     await page.goto('/feed');
-    await page.getByPlaceholder('Share an update', { exact: true }).fill('Alice private discussion');
-    await page.getByRole('button', { name: 'Audience, persona & attachments', exact: true }).click();
+    await page.getByLabel('Share an update', { exact: true }).fill('Alice private discussion');
+    await page.getByRole('button', { name: 'Audience: Everyone', exact: true }).click();
     await page.getByLabel('Who can see this?', { exact: true }).selectOption('followers');
     const published = page.waitForResponse((response) => response.url().endsWith('/api/posts') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Post', exact: true }).click();

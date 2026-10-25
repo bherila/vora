@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
-import { switchActiveIdentity, useIdentityStore } from '@/identity';
 import { safeInternalUrl } from '@/security/dom-url';
 
 interface PendingAction {
@@ -75,10 +74,46 @@ function PersonLink({
   );
 }
 
+function FollowSuggestionButton({ person }: { person: SuggestedPerson }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'requested'>('idle');
+  const [error, setError] = useState('');
+
+  const follow = async (): Promise<void> => {
+    setState('busy');
+    setError('');
+    try {
+      await fetchWrapper.post(`/api/users/${person.id}/follow-requests`, {});
+      setState('requested');
+    } catch (err) {
+      setState('idle');
+      setError(typeof err === 'string' ? err : 'Could not send the follow request.');
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 flex-col items-end">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={state !== 'idle'}
+        aria-label={state === 'requested' ? `Follow request sent to ${person.display_name}` : `Follow ${person.display_name}`}
+        onClick={() => void follow()}
+      >
+        {state === 'requested' ? 'Requested' : 'Follow'}
+      </Button>
+      {error && <span role="alert" className="mt-1 max-w-32 text-right text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
+
+/**
+ * Context for the page beside it. A card renders only when it has something to
+ * say: pending actions with nothing waiting are left out instead of listed at
+ * zero. Choosing who you create as lives in the navbar and the post composer.
+ */
 export function AppSideRail() {
-  const { identities, activeIdentityId } = useIdentityStore();
   const [payload, setPayload] = useState<SideRailPayload | null>(null);
-  const [switchError, setSwitchError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -107,80 +142,41 @@ export function AppSideRail() {
     setPayload((current) => (current ? { ...current, recently_visited: [] } : current));
   };
 
-  const chooseIdentity = async (identityId: number | null): Promise<void> => {
-    setSwitchError('');
-    try {
-      await switchActiveIdentity(identityId);
-    } catch {
-      setSwitchError('Unable to switch identity.');
-    }
-  };
+  const waiting = (payload?.pending_actions ?? []).filter((action) => action.count > 0);
+  const waitingTotal = waiting.reduce((sum, action) => sum + action.count, 0);
 
   return (
     <aside aria-label="Account overview" className="space-y-4">
-      <h2 className="text-lg font-semibold">Account overview</h2>
-
-      {identities.length > 0 && (
+      {waiting.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Creating as</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              Needs you
+              <Badge>{waitingTotal}</Badge>
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {identities.map((identity) => (
-                <button
-                  key={identity.id ?? 'human'}
-                  type="button"
-                  aria-pressed={identity.id === activeIdentityId}
-                  onClick={() => void chooseIdentity(identity.id)}
-                  className={`flex min-w-0 items-center gap-2 rounded-full border px-2 py-1 text-sm ${
-                    identity.id === activeIdentityId
-                      ? 'border-foreground bg-muted'
-                      : 'border-border hover:bg-muted'
-                  }`}
-                >
-                  <Avatar
-                    name={identity.displayName}
-                    src={identity.avatarUrl}
-                    sizeClassName="h-7 w-7"
-                  />
-                  <span className="max-w-28 truncate">{identity.displayName}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Switching changes who you create as — never what you can see.
-            </p>
-            {switchError && <p className="text-xs text-destructive">{switchError}</p>}
+          <CardContent className="space-y-1">
+            {waiting.map((action) => {
+              const safeHref = safeInternalUrl(action.href);
+              const content = (
+                <>
+                  <span>{action.label}</span>
+                  <span className="font-semibold tabular-nums">{action.count}</span>
+                </>
+              );
+              const className = 'flex items-center justify-between rounded-md px-1 py-1.5 text-sm';
+
+              return safeHref === null ? (
+                <div key={action.label} className={className}>{content}</div>
+              ) : (
+                <a key={action.label} href={safeHref} className={`${className} hover:bg-muted`}>
+                  {content}
+                </a>
+              );
+            })}
           </CardContent>
         </Card>
       )}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Pending actions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          {(payload?.pending_actions ?? []).map((action) => {
-            const safeHref = safeInternalUrl(action.href);
-            const content = (
-              <>
-                <span>{action.label}</span>
-                <Badge variant={action.count > 0 ? 'default' : 'secondary'}>{action.count}</Badge>
-              </>
-            );
-            const className = 'flex items-center justify-between rounded-md px-1 py-1.5 text-sm';
-
-            return safeHref === null ? (
-              <div key={action.label} className={className}>{content}</div>
-            ) : (
-              <a key={action.label} href={safeHref} className={`${className} hover:bg-muted`}>
-                {content}
-              </a>
-            );
-          })}
-        </CardContent>
-      </Card>
 
       {(payload?.suggested_people.length ?? 0) > 0 && (
         <Card>
@@ -192,19 +188,21 @@ export function AppSideRail() {
           </CardHeader>
           <CardContent className="space-y-1">
             {payload?.suggested_people.map((person) => (
-              <PersonLink
-                key={person.id}
-                name={person.display_name}
-                avatarUrl={person.avatar_url}
-                href={person.href}
-                detail={
-                  person.matching_interests_count > 0
-                    ? `${person.matching_interests_count} shared ${
-                        person.matching_interests_count === 1 ? 'interest' : 'interests'
-                      }`
-                    : undefined
-                }
-              />
+              <div key={person.id} className="flex items-center justify-between gap-2">
+                <PersonLink
+                  name={person.display_name}
+                  avatarUrl={person.avatar_url}
+                  href={person.href}
+                  detail={
+                    person.matching_interests_count > 0
+                      ? `${person.matching_interests_count} shared ${
+                          person.matching_interests_count === 1 ? 'interest' : 'interests'
+                        }`
+                      : undefined
+                  }
+                />
+                <FollowSuggestionButton person={person} />
+              </div>
             ))}
           </CardContent>
         </Card>

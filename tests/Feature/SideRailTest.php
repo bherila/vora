@@ -174,4 +174,20 @@ class SideRailTest extends TestCase
             collect($response->json('data.pending_actions'))->firstWhere('label', 'Co-author invites')['href'],
         );
     }
+
+    #[Test]
+    public function pending_actions_and_suggestions_follow_enabled_modules(): void
+    {
+        User::factory()->approved()->create(['display_name' => 'Suggested Person']);
+
+        config(['instance.modules.stories' => false]);
+        $labels = collect($this->actingAs($this->viewer)->getJson('/api/side-rail')->assertOk()->json('data.pending_actions'))->pluck('label')->all();
+        $this->assertSame(['Follow requests', 'Items under review'], $labels);
+
+        // Without profile pages every row would link to a 404, so none are offered.
+        config(['instance.modules.profiles' => false]);
+        $response = $this->actingAs($this->viewer)->getJson('/api/side-rail')->assertOk();
+        $this->assertSame([], $response->json('data.pending_actions'));
+        $this->assertSame([], $response->json('data.suggested_people'));
+    }
 }

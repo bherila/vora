@@ -11,6 +11,10 @@ use App\Models\User;
  * First-run guide shown on the feed (/feed, the post-login landing). Returns
  * null once every required step is complete or the account has dismissed it.
  * Each flag is a single existence check, kept cheap.
+ *
+ * A step whose module is disabled on this instance is omitted rather than left
+ * incomplete: its page does not exist, so it could never be finished and the
+ * guide would never go away.
  */
 class Onboarding
 {
@@ -19,9 +23,9 @@ class Onboarding
      *     display_name: string,
      *     has_personas: bool,
      *     steps: array{
-     *         has_avatar: bool,
-     *         has_interests: bool,
-     *         is_following: bool,
+     *         has_avatar?: bool,
+     *         has_interests?: bool,
+     *         is_following?: bool,
      *         has_posted: bool
      *     }
      * }|null
@@ -32,22 +36,28 @@ class Onboarding
             return null;
         }
 
-        $steps = [
-            'has_avatar' => $viewer->profile_picture_media_id !== null,
-            'has_interests' => InterestRating::query()
-                ->where('user_id', $viewer->id)
-                ->whereNull('character_id')
-                ->where('level', '>', 0)
-                ->exists(),
-            'is_following' => FollowRequest::query()
-                ->where('requester_id', $viewer->id)
-                ->where('status', 'accepted')
-                // Onboarding asks whether the human follows another human;
-                // opting into a persona's audience does not complete this step.
-                ->whereNull('recipient_character_id')
-                ->exists(),
+        $profiles = InstanceFeatures::enabled('profiles');
+        $steps = array_filter([
+            // The photo editor and people directory are profile pages.
+            'has_avatar' => $profiles ? $viewer->profile_picture_media_id !== null : null,
+            'has_interests' => InstanceFeatures::enabled('interests')
+                ? InterestRating::query()
+                    ->where('user_id', $viewer->id)
+                    ->whereNull('character_id')
+                    ->where('level', '>', 0)
+                    ->exists()
+                : null,
+            'is_following' => $profiles
+                ? FollowRequest::query()
+                    ->where('requester_id', $viewer->id)
+                    ->where('status', 'accepted')
+                    // Onboarding asks whether the human follows another human;
+                    // opting into a persona's audience does not complete this step.
+                    ->whereNull('recipient_character_id')
+                    ->exists()
+                : null,
             'has_posted' => Post::query()->where('user_id', $viewer->id)->exists(),
-        ];
+        ], static fn (?bool $done): bool => $done !== null);
 
         if (! in_array(false, $steps, true)) {
             return null;

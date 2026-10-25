@@ -50,8 +50,8 @@ describe('PostComposer identity default', () => {
     render(<PostComposer onCreated={jest.fn()} />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: /As Kira/i })).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText('Share an update'), { target: { value: 'Hello' } });
-    fireEvent.submit(screen.getByPlaceholderText('Share an update').closest('form') as HTMLFormElement);
+    fireEvent.change(screen.getByLabelText('Share an update'), { target: { value: 'Hello' } });
+    fireEvent.submit(screen.getByLabelText('Share an update').closest('form') as HTMLFormElement);
 
     await waitFor(() => expect(communityApi.createPost).toHaveBeenCalledWith(expect.objectContaining({
       character_id: 17,

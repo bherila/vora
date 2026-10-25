@@ -19,11 +19,8 @@ export function FeedPage() {
   return (
     <div className={`${BROWSING_PAGE_WIDTH} px-4`}>
       <SideRailLayout>
-        <div className="mx-auto max-w-3xl space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">Feed</h1>
-            <p className="text-muted-foreground">Posts shared with you.</p>
-          </div>
+        <div className="mx-auto max-w-3xl">
+          <h1 className="sr-only">Feed</h1>
           <FeedView
             hasFollowing={initialData.feedHasFollowing ?? false}
             onboarding={onboarding}

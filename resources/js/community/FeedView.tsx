@@ -6,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { moduleEnabled } from '@/instance';
 
 import { communityApi } from './api';
 import { OnboardingChecklist, type OnboardingData } from './OnboardingChecklist';
@@ -175,93 +176,104 @@ export function FeedView({ hasFollowing, onboarding = null, interest = null, int
     return () => observer.disconnect();
   }, [nextCursor, loadingMore, load, scope]);
 
+  const scopeTabClass = (active: boolean): string => `-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+    active ? 'border-primary font-semibold text-foreground' : 'border-transparent font-medium text-muted-foreground hover:text-foreground'
+  } disabled:cursor-not-allowed disabled:opacity-50`;
+  const chipClass = (active: boolean): string => `h-8 shrink-0 rounded-full border px-3 text-sm transition-colors ${
+    active ? 'border-primary bg-primary font-medium text-primary-foreground' : 'border-border text-muted-foreground hover:text-foreground'
+  }`;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {onboarding && <OnboardingChecklist onboarding={onboarding} />}
-      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Feed scope">
-        <Button
-          type="button"
-          variant={scope === 'mixed' ? 'default' : 'outline'}
-          aria-pressed={scope === 'mixed'}
-          className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
-          onClick={() => selectScope('mixed')}
-        >
-          <span>
-            <strong>Mixed</strong> — <span className="font-normal">public posts from everyone, plus the people and personas you follow.</span>
-          </span>
-        </Button>
-        {followingDisabled ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                className="block"
-                data-testid="following-disabled-tooltip-trigger"
-                tabIndex={0}
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-pressed={false}
-                  className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
-                  disabled
-                >
-                  <span>
-                    <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
-                  </span>
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent role="tooltip" side="top">
-              you aren't following anyone yet.
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <Button
+      <PostComposer
+        contextInterest={selectedInterest}
+        lockContext={contextLocked}
+        onCreated={(post) => {
+          if (interestSlug === null || post.context_interest?.slug === interestSlug) {
+            setPosts((current) => [post, ...current]);
+          }
+        }}
+      />
+      <div className="space-y-3">
+        <div className="flex gap-6 border-b" role="group" aria-label="Feed scope">
+          {followingDisabled ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span data-testid="following-disabled-tooltip-trigger" tabIndex={0} className="inline-flex">
+                  <button
+                    type="button"
+                    aria-pressed={false}
+                    aria-describedby="feed-scope-following"
+                    className={scopeTabClass(false)}
+                    disabled
+                  >
+                    Following
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent role="tooltip" side="top">
+                you aren't following anyone yet.
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              type="button"
+              aria-pressed={scope === 'following'}
+              aria-describedby="feed-scope-following"
+              className={scopeTabClass(scope === 'following')}
+              onClick={() => selectScope('following')}
+            >
+              Following
+            </button>
+          )}
+          <button
             type="button"
-            variant={scope === 'following' ? 'default' : 'outline'}
-            aria-pressed={scope === 'following'}
-            className="h-auto w-full justify-start whitespace-normal px-4 py-3 text-left"
-            onClick={() => selectScope('following')}
+            aria-pressed={scope === 'mixed'}
+            aria-describedby="feed-scope-mixed"
+            className={scopeTabClass(scope === 'mixed')}
+            onClick={() => selectScope('mixed')}
           >
-            <span>
-              <strong>Following</strong> — <span className="font-normal">only the people and personas you follow.</span>
-            </span>
-          </Button>
+            Everyone
+          </button>
+          <span id="feed-scope-following" className="sr-only">Only the people and personas you follow.</span>
+          <span id="feed-scope-mixed" className="sr-only">Public posts from everyone, plus the people and personas you follow.</span>
+        </div>
+        {!contextLocked && interests.length > 0 && (
+          <div role="group" aria-label="Filter by Interest" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <button type="button" aria-pressed={selectedInterestSlug === ''} className={chipClass(selectedInterestSlug === '')} onClick={() => selectInterest('')}>
+              All
+            </button>
+            {interests.map((item) => (
+              <button
+                key={item.slug}
+                type="button"
+                aria-pressed={selectedInterestSlug === item.slug}
+                className={chipClass(selectedInterestSlug === item.slug)}
+                onClick={() => selectInterest(item.slug)}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
         )}
-      </div>
-      {!contextLocked && interests.length > 0 && (
-        <label className="grid gap-1 text-sm" htmlFor="feed-interest-filter">
-          <span>Filter by Interest</span>
-          <select
-            id="feed-interest-filter"
-            className="rounded-md border border-input bg-background px-3 py-2"
-            value={selectedInterestSlug}
-            onChange={(event) => selectInterest(event.target.value)}
-          >
-            <option value="">All Interests</option>
-            {interests.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}
-          </select>
-        </label>
-      )}
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Every post has an audience. New posts default to Everyone; open Audience, persona &amp; attachments to choose who can see yours.
-        </p>
-        <PostComposer
-          contextInterest={selectedInterest}
-          lockContext={contextLocked}
-          onCreated={(post) => {
-            if (interestSlug === null || post.context_interest?.slug === interestSlug) {
-              setPosts((current) => [post, ...current]);
-            }
-          }}
-        />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading feed...</p>
       ) : posts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No posts yet. Follow people in Explore or share something above.</p>
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          {scope === 'following' && !followingDisabled ? (
+            <p>
+              Nothing new from the people you follow.{' '}
+              <button type="button" className="font-medium text-foreground underline underline-offset-4" onClick={() => selectScope('mixed')}>
+                See posts from everyone
+              </button>
+            </p>
+          ) : (
+            <p>No posts yet. Share something above{moduleEnabled('profiles') ? <>, or <a className="font-medium text-foreground underline underline-offset-4" href="/users">find people to follow</a></> : null}.</p>
+          )}
+        </div>
       ) : (
         <div className="space-y-4">
           {posts.map((post) => <PostCard key={post.id} post={post} />)}

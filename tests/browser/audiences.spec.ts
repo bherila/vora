@@ -4,8 +4,8 @@ import { acceptFollow, login, peerContext, type TestAccounts } from './helpers';
 
 async function publish(page: Page, body: string, audience: 'mutuals' | 'specific', recipient?: string): Promise<string> {
   await page.goto('/feed');
-  await page.getByPlaceholder('Share an update', { exact: true }).fill(body);
-  await page.getByRole('button', { name: 'Audience, persona & attachments', exact: true }).click();
+  await page.getByLabel('Share an update', { exact: true }).fill(body);
+  await page.getByRole('button', { name: 'Audience: Everyone', exact: true }).click();
   await page.getByLabel('Who can see this?', { exact: true }).selectOption(audience);
   if (recipient) {
     await page.getByLabel('Specific people', { exact: true }).fill(recipient);
@@ -69,8 +69,8 @@ test('Mutuals requires both follows and Specific people grants only the selected
     await expect(bob.getByText('An explicitly shared update', { exact: true })).toBeVisible();
 
     await page.goto('/feed');
-    await page.getByPlaceholder('Share an update', { exact: true }).fill('An update without recipients');
-    await page.getByRole('button', { name: 'Audience, persona & attachments', exact: true }).click();
+    await page.getByLabel('Share an update', { exact: true }).fill('An update without recipients');
+    await page.getByRole('button', { name: 'Audience: Everyone', exact: true }).click();
     await page.getByLabel('Who can see this?', { exact: true }).selectOption('specific');
     let attemptedPosts = 0;
     page.on('request', (sent) => {
