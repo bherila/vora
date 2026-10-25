@@ -30,14 +30,16 @@ export function isDayOne(onboarding: OnboardingData | null, hasFollowing: boolea
     && onboarding.steps.is_following !== true;
 }
 
-function StepCard({ index, total, title, why, complete, children }: {
+interface StepCardProps {
   index: number;
   total: number;
   title: string;
   why: string;
   complete: boolean;
   children?: ReactNode;
-}) {
+}
+
+function StepCard({ index, total, title, why, complete, children }: StepCardProps) {
   return (
     <section aria-label={title} className={`flex flex-col gap-3 rounded-xl border bg-card p-4 text-card-foreground ${complete ? 'opacity-70' : ''}`}>
       <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

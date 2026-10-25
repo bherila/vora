@@ -74,7 +74,11 @@ function PersonLink({
   );
 }
 
-export function FollowSuggestionButton({ person }: { person: SuggestedPerson }) {
+interface FollowSuggestionButtonProps {
+  person: SuggestedPerson;
+}
+
+export function FollowSuggestionButton({ person }: FollowSuggestionButtonProps) {
   const [state, setState] = useState<'idle' | 'busy' | 'requested'>('idle');
   const [error, setError] = useState('');
 

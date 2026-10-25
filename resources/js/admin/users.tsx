@@ -208,7 +208,13 @@ function formatDate(value: string | null): string {
 
 const ROW_FLAG_LIMIT = 2;
 
-function ActionGroup({ title, children, danger = false }: { title: string; children: ReactNode; danger?: boolean }) {
+interface ActionGroupProps {
+  title: string;
+  children: ReactNode;
+  danger?: boolean;
+}
+
+function ActionGroup({ title, children, danger = false }: ActionGroupProps) {
   return (
     <section className={danger ? 'space-y-2 rounded-lg border border-destructive/40 p-3' : 'space-y-2'}>
       <h3 className={`text-xs font-semibold uppercase tracking-wide ${danger ? 'text-destructive' : 'text-muted-foreground'}`}>{title}</h3>
@@ -217,7 +223,11 @@ function ActionGroup({ title, children, danger = false }: { title: string; child
   );
 }
 
-function Callout({ children }: { children: ReactNode }) {
+interface CalloutProps {
+  children: ReactNode;
+}
+
+function Callout({ children }: CalloutProps) {
   return <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">{children}</div>;
 }
 

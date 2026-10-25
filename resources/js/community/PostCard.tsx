@@ -40,14 +40,26 @@ function attachmentHref(attachment: PostAttachment): string | null {
   return null;
 }
 
-function MaybeLink({ href, className, children, label }: { href: string | null; className: string; children: ReactNode; label?: string }) {
+interface MaybeLinkProps {
+  href: string | null;
+  className: string;
+  children: ReactNode;
+  label?: string;
+}
+
+function MaybeLink({ href, className, children, label }: MaybeLinkProps) {
   return href
     ? <a href={href} className={className} aria-label={label}>{children}</a>
     : <div className={className}>{children}</div>;
 }
 
 /** Media with a preview renders inline; anything else (no preview yet) falls back to a labelled chip. */
-function MediaGrid({ items, readOnly }: { items: PostAttachment[]; readOnly: boolean }) {
+interface MediaGridProps {
+  items: PostAttachment[];
+  readOnly: boolean;
+}
+
+function MediaGrid({ items, readOnly }: MediaGridProps) {
   return (
     <div className={`grid gap-0.5 ${items.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {items.map((attachment) => {

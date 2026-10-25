@@ -80,7 +80,13 @@ export function onboardingSteps(onboarding: OnboardingData): Array<StepDef & { c
     .map((step) => ({ ...step, complete: onboarding.steps[step.key] === true }));
 }
 
-function StepAction({ step, className, children }: { step: StepDef; className: string; children: string }) {
+interface StepActionProps {
+  step: StepDef;
+  className: string;
+  children: string;
+}
+
+function StepAction({ step, className, children }: StepActionProps) {
   return step.href
     ? <a className={className} href={step.href}>{children}</a>
     : <button type="button" className={className} onClick={focusComposer}>{children}</button>;
