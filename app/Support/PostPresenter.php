@@ -234,12 +234,25 @@ class PostPresenter
 
         return match (true) {
             $attachable instanceof Character => ['type' => 'character', 'id' => $attachable->id, 'label' => $attachable->display_name],
-            // The preview is the opaque, app-relative asset proxy, which re-checks
-            // the viewer on every request — never a signed storage URL.
-            $attachable instanceof Media => ['type' => 'media', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'media_type' => $attachable->type->value, 'label' => $attachable->title, 'thumbnail_url' => $mediaResponder?->visitorAssetUrl($attachable)],
+            $attachable instanceof Media => ['type' => 'media', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'media_type' => $attachable->type->value, 'label' => $attachable->title, 'thumbnail_url' => self::previewUrl($attachable, $mediaResponder)],
             $attachable instanceof Story => ['type' => 'story', 'id' => $attachable->id, 'ulid' => $attachable->ulid, 'label' => $attachable->title],
             default => null,
         };
+    }
+
+    /**
+     * An image the card can show inline: the opaque, app-relative asset proxy,
+     * which re-checks the viewer on every request — never a signed storage URL.
+     * A video without a poster frame has no image at all (its fallback would be
+     * the original video file), so it keeps the labelled-chip fallback instead.
+     */
+    private static function previewUrl(Media $media, ?MediaResponseService $mediaResponder): ?string
+    {
+        if ($media->type->isVideo() && $media->playbackThumbnailKey() === null) {
+            return null;
+        }
+
+        return $mediaResponder?->visitorAssetUrl($media);
     }
 
     /**

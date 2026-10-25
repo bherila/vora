@@ -147,6 +147,25 @@ class PostAttachmentTest extends TestCase
         $this->actingAs($stranger)->get($preview)->assertNotFound();
     }
 
+    public function test_video_without_a_poster_frame_offers_no_inline_preview(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $bare = Media::factory()->for($author)->approved()->video()->create(['thumbnail_key' => null]);
+        $posterKey = 'thumbnails/'.$author->id.'/poster.jpg';
+        $poster = Media::factory()->for($author)->approved()->video()->create(['thumbnail_key' => $posterKey, 'reviewed_thumbnail_key' => $posterKey]);
+        $post = Post::factory()->for($author)->approved()->create(['audience' => Audience::Everyone]);
+        $this->attach($post, $bare);
+        $this->attach($post, $poster);
+
+        $attachments = collect($this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$post->ulid}")
+            ->assertOk()->json('data.attachments'))->keyBy('id');
+
+        // Falling back to the original would point an <img> at the video file.
+        $this->assertNull($attachments[$bare->id]['thumbnail_url']);
+        $this->assertSame("/api/media/by-ulid/{$poster->ulid}/asset/thumbnail", $attachments[$poster->id]['thumbnail_url']);
+    }
+
     public function test_intersection_hides_a_restricted_character_attachment(): void
     {
         $author = User::factory()->approved()->create();
