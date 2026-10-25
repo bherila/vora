@@ -31,7 +31,8 @@ return [
     |
     | Supported: "smtp", "sendmail", "mailgun", "ses", "ses-v2",
     |            "postmark", "resend", "log", "array",
-    |            "failover", "roundrobin"
+    |            "failover", "roundrobin", "brevo" (registered in
+    |            AppServiceProvider)
     |
     */
 
@@ -77,6 +78,21 @@ return [
 
         'array' => [
             'transport' => 'array',
+        ],
+
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
+        // Brevo's API first; the SMTP mailer above takes over when Brevo
+        // refuses a message (outage, or the plan's daily send limit).
+        'hybrid' => [
+            'transport' => 'failover',
+            'mailers' => [
+                'brevo',
+                'smtp',
+            ],
+            'retry_after' => 60,
         ],
 
         'failover' => [

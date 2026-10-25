@@ -18,6 +18,8 @@
         "league/flysystem-aws-s3-v3": "^3.35.3",
         "maennchen/zipstream-php": "^3.2",
         "spatie/laravel-csp": "^3.29.0",
+        "symfony/brevo-mailer": "^7.4",
+        "symfony/http-client": "^7.4",
         "symfony/yaml": "~8.0.15"
     },
     "require-dev": {
