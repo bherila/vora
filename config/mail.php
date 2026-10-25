@@ -131,4 +131,11 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    // Optional: where replies go when the From address is a no-reply sender.
+    // Unset, messages carry no Reply-To and replies go to the From address.
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO_ADDRESS'),
+        'name' => env('MAIL_REPLY_TO_NAME'),
+    ],
+
 ];
