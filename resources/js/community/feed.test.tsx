@@ -4,8 +4,9 @@ import { FeedPage } from './feed';
 import type { OnboardingData } from './OnboardingChecklist';
 
 let mockOnboarding: OnboardingData | null = null;
+let mockHasFollowing = false;
 jest.mock('@/initialData', () => ({
-  readInitialData: () => ({ feedHasFollowing: false, feedOnboarding: mockOnboarding, feedInterests: [] }),
+  readInitialData: () => ({ feedHasFollowing: mockHasFollowing, feedOnboarding: mockOnboarding, feedInterests: [] }),
 }));
 jest.mock('@/components/app-side-rail', () => ({
   SideRailLayout: ({ enabled = true, children }: { enabled?: boolean; children: React.ReactNode }) => (
@@ -21,6 +22,10 @@ jest.mock('./DayOne', () => ({
 }));
 
 describe('FeedPage', () => {
+  beforeEach(() => {
+    mockHasFollowing = false;
+  });
+
   it('opens a brand-new account on the first-run page without the rail', () => {
     mockOnboarding = { display_name: 'Avery', has_personas: false, steps: { has_avatar: false, is_following: false, has_posted: false } };
     render(<FeedPage />);
@@ -41,5 +46,14 @@ describe('FeedPage', () => {
     expect(screen.getByTestId('with-rail')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Day one skip' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Feed' })).toBeInTheDocument();
+  });
+
+  it('opens the Following feed for an account that follows only personas', () => {
+    mockHasFollowing = true;
+    mockOnboarding = { display_name: 'Avery', has_personas: false, steps: { has_avatar: false, is_following: false, has_posted: false } };
+    render(<FeedPage />);
+
+    expect(screen.queryByRole('button', { name: 'Day one skip' })).toBeNull();
+    expect(screen.getByText('Feed with composer')).toBeInTheDocument();
   });
 });

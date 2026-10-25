@@ -23,12 +23,17 @@ const fresh = onboarding({ has_avatar: false, has_interests: true, is_following:
 
 describe('isDayOne', () => {
   it('opens the first-run page only before the account has posted or followed', () => {
-    expect(isDayOne(null)).toBe(false);
-    expect(isDayOne(fresh)).toBe(true);
-    expect(isDayOne({ ...fresh, steps: { ...fresh.steps, is_following: true } })).toBe(false);
-    expect(isDayOne({ ...fresh, steps: { ...fresh.steps, has_posted: true } })).toBe(false);
+    expect(isDayOne(null, false)).toBe(false);
+    expect(isDayOne(fresh, false)).toBe(true);
+    expect(isDayOne({ ...fresh, steps: { ...fresh.steps, is_following: true } }, true)).toBe(false);
+    expect(isDayOne({ ...fresh, steps: { ...fresh.steps, has_posted: true } }, false)).toBe(false);
     // Without profile pages there is no following step to wait for.
-    expect(isDayOne(onboarding({ has_posted: false }))).toBe(true);
+    expect(isDayOne(onboarding({ has_posted: false }), false)).toBe(true);
+  });
+
+  it('never holds an account that follows only personas on the setup page', () => {
+    // The checklist step counts human follows only, so it stays incomplete here.
+    expect(isDayOne(fresh, true)).toBe(false);
   });
 });
 

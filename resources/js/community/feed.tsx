@@ -17,7 +17,8 @@ export function FeedPage() {
     feedInterests?: InterestRef[];
   }>();
   const [onboarding, setOnboarding] = useState(initialData.feedOnboarding ?? null);
-  const [dayOne, setDayOne] = useState(() => isDayOne(onboarding));
+  const hasFollowing = initialData.feedHasFollowing ?? false;
+  const [dayOne, setDayOne] = useState(() => isDayOne(onboarding, hasFollowing));
   const markPosted = (): void => {
     setOnboarding((current) => current && { ...current, steps: { ...current.steps, has_posted: true } });
     setDayOne(false);
@@ -41,7 +42,7 @@ export function FeedPage() {
             <>
               <h1 className="sr-only">Feed</h1>
               <FeedView
-                hasFollowing={initialData.feedHasFollowing ?? false}
+                hasFollowing={hasFollowing}
                 onboarding={onboarding}
                 interests={initialData.feedInterests ?? []}
               />

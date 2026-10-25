@@ -17,9 +17,17 @@ const SUGGESTION_LIMIT = 4;
  * Whether the feed should open as the first-run page instead of a timeline:
  * the guide is still active and the account has neither posted nor followed
  * anyone, so there is nothing of its own to show yet.
+ *
+ * `hasFollowing` is the feed's own answer (any accepted follow, persona
+ * audiences included). The checklist's human-only `is_following` step cannot
+ * stand in for it: an account that follows only personas already has a
+ * Following feed and must not be held on the setup page.
  */
-export function isDayOne(onboarding: OnboardingData | null): boolean {
-  return onboarding !== null && onboarding.steps.has_posted !== true && onboarding.steps.is_following !== true;
+export function isDayOne(onboarding: OnboardingData | null, hasFollowing: boolean): boolean {
+  return onboarding !== null
+    && !hasFollowing
+    && onboarding.steps.has_posted !== true
+    && onboarding.steps.is_following !== true;
 }
 
 function StepCard({ index, total, title, why, complete, children }: {
