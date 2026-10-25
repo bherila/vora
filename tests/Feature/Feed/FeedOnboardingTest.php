@@ -113,6 +113,25 @@ class FeedOnboardingTest extends TestCase
         $this->assertCount(4, $onboarding['steps']);
     }
 
+    public function test_steps_for_disabled_modules_are_omitted_so_the_guide_can_finish(): void
+    {
+        config(['instance.modules.interests' => false]);
+        User::factory()->approved()->create();
+        $user = User::factory()->approved()->create();
+
+        $this->assertSame(
+            ['has_avatar', 'is_following', 'has_posted'],
+            array_keys($this->onboarding($user)['steps']),
+        );
+
+        config(['instance.modules.profiles' => false]);
+        $this->assertSame(['has_posted'], array_keys($this->onboarding($user)['steps']));
+
+        // With only the remaining step done, the guide is complete and disappears.
+        Post::factory()->for($user)->approved()->create();
+        $this->assertNull($this->onboarding($user));
+    }
+
     public function test_dismissal_is_persisted_to_the_account_and_hides_onboarding_on_a_later_request(): void
     {
         User::factory()->approved()->create();

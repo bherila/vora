@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { formatStorageLimit, StorageLimitDialog } from '@/admin/StorageLimitDialog';
 import { todayDate } from '@/auth/age-policy';
+import { Avatar } from '@/components/avatar';
 import { DatePicker } from '@/components/date-picker';
+import { BROWSING_PAGE_WIDTH } from '@/components/page-width';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,14 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 import { instanceProfile, moduleEnabled } from '@/instance';
@@ -103,6 +98,145 @@ async function patchUser(id: number, body: Record<string, unknown>) {
   return response.json() as Promise<{ success: boolean; data: AdminUser }>;
 }
 
+type UserFilter = 'all' | 'pending' | 'restricted' | 'banned' | 'admins' | 'deleted';
+
+const FILTERS: Array<{ value: UserFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Needs approval' },
+  { value: 'restricted', label: 'Restricted' },
+  { value: 'banned', label: 'Banned' },
+  { value: 'admins', label: 'Admins' },
+  { value: 'deleted', label: 'Deleted' },
+];
+
+const TONES = {
+  neutral: 'border-transparent bg-muted text-foreground',
+  good: 'border-transparent bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
+  waiting: 'border-transparent bg-amber-500/15 text-amber-800 dark:text-amber-300',
+  warning: 'border-transparent bg-orange-500/15 text-orange-800 dark:text-orange-300',
+  danger: 'border-transparent bg-destructive/15 text-destructive dark:text-red-300',
+  admin: 'border-transparent bg-primary text-primary-foreground',
+};
+
+interface StatusPill {
+  label: string;
+  className: string;
+}
+
+function activeRestrictions(user: AdminUser): AdminRestriction[] {
+  return user.restrictions.filter((restriction) => restriction.active);
+}
+
+function matchesFilter(user: AdminUser, filter: UserFilter): boolean {
+  switch (filter) {
+    case 'pending':
+      return !user.is_deleted && !user.is_approved;
+    case 'restricted':
+      return !user.is_deleted && activeRestrictions(user).length > 0;
+    case 'banned':
+      return !user.is_deleted && user.is_banned;
+    case 'admins':
+      return !user.is_deleted && user.is_admin;
+    case 'deleted':
+      return user.is_deleted;
+    default:
+      return true;
+  }
+}
+
+function matchesQuery(user: AdminUser, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return true;
+
+  return [user.name, user.display_name ?? '', user.email].some((value) => value.toLowerCase().includes(needle));
+}
+
+function displayName(user: AdminUser): string {
+  return user.display_name ?? user.name;
+}
+
+/** "Real name · email", dropping the real name when it repeats the display name. */
+function identityLine(user: AdminUser): string {
+  return user.display_name && user.display_name !== user.name ? `${user.name} · ${user.email}` : user.email;
+}
+
+/** The one state an admin should read first; {@link userFlags} carries the rest. */
+function primaryStatus(user: AdminUser): StatusPill {
+  if (user.is_deleted) return { label: 'Deleted', className: TONES.danger };
+  if (user.is_banned) return { label: user.ban_hides_content ? 'Banned (hidden)' : 'Banned', className: TONES.danger };
+  if (user.is_disabled) return { label: 'Disabled', className: TONES.danger };
+  if (!user.is_approved) return { label: 'Pending', className: TONES.waiting };
+  if (user.is_deactivated) return { label: 'Deactivated', className: TONES.neutral };
+  if (activeRestrictions(user).length > 0) return { label: 'Restricted', className: TONES.warning };
+  if (user.is_admin) return { label: 'Admin', className: TONES.admin };
+  return { label: 'Active', className: TONES.good };
+}
+
+function storageLabel(user: AdminUser): string {
+  if (user.storage_unlimited) return 'Unlimited override';
+  if (user.storage_limit_bytes === null) return `Site default (${formatStorageLimit(user.effective_storage_limit_bytes)})`;
+  return `Custom (${formatStorageLimit(user.storage_limit_bytes)})`;
+}
+
+/**
+ * Departures from the defaults only. Site-default storage, a zero invite
+ * balance and a verified email are what most accounts look like, so they stay
+ * in the detail panel instead of earning a badge on every row.
+ */
+function userFlags(user: AdminUser, eventProfile: boolean): string[] {
+  const flags: string[] = [];
+  if (user.is_admin && primaryStatus(user).label !== 'Admin') flags.push('Admin');
+  if (!user.email_verified) flags.push('Email unverified');
+  for (const restriction of activeRestrictions(user)) flags.push(`Restricted: ${restriction.label}`);
+  if (user.is_banned && user.ban_appeal_at) flags.push('Appeal pending');
+  if (user.is_on_legal_hold) flags.push('Legal hold');
+  if (user.id_verified) flags.push('ID/Age verified');
+  if (moduleEnabled('events') && user.event_uploads_auto_approved) flags.push('Event uploads auto-approved');
+  if (user.name_locked) flags.push('Real name locked');
+  if (user.email_locked) flags.push('Email locked');
+  if (user.trusted_inviter) flags.push('Trusted inviter');
+  if (!user.can_receive_invites) flags.push('No invites');
+  if (user.storage_unlimited || user.storage_limit_bytes !== null) flags.push(`Storage: ${storageLabel(user)}`);
+  if (!eventProfile && moduleEnabled('library') && user.library_enabled) flags.push('Library enabled');
+
+  return flags;
+}
+
+/** `#user-<id>` links (e.g. from duplicate review) name the account to open. */
+function userIdFromHash(hash: string): number | null {
+  const match = /^#user-(\d+)$/.exec(hash);
+  return match ? Number(match[1]) : null;
+}
+
+function formatDate(value: string | null): string {
+  return value ? new Date(value).toLocaleDateString() : '—';
+}
+
+const ROW_FLAG_LIMIT = 2;
+
+interface ActionGroupProps {
+  title: string;
+  children: ReactNode;
+  danger?: boolean;
+}
+
+function ActionGroup({ title, children, danger = false }: ActionGroupProps) {
+  return (
+    <section className={danger ? 'space-y-2 rounded-lg border border-destructive/40 p-3' : 'space-y-2'}>
+      <h3 className={`text-xs font-semibold uppercase tracking-wide ${danger ? 'text-destructive' : 'text-muted-foreground'}`}>{title}</h3>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </section>
+  );
+}
+
+interface CalloutProps {
+  children: ReactNode;
+}
+
+function Callout({ children }: CalloutProps) {
+  return <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">{children}</div>;
+}
+
 export function AdminUsersPage() {
   const eventProfile = instanceProfile() === 'event';
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -134,6 +268,12 @@ export function AdminUsersPage() {
   const [restrictionCapability, setRestrictionCapability] = useState<RestrictionCapability>('media.upload');
   const [restrictionReason, setRestrictionReason] = useState('');
   const [restrictionExpiry, setRestrictionExpiry] = useState('');
+  // List filtering and the detail panel's selection.
+  const [filter, setFilter] = useState<UserFilter>('all');
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<number | null>(() => userIdFromHash(window.location.hash));
+  const detailRef = useRef<HTMLElement | null>(null);
+  const linkedScrollDone = useRef(false);
 
   const loadUsers = async (): Promise<boolean> => {
     setLoading(true);
@@ -158,6 +298,25 @@ export function AdminUsersPage() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  // Follow in-page account links after load as well as on arrival.
+  useEffect(() => {
+    const onHashChange = (): void => {
+      const id = userIdFromHash(window.location.hash);
+      if (id !== null) setSelectedId(id);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // The list renders after the fetch, too late for the browser's own anchor
+  // jump, so bring a linked account's row into view once it exists.
+  useEffect(() => {
+    if (linkedScrollDone.current || users.length === 0) return;
+    linkedScrollDone.current = true;
+    const id = userIdFromHash(window.location.hash);
+    if (id !== null) document.getElementById(`user-${id}`)?.scrollIntoView?.({ block: 'center' });
+  }, [users]);
 
   const approveUser = async (user: AdminUser) => {
     setActionLoading(user.id);
@@ -449,9 +608,211 @@ export function AdminUsersPage() {
     }
   };
 
+  const counts = Object.fromEntries(
+    FILTERS.map((item) => [item.value, users.filter((user) => matchesFilter(user, item.value)).length]),
+  ) as Record<UserFilter, number>;
+  const visibleUsers = users.filter((user) => matchesFilter(user, filter) && matchesQuery(user, query));
+  const selected = visibleUsers.find((user) => user.id === selectedId) ?? visibleUsers[0] ?? null;
+
+  const selectUser = (id: number): void => {
+    setSelectedId(id);
+    // Keep the address shareable without adding a history entry per click.
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#user-${id}`);
+    // On narrow screens the panel stacks under the list; bring it into view.
+    if (window.matchMedia?.('(max-width: 1023px)').matches) {
+      detailRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const renderDetail = (user: AdminUser) => {
+    const status = primaryStatus(user);
+    const restrictions = activeRestrictions(user);
+    const busy = actionLoading === user.id;
+
+    return (
+      <>
+        <div className="space-y-3 border-b p-4">
+          <div className="flex items-center gap-3">
+            <Avatar name={displayName(user)} src={null} sizeClassName="h-12 w-12" />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-lg font-semibold">{displayName(user)}</h2>
+              <p className="truncate text-sm text-muted-foreground">{identityLine(user)}</p>
+            </div>
+            {!user.is_deleted && moduleEnabled('profiles') && (
+              <a className="shrink-0 text-sm text-muted-foreground underline-offset-4 hover:underline" href={`/users/${user.id}`}>Profile</a>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge className={status.className}>{status.label}</Badge>
+            {userFlags(user, eventProfile).map((flag) => <Badge key={flag} variant="outline">{flag}</Badge>)}
+          </div>
+
+          {user.is_deleted && (
+            <Callout>
+              <p>This account is deleted. Restore it, or purge it permanently below.</p>
+              <Button size="sm" disabled={busy} onClick={() => void restoreUser(user)} data-test="admin-users-restore">Restore</Button>
+            </Callout>
+          )}
+          {!user.is_deleted && !user.is_approved && (
+            <Callout>
+              <p>
+                {user.email_verified
+                  ? `Waiting for approval since ${formatDate(user.created_at)}.`
+                  : 'Waiting for approval. They have to verify their email before you can approve them.'}
+                {user.referrer_display_name && ` Invited by ${user.referrer_display_name}.`}
+              </p>
+              <Button size="sm" disabled={busy || !user.email_verified} onClick={() => void approveUser(user)}>Approve</Button>
+            </Callout>
+          )}
+          {!user.is_deleted && user.is_banned && (
+            <Callout>
+              <p><span className="font-medium">Ban reason:</span> {user.ban_reason ?? 'No reason given.'}</p>
+              {user.ban_appeal_at && <p><span className="font-medium">Appeal:</span> {user.ban_appeal_message}</p>}
+            </Callout>
+          )}
+          {!user.is_deleted && restrictions.map((restriction) => (
+            <Callout key={restriction.id}>
+              <p>
+                <span className="font-medium">{restriction.label}:</span>{' '}
+                {restriction.reason ?? 'No reason provided.'}
+                {restriction.expires_at ? ` Expires ${new Date(restriction.expires_at).toLocaleString()}.` : ' No expiry.'}
+              </p>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void liftRestriction(user, restriction)}>
+                Lift {restriction.label}
+              </Button>
+            </Callout>
+          ))}
+        </div>
+
+        <dl className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-b p-4 text-sm">
+          <dt className="text-muted-foreground">Birth date</dt>
+          <dd title={user.id_verified_at ? `Verified ${new Date(user.id_verified_at).toLocaleString()}` : undefined}>
+            {user.birth_date ? `${user.birth_date} · ${user.birth_date_verified ? 'verified' : 'unverified'}` : '—'}
+          </dd>
+          <dt className="text-muted-foreground">Joined</dt>
+          <dd>{formatDate(user.created_at)}</dd>
+          <dt className="text-muted-foreground">Last login</dt>
+          <dd>{user.last_login_at ? formatDate(user.last_login_at) : 'Never'}</dd>
+          <dt className="text-muted-foreground">Invited by</dt>
+          <dd>{user.referrer_display_name ?? '—'}</dd>
+          <dt className="text-muted-foreground">Storage</dt>
+          <dd>{storageLabel(user)}</dd>
+          {moduleEnabled('library') && (
+            <>
+              <dt className="text-muted-foreground">Library</dt>
+              <dd>{eventProfile ? 'Library available to all attendees' : user.library_enabled ? 'Enabled' : 'Off'}</dd>
+            </>
+          )}
+          <dt className="text-muted-foreground">Invites left</dt>
+          <dd>{user.invite_balance}</dd>
+        </dl>
+
+        <div className="space-y-4 p-4">
+          {/* Normal controls 404 for soft-deleted users (routes aren't trashed-aware); only Restore/Purge apply. */}
+          {!user.is_deleted && (
+            <>
+              <ActionGroup title="Account">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => beginRestriction(user)} data-test="admin-users-restrict">Restrict…</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleDisabled(user)} data-test="admin-users-toggle-disabled">
+                  {user.is_disabled ? 'Enable' : 'Disable'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleAdmin(user)} data-test="admin-users-toggle-admin">
+                  {user.is_admin ? 'Remove admin' : 'Make admin'}
+                </Button>
+              </ActionGroup>
+
+              <ActionGroup title="Identity & age">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleIdVerification(user)} data-test="admin-users-toggle-id-verified">
+                  {user.id_verified ? 'Clear ID/age verification' : 'Verify ID/age'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => beginBirthDateEdit(user)} data-test="admin-users-edit-birth-date">Edit birth date</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleNameLock(user)} data-test="admin-users-toggle-name-lock">
+                  {user.name_locked ? 'Unlock real name' : 'Lock real name'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleEmailLock(user)} data-test="admin-users-toggle-email-lock">
+                  {user.email_locked ? 'Unlock email' : 'Lock email'}
+                </Button>
+              </ActionGroup>
+
+              <ActionGroup title="Storage">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => setStorageTarget(user)}>Set storage limit</Button>
+                {!eventProfile && moduleEnabled('library') && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleLibrary(user)}>
+                    {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
+                  </Button>
+                )}
+              </ActionGroup>
+
+              {moduleEnabled('events') && (
+                <ActionGroup title="Event uploads">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleEventUploadApproval(user)}>
+                    {user.event_uploads_auto_approved ? 'Require Event upload review' : 'Skip Event upload review'}
+                  </Button>
+                  <p className="basis-full text-xs text-muted-foreground">
+                    Exemptions apply when future uploads finish. Other media still needs review. Removing an exemption keeps already approved items approved.
+                  </p>
+                </ActionGroup>
+              )}
+
+              <ActionGroup title="Invites">
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => beginIssue(user)} data-test="admin-users-issue-invites">Issue invites</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleTrustedInviter(user)} data-test="admin-users-toggle-trusted">
+                  {user.trusted_inviter ? 'Untrust inviter' : 'Trust inviter'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleCanReceiveInvites(user)} data-test="admin-users-toggle-can-receive">
+                  {user.can_receive_invites ? 'Block invites' : 'Allow invites'}
+                </Button>
+              </ActionGroup>
+            </>
+          )}
+
+          <ActionGroup title="Danger zone" danger>
+            {!user.is_deleted && (
+              <>
+                <Button
+                  size="sm"
+                  variant={user.is_banned ? 'outline' : 'destructive'}
+                  disabled={busy}
+                  onClick={() => (user.is_banned ? void unbanUser(user) : beginBan(user))}
+                  data-test="admin-users-ban"
+                >
+                  {user.is_banned ? 'Unban' : 'Ban…'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => (user.is_on_legal_hold ? void setLegalHold(user, false) : beginLegalHold(user))}
+                  data-test="admin-users-legal-hold"
+                >
+                  {user.is_on_legal_hold ? 'Lift legal hold' : 'Legal hold…'}
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="destructive" disabled={busy} onClick={() => setDeleteTarget(user)} data-test="admin-users-delete">
+              {user.is_deleted ? 'Purge…' : 'Delete…'}
+            </Button>
+          </ActionGroup>
+        </div>
+      </>
+    );
+  };
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold">Admin — Users</h1>
+    <div className={`${BROWSING_PAGE_WIDTH} px-4 py-8`}>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <h1 className="text-2xl font-bold">Users</h1>
+        <section aria-labelledby="default-storage-heading" className="space-y-1 text-sm sm:text-right">
+          <h2 id="default-storage-heading" className="sr-only">Default account storage</h2>
+          <p className="flex flex-wrap items-center gap-x-2 sm:justify-end">
+            <span>{storageSettingsLoaded ? `Site default storage: ${formatStorageLimit(defaultStorageLimit)}` : 'Site default storage unavailable until settings are loaded.'}</span>
+            <Button variant="link" size="sm" className="h-auto px-0" disabled={loading || !storageSettingsLoaded} onClick={() => setDefaultStorageOpen(true)}>Change site default</Button>
+          </p>
+          <p className="max-w-md text-xs text-muted-foreground">
+            Applies to accounts without their own limit, including new ones. {eventProfile ? 'Library access is available to all attendees.' : 'Library access is enabled separately.'}
+          </p>
+        </section>
+      </header>
 
       {error && (
         <div role="alert" className="mb-4 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
@@ -459,270 +820,133 @@ export function AdminUsersPage() {
         </div>
       )}
 
-      <section aria-labelledby="default-storage-heading" className="mb-6 space-y-2 rounded-lg border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 id="default-storage-heading" className="font-semibold">Default account storage</h2>
-            <p className="mt-1 text-sm">{storageSettingsLoaded ? `Site default: ${formatStorageLimit(defaultStorageLimit)}` : 'Site default unavailable until settings are loaded.'}</p>
-          </div>
-          <Button variant="outline" disabled={loading || !storageSettingsLoaded} onClick={() => setDefaultStorageOpen(true)}>Change site default</Button>
-        </div>
-        <p className="text-sm text-muted-foreground">Applies to accounts using the site default, including new accounts. Custom limits and Unlimited overrides stay as set. {eventProfile ? 'Library access is available to all attendees.' : 'Library access is enabled separately.'}</p>
-      </section>
-
-      {moduleEnabled('events') && <p className="mb-4 text-sm text-muted-foreground">Event upload review exemptions apply when future uploads finish. Other media still needs review. Removing an exemption keeps already approved items approved.</p>}
-
-      {loading ? (
+      {loading && users.length === 0 ? (
         <p className="text-muted-foreground">Loading users...</p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Real Name</TableHead>
-              <TableHead>Display Name</TableHead>
-              <TableHead>Birth Date</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id} id={`user-${user.id}`}>
-                <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell>{user.display_name ?? user.name}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <span>{user.birth_date ?? '—'}</span>
-                    {user.birth_date && (
-                      <Badge
-                        variant={user.birth_date_verified ? 'default' : 'outline'}
-                        className="w-fit"
-                        title={user.id_verified_at ? `Verified ${new Date(user.id_verified_at).toLocaleString()}` : undefined}
-                      >
-                        {user.birth_date_verified ? 'Birth Date Verified' : 'Birth Date Unverified'}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {user.is_admin && <Badge>Admin</Badge>}
-                    {user.is_deleted && <Badge variant="destructive">Deleted</Badge>}
-                    {user.is_deactivated && <Badge variant="secondary">Deactivated</Badge>}
-                    {user.is_disabled && <Badge variant="destructive">Disabled</Badge>}
-                    {!user.is_approved && <Badge variant="secondary">Pending</Badge>}
-                    {user.email_verified && <Badge variant="outline">Verified</Badge>}
-                    {!user.email_verified && <Badge variant="outline">Email Unverified</Badge>}
-                    {user.id_verified && <Badge>ID/Age Verified</Badge>}
-                    {moduleEnabled('events') && user.event_uploads_auto_approved && <Badge variant="outline">Event uploads auto-approved</Badge>}
-                    {user.name_locked && <Badge variant="outline">Real Name Locked</Badge>}
-                    {user.email_locked && <Badge variant="outline">Email Locked</Badge>}
-                    {user.is_banned && (
-                      <Badge variant="destructive">{user.ban_hides_content ? 'Banned (hidden)' : 'Banned'}</Badge>
-                    )}
-                    {user.is_on_legal_hold && <Badge variant="destructive">Legal Hold</Badge>}
-                    {user.restrictions.filter((restriction) => restriction.active).map((restriction) => (
-                      <Badge key={restriction.id} variant="destructive">Restricted: {restriction.label}</Badge>
-                    ))}
-                    {user.trusted_inviter && <Badge>Trusted Inviter</Badge>}
-                    {moduleEnabled('library') && (eventProfile || user.library_enabled) && <Badge variant="outline">{eventProfile ? 'Library available' : 'Library enabled'}</Badge>}
-                    <Badge variant="outline">Storage: {user.storage_unlimited ? 'Unlimited override' : user.storage_limit_bytes === null ? `Site default (${formatStorageLimit(user.effective_storage_limit_bytes)})` : `Custom (${formatStorageLimit(user.storage_limit_bytes)})`}</Badge>
-                    {!user.can_receive_invites && <Badge variant="outline">No Invites</Badge>}
-                    <Badge variant="outline">{user.invite_balance} invite(s)</Badge>
-                    {user.referrer_display_name && (
-                      <Badge variant="outline">Invited by {user.referrer_display_name}</Badge>
-                    )}
-                  </div>
-                  {user.is_banned && user.ban_appeal_at && (
-                    <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                      <span className="font-medium">Appeal:</span> {user.ban_appeal_message}
-                    </p>
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div role="group" aria-label="Filter users" className="flex flex-wrap gap-1 rounded-lg border bg-muted/40 p-1">
+              {FILTERS.filter((item) => item.value !== 'deleted' || counts.deleted > 0).map((item) => {
+                const active = filter === item.value;
+                const highlight = item.value === 'pending' && counts.pending > 0;
+
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setFilter(item.value)}
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm ${active ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {item.label}
+                    <span className={highlight ? 'rounded-full bg-amber-500/20 px-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300' : 'text-xs text-muted-foreground'}>
+                      {counts[item.value]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative min-w-56 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                type="search"
+                aria-label="Search users"
+                placeholder="Search name, display name or email"
+                className="pl-9"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
+            <div className="min-w-0 overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Users</caption>
+                <thead className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-4 py-2.5 font-medium">User</th>
+                    <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
+                    <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
+                    <th scope="col" className="px-4 py-2.5"><span className="sr-only">Quick actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No users match.</td>
+                    </tr>
                   )}
-                  {user.restrictions.filter((restriction) => restriction.active).map((restriction) => (
-                    <div key={restriction.id} className="mt-2 max-w-xs text-xs text-muted-foreground">
-                      <p>
-                        <span className="font-medium">{restriction.label}:</span>{' '}
-                        {restriction.reason ?? 'No reason provided.'}
-                        {restriction.expires_at ? ` Expires ${new Date(restriction.expires_at).toLocaleString()}.` : ' No expiry.'}
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="mt-1"
-                        disabled={actionLoading === user.id}
-                        onClick={() => void liftRestriction(user, restriction)}
+                  {visibleUsers.map((user) => {
+                    const status = primaryStatus(user);
+                    const flags = userFlags(user, eventProfile);
+                    const isSelected = selected?.id === user.id;
+
+                    return (
+                      <tr
+                        key={user.id}
+                        id={`user-${user.id}`}
+                        data-selected={isSelected || undefined}
+                        onClick={() => selectUser(user.id)}
+                        className={`cursor-pointer border-b last:border-b-0 ${isSelected ? 'bg-muted/60 shadow-[inset_3px_0_0_hsl(var(--primary))]' : 'hover:bg-muted/30'}`}
                       >
-                        Lift {restriction.label}
-                      </Button>
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(user.created_at).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-2">
-                    {/* Normal controls 404 for soft-deleted users (routes aren't trashed-aware); only Restore/Purge apply. */}
-                    {!user.is_deleted && (
-                      <>
-                        {!user.is_approved && (
-                          <Button
-                            size="sm"
-                            disabled={actionLoading === user.id || !user.email_verified}
-                            title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
-                            onClick={() => void approveUser(user)}
-                            data-test="admin-users-approve"
-                          >
-                            Approve
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => beginRestriction(user)}
-                          data-test="admin-users-restrict"
-                        >
-                          Restrict
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleAdmin(user)}
-                          data-test="admin-users-toggle-admin"
-                        >
-                          {user.is_admin ? 'Remove Admin' : 'Make Admin'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleDisabled(user)}
-                          data-test="admin-users-toggle-disabled"
-                        >
-                          {user.is_disabled ? 'Enable' : 'Disable'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleNameLock(user)}
-                          data-test="admin-users-toggle-name-lock"
-                        >
-                          {user.name_locked ? 'Unlock Real Name' : 'Lock Real Name'}
-                        </Button>
-                        {!eventProfile && moduleEnabled('library') && <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleLibrary(user)}>
-                          {user.library_enabled ? 'Disable Library storage' : 'Enable Library storage'}
-                        </Button>}
-                        {moduleEnabled('events') && <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => void toggleEventUploadApproval(user)}>
-                          {user.event_uploads_auto_approved ? 'Require Event upload review' : 'Skip Event upload review'}
-                        </Button>}
-                        <Button size="sm" variant="outline" disabled={actionLoading === user.id || user.is_deleted} onClick={() => setStorageTarget(user)}>Set storage limit</Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleEmailLock(user)}
-                          data-test="admin-users-toggle-email-lock"
-                        >
-                          {user.email_locked ? 'Unlock Email' : 'Lock Email'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleIdVerification(user)}
-                          data-test="admin-users-toggle-id-verified"
-                        >
-                          {user.id_verified ? 'Clear ID/Age Verification' : 'Verify ID/Age'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => beginBirthDateEdit(user)}
-                          data-test="admin-users-edit-birth-date"
-                        >
-                          Edit Birth Date
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={user.is_banned ? 'outline' : 'destructive'}
-                          disabled={actionLoading === user.id}
-                          onClick={() => (user.is_banned ? void unbanUser(user) : beginBan(user))}
-                          data-test="admin-users-ban"
-                        >
-                          {user.is_banned ? 'Unban' : 'Ban'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => (user.is_on_legal_hold ? void setLegalHold(user, false) : beginLegalHold(user))}
-                          data-test="admin-users-legal-hold"
-                        >
-                          {user.is_on_legal_hold ? 'Lift Legal Hold' : 'Legal Hold'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleTrustedInviter(user)}
-                          data-test="admin-users-toggle-trusted"
-                        >
-                          {user.trusted_inviter ? 'Untrust Inviter' : 'Trust Inviter'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => void toggleCanReceiveInvites(user)}
-                          data-test="admin-users-toggle-can-receive"
-                        >
-                          {user.can_receive_invites ? 'Block Invites' : 'Allow Invites'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actionLoading === user.id}
-                          onClick={() => beginIssue(user)}
-                          data-test="admin-users-issue-invites"
-                        >
-                          Issue Invites
-                        </Button>
-                      </>
-                    )}
-                    {user.is_deleted && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={actionLoading === user.id}
-                        onClick={() => void restoreUser(user)}
-                        data-test="admin-users-restore"
-                      >
-                        Restore
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={actionLoading === user.id}
-                      onClick={() => setDeleteTarget(user)}
-                      data-test="admin-users-delete"
-                    >
-                      {user.is_deleted ? 'Purge' : 'Delete'}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                        <td className="max-w-0 px-4 py-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar name={displayName(user)} src={null} sizeClassName="h-9 w-9" />
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                aria-pressed={isSelected}
+                                className="block max-w-full truncate text-left font-medium hover:underline"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  selectUser(user.id);
+                                }}
+                              >
+                                {displayName(user)}
+                              </button>
+                              <p className="truncate text-xs text-muted-foreground">{identityLine(user)}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge className={status.className}>{status.label}</Badge>
+                            {flags.slice(0, ROW_FLAG_LIMIT).map((flag) => <Badge key={flag} variant="outline">{flag}</Badge>)}
+                            {flags.length > ROW_FLAG_LIMIT && (
+                              <span className="text-xs text-muted-foreground">+{flags.length - ROW_FLAG_LIMIT} more</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden whitespace-nowrap px-4 py-3 text-muted-foreground sm:table-cell">{formatDate(user.created_at)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {!user.is_deleted && !user.is_approved && (
+                            <Button
+                              size="sm"
+                              disabled={actionLoading === user.id || !user.email_verified}
+                              title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void approveUser(user);
+                              }}
+                              data-test="admin-users-approve"
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <aside ref={detailRef} aria-label="User details" className="min-w-0 rounded-xl border lg:sticky lg:top-4">
+              {selected ? renderDetail(selected) : <p className="p-4 text-sm text-muted-foreground">Select a user to see details and actions.</p>}
+            </aside>
+          </div>
+        </>
       )}
 
       {storageTarget && <StorageLimitDialog

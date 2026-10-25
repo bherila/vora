@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 import { communityApi } from '@/community/api';
 import { FeedView } from '@/community/FeedView';
@@ -82,19 +82,19 @@ describe('FeedView', () => {
     render(<FeedView hasFollowing />);
 
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null, null));
-    expect(screen.getByRole('button', { name: /Following/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('only the people and personas you follow.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Following' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Following' })).toHaveAccessibleDescription('Only the people and personas you follow.');
   });
 
   it('switches to Mixed with the exact explanatory copy and stores the opt-in in the URL', async () => {
     render(<FeedView hasFollowing />);
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null, null));
 
-    fireEvent.click(screen.getByRole('button', { name: /Mixed/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }));
 
     await waitFor(() => expect(feed).toHaveBeenLastCalledWith('mixed', null, null));
-    expect(screen.getByRole('button', { name: /Mixed/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('public posts from everyone, plus the people and personas you follow.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Everyone' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Everyone' })).toHaveAccessibleDescription('Public posts from everyone, plus the people and personas you follow.');
     expect(window.location.search).toBe('?scope=mixed');
   });
 
@@ -104,7 +104,7 @@ describe('FeedView', () => {
     render(<FeedView hasFollowing />);
     await waitFor(() => expect(feed).toHaveBeenCalledWith('mixed', null, null));
 
-    fireEvent.click(screen.getByRole('button', { name: /Following/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Following' }));
 
     await waitFor(() => expect(feed).toHaveBeenLastCalledWith('following', null, null));
     expect(window.location.search).toBe('');
@@ -132,7 +132,9 @@ describe('FeedView', () => {
 
     render(<FeedView hasFollowing interests={[{ name: 'Hiking', slug: 'hiking' }]} />);
 
-    expect(await screen.findByLabelText('Filter by Interest')).toHaveValue('hiking');
+    const filters = await screen.findByRole('group', { name: 'Filter by Interest' });
+    expect(within(filters).getByRole('button', { name: 'Hiking' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(filters).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
     await waitFor(() => expect(feed).toHaveBeenCalledWith('mixed', null, 'hiking'));
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
     await waitFor(() => expect(feed).toHaveBeenLastCalledWith('mixed', 'next page', 'hiking'));
@@ -142,7 +144,7 @@ describe('FeedView', () => {
     render(<FeedView hasFollowing interests={[{ name: 'Hiking', slug: 'hiking' }]} />);
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null, null));
 
-    fireEvent.change(screen.getByLabelText('Filter by Interest'), { target: { value: 'hiking' } });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter by Interest' })).getByRole('button', { name: 'Hiking' }));
 
     await waitFor(() => expect(feed).toHaveBeenLastCalledWith('following', null, 'hiking'));
     expect(window.location.search).toBe('?interest=hiking');
@@ -163,7 +165,7 @@ describe('FeedView', () => {
     render(<FeedView hasFollowing interest={{ name: 'Hiking', slug: 'hiking' }} interests={[]} />);
 
     await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null, 'hiking'));
-    expect(screen.queryByLabelText('Filter by Interest')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Filter by Interest' })).not.toBeInTheDocument();
   });
 
   it('locks users without follows to Mixed and explains why Following is disabled', async () => {
@@ -173,8 +175,8 @@ describe('FeedView', () => {
 
     await waitFor(() => expect(feed).toHaveBeenCalledWith('mixed', null, null));
     expect(feed).not.toHaveBeenCalledWith('following', null, null);
-    expect(screen.getByRole('button', { name: /Mixed/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Following/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Everyone' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Following' })).toBeDisabled();
     expect(window.location.search).toBe('?scope=mixed');
 
     fireEvent.mouseEnter(screen.getByTestId('following-disabled-tooltip-trigger'));
@@ -182,5 +184,23 @@ describe('FeedView', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       "you aren't following anyone yet.",
     );
+  });
+
+  it('clears the Interest filter from the All chip', async () => {
+    window.history.replaceState({}, '', '/feed?interest=hiking');
+    render(<FeedView hasFollowing interests={[{ name: 'Hiking', slug: 'hiking' }]} />);
+    await waitFor(() => expect(feed).toHaveBeenCalledWith('following', null, 'hiking'));
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Filter by Interest' })).getByRole('button', { name: 'All' }));
+
+    await waitFor(() => expect(feed).toHaveBeenLastCalledWith('following', null, null));
+    expect(window.location.search).toBe('');
+  });
+
+  it('offers Everyone from an empty Following feed', async () => {
+    render(<FeedView hasFollowing />);
+    fireEvent.click(await screen.findByRole('button', { name: 'See posts from everyone' }));
+
+    await waitFor(() => expect(feed).toHaveBeenLastCalledWith('mixed', null, null));
   });
 });

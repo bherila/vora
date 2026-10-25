@@ -46,10 +46,10 @@ test('Linked and Separate personas retain their privacy across profiles, posts, 
     await page.getByRole('button', { name: 'Account and identity menu (currently Alice)' }).click();
     await page.getByRole('menuitemradio', { name: 'Vex', exact: true }).click();
     await expect(page.getByText("New posts, uploads, and stories will be from Vex. What you can see doesn't change.", { exact: false })).toBeVisible();
-    await page.getByPlaceholder('Share an update', { exact: true }).fill('Separate persona followers update');
-    await page.getByRole('button', { name: 'As Vex', exact: true }).click();
+    await page.getByLabel('Share an update', { exact: true }).fill('Separate persona followers update');
+    await expect(page.getByRole('button', { name: 'Posting as Vex. Change who this post is from', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Audience: Everyone', exact: true }).click();
     await page.getByLabel('Who can see this?', { exact: true }).selectOption('followers');
-    await expect(page.getByLabel('Post as', { exact: true })).toHaveValue(String(separate.id));
     const published = page.waitForResponse((response) => response.url().endsWith('/api/posts') && response.request().method() === 'POST');
     await page.getByRole('button', { name: 'Post', exact: true }).click();
     const publishedResponse = await published;

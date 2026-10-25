@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Support\BlockGraph;
+use App\Support\InstanceFeatures;
 use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Support\Collection;
@@ -30,39 +31,49 @@ class SideRailService
      */
     public function payload(User $viewer): array
     {
+        // Each pending action links into a module's pages; a disabled module
+        // contributes no row rather than a count whose link would 404.
+        $profiles = InstanceFeatures::enabled('profiles');
+        $pending = [];
+        if ($profiles) {
+            $pending[] = [
+                'label' => 'Follow requests',
+                'count' => $viewer->receivedFollowRequests()
+                    ->whereNull('recipient_character_id')
+                    ->where('status', FollowRequest::STATUS_PENDING)
+                    ->whereHas('requester', fn ($query) => $query->active())
+                    ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
+                        $blocks,
+                        'follow_requests.requester_id',
+                        $viewer->id,
+                    ))
+                    ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
+                        $blocks,
+                        'follow_requests.requester_id',
+                        $viewer->id,
+                    ))
+                    ->count(),
+                'href' => route('users.follow-requests', [], false),
+            ];
+        }
+        if ($profiles && InstanceFeatures::enabled('stories')) {
+            $pending[] = [
+                'label' => 'Co-author invites',
+                'count' => $viewer->storyAuthorships()->pendingForActiveOwner()->count(),
+                'href' => route('users.follow-requests', [], false),
+            ];
+        }
+        if ($profiles) {
+            $pending[] = [
+                'label' => 'Items under review',
+                'count' => $this->underReviewCount($viewer),
+                'href' => route('me', [], false),
+            ];
+        }
+
         return [
-            'pending_actions' => [
-                [
-                    'label' => 'Follow requests',
-                    'count' => $viewer->receivedFollowRequests()
-                        ->whereNull('recipient_character_id')
-                        ->where('status', FollowRequest::STATUS_PENDING)
-                        ->whereHas('requester', fn ($query) => $query->active())
-                        ->whereNotExists(fn ($blocks) => BlockGraph::constrainDenied(
-                            $blocks,
-                            'follow_requests.requester_id',
-                            $viewer->id,
-                        ))
-                        ->whereNotExists(fn ($blocks) => BlockGraph::constrainHidden(
-                            $blocks,
-                            'follow_requests.requester_id',
-                            $viewer->id,
-                        ))
-                        ->count(),
-                    'href' => route('users.follow-requests', [], false),
-                ],
-                [
-                    'label' => 'Co-author invites',
-                    'count' => $viewer->storyAuthorships()->pendingForActiveOwner()->count(),
-                    'href' => route('users.follow-requests', [], false),
-                ],
-                [
-                    'label' => 'Items under review',
-                    'count' => $this->underReviewCount($viewer),
-                    'href' => route('me', [], false),
-                ],
-            ],
-            'suggested_people' => $this->suggestedPeople($viewer),
+            'pending_actions' => $pending,
+            'suggested_people' => $profiles ? $this->suggestedPeople($viewer) : [],
             'recently_visited' => $this->trail->cards($viewer),
         ];
     }

@@ -9,6 +9,7 @@ use App\Models\Interest;
 use App\Models\Post;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PostFeedTest extends TestCase
@@ -290,5 +291,46 @@ class PostFeedTest extends TestCase
         $hidden = Post::factory()->for($viewer)->approved()->create(['is_feed_hidden' => true]);
 
         $this->assertNotContains($hidden->ulid, $this->feedUlids($viewer));
+    }
+
+    public function test_feed_and_single_post_report_saved_state_only_when_favorites_are_on(): void
+    {
+        User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $author = User::factory()->approved()->create();
+        $this->follow($viewer, $author);
+        $saved = Post::factory()->for($author)->approved()->create();
+        $other = Post::factory()->for($author)->approved()->create();
+
+        $this->actingAs($viewer)->postJson('/api/favorites', ['type' => 'post', 'id' => $saved->id])->assertSuccessful();
+
+        $feed = collect($this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data'))->keyBy('ulid');
+        $this->assertTrue($feed[$saved->ulid]['favorited']);
+        $this->assertFalse($feed[$other->ulid]['favorited']);
+        $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$saved->ulid}")->assertOk()->assertJsonPath('data.favorited', true);
+
+        // Without the module the key is absent, so clients offer no Save control.
+        config(['instance.modules.favorites' => false]);
+        $feed = $this->actingAs($viewer)->getJson('/api/feed')->assertOk()->json('data');
+        $this->assertArrayNotHasKey('favorited', $feed[0]);
+        $this->assertArrayNotHasKey('favorited', $this->actingAs($viewer)->getJson("/api/posts/by-ulid/{$saved->ulid}")->json('data'));
+    }
+
+    public function test_own_posts_listing_reports_saved_state_with_one_favorites_query(): void
+    {
+        User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $posts = Post::factory()->count(5)->for($viewer)->approved()->create();
+        $this->actingAs($viewer)->postJson('/api/favorites', ['type' => 'post', 'id' => $posts[2]->id])->assertSuccessful();
+
+        DB::enableQueryLog();
+        $data = collect($this->actingAs($viewer)->getJson('/api/posts')->assertOk()->json('data'))->keyBy('id');
+        // Identifier quoting differs by driver (SQLite "x", MariaDB `x`).
+        $favoriteQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => preg_match('/\bfrom\s+["`]?favorites["`]?(\s|$)/i', $query['query']) === 1);
+        DB::disableQueryLog();
+
+        $this->assertCount(1, $favoriteQueries);
+        $this->assertTrue($data[$posts[2]->id]['favorited']);
+        $this->assertFalse($data[$posts[0]->id]['favorited']);
     }
 }
