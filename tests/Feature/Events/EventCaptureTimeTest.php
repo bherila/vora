@@ -90,5 +90,14 @@ class EventCaptureTimeTest extends TestCase
         $this->assertSame(['Ceremony', 'Screenshot without EXIF', 'Speeches', 'First dance'], $titles('?sort=taken'));
         $this->assertSame(['Ceremony', 'Speeches', 'First dance', 'Screenshot without EXIF'], $titles('?sort=recent'));
         $this->getJson('/api/events/media?sort=random')->assertUnprocessable()->assertJsonValidationErrors('sort');
+
+        // The gallery labels days and times in the Event's own time zone.
+        $first = $this->getJson('/api/events/media')->assertOk()->json('data.0');
+        $this->assertSame('America/Los_Angeles', $first['event']['timezone']);
+        $this->assertSame('2026-10-24T16:00:00+00:00', $first['taken_at']);
+        $this->assertSame($first['taken_at'], $first['gallery_at']);
+        $undated = collect($this->getJson('/api/events/media')->json('data'))->firstWhere('title', 'Screenshot without EXIF');
+        $this->assertNull($undated['taken_at']);
+        $this->assertSame('2026-10-24T18:00:00+00:00', $undated['gallery_at']);
     }
 }

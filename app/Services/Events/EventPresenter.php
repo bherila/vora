@@ -36,7 +36,11 @@ class EventPresenter
         $data = $owned ? $this->media->item($media, resolveHls: $resolveHls) : $this->media->visitorItem($media, resolveHls: $resolveHls);
 
         return $data + [
-            'event' => $media->event === null ? null : ['ulid' => $media->event->ulid, 'name' => $media->event->name],
+            'event' => $media->event === null ? null : ['ulid' => $media->event->ulid, 'name' => $media->event->name, 'timezone' => $media->event->timezone],
+            // When the device captured it, if known; the gallery is ordered by
+            // gallery_at, which falls back to upload time.
+            'taken_at' => $media->captured_at?->toIso8601String(),
+            'gallery_at' => $media->gallery_sort_at?->toIso8601String(),
             'uploader' => ['id' => $media->user_id, 'display_name' => $media->user?->display_name],
             'owned' => $owned, 'favorited' => $favorited,
             'can_save_to_library' => $viewer->canUseLibrary() && app(LibraryAccess::class)->canSaveMedia($viewer, $media),
