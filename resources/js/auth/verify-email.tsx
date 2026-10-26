@@ -57,7 +57,9 @@ export function VerifyEmailPage() {
     const tick = async (): Promise<void> => {
       const current = await loadStatus();
       if (!active) return;
-      const settled = current !== null && (current.verified || (current.delivery !== null && !['sent', 'deferred'].includes(current.delivery.status)));
+      // A bounce can still follow a "delivered" report, so only verification
+      // or a terminal failure ends the bounded watch early.
+      const settled = current !== null && (current.verified || (current.delivery !== null && UNDELIVERABLE.includes(current.delivery.status)));
       if (!settled && attempts.current < STATUS_POLL_LIMIT) {
         attempts.current += 1;
         timer = window.setTimeout(() => void tick(), STATUS_POLL_MS);

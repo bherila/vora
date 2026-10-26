@@ -47,6 +47,18 @@ describe('VerifyEmailPage delivery status', () => {
     expect(screen.queryByLabelText('Use a different email address')).toBeNull();
   });
 
+  it('keeps watching after a delivered report so a later bounce still surfaces', async () => {
+    jest.mocked(fetchWrapper.get)
+      .mockResolvedValueOnce(status('guest@exmaple.test', { status: 'delivered', ...sent }))
+      .mockResolvedValue(status('guest@exmaple.test', { status: 'bounced', ...sent }));
+    render(<VerifyEmailPage />);
+    await flush();
+    expect(screen.queryByRole('alert')).toBeNull();
+    await act(async () => { jest.advanceTimersByTime(STATUS_POLL_MS); });
+    await flush();
+    expect(screen.getByRole('alert')).toHaveTextContent('guest@exmaple.test');
+  });
+
   it('notes delays, hides the address change when locked, and stops polling after about three minutes', async () => {
     jest.mocked(fetchWrapper.get).mockResolvedValueOnce(status('guest@example.test', { status: 'deferred', ...sent }));
     const { unmount } = render(<VerifyEmailPage />);
