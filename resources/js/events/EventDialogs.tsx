@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { takenLabel } from '@/events/capture-time';
 import { eventMediaStatus, mediaNeedsRefresh } from '@/events/media-status';
 import { PhotoDetails, PhotoVersionsChooser } from '@/events/PhotoVersionsChooser';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
@@ -184,7 +185,7 @@ export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChoos
   };
   return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl" onKeyDown={keyDown}>
-      <DialogHeader><DialogTitle>{item.title || 'Event media'}</DialogTitle><DialogDescription>{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{` · ${eventMediaStatus(item)}`}</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{item.title || 'Event media'}</DialogTitle><DialogDescription>{item.uploader.display_name}{item.event ? ` · ${item.event.name}` : ''}{` · ${eventMediaStatus(item)}`}{takenLabel(item) && <span className="block">{takenLabel(item)}</span>}</DialogDescription></DialogHeader>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {onNavigate && <nav aria-label="Media navigation" className="flex items-center justify-between gap-3">
         <Button variant="outline" size="sm" disabled={!hasPrevious || busy || navigationBusy || confirmDelete} onClick={() => navigate(-1)}>Previous item</Button>
