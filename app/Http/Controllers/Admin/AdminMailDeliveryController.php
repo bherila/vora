@@ -25,8 +25,11 @@ class AdminMailDeliveryController extends Controller
         if ($status = $request->validated('status')) {
             $query->where('status', $status);
         }
-        if ($search = $request->validated('search')) {
-            $query->where('recipient', 'like', '%'.addcslashes(mb_strtolower($search), '\\%_').'%');
+        $search = $request->validated('search');
+        if ($search !== null && $search !== '') {
+            // An explicit escape character behaves the same on SQLite and MariaDB.
+            $term = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search));
+            $query->whereRaw("recipient like ? escape '!'", ['%'.$term.'%']);
         }
         $page = $query->paginate(50);
         $summary = MailDelivery::query()->where('sent_at', '>=', now()->subDays(7))

@@ -143,6 +143,21 @@ class MailDeliveryTrackingTest extends TestCase
         $this->get('/admin/mail-deliveries')->assertOk()->assertSee('admin-mail-deliveries');
     }
 
+    public function test_admin_search_treats_wildcards_literally_on_every_database(): void
+    {
+        $admin = User::factory()->admin()->approved()->create();
+        $this->delivery(['recipient' => 'a_b@example.test']);
+        $this->delivery(['recipient' => 'axb@example.test']);
+        $this->delivery(['recipient' => 'zero0@example.test']);
+        $this->delivery(['recipient' => 'pct%sign@example.test']);
+        $search = fn (string $term): array => array_column($this->actingAs($admin)->getJson('/api/admin/mail-deliveries?search='.rawurlencode($term))->assertOk()->json('data'), 'recipient');
+
+        $this->assertSame(['a_b@example.test'], $search('a_b'));
+        $this->assertSame(['pct%sign@example.test'], $search('%sign'));
+        $this->assertSame(['zero0@example.test'], $search('0'));
+        $this->assertSame([], $search('!'));
+    }
+
     public function test_records_older_than_ninety_days_are_pruned(): void
     {
         $old = $this->delivery(['sent_at' => now()->subDays(91)]);
