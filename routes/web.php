@@ -106,6 +106,8 @@ Route::middleware('auth')->group(function () {
         ->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
     Route::post('/email/verification-notification', [EmailVerificationController::class, 'resend'])
         ->middleware('throttle:6,1')->name('verification.send');
+    Route::get('/email/verification-status', [EmailVerificationController::class, 'status'])
+        ->middleware('throttle:60,1')->name('verification.status');
 
     Route::patch('/api/account', [ProfileController::class, 'update']);
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
