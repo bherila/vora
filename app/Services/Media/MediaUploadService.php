@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Events\EventAccess;
 use App\Services\Events\EventPhotoVersions;
 use App\Services\FileStorageService;
+use App\Support\CaptureTime;
 use App\Support\HeifPhoto;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -83,8 +84,9 @@ class MediaUploadService
         ?int $thumbnailSizeBytes = null,
         ?int $eventId = null,
         ?array $photoMetadata = null,
+        ?string $capturedAt = null,
     ): array {
-        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes, $eventId, $photoMetadata): array {
+        return DB::transaction(function () use ($user, $type, $filename, $mimeType, $title, $audience, $interestIds, $wantsThumbnail, $perceptualHash, $purpose, $discoverable, $characterId, $fileHash, $expectedSizeBytes, $announceOnApproval, $thumbnailSizeBytes, $eventId, $photoMetadata, $capturedAt): array {
             $user = $this->quota->lock($user);
             if ($purpose === MediaPurpose::Event) {
                 // Bind the immutable event ACL before an object key or URL can
@@ -140,6 +142,9 @@ class MediaUploadService
             ]);
             if ($purpose === MediaPurpose::Event && $type === MediaType::Photo && EventPhotoVersions::supportsMime($mimeType)) {
                 $media->forceFill(EventPhotoVersions::metadataAttributes($photoMetadata));
+            }
+            if ($purpose === MediaPurpose::Event) {
+                $media->captured_at = CaptureTime::parse($capturedAt, $event->timezone);
             }
             $media->save();
 

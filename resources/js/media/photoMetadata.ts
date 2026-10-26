@@ -2,6 +2,8 @@ export interface PhotoMetadataSummary {
   has_gps: boolean;
   has_capture_time: boolean;
   has_camera: boolean;
+  /** Wall-clock `YYYY-MM-DDTHH:mm:ss`, plus the EXIF offset when the camera recorded one. */
+  captured_at: string | null;
 }
 
 const CHUNK_BYTES = 65536;
@@ -36,7 +38,28 @@ function hasText(value: unknown): boolean {
   return typeof value === 'string' && value.trim() !== '';
 }
 
-/** Read only summary flags. Coordinates, camera names and timestamps stay in the original. */
+const pad = (value: number): string => String(value).padStart(2, '0');
+
+/**
+ * Exifr revives EXIF's zone-less wall-clock strings as Dates in the browser's
+ * own zone, so the local getters return the camera's digits unchanged.
+ */
+export function exifCaptureTime(value: unknown, offset: unknown): string | null {
+  let wallClock: string | null = null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    wallClock = `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+  } else if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    if (match) wallClock = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}`;
+  }
+  if (wallClock === null) return null;
+  return typeof offset === 'string' && /^[+-]\d{2}:\d{2}$/.test(offset.trim()) ? `${wallClock}${offset.trim()}` : wallClock;
+}
+
+/**
+ * Read summary flags plus the capture time, which orders the Event gallery.
+ * Coordinates and camera names stay in the original.
+ */
 export async function readPhotoMetadata(file: File, signal: AbortSignal): Promise<PhotoMetadataSummary | null> {
   signal.throwIfAborted();
   try {
@@ -48,7 +71,7 @@ export async function readPhotoMetadata(file: File, signal: AbortSignal): Promis
       chunked: true, firstChunkSize: CHUNK_BYTES, chunkSize: CHUNK_BYTES, chunkLimit: 5,
       multiSegment: false, makerNote: false, userComment: false,
       xmp: false, icc: false, iptc: false,
-      pick: ['GPSLatitude', 'GPSLongitude', 'DateTimeOriginal', 'CreateDate', 'Make', 'Model'],
+      pick: ['GPSLatitude', 'GPSLongitude', 'DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal', 'OffsetTimeDigitized', 'Make', 'Model'],
     };
     const parsed = await parse(input, options) as Record<string, unknown> | undefined;
     signal.throwIfAborted();
@@ -58,11 +81,13 @@ export async function readPhotoMetadata(file: File, signal: AbortSignal): Promis
       || (Array.isArray(data.GPSLatitude) && Array.isArray(data.GPSLongitude)
         && data.GPSLatitude.length === 3 && data.GPSLongitude.length === 3
         && [...data.GPSLatitude, ...data.GPSLongitude].every((value) => typeof value === 'number' && Number.isFinite(value)));
-    const capture = data.DateTimeOriginal ?? data.CreateDate;
+    const original = data.DateTimeOriginal !== undefined && data.DateTimeOriginal !== null;
+    const capture = original ? data.DateTimeOriginal : data.CreateDate;
     return {
       has_gps: hasGps,
       has_capture_time: (capture instanceof Date && !Number.isNaN(capture.getTime())) || hasText(capture),
       has_camera: hasText(data.Make) || hasText(data.Model),
+      captured_at: exifCaptureTime(capture, original ? data.OffsetTimeOriginal : data.OffsetTimeDigitized),
     };
   } catch {
     signal.throwIfAborted();
