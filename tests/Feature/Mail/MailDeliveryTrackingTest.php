@@ -83,6 +83,18 @@ class MailDeliveryTrackingTest extends TestCase
         $this->assertSame('0100018f-ses-id', MailDelivery::sole()->provider_message_id);
     }
 
+    public function test_one_recipient_failing_spares_the_others(): void
+    {
+        MailDelivery::creating(function (MailDelivery $delivery): void {
+            if ($delivery->recipient === 'broken@example.test') {
+                throw new \RuntimeException('Simulated insert failure');
+            }
+        });
+        Mail::raw('Hello', fn ($message) => $message->to('broken@example.test')->cc('guest@example.test')->bcc('third@example.test')->subject('Hi'));
+
+        $this->assertSame(['guest@example.test', 'third@example.test'], MailDelivery::orderBy('recipient')->pluck('recipient')->all());
+    }
+
     public function test_bookkeeping_failure_never_fails_the_send(): void
     {
         Schema::drop('mail_deliveries');
