@@ -109,12 +109,18 @@ export async function generatePhotoDerivatives(file: File): Promise<PhotoDerivat
 }
 
 /**
+ * iOS Safari may never load an off-screen video (codec, power or memory
+ * limits), so each step gives up rather than stalling a whole upload batch.
+ */
+export const VIDEO_POSTER_STEP_TIMEOUT_MS = 8_000;
+
+/**
  * Capture a poster frame from a video file as a JPEG thumbnail. Seeks a little
  * past the start to skip black leader frames. Resolves null if the video can't
- * be decoded/drawn (e.g. an unsupported codec), so the caller falls back to a
- * posterless upload.
+ * be decoded/drawn (e.g. an unsupported codec) or doesn't respond in time, so
+ * the caller falls back to a posterless upload.
  */
-export async function generateVideoPoster(file: File): Promise<Blob | null> {
+export async function generateVideoPoster(file: File, signal?: AbortSignal): Promise<Blob | null> {
   const url = URL.createObjectURL(file);
   const video = document.createElement('video');
   video.muted = true;
@@ -123,11 +129,11 @@ export async function generateVideoPoster(file: File): Promise<Blob | null> {
   video.src = url;
 
   try {
-    await waitForEvent(video, 'loadedmetadata');
+    await waitForEvent(video, 'loadedmetadata', signal);
     // A short offset avoids an all-black first frame; clamp to the duration.
     const target = Number.isFinite(video.duration) ? Math.min(0.5, video.duration / 2) : 0;
     video.currentTime = target;
-    await waitForEvent(video, 'seeked');
+    await waitForEvent(video, 'seeked', signal);
 
     const { videoWidth: w, videoHeight: h } = video;
     if (w === 0 || h === 0) {
@@ -282,7 +288,7 @@ function drawTo(source: ImageBitmap | OffscreenCanvas, width: number, height: nu
   return canvas;
 }
 
-function waitForEvent(target: HTMLMediaElement, event: string): Promise<void> {
+function waitForEvent(target: HTMLMediaElement, event: string, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const onDone = (): void => {
       cleanup();
@@ -292,11 +298,19 @@ function waitForEvent(target: HTMLMediaElement, event: string): Promise<void> {
       cleanup();
       reject(new Error(`Video failed to ${event}.`));
     };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Video did not ${event} in time.`));
+    }, VIDEO_POSTER_STEP_TIMEOUT_MS);
     const cleanup = (): void => {
+      clearTimeout(timer);
       target.removeEventListener(event, onDone);
       target.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onError);
     };
+    if (signal?.aborted) { onError(); return; }
     target.addEventListener(event, onDone, { once: true });
     target.addEventListener('error', onError, { once: true });
+    signal?.addEventListener('abort', onError, { once: true });
   });
 }
