@@ -30,21 +30,31 @@ class MailDeliveryLog
             $messageId = self::normalizeMessageId($sesId ?? $sent->getMessageId());
             $class = $data['__laravel_notification'] ?? $data['__laravel_mailable'] ?? null;
             $now = now();
-            foreach ($sent->getEnvelope()->getRecipients() as $address) {
-                $recipient = mb_strtolower($address->getAddress());
+            $recipients = $sent->getEnvelope()->getRecipients();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return;
+        }
+        // One recipient's failure must not leave the message's others unrecorded.
+        foreach ($recipients as $address) {
+            try {
+                $recipient = mb_substr(mb_strtolower($address->getAddress()), 0, 254);
                 MailDelivery::create([
+                    // The configured mailer; under a failover chain this does not say which transport sent it.
                     'mailer' => (string) config('mail.default'),
                     'provider_message_id' => $messageId,
                     'recipient' => $recipient,
-                    'user_id' => User::query()->where('email', $recipient)->value('id'),
-                    'type' => is_string($class) ? class_basename($class) : null,
+                    // Stored addresses keep their original case; match either form on every database.
+                    'user_id' => User::query()->whereIn('email', array_unique([$address->getAddress(), $recipient]))->value('id'),
+                    'type' => is_string($class) ? mb_substr(class_basename($class), 0, 100) : null,
                     'status' => 'sent',
                     'sent_at' => $now,
                     'status_at' => $now,
                 ]);
+            } catch (Throwable $exception) {
+                report($exception);
             }
-        } catch (Throwable $exception) {
-            report($exception);
         }
     }
 

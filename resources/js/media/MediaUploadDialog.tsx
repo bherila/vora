@@ -18,6 +18,7 @@ import { useActiveIdentityId } from '@/identity';
 import { type Audience } from '@/media/types';
 import { discardUploadReservation, type MediaUploadDestination, UploadAttemptError, uploadMediaFile } from '@/media/uploadMediaFile';
 import { type QueuedUpload,UploadQueue } from '@/media/UploadQueue';
+import { useScreenWakeLock } from '@/media/useScreenWakeLock';
 import { activeRestriction } from '@/restrictions';
 
 /** A character the upload can be associated with (privacy is inherited from it). */
@@ -97,6 +98,8 @@ export function MediaUploadDialog({
   const [announce, setAnnounce] = useState(true);
   const [uploadInterestIds, setUploadInterestIds] = useState<number[]>(lastInterestIds);
   const [uploading, setUploading] = useState(false);
+  // Held for the whole dialog: picking (iCloud downloads) and uploading.
+  const screenAwake = useScreenWakeLock(open);
   const [progress, setProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState('Uploading…');
   const selectedEvent = eventOptions?.find((option) => option.ulid === selectedEventUlid);
@@ -350,7 +353,7 @@ export function MediaUploadDialog({
             />
             <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
           </label></>}
-          <p className="text-xs text-muted-foreground">Keep this page open and your device awake until uploads finish. If interrupted, choose the same files and event again: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
+          <p className="text-xs text-muted-foreground">{screenAwake ? 'Your screen stays on while this window is open. Stay on this page until uploads finish.' : 'Keep this page open and your device awake until uploads finish.'} If interrupted, choose the same files and event again: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={uploading || discarding || (isEvent && !hasEvent) || pending.length === 0}>
               {uploading ? 'Uploading…' : batchStarted ? (completed === pending.length ? 'Done' : pending.some((item) => item.status === 'queued' || item.status === 'canceled') ? 'Continue unfinished' : 'Retry failed') : 'Upload'}
