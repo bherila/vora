@@ -21,10 +21,20 @@ class SesMailWebhookController extends Controller
 {
     private const SUBSCRIBE_URL = '/^https:\/\/sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?\//';
 
+    /** AWS's own certificate path; anything looser would let unsigned requests trigger fetches. */
+    private const SIGNING_CERT_URL = '/^https:\/\/sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?\/SimpleNotificationService-[0-9a-f]+\.pem$/';
+
+    private const MESSAGE_TYPES = ['Notification', 'SubscriptionConfirmation', 'UnsubscribeConfirmation'];
+
     public function __invoke(Request $request, MailDeliveryLog $log, MessageValidator $validator): Response
     {
         $topic = (string) config('services.ses.notification_topic_arn');
         abort_if($topic === '', 404);
+        // Cheap shape checks first: an unsigned request must not make this app
+        // fetch a certificate (each fetch can hold a worker for seconds).
+        $type = $request->header('x-amz-sns-message-type');
+        $certUrl = json_decode($request->getContent(), true)['SigningCertURL'] ?? null;
+        abort_unless(in_array($type, self::MESSAGE_TYPES, true) && is_string($certUrl) && preg_match(self::SIGNING_CERT_URL, $certUrl) === 1, 403);
         try {
             $message = Message::fromJsonString($request->getContent());
             $validator->validate($message);

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Mail;
 
 use App\Models\MailDelivery;
+use App\Providers\AppServiceProvider;
 use Aws\Sns\Message;
 use Aws\Sns\MessageValidator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,7 +18,7 @@ class SesMailWebhookTest extends TestCase
 
     private const TOPIC = 'arn:aws:sns:us-east-1:123456789012:ses-delivery';
 
-    private const CERT_URL = 'https://sns.us-east-1.amazonaws.com/SimpleNotificationService-test.pem';
+    private const CERT_URL = 'https://sns.us-east-1.amazonaws.com/SimpleNotificationService-0123456789abcdef.pem';
 
     private OpenSSLAsymmetricKey $key;
 
@@ -45,7 +46,7 @@ class SesMailWebhookTest extends TestCase
             $message['Signature'] = base64_encode($signature);
         }
 
-        return $this->call('POST', '/api/webhooks/mail/ses', [], [], [], ['CONTENT_TYPE' => 'text/plain; charset=UTF-8'], json_encode($message));
+        return $this->call('POST', '/api/webhooks/mail/ses', [], [], [], ['CONTENT_TYPE' => 'text/plain; charset=UTF-8', 'HTTP_X_AMZ_SNS_MESSAGE_TYPE' => $message['Type'] ?? ''], json_encode($message));
     }
 
     /** @param array<string, mixed> $event */
@@ -73,6 +74,17 @@ class SesMailWebhookTest extends TestCase
 
         config(['services.ses.notification_topic_arn' => null]);
         $this->notification($delivered)->assertNotFound();
+    }
+
+    public function test_unsigned_requests_never_trigger_a_certificate_fetch(): void
+    {
+        $this->app->bind(MessageValidator::class, fn (): MessageValidator => AppServiceProvider::snsMessageValidator());
+        Http::fake();
+        foreach (['https://sns.us-east-1.amazonaws.com/random.pem', 'https://sns.us-east-1.amazonaws.com/?x=.pem', 'https://sns.us-east-1.amazonaws.com/SimpleNotificationService-abc.pem?x'] as $url) {
+            $this->sns(['Type' => 'Notification', 'Message' => '{}', 'SigningCertURL' => $url], sign: false)->assertForbidden();
+        }
+        $this->call('POST', '/api/webhooks/mail/ses', [], [], [], ['CONTENT_TYPE' => 'text/plain'], json_encode(['Type' => 'Notification', 'SigningCertURL' => self::CERT_URL]))->assertForbidden();
+        Http::assertNothingSent();
     }
 
     public function test_subscription_confirmation_is_fetched_only_from_amazon_sns(): void

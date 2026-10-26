@@ -55,9 +55,15 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(RestrictionGate::class);
         // SNS signing certificates for SES delivery reports. The validator checks
         // the certificate URL is an amazonaws.com .pem before this fetch runs.
-        $this->app->bind(MessageValidator::class, fn (): MessageValidator => new MessageValidator(
+        $this->app->bind(MessageValidator::class, fn (): MessageValidator => self::snsMessageValidator());
+    }
+
+    /** The production SNS validator: certificates fetched over HTTPS and cached for a day. */
+    public static function snsMessageValidator(): MessageValidator
+    {
+        return new MessageValidator(
             fn (string $url): string => Cache::remember('sns-signing-cert:'.sha1($url), now()->addDay(), fn (): string => Http::timeout(10)->get($url)->throw()->body()),
-        ));
+        );
     }
 
     /**
