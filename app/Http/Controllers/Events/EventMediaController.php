@@ -79,7 +79,11 @@ class EventMediaController extends Controller
                 ->whereColumn('favorites.favoritable_id', 'media.id')->where('favorites.favoritable_type', (new Media)->getMorphClass())
                 ->whereIn('favorites.user_id', $curators));
         }
-        $page = $this->photoVersions->collapse($query)->latest('media.created_at')->orderByDesc('media.id')->paginate(24);
+        $query = $this->photoVersions->collapse($query);
+        // Default to the order things happened; "recent" keeps upload order for catching up.
+        $page = ($request->validated('sort') === 'recent'
+            ? $query->latest('media.created_at')->orderByDesc('media.id')
+            : $query->orderBy('media.gallery_sort_at')->orderBy('media.id'))->paginate(24);
         $versions = $this->photoVersions->summaries($viewer, $page->getCollection());
         $saved = $viewer->libraryItems()->whereIn('media_id', $page->getCollection()->modelKeys())->pluck('ulid', 'media_id');
         $favorited = InstanceFeatures::enabled('favorites')
@@ -134,6 +138,7 @@ class EventMediaController extends Controller
             purpose: MediaPurpose::Event, discoverable: false, fileHash: $request->validated('file_hash'),
             expectedSizeBytes: (int) $request->validated('size'), thumbnailSizeBytes: $request->validated('thumbnail_size'), eventId: $event->id,
             photoMetadata: $request->validated('type') === 'photo' ? $request->validated('photo_metadata') : null,
+            capturedAt: $request->validated('captured_at'),
         );
         $media = $result['media']->load(['event.members:id', 'user', 'interests']);
 

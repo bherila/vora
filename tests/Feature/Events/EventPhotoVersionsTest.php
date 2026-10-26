@@ -184,12 +184,15 @@ class EventPhotoVersionsTest extends TestCase
             $root = $this->photo(['created_at' => now()->subMinutes($i)]);
             $preferred[] = $this->photo(['photo_group_ulid' => $root->ulid, 'created_at' => $root->created_at], ['width' => 2000, 'height' => 2000])->ulid;
         }
-        $first = $this->actingAs($this->viewer)->getJson('/api/events/media')->assertOk()->assertJsonCount(24, 'data')->assertJsonPath('meta.total', 25);
-        $last = $this->getJson('/api/events/media?page=2')->assertOk()->assertJsonCount(1, 'data');
-        $actual = [...array_column($first->json('data'), 'ulid'), ...array_column($last->json('data'), 'ulid')];
-        $this->assertSame($preferred, $actual);
-        $again = $this->getJson('/api/events/media')->assertOk();
-        $this->assertSame(array_column($first->json('data'), 'ulid'), array_column($again->json('data'), 'ulid'));
+        // Without capture times, time-taken order falls back to upload time: oldest first.
+        foreach (['' => array_reverse($preferred), 'sort=recent&' => $preferred] as $sort => $expected) {
+            $first = $this->actingAs($this->viewer)->getJson('/api/events/media?'.$sort.'page=1')->assertOk()->assertJsonCount(24, 'data')->assertJsonPath('meta.total', 25);
+            $last = $this->getJson('/api/events/media?'.$sort.'page=2')->assertOk()->assertJsonCount(1, 'data');
+            $actual = [...array_column($first->json('data'), 'ulid'), ...array_column($last->json('data'), 'ulid')];
+            $this->assertSame($expected, $actual);
+            $again = $this->getJson('/api/events/media?'.$sort.'page=1')->assertOk();
+            $this->assertSame(array_column($first->json('data'), 'ulid'), array_column($again->json('data'), 'ulid'));
+        }
     }
 
     public function test_revocation_hides_versions_but_keeps_a_saved_concrete_original_and_its_metadata(): void

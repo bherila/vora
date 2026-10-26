@@ -37,6 +37,8 @@ class EventUploadRequest extends StoreMediaRequest
             'photo_metadata.has_gps' => ['sometimes', 'boolean'],
             'photo_metadata.has_capture_time' => ['sometimes', 'boolean'],
             'photo_metadata.has_camera' => ['sometimes', 'boolean'],
+            // An ordering hint only; CaptureTime discards anything implausible.
+            'captured_at' => ['sometimes', 'nullable', 'string', 'max:40'],
         ];
     }
 }
