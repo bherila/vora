@@ -112,6 +112,17 @@ describe('EventsPage', () => {
     expect(window.location.search).toContain('item=p2');
   });
 
+  it('steps back to the last page that still has items when a later page empties', async () => {
+    window.history.replaceState({}, '', '/events?page=2');
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events/media?page=2' ? { data: [], meta: { ...meta, current_page: 2, last_page: 1, total: 24, has_more: false } } : implementation(url));
+    render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1');
+    expect(window.location.search).toBe('');
+    expect(screen.queryByText('Be the first to share a moment.')).toBeNull();
+  });
+
   it('names a selected event once and drops it from each card’s byline', async () => {
     localStorage.setItem('vora:events:view', 'details');
     window.history.replaceState({}, '', '/events?event_ulid=event-one');

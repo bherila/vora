@@ -207,6 +207,12 @@ export function EventsPage() {
       try {
         const result = await fetchWrapper.get(`/api/events/media?${key}`) as { data: EventMediaItem[]; meta: PageMeta };
         if (!active) return;
+        // Moderating or deleting the last item on a later page empties it; step back
+        // to the last page that still has items instead of claiming none remain.
+        if (result.data.length === 0 && page > 1 && result.meta.last_page < page) {
+          replaceLocation(pageUrl(new URLSearchParams(window.location.search), { page: result.meta.last_page > 1 ? String(result.meta.last_page) : null }));
+          return;
+        }
         setItems(result.data);
         setMeta(result.meta);
         if (pendingScrollRestore.current !== null) {
