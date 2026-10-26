@@ -32,9 +32,17 @@ needs the same secrets as `prod` plus the variables `DEPLOY_PROFILE=event` and
 Instance repositories can still call `release-instance.yml` with a pinned
 `source_ref` for reviewed releases.
 
-Configure every secret and both variables on the environment itself, and
-restrict it to the `main` branch. An environment missing a value inherits the
-repository-level one, which belongs to the primary instance.
+Every environment, `prod` included, is self-contained: its SSH and target
+secrets plus `DEPLOY_ENABLED` and `DEPLOY_PROFILE` (`vora` or `event`) live on
+the environment, which only `main` may deploy. Keep no deployment secrets or
+variables at repository level; an environment missing a value would inherit
+them, and the release copies files with `rsync --delete` before the remote
+profile check runs.
+
+An instance repository's pinned release and this repository's automatic one
+can both target the Event instance, and their concurrency groups do not span
+repositories. While `event-prod` follows `main`, release the Event instance
+only from here; to pin it again, set `DEPLOY_ENABLED=false` first.
 
 ## Deployment Target
 
