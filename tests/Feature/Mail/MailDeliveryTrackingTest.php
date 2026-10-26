@@ -95,6 +95,14 @@ class MailDeliveryTrackingTest extends TestCase
         $this->assertSame(['guest@example.test', 'third@example.test'], MailDelivery::orderBy('recipient')->pluck('recipient')->all());
     }
 
+    public function test_mixed_case_stored_addresses_still_match_their_account(): void
+    {
+        $user = User::factory()->create(['email' => 'Guest@Example.test']);
+        Mail::raw('Hello', fn ($message) => $message->to('Guest@Example.test')->subject('Hi'));
+
+        $this->assertSame($user->id, MailDelivery::sole()->user_id);
+    }
+
     public function test_bookkeeping_failure_never_fails_the_send(): void
     {
         Schema::drop('mail_deliveries');

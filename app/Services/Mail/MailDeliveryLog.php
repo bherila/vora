@@ -45,7 +45,8 @@ class MailDeliveryLog
                     'mailer' => (string) config('mail.default'),
                     'provider_message_id' => $messageId,
                     'recipient' => $recipient,
-                    'user_id' => User::query()->where('email', $recipient)->value('id'),
+                    // Stored addresses keep their original case; match either form on every database.
+                    'user_id' => User::query()->whereIn('email', array_unique([$address->getAddress(), $recipient]))->value('id'),
                     'type' => is_string($class) ? mb_substr(class_basename($class), 0, 100) : null,
                     'status' => 'sent',
                     'sent_at' => $now,
