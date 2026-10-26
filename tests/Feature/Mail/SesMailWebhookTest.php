@@ -4,13 +4,14 @@ namespace Tests\Feature\Mail;
 
 use App\Models\MailDelivery;
 use App\Providers\AppServiceProvider;
+use App\Services\Mail\MailDeliveryLog;
 use Aws\Sns\Message;
 use Aws\Sns\MessageValidator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
 use OpenSSLAsymmetricKey;
+use RuntimeException;
 use Tests\TestCase;
 
 class SesMailWebhookTest extends TestCase
@@ -91,7 +92,8 @@ class SesMailWebhookTest extends TestCase
         $this->assertSame('delivered', $delivery->fresh()->status);
 
         // A storage failure must reach SNS as an error so it retries the bounce.
-        Schema::drop('mail_deliveries');
+        // Simulated in the service: dropping a table would end MariaDB's test transaction.
+        $this->mock(MailDeliveryLog::class)->shouldReceive('apply')->andThrow(new RuntimeException('database unavailable'));
         $this->notification(['eventType' => 'Bounce', 'bounce' => ['bounceType' => 'Permanent', 'bouncedRecipients' => [['emailAddress' => 'guest@example.test']]]])->assertServerError();
     }
 
