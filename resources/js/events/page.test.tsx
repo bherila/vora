@@ -46,6 +46,16 @@ describe('EventsPage', () => {
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
   });
 
+  it('names a selected event once and drops it from each card’s byline', async () => {
+    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+    render(<EventsPage />);
+    expect(await screen.findByText('Welcome video')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Welcome' })).toHaveLength(1);
+    expect(screen.getByText(/^Sam · [^·]+$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter media' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check for updates' })).toBeInTheDocument();
+  });
+
   it('selects current-page ready media, saves it privately and resets selection on filters', async () => {
     const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
     jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url.startsWith('/api/events/media?') ? {

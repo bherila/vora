@@ -29,6 +29,12 @@ type NavbarProps = {
 
 type ThemeMode = 'system' | 'dark' | 'light';
 
+const THEME_OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Laptop }[] = [
+  { mode: 'system', label: 'System', Icon: Laptop },
+  { mode: 'dark', label: 'Dark', Icon: Moon },
+  { mode: 'light', label: 'Light', Icon: Sun },
+];
+
 export interface NavbarBrand {
   label: string;
   href: string;
@@ -244,7 +250,7 @@ export default function Navbar({
     <>
     <nav className='relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3'>
       {/* Left: Branding + Main nav */}
-      <div className='flex items-center gap-3 md:gap-6'>
+      <div className='flex min-w-0 items-center gap-3 md:gap-6'>
         {authenticated && (
           <button
             type='button'
@@ -256,8 +262,8 @@ export default function Navbar({
             {mobileOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
           </button>
         )}
-        <InternalNavLink href={brand.href} className='select-none'>
-          <h1 className='text-lg font-semibold tracking-tight'>{brand.label}</h1>
+        <InternalNavLink href={brand.href} className='min-w-0 select-none'>
+          <h1 className='truncate text-base font-semibold tracking-tight sm:text-lg'>{brand.label}</h1>
         </InternalNavLink>
         <ul className='hidden md:flex items-center gap-4 text-sm'>
           {navItems.map((item) => (
@@ -302,7 +308,7 @@ export default function Navbar({
       </div>
 
       {/* Right: Auth links + Theme toggle */}
-      <div className='flex items-center gap-3'>
+      <div className='flex shrink-0 items-center gap-3'>
         {authenticated && <NotificationBell />}
         {!authenticated ? (
           <div className='flex items-center gap-2 text-sm'>
@@ -400,8 +406,8 @@ export default function Navbar({
           </DropdownMenu>
         )}
 
-        {/* Tri-state theme toggle */}
-        <div className='inline-flex items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]'>
+        {/* Tri-state theme toggle; signed-in phones get it in the drawer instead. */}
+        <div className={`${authenticated ? 'hidden md:inline-flex' : 'inline-flex'} items-center overflow-hidden rounded-md border border-gray-200 dark:border-[#3E3E3A]`}>
           <button
             type='button'
             onClick={() => setTheme('system')}
@@ -505,6 +511,27 @@ export default function Navbar({
                 ))}
               </li>
             )}
+            <li className='mt-1 border-t border-gray-200 px-4 pb-1 pt-3 dark:border-[#3E3E3A]'>
+              <p id='mobile-theme-label' className='pb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400'>Appearance</p>
+              <div role='group' aria-labelledby='mobile-theme-label' className='grid grid-cols-3 overflow-hidden rounded-md border border-gray-200 text-sm dark:border-[#3E3E3A]'>
+                {THEME_OPTIONS.map(({ mode, label, Icon }) => (
+                  <button
+                    key={mode}
+                    type='button'
+                    onClick={() => setTheme(mode)}
+                    aria-pressed={theme === mode}
+                    className={`flex items-center justify-center gap-1.5 px-2 py-2 ${
+                      theme === mode
+                        ? 'bg-gray-900 text-white dark:bg-[#262625] dark:text-gray-50'
+                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-[#1f1f1e]'
+                    }`}
+                  >
+                    <Icon className='h-4 w-4' aria-hidden='true' />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </li>
           </ul>
         </div>
       )}
