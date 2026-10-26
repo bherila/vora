@@ -63,6 +63,18 @@ describe('EventsPage', () => {
     expect(screen.getByRole('button', { name: 'Details view' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('lists by time taken and keeps Recently added in the URL', async () => {
+    render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1');
+    expect(screen.getByRole('combobox', { name: 'Sort media' })).toHaveValue('');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort media' }), { target: { value: 'recent' } });
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&sort=recent'));
+    expect(window.location.search).toBe('?sort=recent');
+    fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&sort=recent'));
+  });
+
   it('names a selected event once and drops it from each card’s byline', async () => {
     localStorage.setItem('vora:events:view', 'details');
     window.history.replaceState({}, '', '/events?event_ulid=event-one');

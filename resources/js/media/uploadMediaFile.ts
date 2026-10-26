@@ -4,6 +4,7 @@ import { readPhotoMetadata } from '@/media/photoMetadata';
 import { type Audience, type MediaItem, mediaTypeForFile } from '@/media/types';
 import { type CompletedMultipartPart, type MultipartPartToSign, type MultipartUploadSession, putToSignedUrl, readMultipartSession, removeMultipartSession, saveMultipartSession, uploadMultipartFile, withRetries } from '@/media/upload';
 import { postUpload, UploadHttpError } from '@/media/uploadRequest';
+import { readVideoCaptureTime } from '@/media/videoMetadata';
 
 interface StoreResponse {
   data: MediaItem;
@@ -199,11 +200,14 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
     const inspectMetadata = isEvent && type === 'photo' && ['image/jpeg', 'image/png', 'image/heic', 'image/heif'].includes(selectedFile.type);
     phase = 'preparing';
     setProgress(0);
-    const [{ thumbnail, perceptualHash, width, height }, fileHash, metadata] = await Promise.all([
+    const [{ thumbnail, perceptualHash, width, height }, fileHash, metadata, videoCapturedAt] = await Promise.all([
       buildDerivatives(selectedFile, type, signal),
       computeFileHash(selectedFile, (fraction) => setProgress(fraction * 100), signal),
       inspectMetadata ? readPhotoMetadata(selectedFile, signal) : Promise.resolve(null),
+      isEvent && type === 'video' ? readVideoCaptureTime(selectedFile, signal) : Promise.resolve(null),
     ]);
+    // Orders the Event gallery by when the moment happened rather than when it was shared.
+    const capturedAt = metadata?.captured_at ?? videoCapturedAt;
 
     signal.throwIfAborted();
     phase = 'uploading';
@@ -224,6 +228,7 @@ export async function uploadMediaFile({ file, title, destination, signal, reserv
       ...(inspectMetadata ? { photo_metadata: { width, height, ...(metadata === null ? {} : {
         has_gps: metadata.has_gps, has_capture_time: metadata.has_capture_time, has_camera: metadata.has_camera,
       }) } } : {}),
+      ...(isEvent && capturedAt ? { captured_at: capturedAt } : {}),
       ...(!isEvent ? { interest_ids: uploadInterestIds, announce } : {}),
       ...(isEvent ? {} : isLibrary ? {
         audience: 'specific', audience_user_ids: [], discoverable: false, announce: false,

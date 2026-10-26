@@ -4,6 +4,7 @@ namespace App\Http\Requests\Events;
 
 use App\Support\InstanceFeatures;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class EventMediaRequest extends FormRequest
 {
@@ -24,6 +25,7 @@ class EventMediaRequest extends FormRequest
             'favorites_of' => ['nullable', 'integer', 'min:1'],
             'featured' => ['sometimes', 'boolean'],
             'page' => ['sometimes', 'integer', 'min:1'],
+            'sort' => ['sometimes', 'string', Rule::in(['taken', 'recent'])],
         ];
     }
 }

@@ -21,10 +21,10 @@ function jpegExif(): File {
   return new File([jpeg], 'camera.jpg', { type: 'image/jpeg' });
 }
 
-it('extracts summary flags with the real EXIF parser while retaining every original byte', async () => {
+it('extracts summary flags and the wall-clock capture time with the real EXIF parser while retaining every original byte', async () => {
   const file = jpegExif();
   const summary = await readPhotoMetadata(file, new AbortController().signal);
-  expect(summary).toEqual({ has_gps: true, has_capture_time: true, has_camera: true });
+  expect(summary).toEqual({ has_gps: true, has_capture_time: true, has_camera: true, captured_at: '2026-10-22T12:34:56' });
   expect(file.size).toBe(270);
-  expect(Object.keys(summary ?? {})).toEqual(['has_gps', 'has_capture_time', 'has_camera']);
+  expect(Object.keys(summary ?? {})).toEqual(['has_gps', 'has_capture_time', 'has_camera', 'captured_at']);
 });

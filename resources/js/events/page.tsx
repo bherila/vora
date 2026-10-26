@@ -90,6 +90,7 @@ export function EventsPage() {
   const eventUlid = params.get('event_ulid') ?? '';
   const favoritesOf = favoritesEnabled ? params.get('favorites_of') ?? '' : '';
   const featured = favoritesEnabled && params.get('featured') === '1';
+  const recent = params.get('sort') === 'recent';
   const itemUlid = params.get('item') ?? params.get('media') ?? '';
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
   const selectedEvent = events.find((event) => event.ulid === eventUlid);
@@ -191,6 +192,7 @@ export function EventsPage() {
     else if (attendeeId) search.set('attendee_id', attendeeId);
     if (favoritesOf) search.set('favorites_of', favoritesOf);
     if (featured) search.set('featured', '1');
+    if (recent) search.set('sort', 'recent');
     const key = search.toString();
     const changed = previousListing.current !== key;
     previousListing.current = key;
@@ -236,7 +238,7 @@ export function EventsPage() {
     };
     void load();
     return () => { active = false; window.clearTimeout(timer); };
-  }, [showMedia, viewerId, page, eventUlid, section, attendeeId, favoritesOf, featured, revision, listRevision]);
+  }, [showMedia, viewerId, page, eventUlid, section, attendeeId, favoritesOf, featured, recent, revision, listRevision]);
 
   useEffect(() => {
     let active = true;
@@ -363,6 +365,7 @@ export function EventsPage() {
         <div className="flex flex-wrap items-center gap-2">
           {!showEventHeading && <h2 className="mr-auto text-lg font-semibold">{mediaHeading}</h2>}
           <div className="ml-auto flex items-center gap-2">
+            <select aria-label="Sort media" className="h-8 rounded-md border bg-background px-2 text-sm" value={recent ? 'recent' : ''} onChange={(event) => navigate(pageUrl(params, { sort: event.target.value || null, page: null, item: null }))}><option value="">Time taken</option><option value="recent">Recently added</option></select>
             {view === 'gallery' && !loading && selectableItems.length > 0 && <Button size="sm" variant={selecting ? 'default' : 'outline'} aria-pressed={selecting} onClick={() => { if (selecting) setSelectedIds([]); setSelecting(!selecting); }}>{selecting ? 'Cancel' : 'Select'}</Button>}
             <div role="group" aria-label="Layout" className="inline-flex overflow-hidden rounded-md border">
               <Button variant="ghost" size="icon-sm" className="rounded-none aria-pressed:bg-muted" aria-label="Gallery view" title="Gallery view" aria-pressed={view === 'gallery'} onClick={() => changeView('gallery')}><LayoutGrid aria-hidden="true" /></Button>

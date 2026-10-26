@@ -129,7 +129,18 @@ class Media extends Model
             'photo_pixel_area' => 'integer',
             'photo_metadata_score' => 'integer',
             'photo_metadata' => 'array',
+            'captured_at' => 'datetime',
+            'gallery_sort_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Every row gets a gallery position: its capture time when known,
+        // otherwise when the upload began.
+        static::creating(function (Media $media): void {
+            $media->gallery_sort_at ??= $media->captured_at ?? $media->created_at ?? $media->freshTimestamp();
+        });
     }
 
     /**
