@@ -105,6 +105,13 @@ describe('EventsPage', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Awaiting review (2)' }));
     expect(await screen.findByRole('heading', { name: 'Awaiting review' })).toBeInTheDocument();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&review=1'));
+    // No bulk selection here: Save and ZIP downloads cannot include unapproved uploads.
+    expect(await screen.findByRole('link', { name: 'Open First pending' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Details view' }));
+    expect(screen.queryByRole('checkbox', { name: 'Select all on this page' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Select First pending' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Gallery view' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Open First pending' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/21/moderate', { action: 'approve', notes: null }));

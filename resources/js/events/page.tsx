@@ -98,7 +98,10 @@ export function EventsPage() {
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
   const selectedEvent = events.find((event) => event.ulid === eventUlid);
   const selectedAttendee = attendees.find((attendee) => String(attendee.id) === attendeeId);
-  const selectableItems = items.filter((item) => item.upload_status === 'ready');
+  // The review queue holds other people's unapproved uploads, which bulk Save and ZIP
+  // downloads cannot include; review there is one item at a time.
+  const canSelectItem = (item: { upload_status: string }): boolean => !reviewMode && item.upload_status === 'ready';
+  const selectableItems = items.filter(canSelectItem);
   const selectedItems = selectableItems.filter((item) => selectedIds.includes(item.id));
   const isEventIndex = section === 'events' && !attendeeIndex && !attendeeId;
   const showMedia = !isEventIndex && !attendeeIndex;
@@ -335,7 +338,7 @@ export function EventsPage() {
   const tabClassName = 'shrink-0 whitespace-nowrap rounded-full bg-muted px-3 py-1.5 text-sm hover:bg-accent aria-[current=page]:bg-foreground aria-[current=page]:text-background';
   const showEventHeading = !!selectedEvent && mediaHeading === selectedEvent.name;
   const hasSelection = !loading && selectedItems.length > 0;
-  const renderThumbnails = (list: EventMediaItem[]): ReactNode => <MediaThumbnailGrid items={list} selecting={selecting} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderOverlay={(media) => {
+  const renderThumbnails = (list: EventMediaItem[]): ReactNode => <MediaThumbnailGrid items={list} selecting={selecting} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={canSelectItem} getHref={(item) => pageUrl(params, { item: item.ulid })} renderOverlay={(media) => {
     const item = items.find((entry) => entry.id === media.id);
     if (!item) return null;
     const status = eventMediaStatus(item);
@@ -414,7 +417,7 @@ export function EventsPage() {
         {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 && reviewMode ? <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Nothing is waiting for review.</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? (recent ? renderThumbnails(items) : <div className="space-y-4">{gallerySections(items, selectedEvent?.timezone).map((section) => <section key={section.key} aria-label={section.label} className="space-y-1">
           <h3 className="sticky top-0 z-10 -mx-4 flex items-baseline justify-between gap-2 bg-background/95 px-4 py-1.5 text-sm font-semibold backdrop-blur sm:mx-0 sm:px-0"><span>{section.label}</span>{section.span && <span className="text-xs font-normal text-muted-foreground">{section.span}</span>}</h3>
           {renderThumbnails(section.items)}
-        </section>)}</div>) : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
+        </section>)}</div>) : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={canSelectItem} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
           const item = items.find((entry) => entry.id === media.id);
           return item && <div className="flex min-w-0 flex-wrap items-center gap-2">{favoritesEnabled && <FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} />}<span className="min-w-0 break-words text-xs text-muted-foreground">{item.uploader.display_name}{item.event && !eventUlid ? ` · ${item.event.name}` : ''} · {eventMediaStatus(item)}</span>{item.photo_versions && <Badge variant="secondary">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</Badge>}</div>;
         }} />}
