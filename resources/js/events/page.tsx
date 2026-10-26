@@ -1,4 +1,4 @@
-import { ImagePlus, Layers, LayoutGrid, Link2, List, Pencil, RefreshCw, SlidersHorizontal, Star } from 'lucide-react';
+import { ChevronDown, ImagePlus, Layers, LayoutGrid, Link2, List, Pencil, RefreshCw, SlidersHorizontal, Star } from 'lucide-react';
 import { type MouseEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
@@ -347,24 +347,28 @@ export function EventsPage() {
         {events.map((event) => <Card key={event.ulid} className={isEventIndex ? undefined : 'w-56 shrink-0 snap-start py-0 sm:w-auto'}><CardContent className="grid gap-2 p-4"><h2 className="font-semibold"><a href={pageUrl(params, { event_ulid: event.ulid, section: null, page: null, item: null }, '/events')} className="block underline underline-offset-4">{event.name}</a></h2>{eventDate(event) && <p className="text-xs text-muted-foreground">{eventDate(event)}</p>}<p className="text-xs text-muted-foreground">{event.visibility === 'everyone' ? 'All attendees' : 'Selected attendees'}</p>{isEventIndex && event.description && <p className="text-sm">{event.description}</p>}{event.can_manage && isEventIndex && <Button size="sm" variant="outline" onClick={() => setEditor(event)}>Edit {event.name}</Button>}</CardContent></Card>)}
       </section>}
       {listRefreshPaused && <p role="status" className="text-sm text-muted-foreground">Automatic updates have paused. Choose Check for updates to look again.</p>}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-sm"><Label htmlFor="event-filter" className="sr-only shrink-0 sm:not-sr-only">Event</Label><select id="event-filter" className="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, section: null, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select></div>
-        {/* Icon-only below sm; the aria-label keeps the same accessible name everywhere. */}
-        <Button variant="outline" className="relative max-sm:size-9 max-sm:px-0" aria-label="Filter media" title="Filter media" aria-expanded={filtersVisible} aria-controls="event-media-filters" onClick={() => setFiltersOpen((value) => !(value ?? filtersActive))}><SlidersHorizontal aria-hidden="true" /><span className="hidden sm:inline">Filter media</span>{filtersActive && <span aria-hidden="true" className="absolute right-1 top-1 size-2 rounded-full bg-primary sm:hidden" />}</Button>
-        <Button variant="ghost" className="max-sm:size-9 max-sm:px-0" aria-label="Check for updates" title="Check for updates" onClick={refresh}><RefreshCw aria-hidden="true" /><span className="hidden sm:inline">Check for updates</span></Button>
-        {filtersActive && <a href={clearFiltersUrl} className="whitespace-nowrap text-sm underline underline-offset-4">Clear filters</a>}
+      {/* The Event picker doubles as the section title; its actions sit beside it as icons. */}
+      <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Label htmlFor="event-filter" className="sr-only">Event</Label>
+          <select id="event-filter" className="h-10 w-full min-w-0 appearance-none truncate rounded-md bg-transparent pl-1 pr-7 text-lg font-semibold hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={eventUlid} onChange={(event) => navigate(pageUrl(params, { event_ulid: event.target.value, section: null, page: null, item: null }))}><option value="">All events</option>{events.map((event) => <option key={event.ulid} value={event.ulid}>{event.name}</option>)}</select>
+          <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-1.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
+        {selectedEvent && <Button variant="ghost" size="icon" aria-label="Copy joining link" title="Copy joining link" onClick={() => void copyJoiningLink()}><Link2 aria-hidden="true" /></Button>}
+        {selectedEvent?.can_manage && <Button variant="ghost" size="icon" aria-label="Edit event" title="Edit event" onClick={() => setEditor(selectedEvent)}><Pencil aria-hidden="true" /></Button>}
+        <Button variant="ghost" size="icon" className="relative" aria-label="Filter media" title="Filter media" aria-expanded={filtersVisible} aria-controls="event-media-filters" onClick={() => setFiltersOpen((value) => !(value ?? filtersActive))}><SlidersHorizontal aria-hidden="true" />{filtersActive && <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />}</Button>
+        <Button variant="ghost" size="icon" aria-label="Check for updates" title="Check for updates" onClick={refresh}><RefreshCw aria-hidden="true" /></Button>
+        {filtersActive && <a href={clearFiltersUrl} className="basis-full whitespace-nowrap text-sm underline underline-offset-4 sm:basis-auto">Clear filters</a>}
       </div>
       {filtersVisible && <section id="event-media-filters" aria-label="Media filters" className="flex flex-wrap items-end gap-4 rounded border p-4">
         <div className="grid min-w-48 gap-1"><Label htmlFor="attendee-filter">Uploaded by</Label><select id="attendee-filter" className="rounded-md border bg-background p-2" value={section === 'mine' ? String(viewerId) : attendeeId} onChange={(event) => navigate(pageUrl(params, { attendee_id: event.target.value, section: null, page: null, item: null }, '/events'))}><option value="">All attendees</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>
         {favoritesEnabled && <div className="grid min-w-48 gap-1"><Label htmlFor="favorites-filter">Favorites by</Label><select id="favorites-filter" className="rounded-md border bg-background p-2" value={favoritesOf} onChange={(event) => navigate(pageUrl(params, { favorites_of: event.target.value, featured: null, page: null, item: null }, '/events'))}><option value="">Everyone / unfiltered</option>{attendees.map((attendee) => <option key={attendee.id} value={attendee.id}>{attendee.display_name}</option>)}</select></div>}
         <a href={mineUrl} className="text-sm underline underline-offset-4">My uploads</a><a href={attendeesUrl} className="text-sm underline underline-offset-4">Browse attendees</a>
       </section>}
-      {/* Unfiltered, this block doubles as the gallery heading so the Event name appears once. */}
+      {/* The picker above shows the name; this keeps it in the heading outline and adds only what is informative. */}
       {selectedEvent && <section aria-label="Event details" className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0"><h2 className="break-words text-lg font-semibold">{selectedEvent.name}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{eventDate(selectedEvent) && <span>{eventDate(selectedEvent)}</span>}<Badge variant="outline">{selectedEvent.visibility === 'everyone' ? 'All attendees' : 'Selected attendees only'}</Badge></div></div>
-          <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void copyJoiningLink()}><Link2 aria-hidden="true" />Copy joining link</Button>{selectedEvent.can_manage && <Button size="sm" variant="outline" onClick={() => setEditor(selectedEvent)}><Pencil aria-hidden="true" />Edit event</Button>}</div>
-        </div>
+        <h2 className="sr-only">{selectedEvent.name}</h2>
+        {(eventDate(selectedEvent) || selectedEvent.visibility !== 'everyone') && <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{eventDate(selectedEvent) && <span>{eventDate(selectedEvent)}</span>}{selectedEvent.visibility !== 'everyone' && <Badge variant="outline">Selected attendees only</Badge>}</div>}
         {joiningLinkFallback === `${window.location.origin}/events/join/${selectedEvent.ulid}` && <div className="grid gap-1"><Label htmlFor="event-joining-link">Joining link</Label><Input id="event-joining-link" readOnly value={joiningLinkFallback} onFocus={(event) => event.target.select()} /></div>}
         {selectedEvent.description && <p className="whitespace-pre-wrap text-sm">{selectedEvent.description}</p>}
       </section>}
@@ -374,7 +378,7 @@ export function EventsPage() {
         {attendees.map((attendee) => <Card key={attendee.id}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold">{attendee.display_name}</h2><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: null, page: null, item: null }, `/attendees/${attendee.id}`)}>View uploads by {attendee.display_name}</a>{favoritesEnabled && <a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: String(attendee.id), page: null, item: null }, '/events')}>View favorites by {attendee.display_name}</a>}</CardContent></Card>)}
       </section> : !isEventIndex && <section className="space-y-4" aria-label="Event media">
         <div className="flex flex-wrap items-center gap-2">
-          {!showEventHeading && <h2 className="mr-auto text-lg font-semibold">{mediaHeading}</h2>}
+          {showEventHeading ? <p className="mr-auto text-sm text-muted-foreground">{!loading && meta ? `${meta.total} ${meta.total === 1 ? 'item' : 'items'}` : ''}</p> : <h2 className="mr-auto min-w-0 truncate text-lg font-semibold">{mediaHeading}</h2>}
           <div className="ml-auto flex items-center gap-2">
             <select aria-label="Sort media" className="h-8 rounded-md border bg-background px-2 text-sm" value={recent ? 'recent' : ''} onChange={(event) => navigate(pageUrl(params, { sort: event.target.value || null, page: null, item: null }))}><option value="">Time taken</option><option value="recent">Recently added</option></select>
             {view === 'gallery' && !loading && selectableItems.length > 0 && <Button size="sm" variant={selecting ? 'default' : 'outline'} aria-pressed={selecting} onClick={() => { if (selecting) setSelectedIds([]); setSelecting(!selecting); }}>{selecting ? 'Cancel' : 'Select'}</Button>}

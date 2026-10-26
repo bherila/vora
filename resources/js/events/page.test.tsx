@@ -42,7 +42,8 @@ describe('EventsPage', () => {
     expect(screen.queryByLabelText('Favorites by')).toBeNull();
     fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
     expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-event', 'event-one');
-    expect(screen.getByText('All attendees', { selector: '[data-slot=badge]' })).toBeInTheDocument();
+    // The default audience needs no badge; only a restricted Event says so.
+    expect(screen.queryByText('All attendees', { selector: '[data-slot=badge]' })).toBeNull();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
   });
 
@@ -73,6 +74,18 @@ describe('EventsPage', () => {
     expect(window.location.search).toBe('?sort=recent');
     fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&sort=recent'));
+  });
+
+  it('marks restricted Events and keeps Event actions as named icon buttons', async () => {
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events' ? { data: [{ ...event, visibility: 'specific' }] } : implementation(url));
+    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+    render(<EventsPage />);
+    expect(await screen.findByText('Selected attendees only', { selector: '[data-slot=badge]' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Event')).toHaveValue('event-one');
+    expect(screen.getByRole('button', { name: 'Copy joining link' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit event' })).toBeInTheDocument();
+    expect(await screen.findByText('25 items')).toBeInTheDocument();
   });
 
   it('names a selected event once and drops it from each card’s byline', async () => {
