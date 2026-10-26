@@ -94,6 +94,7 @@ class NavbarHydrationTest extends TestCase
             'Posts review',
             'Deleted content',
             'Static pages',
+            'Email delivery',
             'Audit log',
         ], array_column($navbar['adminMenu']['items'], 'label'));
         $this->assertSame('/admin/users', $navbar['adminMenu']['items'][0]['href']);

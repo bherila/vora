@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
 use App\Http\Controllers\Admin\AdminInviteController;
+use App\Http\Controllers\Admin\AdminMailDeliveryController;
 use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminMediaDuplicateController;
 use App\Http\Controllers\Admin\AdminPostCommentController;
@@ -413,6 +414,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/invites', [AdminInviteController::class, 'index'])->name('invites');
     Route::get('/waitlist', [AdminWaitlistController::class, 'index'])->name('waitlist');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
+    Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'index'])->name('mail-deliveries');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
     Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'index'])->name('media-duplicates');
@@ -447,6 +449,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
 
     Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
+    Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'apiIndex']);
     Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
     Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 

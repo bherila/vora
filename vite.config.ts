@@ -29,6 +29,7 @@ export default defineConfig({
                 'resources/js/admin/invites.tsx',
                 'resources/js/admin/waitlist.tsx',
                 'resources/js/admin/audit-log.tsx',
+                'resources/js/admin/mail-deliveries.tsx',
                 'resources/js/admin/interests.tsx',
                 'resources/js/admin/media.tsx',
                 'resources/js/admin/media-duplicates.tsx',
