@@ -572,6 +572,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect(await visibleIds(outsider, `favorites_of=${recipientId}`)).not.toContain(video.data.ulid);
     expect(await visibleIds(outsider, `event_ulid=${shared.ulid}`)).toContain(publicPhoto.data.ulid);
     await recipient.goto(`/events?event_ulid=${restricted.ulid}`);
+    await recipient.getByRole('button', { name: 'Select', exact: true }).click();
     await recipient.getByRole('checkbox', { name: `Select ${photoTitle}`, exact: true }).check();
     await recipient.getByRole('checkbox', { name: `Select ${videoTitle}`, exact: true }).check();
     const downloading = recipient.waitForEvent('download');

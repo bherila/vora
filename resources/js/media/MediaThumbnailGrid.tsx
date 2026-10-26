@@ -46,10 +46,11 @@ export function MediaThumbnailGrid({
         return (
           <li key={item.id} className="relative aspect-square overflow-hidden bg-muted">
             {selectable ? (
-              <label className="block h-full w-full cursor-pointer">
+              <label className="block h-full w-full">
+                {/* Covers the tile, so tapping anywhere on it is tapping the checkbox. */}
                 <input
                   type="checkbox"
-                  className="peer sr-only"
+                  className="peer absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none opacity-0"
                   aria-label={`Select ${label}`}
                   checked={selected.has(item.id)}
                   onChange={(event) => toggle(item, event.target.checked)}
