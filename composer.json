@@ -9,7 +9,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.4",
+        "php": "^8.4.1",
         "aws/aws-php-sns-message-validator": "^1.10",
         "bherila/auth-laravel": "^0.25.0",
         "erusev/parsedown": "^1.8.0",
@@ -21,7 +21,7 @@
         "spatie/laravel-csp": "^3.29.0",
         "symfony/brevo-mailer": "^7.4",
         "symfony/http-client": "^7.4",
-        "symfony/yaml": "~8.0.15"
+        "symfony/yaml": "^8.1.6"
     },
     "require-dev": {
         "brianium/paratest": "^7.20",
@@ -92,7 +92,7 @@
     },
     "config": {
         "platform": {
-            "php": "8.4.0"
+            "php": "8.4.1"
         },
         "optimize-autoloader": true,
         "preferred-install": "dist",
