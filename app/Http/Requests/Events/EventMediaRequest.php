@@ -12,6 +12,7 @@ class EventMediaRequest extends FormRequest
     {
         abort_if(! InstanceFeatures::enabled('favorites')
             && ($this->filled('favorites_of') || $this->boolean('featured')), 404);
+        abort_if($this->boolean('review') && ! $this->user()?->isAdmin(), 403);
 
         return $this->user() !== null;
     }
@@ -26,6 +27,7 @@ class EventMediaRequest extends FormRequest
             'featured' => ['sometimes', 'boolean'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'sort' => ['sometimes', 'string', Rule::in(['taken', 'recent'])],
+            'review' => ['sometimes', 'boolean'],
         ];
     }
 }

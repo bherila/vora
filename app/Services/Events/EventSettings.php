@@ -2,6 +2,9 @@
 
 namespace App\Services\Events;
 
+use App\Enums\MediaPurpose;
+use App\Enums\ModerationStatus;
+use App\Models\Media;
 use App\Models\User;
 use App\Services\SettingsService;
 use App\Support\BlockGraph;
@@ -48,6 +51,9 @@ class EventSettings
             'featured_curators' => $this->featuredCurators($viewer)->map(fn (User $user): array => ['id' => $user->id, 'display_name' => $user->display_name])->all(),
             'is_admin' => $viewer->isAdmin(), 'viewer_id' => $viewer->id,
             'uploads_require_review' => ! InstanceFeatures::enabled('events') || ! $viewer->event_uploads_auto_approved,
+            // Organizers see how many finished uploads wait for review.
+            'pending_review_count' => $viewer->isAdmin() ? Media::query()->where('purpose', MediaPurpose::Event->value)
+                ->where('upload_status', 'ready')->where('moderation_status', ModerationStatus::Pending->value)->count() : null,
         ];
     }
 }

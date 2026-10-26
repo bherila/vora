@@ -42,7 +42,8 @@ describe('EventsPage', () => {
     expect(screen.queryByLabelText('Favorites by')).toBeNull();
     fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
     expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-event', 'event-one');
-    expect(screen.getByText('All attendees', { selector: '[data-slot=badge]' })).toBeInTheDocument();
+    // The default audience needs no badge; only a restricted Event says so.
+    expect(screen.queryByText('All attendees', { selector: '[data-slot=badge]' })).toBeNull();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
   });
 
@@ -73,6 +74,60 @@ describe('EventsPage', () => {
     expect(window.location.search).toBe('?sort=recent');
     fireEvent.change(screen.getByLabelText('Event'), { target: { value: 'event-one' } });
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one&sort=recent'));
+  });
+
+  it('marks restricted Events and keeps Event actions as named icon buttons', async () => {
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events' ? { data: [{ ...event, visibility: 'specific' }] } : implementation(url));
+    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+    render(<EventsPage />);
+    expect(await screen.findByText('Selected attendees only', { selector: '[data-slot=badge]' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Event')).toHaveValue('event-one');
+    expect(screen.getByRole('button', { name: 'Copy joining link' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit event' })).toBeInTheDocument();
+    expect(await screen.findByText('25 items')).toBeInTheDocument();
+  });
+
+  it('gives organizers a review queue that advances after each decision', async () => {
+    const queue = [
+      { ...media, id: 21, ulid: 'p1', title: 'First pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'a.jpg' } },
+      { ...media, id: 22, ulid: 'p2', title: 'Second pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'b.jpg' } },
+    ];
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/events/settings') return { data: { ...settings, pending_review_count: 2 } };
+      if (url.startsWith('/api/events/media?') && url.includes('review=1')) return { data: queue, meta: { ...meta, total: 2, last_page: 1, has_more: false } };
+      const pendingItem = queue.find((entry) => url === `/api/events/media/${entry.ulid}`);
+      return pendingItem ? { data: pendingItem } : implementation(url);
+    });
+    jest.mocked(fetchWrapper.post).mockResolvedValue({ success: true });
+    render(<EventsPage />);
+    fireEvent.click(await screen.findByRole('link', { name: 'Awaiting review (2)' }));
+    expect(await screen.findByRole('heading', { name: 'Awaiting review' })).toBeInTheDocument();
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&review=1'));
+    // No bulk selection here: Save and ZIP downloads cannot include unapproved uploads.
+    expect(await screen.findByRole('link', { name: 'Open First pending' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Details view' }));
+    expect(screen.queryByRole('checkbox', { name: 'Select all on this page' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Select First pending' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Gallery view' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Open First pending' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/21/moderate', { action: 'approve', notes: null }));
+    expect(await screen.findByRole('dialog', { name: 'Second pending' })).toBeInTheDocument();
+    expect(window.location.search).toContain('item=p2');
+  });
+
+  it('steps back to the last page that still has items when a later page empties', async () => {
+    window.history.replaceState({}, '', '/events?page=2');
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events/media?page=2' ? { data: [], meta: { ...meta, current_page: 2, last_page: 1, total: 24, has_more: false } } : implementation(url));
+    render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1');
+    expect(window.location.search).toBe('');
+    expect(screen.queryByText('Be the first to share a moment.')).toBeNull();
   });
 
   it('names a selected event once and drops it from each card’s byline', async () => {

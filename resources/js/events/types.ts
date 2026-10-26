@@ -24,6 +24,8 @@ export interface EventSettings {
   is_admin: boolean;
   viewer_id: number;
   uploads_require_review?: boolean;
+  /** Finished Event uploads awaiting review; admins only. */
+  pending_review_count?: number | null;
 }
 
 export interface EventMediaItem extends MediaItem {
@@ -37,6 +39,8 @@ export interface EventMediaItem extends MediaItem {
   download_url: string | null;
   favorited: boolean;
   photo_versions?: { visible_count: number; preferred_ulid: string; is_preferred: boolean } | null;
+  /** Present for admins on finished uploads awaiting review. */
+  review?: { pending: true; requires_original_check: boolean; original_url: string | null; original_size_bytes: number | null; original_filename: string } | null;
   photo_details?: { width: number | null; height: number | null; metadata_known: boolean; has_gps: boolean; has_capture_time: boolean; has_camera: boolean } | null;
 }
 

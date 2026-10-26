@@ -7,7 +7,8 @@ import { type AdminMediaItem } from '@/media/types';
 import { safeHttpsUrl, safeLocalBlobUrl } from '@/security/dom-url';
 
 interface HeifOriginalReviewProps {
-  item: AdminMediaItem;
+  /** The admin queue and the Event viewer both supply the signed original and its stored size. */
+  item: Pick<AdminMediaItem, 'download_url' | 'url' | 'size_bytes' | 'original_filename' | 'mime_type'>;
   onVerified: () => void;
 }
 
