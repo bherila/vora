@@ -31,12 +31,12 @@ function mockRequests() {
 }
 
 describe('EventsPage', () => {
-  beforeEach(() => { jest.resetAllMocks(); Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent }); window.scrollTo = jest.fn(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); mockRequests(); });
+  beforeEach(() => { jest.resetAllMocks(); Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent }); window.scrollTo = jest.fn(); jest.mocked(readInitialData).mockReturnValue({}); window.history.replaceState({}, '', '/events'); localStorage.clear(); mockRequests(); });
 
   it('loads visible events and requires an explicit event before upload', async () => {
     render(<EventsPage />);
     expect(screen.getByRole('status')).toHaveTextContent('Loading events');
-    expect(await screen.findByText('Welcome video')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-options', '1');
     expect(screen.queryByLabelText('Uploaded by')).toBeNull();
     expect(screen.queryByLabelText('Favorites by')).toBeNull();
@@ -46,10 +46,28 @@ describe('EventsPage', () => {
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
   });
 
-  it('names a selected event once and drops it from each card’s byline', async () => {
-    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+  it('defaults to the caption-free gallery and remembers the Details view', async () => {
+    const { unmount } = render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gallery view' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Welcome video')).toBeNull();
+    expect(screen.queryByText(/Sam · Welcome/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Details view' }));
+    expect(screen.getByText('Welcome video')).toBeInTheDocument();
+    expect(screen.getByText(/Sam · Welcome/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    unmount();
+
     render(<EventsPage />);
     expect(await screen.findByText('Welcome video')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Details view' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('names a selected event once and drops it from each card’s byline', async () => {
+    localStorage.setItem('vora:events:view', 'details');
+    window.history.replaceState({}, '', '/events?event_ulid=event-one');
+    render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { name: 'Welcome' })).toHaveLength(1);
     expect(screen.getByText(/^Sam · [^·]+$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Filter media' })).toBeInTheDocument();
@@ -63,6 +81,10 @@ describe('EventsPage', () => {
     } : implementation(url));
     jest.mocked(fetchWrapper.post).mockRejectedValueOnce('Storage limit reached.');
     render(<EventsPage />);
+    expect(await screen.findByRole('link', { name: 'Open Welcome video' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select all on this page' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+    expect(screen.queryByRole('link', { name: 'Open Welcome video' })).toBeNull();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all on this page' }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'Select Pending upload' })).toBeNull();
@@ -77,7 +99,7 @@ describe('EventsPage', () => {
   it('retains event and favorite filters through pagination and browser history', async () => {
     window.history.replaceState({}, '', '/events?event_ulid=event-one&favorites_of=7');
     render(<EventsPage />);
-    await screen.findByText('Welcome video');
+    await screen.findByRole('link', { name: 'Open Welcome video' });
     expect(screen.getByLabelText('Favorites by')).toHaveValue('7');
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=2&event_ulid=event-one&favorites_of=7'));
@@ -187,15 +209,16 @@ describe('EventsPage', () => {
     const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
     jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/events/settings' ? { data: { ...settings, is_admin: false } } : url === '/api/events' ? { data: [{ ...event, can_manage: false }] } : implementation(url));
     render(<EventsPage />);
-    await screen.findByText('Welcome video');
+    await screen.findByRole('link', { name: 'Open Welcome video' });
     expect(screen.queryByRole('button', { name: 'Create event' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage featured curators' })).toBeNull();
     expect(within(screen.getByLabelText('Event')).getAllByRole('option')).toHaveLength(2);
   });
   it('hides disabled Favorite and Library controls while retaining event browsing', async () => {
+    localStorage.setItem('vora:events:view', 'details');
     jest.mocked(readInitialData).mockReturnValue({ instance: { modules: { favorites: false, library: false } } });
     render(<EventsPage />);
-    await screen.findByText('Welcome video');
+    await screen.findByRole('link', { name: 'Open Welcome video' });
     expect(screen.queryByRole('link', { name: 'Sam’s favorites' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'My collection' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage featured curators' })).toBeNull();
@@ -209,7 +232,7 @@ describe('EventsPage', () => {
 
   it('reveals filters on demand and clears attendee filters through URL navigation', async () => {
     render(<EventsPage />);
-    await screen.findByText('Welcome video');
+    await screen.findByRole('link', { name: 'Open Welcome video' });
     expect(screen.getByRole('link', { name: 'Welcome' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Uploaded by')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Filter media' }));
@@ -298,7 +321,7 @@ describe('EventsPage', () => {
       expect(screen.getByText(/Awaiting review/)).toBeInTheDocument();
       pending = false;
       await act(async () => { jest.advanceTimersByTime(5_000); });
-      expect(screen.getByText(/Sam · Welcome · Shared/)).toBeInTheDocument();
+      expect(screen.queryByText('Awaiting review')).toBeNull();
       const count = jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url.startsWith('/api/events/media?')).length;
       await act(async () => { jest.advanceTimersByTime(60_000); });
       expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url.startsWith('/api/events/media?'))).toHaveLength(count);

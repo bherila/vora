@@ -15,11 +15,13 @@ interface BulkTransferActionsProps {
   downloadUlids: string[];
   canSave: boolean;
   showSummary?: boolean;
+  /** Pinned action bar: keep only the notes that explain a limited action. */
+  compact?: boolean;
   onSaved: () => void;
   onClear?: () => void;
 }
 
-export function BulkTransferActions({ source, ulids, saveUlids = ulids, downloadUlids, canSave, showSummary = true, onSaved, onClear }: BulkTransferActionsProps) {
+export function BulkTransferActions({ source, ulids, saveUlids = ulids, downloadUlids, canSave, showSummary = true, compact = false, onSaved, onClear }: BulkTransferActionsProps) {
   const [busy, setBusy] = useState<'save' | 'download' | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -66,12 +68,13 @@ export function BulkTransferActions({ source, ulids, saveUlids = ulids, download
   return <div className="space-y-2 rounded border p-3" aria-label="Save or download selected items">
     <div className="flex flex-wrap items-center gap-2">
       {showSummary && <p className="mr-auto text-sm font-medium" role="status">{ulids.length} selected</p>}
-      {canSave && <Button variant="outline" disabled={busy !== null} onClick={() => void transfer('save')}>{busy === 'save' ? 'Saving selected…' : saveLabel}</Button>}
-      <Button variant="outline" disabled={busy !== null || downloadUlids.length === 0 || downloadUlids.length > 50} onClick={() => void transfer('download')}>{busy === 'download' ? 'Preparing ZIP…' : 'Download selected (ZIP)'}</Button>
-      {onClear && <Button variant="ghost" disabled={busy !== null} onClick={onClear}>Clear selection</Button>}
+      {/* Compact keeps the full action names for assistive tech, starting with the visible word. */}
+      {canSave && <Button variant="outline" size={compact ? 'sm' : 'default'} aria-label={compact && busy !== 'save' ? saveLabel : undefined} disabled={busy !== null} onClick={() => void transfer('save')}>{busy === 'save' ? 'Saving selected…' : compact ? 'Save' : saveLabel}</Button>}
+      <Button variant="outline" size={compact ? 'sm' : 'default'} aria-label={compact && busy !== 'download' ? 'Download selected (ZIP)' : undefined} disabled={busy !== null || downloadUlids.length === 0 || downloadUlids.length > 50} onClick={() => void transfer('download')}>{busy === 'download' ? 'Preparing ZIP…' : compact ? 'Download' : 'Download selected (ZIP)'}</Button>
+      {onClear && !compact && <Button variant="ghost" disabled={busy !== null} onClick={onClear}>Clear selection</Button>}
     </div>
-    <p className="text-xs text-muted-foreground">ZIP downloads: up to 50 files and 2 GiB total. Download larger videos individually.{downloadUlids.length < ulids.length ? ' Notes and unavailable files are excluded from ZIP downloads.' : ''}</p>
-    {canSave && <p className="text-xs text-muted-foreground">Saving adds private references without copying files and counts toward your storage limit.</p>}
+    {(!compact || downloadUlids.length > 50 || downloadUlids.length < ulids.length) && <p className="text-xs text-muted-foreground">ZIP downloads: up to 50 files and 2 GiB total. Download larger videos individually.{downloadUlids.length < ulids.length ? ' Notes and unavailable files are excluded from ZIP downloads.' : ''}</p>}
+    {canSave && !compact && <p className="text-xs text-muted-foreground">Saving adds private references without copying files and counts toward your storage limit.</p>}
     {message && <p role="status" className="text-sm">{message}</p>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
   </div>;

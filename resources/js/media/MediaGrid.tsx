@@ -129,7 +129,7 @@ function MediaCard({ item, actions, href, compact, selected, onSelectedChange }:
   );
 }
 
-function MediaThumbnail({ item }: { item: MediaItem }) {
+export function MediaThumbnail({ item }: { item: MediaItem }) {
   const alt = item.title || item.original_filename || 'Untitled media';
 
   // Prefer the lightweight thumbnail/poster. Photos can fall back to the signed
