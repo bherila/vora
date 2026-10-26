@@ -20,6 +20,8 @@ return [
 
     'brevo' => [
         'dsn' => env('MAILER_DSN'),
+        // Shared secret for the transactional webhook (bearer token or Basic password).
+        'webhook_secret' => env('BREVO_WEBHOOK_SECRET'),
     ],
 
     'resend' => [
@@ -30,6 +32,8 @@ return [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+        // The SNS topic SES publishes delivery events to; other topics are rejected.
+        'notification_topic_arn' => env('SES_NOTIFICATION_TOPIC_ARN'),
     ],
 
     'slack' => [

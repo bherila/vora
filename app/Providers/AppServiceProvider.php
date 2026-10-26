@@ -22,13 +22,16 @@ use App\Services\Auth\VoraAuthUserPolicy;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\AnnouncementPostService;
 use App\Services\Privacy\ViewAsContext;
+use Aws\Sns\MessageValidator;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Routing\Route as RoutingRoute;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -50,6 +53,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
         $this->app->scoped(ViewAsContext::class);
         $this->app->scoped(RestrictionGate::class);
+        // SNS signing certificates for SES delivery reports. The validator checks
+        // the certificate URL is an amazonaws.com .pem before this fetch runs.
+        $this->app->bind(MessageValidator::class, fn (): MessageValidator => new MessageValidator(
+            fn (string $url): string => Cache::remember('sns-signing-cert:'.sha1($url), now()->addDay(), fn (): string => Http::timeout(10)->get($url)->throw()->body()),
+        ));
     }
 
     /**

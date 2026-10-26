@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Commands\QueueHealthCommand;
+use App\Models\MailDelivery;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -12,6 +13,9 @@ Artisan::command('inspire', function () {
 
 // Sweep abandoned (never-completed) uploads hourly.
 Schedule::command('media:prune-orphans')->hourly();
+
+// Email delivery records are operational evidence, not history: keep 90 days.
+Schedule::command('model:prune', ['--model' => [MailDelivery::class]])->daily();
 
 // The heartbeat is external evidence that cPanel is actually invoking
 // schedule:run; a schedule definition by itself cannot prove that.

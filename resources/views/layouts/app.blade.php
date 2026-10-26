@@ -98,6 +98,7 @@
           $__enabled('community') ? ['type' => 'link', 'label' => 'Posts review', 'href' => route('admin.posts', [], false)] : null,
           ['type' => 'link', 'label' => 'Deleted content', 'href' => route('admin.deleted-content', [], false)],
           ['type' => 'link', 'label' => 'Static pages', 'href' => route('admin.pages', [], false)],
+          ['type' => 'link', 'label' => 'Email delivery', 'href' => route('admin.mail-deliveries', [], false)],
           ['type' => 'link', 'label' => 'Audit log', 'href' => route('admin.audit-log', [], false)],
         ])),
       ] : null;
