@@ -77,7 +77,9 @@ class EventReviewInPlaceTest extends TestCase
 
         $this->actingAs($this->admin)->getJson('/api/events/media/'.$jpeg->ulid)->assertOk()
             ->assertJsonPath('data.review.pending', true)->assertJsonPath('data.review.requires_original_check', false)
-            ->assertJsonPath('data.review.original_url', null)->assertJsonPath('data.url', 'https://storage.example.test/view');
+            ->assertJsonPath('data.review.original_url', null)->assertJsonPath('data.url', 'https://storage.example.test/view')
+            // Marked for refresh so the signed preview and original URLs are renewed.
+            ->assertJsonPath('data.under_review', true);
         $this->getJson('/api/events/media/'.$heic->ulid)->assertOk()
             ->assertJsonPath('data.review.requires_original_check', true)->assertJsonPath('data.review.original_url', 'https://storage.example.test/original')
             ->assertJsonPath('data.review.original_size_bytes', 8)->assertJsonPath('data.review.original_filename', 'IMG_0001.HEIC');
@@ -86,6 +88,8 @@ class EventReviewInPlaceTest extends TestCase
         // Approval goes through the existing admin moderation endpoint and leaves the queue.
         $this->postJson('/api/admin/media/'.$jpeg->id.'/moderate', ['action' => 'reject', 'notes' => 'Blurry'])->assertOk();
         $this->getJson('/api/events/settings')->assertJsonPath('data.pending_review_count', 1);
-        $this->assertSame([$heic->ulid], array_column($this->getJson('/api/events/media?review=1')->json('data'), 'ulid'));
+        $queue = $this->getJson('/api/events/media?review=1')->json('data');
+        $this->assertSame([$heic->ulid], array_column($queue, 'ulid'));
+        $this->assertTrue($queue[0]['under_review']);
     }
 }

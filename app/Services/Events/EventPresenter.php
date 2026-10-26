@@ -78,6 +78,9 @@ class EventPresenter
             return null;
         }
         $extras = $this->admin->extras($media, $resolveHls);
+        // Visitor payloads omit the flag; restoring it keeps the viewer polling,
+        // so signed preview and original URLs are renewed before they expire.
+        $data['under_review'] = true;
         if (! $owned) {
             $data['url'] = $extras['url'];
             $data['thumbnail_url'] = $extras['thumbnail_url'];
