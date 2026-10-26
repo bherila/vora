@@ -50,6 +50,18 @@ describe('MediaGrid visitor fallbacks', () => {
     );
   });
 
+  it('packs two square previews per row on phones for compact galleries', () => {
+    render(<MediaGrid items={[visitorItem()]} thumbnailSize="compact" />);
+
+    expect(document.querySelector('[data-layout="media-grid"]')).toHaveClass(
+      'grid-cols-2',
+      'sm:grid-cols-3',
+      'lg:grid-cols-4',
+    );
+    expect(document.querySelector('[data-layout="media-grid"] .aspect-square')).not.toBeNull();
+    expect(document.querySelector('[data-layout="media-grid"] .aspect-video')).toBeNull();
+  });
+
   it('uses neutral copy when the visitor payload has no title or filename', () => {
     render(<MediaGrid items={[visitorItem()]} />);
 

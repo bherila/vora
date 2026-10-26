@@ -7,8 +7,11 @@ import { safeInternalUrl } from '@/security/dom-url';
 
 interface MediaGridProps {
   items: MediaItem[];
-  /** Use fewer columns when the surrounding surface should emphasize previews. */
-  thumbnailSize?: 'standard' | 'large';
+  /**
+   * Use fewer columns when the surrounding surface should emphasize previews,
+   * or `compact` for a dense two-column phone gallery with square previews.
+   */
+  thumbnailSize?: 'standard' | 'large' | 'compact';
   /** Optional per-item action buttons (e.g. delete) rendered in the card footer. */
   renderActions?: (item: MediaItem) => ReactNode;
   getHref?: (item: MediaItem) => string | null;
@@ -32,9 +35,12 @@ export function MediaGrid({
   canSelect = () => true,
 }: MediaGridProps) {
   const selected = new Set(selectedIds);
+  const compact = thumbnailSize === 'compact';
   const gridColumns = thumbnailSize === 'large'
-    ? 'sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
-    : 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5';
+    ? 'gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+    : compact
+      ? 'grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5'
+      : 'gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5';
   const toggle = (item: MediaItem, checked: boolean): void => {
     if (checked) {
       onSelectionChange?.([...selectedIds, item.id]);
@@ -44,13 +50,14 @@ export function MediaGrid({
   };
 
   return (
-    <div className={`grid gap-4 ${gridColumns}`} data-layout="media-grid">
+    <div className={`grid ${gridColumns}`} data-layout="media-grid">
       {items.map((item) => (
         <MediaCard
           key={item.id}
           item={item}
           actions={renderActions?.(item)}
           href={getHref(item)}
+          compact={compact}
           selected={selected.has(item.id)}
           onSelectedChange={onSelectionChange && canSelect(item) ? (checked) => toggle(item, checked) : undefined}
         />
@@ -63,15 +70,16 @@ interface MediaCardProps {
   item: MediaItem;
   actions?: ReactNode;
   href: string | null;
+  compact: boolean;
   selected: boolean;
   onSelectedChange?: ((checked: boolean) => void) | undefined;
 }
 
-function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCardProps) {
+function MediaCard({ item, actions, href, compact, selected, onSelectedChange }: MediaCardProps) {
   const label = item.title || item.original_filename || 'Untitled media';
   const safeHref = safeInternalUrl(href);
   const preview = (
-    <div className="relative aspect-video bg-muted">
+    <div className={`relative bg-muted ${compact ? 'aspect-square' : 'aspect-video'}`}>
       <MediaThumbnail item={item} />
       {item.type === 'video' && (
         <span
@@ -87,7 +95,7 @@ function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCar
   );
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="gap-0 overflow-hidden py-0">
       <div className="relative">
         {onSelectedChange && (
           <label className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded border border-background/80 bg-background/90 shadow-sm">
@@ -106,7 +114,7 @@ function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCar
           </a>
         ) : preview}
       </div>
-      <CardContent className="grid gap-2 p-3">
+      <CardContent className={`grid min-w-0 ${compact ? 'gap-1 p-2' : 'gap-2 p-3'}`}>
         <p className="truncate text-sm font-medium" title={label}>
           {label}
         </p>
@@ -115,7 +123,7 @@ function MediaCard({ item, actions, href, selected, onSelectedChange }: MediaCar
             {item.interests.map((i) => i.name).join(', ')}
           </p>
         )}
-        {actions && <div className="flex gap-2">{actions}</div>}
+        {actions && <div className="flex min-w-0 gap-2">{actions}</div>}
       </CardContent>
     </Card>
   );

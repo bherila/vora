@@ -59,6 +59,20 @@ beforeEach(() => {
   hydrateIdentityStore([], null);
 });
 
+describe('Navbar theme controls', () => {
+  it('keeps the theme choice reachable from the phone drawer for signed-in users', () => {
+    renderNavbar();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle navigation menu' }));
+
+    const appearance = screen.getByRole('group', { name: 'Appearance' });
+    fireEvent.click(within(appearance).getByRole('button', { name: 'Dark' }));
+
+    expect(within(appearance).getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTitle('Dark')).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('theme')).toBe('dark');
+  });
+});
+
 describe('Navbar account and identity menu', () => {
   it('does not render untrusted DOM data as navigation URLs', () => {
     const { container } = render(
