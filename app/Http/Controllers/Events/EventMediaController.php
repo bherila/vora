@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Events;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
+use App\Enums\ModerationStatus;
 use App\Enums\RestrictionCapability;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Events\EventMediaRequest;
@@ -42,12 +43,17 @@ class EventMediaController extends Controller
     /** @return Builder<Media> */
     private function visibleMedia(User $viewer): Builder
     {
+        // Admins also reach finished uploads awaiting review, to moderate in place.
+        $reviewer = $viewer->isAdmin();
         $query = Media::query()->where('purpose', MediaPurpose::Event->value)->viewableBy($viewer)
-            ->where(function (Builder $ready) use ($viewer): void {
+            ->where(function (Builder $ready) use ($viewer, $reviewer): void {
                 $ready->where('user_id', $viewer->id)->orWhere(function (Builder $published): void {
                     $published->where('upload_status', 'ready')->where('moderation_status', 'approved')
                         ->whereHas('user', fn (Builder $owner) => $owner->active()->whereNotNull('approved_at'));
                 });
+                if ($reviewer) {
+                    $ready->orWhere(fn (Builder $pending) => $pending->where('upload_status', 'ready')->where('moderation_status', ModerationStatus::Pending->value));
+                }
             });
         if ($this->restrictions->denies($viewer, RestrictionCapability::MediaView)) {
             $query->where('user_id', $viewer->id);
@@ -60,6 +66,13 @@ class EventMediaController extends Controller
     {
         $viewer = $request->user();
         $query = $this->visibleMedia($viewer);
+        // The review queue lists only finished uploads awaiting review; the
+        // ordinary gallery stays what every attendee sees.
+        if ($request->boolean('review')) {
+            $query->where('upload_status', 'ready')->where('moderation_status', ModerationStatus::Pending->value);
+        } else {
+            $query->where(fn (Builder $published) => $published->where('user_id', $viewer->id)->orWhere('moderation_status', '!=', ModerationStatus::Pending->value));
+        }
         if ($ulid = $request->validated('event_ulid')) {
             $query->whereHas('event', fn (Builder $event) => $event->where('ulid', $ulid));
         }

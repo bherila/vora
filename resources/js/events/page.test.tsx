@@ -88,6 +88,30 @@ describe('EventsPage', () => {
     expect(await screen.findByText('25 items')).toBeInTheDocument();
   });
 
+  it('gives organizers a review queue that advances after each decision', async () => {
+    const queue = [
+      { ...media, id: 21, ulid: 'p1', title: 'First pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'a.jpg' } },
+      { ...media, id: 22, ulid: 'p2', title: 'Second pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'b.jpg' } },
+    ];
+    const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/events/settings') return { data: { ...settings, pending_review_count: 2 } };
+      if (url.startsWith('/api/events/media?') && url.includes('review=1')) return { data: queue, meta: { ...meta, total: 2, last_page: 1, has_more: false } };
+      const pendingItem = queue.find((entry) => url === `/api/events/media/${entry.ulid}`);
+      return pendingItem ? { data: pendingItem } : implementation(url);
+    });
+    jest.mocked(fetchWrapper.post).mockResolvedValue({ success: true });
+    render(<EventsPage />);
+    fireEvent.click(await screen.findByRole('link', { name: 'Awaiting review (2)' }));
+    expect(await screen.findByRole('heading', { name: 'Awaiting review' })).toBeInTheDocument();
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&review=1'));
+    fireEvent.click(await screen.findByRole('link', { name: 'Open First pending' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/21/moderate', { action: 'approve', notes: null }));
+    expect(await screen.findByRole('dialog', { name: 'Second pending' })).toBeInTheDocument();
+    expect(window.location.search).toContain('item=p2');
+  });
+
   it('names a selected event once and drops it from each card’s byline', async () => {
     localStorage.setItem('vora:events:view', 'details');
     window.history.replaceState({}, '', '/events?event_ulid=event-one');

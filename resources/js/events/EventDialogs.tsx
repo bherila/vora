@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { takenLabel } from '@/events/capture-time';
 import { eventMediaStatus, mediaNeedsRefresh } from '@/events/media-status';
 import { PhotoDetails, PhotoVersionsChooser } from '@/events/PhotoVersionsChooser';
+import { type ReviewAction, ReviewPanel } from '@/events/ReviewPanel';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
@@ -140,9 +141,11 @@ interface EventMediaDialogProps {
   position?: string;
   onRefresh?: () => void;
   refreshPaused?: boolean;
+  /** Organizers reviewing a pending upload; called after approval or rejection. */
+  onModerated?: (action: ReviewAction) => void;
 }
 
-export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChooseVersion, hasPrevious = false, hasNext = false, navigationBusy = false, position, onRefresh, refreshPaused = false }: EventMediaDialogProps) {
+export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChooseVersion, hasPrevious = false, hasNext = false, navigationBusy = false, position, onRefresh, refreshPaused = false, onModerated }: EventMediaDialogProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -195,6 +198,7 @@ export function EventMediaDialog({ item, onClose, onDeleted, onNavigate, onChoos
       <div className="touch-pan-y touch-pinch-zoom" onTouchStart={startSwipe} onTouchEnd={endSwipe} onTouchCancel={() => { touchStart.current = null; }} data-testid="event-media-surface">
         <MediaPlayer item={item} className="max-h-[65vh] w-full object-contain" />
       </div>
+      {item.review && onModerated && <ReviewPanel item={{ ...item, review: item.review }} onModerated={onModerated} />}
       {mediaNeedsRefresh(item) && <p className="text-xs text-muted-foreground">{refreshPaused ? 'Automatic updates have paused.' : 'Status updates automatically for a short time.'} {onRefresh && <button type="button" className="underline underline-offset-4" onClick={onRefresh}>Check for updates</button>}</p>}
       {item.type === 'photo' && <PhotoDetails item={item} />}
       <div className="flex flex-wrap items-center gap-2">

@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { gallerySections } from '@/events/capture-time';
 import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDialogs';
 import { EVENT_REFRESH_LIMIT, eventMediaStatus, eventRefreshDelay, mediaNeedsRefresh } from '@/events/media-status';
+import type { ReviewAction } from '@/events/ReviewPanel';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
@@ -92,6 +93,7 @@ export function EventsPage() {
   const favoritesOf = favoritesEnabled ? params.get('favorites_of') ?? '' : '';
   const featured = favoritesEnabled && params.get('featured') === '1';
   const recent = params.get('sort') === 'recent';
+  const reviewMode = params.get('review') === '1';
   const itemUlid = params.get('item') ?? params.get('media') ?? '';
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
   const selectedEvent = events.find((event) => event.ulid === eventUlid);
@@ -194,6 +196,7 @@ export function EventsPage() {
     if (favoritesOf) search.set('favorites_of', favoritesOf);
     if (featured) search.set('featured', '1');
     if (recent) search.set('sort', 'recent');
+    if (reviewMode) search.set('review', '1');
     const key = search.toString();
     const changed = previousListing.current !== key;
     previousListing.current = key;
@@ -239,7 +242,7 @@ export function EventsPage() {
     };
     void load();
     return () => { active = false; window.clearTimeout(timer); };
-  }, [showMedia, viewerId, page, eventUlid, section, attendeeId, favoritesOf, featured, recent, revision, listRevision]);
+  }, [showMedia, viewerId, page, eventUlid, section, attendeeId, favoritesOf, featured, recent, reviewMode, revision, listRevision]);
 
   useEffect(() => {
     let active = true;
@@ -288,6 +291,15 @@ export function EventsPage() {
       replaceLocation(pageUrl(params, { page: String(page + direction) }));
     }
   };
+  // In the review queue, move straight to the next waiting item.
+  const moderated = (action: ReviewAction): void => {
+    toast.success(action === 'approve' ? 'Approved. Attendees can now see it.' : 'Rejected.');
+    const next = reviewMode && activeIndex >= 0 ? items[activeIndex + 1] ?? items[activeIndex - 1] : undefined;
+    if (next) replaceLocation(pageUrl(params, { item: next.ulid }));
+    else if (reviewMode) closeItem();
+    else setDetailRevision((value) => value + 1);
+    refresh();
+  };
   const copyJoiningLink = async (): Promise<void> => {
     if (!selectedEvent) return;
     try {
@@ -299,18 +311,20 @@ export function EventsPage() {
       toast.error('Clipboard access is unavailable. Select and copy the joining link below.');
     }
   };
-  const allMediaUrl = pageUrl(params, { event_ulid: null, section: null, attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
-  const eventsUrl = pageUrl(params, { event_ulid: null, section: 'events', attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
-  const attendeesUrl = pageUrl(params, { section: null, attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/attendees');
-  const featuredUrl = pageUrl(params, { section: null, attendee_id: null, favorites_of: null, featured: '1', page: null, item: null }, '/events');
-  const mineUrl = pageUrl(params, { section: 'mine', attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
+  const allMediaUrl = pageUrl(params, { review: null, event_ulid: null, section: null, attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
+  const eventsUrl = pageUrl(params, { review: null, event_ulid: null, section: 'events', attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
+  const attendeesUrl = pageUrl(params, { review: null, section: null, attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/attendees');
+  const featuredUrl = pageUrl(params, { review: null, section: null, attendee_id: null, favorites_of: null, featured: '1', page: null, item: null }, '/events');
+  const mineUrl = pageUrl(params, { review: null, section: 'mine', attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
 
   const curatorNames = settings?.featured_curators.map((curator) => curator.display_name).join(' & ') ?? '';
   const featuredLabel = curatorNames ? `${curatorNames}’s favorites` : 'Featured favorites';
   const filtersActive = !!attendeeId || !!favoritesOf || featured || section === 'mine';
   const filtersVisible = filtersOpen ?? filtersActive;
-  const clearFiltersUrl = pageUrl(params, { attendee_id: null, favorites_of: null, featured: null, section: null, page: null, item: null }, '/events');
-  const mediaHeading = featured ? featuredLabel : favoritesOf ? `${attendees.find((entry) => String(entry.id) === favoritesOf)?.display_name ?? 'Attendee'}’s favorites` : section === 'mine' ? 'My uploads' : selectedAttendee ? `Uploads by ${selectedAttendee.display_name}` : selectedEvent?.name ?? 'All photos & videos';
+  const reviewUrl = pageUrl(params, { review: '1', section: null, attendee_id: null, favorites_of: null, featured: null, page: null, item: null }, '/events');
+  const pendingReviewCount = settings?.pending_review_count ?? 0;
+  const clearFiltersUrl = pageUrl(params, { review: null, attendee_id: null, favorites_of: null, featured: null, section: null, page: null, item: null }, '/events');
+  const mediaHeading = reviewMode ? 'Awaiting review' : featured ? featuredLabel : favoritesOf ? `${attendees.find((entry) => String(entry.id) === favoritesOf)?.display_name ?? 'Attendee'}’s favorites` : section === 'mine' ? 'My uploads' : selectedAttendee ? `Uploads by ${selectedAttendee.display_name}` : selectedEvent?.name ?? 'All photos & videos';
 
   const tabClassName = 'shrink-0 whitespace-nowrap rounded-full bg-muted px-3 py-1.5 text-sm hover:bg-accent aria-[current=page]:bg-foreground aria-[current=page]:text-background';
   const showEventHeading = !!selectedEvent && mediaHeading === selectedEvent.name;
@@ -336,9 +350,10 @@ export function EventsPage() {
     </header>
     {/* One scrollable row on phones instead of wrapping onto several lines. */}
     <nav aria-label="Event navigation" className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
-      <a href={allMediaUrl} aria-current={showMedia && !filtersActive && !eventUlid ? 'page' : undefined} className={tabClassName}>All media</a>
+      <a href={allMediaUrl} aria-current={showMedia && !filtersActive && !eventUlid && !reviewMode ? 'page' : undefined} className={tabClassName}>All media</a>
       <a href={eventsUrl} aria-current={isEventIndex ? 'page' : undefined} className={tabClassName}>Events</a>
       {favoritesEnabled && curatorNames && <a href={featuredUrl} aria-current={featured ? 'page' : undefined} className={tabClassName}>{featuredLabel}</a>}
+      {settings?.is_admin && (pendingReviewCount > 0 || reviewMode) && <a href={reviewUrl} aria-current={reviewMode ? 'page' : undefined} className={tabClassName}>Awaiting review ({pendingReviewCount})</a>}
       {moduleEnabled('library') && <a href="/library" className="ml-auto shrink-0 whitespace-nowrap pl-2 text-sm underline underline-offset-4">My collection</a>}
     </nav>
     {initialLoading ? <p role="status">Loading events…</p> : error ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{error}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : <>
@@ -390,7 +405,7 @@ export function EventsPage() {
         </div>
         {!loading && selectableItems.length > 0 && (view === 'details' || selecting) && <Label className="flex w-fit items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedIds(checked ? selectableItems.map((item) => item.id) : [])} />Select all on this page</Label>}
         {view === 'details' && hasSelection && renderBulkActions(false)}
-        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? (recent ? renderThumbnails(items) : <div className="space-y-4">{gallerySections(items, selectedEvent?.timezone).map((section) => <section key={section.key} aria-label={section.label} className="space-y-1">
+        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 && reviewMode ? <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Nothing is waiting for review.</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? (recent ? renderThumbnails(items) : <div className="space-y-4">{gallerySections(items, selectedEvent?.timezone).map((section) => <section key={section.key} aria-label={section.label} className="space-y-1">
           <h3 className="sticky top-0 z-10 -mx-4 flex items-baseline justify-between gap-2 bg-background/95 px-4 py-1.5 text-sm font-semibold backdrop-blur sm:mx-0 sm:px-0"><span>{section.label}</span>{section.span && <span className="text-xs font-normal text-muted-foreground">{section.span}</span>}</h3>
           {renderThumbnails(section.items)}
         </section>)}</div>) : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
@@ -405,7 +420,7 @@ export function EventsPage() {
     </>}
     {detailLoading && <p role="status">Loading media details…</p>}
     {detailError && <div role="alert" className="flex items-center gap-3 text-sm text-destructive"><p>{detailError}</p><Button variant="outline" onClick={() => setDetailRevision((value) => value + 1)}>Try again</Button><Button variant="outline" onClick={closeItem}>Dismiss</Button></div>}
-    {activeItem && <EventMediaDialog key={activeItem.ulid} item={activeItem} onClose={closeItem} onDeleted={refresh} onNavigate={browse} onChooseVersion={(ulid) => replaceLocation(pageUrl(params, { item: ulid }))} hasPrevious={activeIndex >= 0 && (activeIndex > 0 || page > 1)} hasNext={activeIndex >= 0 && (activeIndex < items.length - 1 || !!meta?.has_more)} navigationBusy={loading || detailLoading} position={activeIndex >= 0 ? `Item ${(page - 1) * (meta?.per_page ?? items.length) + activeIndex + 1}${meta ? ` of ${meta.total}` : ''}` : 'Shared media'} refreshPaused={detailRefreshPaused} onRefresh={() => setDetailRevision((value) => value + 1)} />}
+    {activeItem && <EventMediaDialog key={activeItem.ulid} item={activeItem} onClose={closeItem} onDeleted={refresh} onNavigate={browse} onChooseVersion={(ulid) => replaceLocation(pageUrl(params, { item: ulid }))} hasPrevious={activeIndex >= 0 && (activeIndex > 0 || page > 1)} hasNext={activeIndex >= 0 && (activeIndex < items.length - 1 || !!meta?.has_more)} navigationBusy={loading || detailLoading} position={activeIndex >= 0 ? `Item ${(page - 1) * (meta?.per_page ?? items.length) + activeIndex + 1}${meta ? ` of ${meta.total}` : ''}` : 'Shared media'} refreshPaused={detailRefreshPaused} onRefresh={() => setDetailRevision((value) => value + 1)} onModerated={moderated} />}
     {editor !== undefined && <EventEditor event={editor} attendees={attendees} onClose={() => setEditor(undefined)} onSaved={refresh} />}
     {curatorsOpen && settings && <CuratorEditor settings={settings} attendees={attendees} onClose={() => setCuratorsOpen(false)} onSaved={refresh} />}
   </div>;
