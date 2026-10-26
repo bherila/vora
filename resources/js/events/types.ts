@@ -27,7 +27,11 @@ export interface EventSettings {
 }
 
 export interface EventMediaItem extends MediaItem {
-  event: { ulid: string; name: string } | null;
+  event: { ulid: string; name: string; timezone?: string } | null;
+  /** Device capture time, when the upload reported one. */
+  taken_at?: string | null;
+  /** The gallery's ordering time: capture time, else upload time. */
+  gallery_at?: string | null;
   uploader: { id: number; display_name: string };
   owned: boolean;
   download_url: string | null;
