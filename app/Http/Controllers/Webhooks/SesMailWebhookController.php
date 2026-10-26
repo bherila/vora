@@ -51,9 +51,14 @@ class SesMailWebhookController extends Controller
             return response()->noContent();
         }
         if ($message['Type'] === 'Notification') {
-            $event = json_decode((string) $message['Message'], true);
-            if (is_array($event)) {
-                $this->applyEvent($event, $log);
+            // A signed but malformed event must not 500: SNS would retry it for hours.
+            try {
+                $event = is_string($message['Message']) ? json_decode($message['Message'], true) : null;
+                if (is_array($event)) {
+                    $this->applyEvent($event, $log);
+                }
+            } catch (Throwable $exception) {
+                report($exception);
             }
         }
 

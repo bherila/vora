@@ -76,6 +76,14 @@ class SesMailWebhookTest extends TestCase
         $this->notification($delivered)->assertNotFound();
     }
 
+    public function test_signed_but_malformed_events_are_acknowledged_without_changes(): void
+    {
+        $delivery = $this->delivery('guest@example.test');
+        $this->notification(['eventType' => 'Delivery', 'delivery' => ['timestamp' => 'not a time', 'recipients' => ['guest@example.test']]])->assertNoContent();
+        $this->sns(['Type' => 'Notification', 'Message' => 'not json'])->assertNoContent();
+        $this->assertSame('sent', $delivery->fresh()->status);
+    }
+
     public function test_unsigned_requests_never_trigger_a_certificate_fetch(): void
     {
         $this->app->bind(MessageValidator::class, fn (): MessageValidator => AppServiceProvider::snsMessageValidator());
