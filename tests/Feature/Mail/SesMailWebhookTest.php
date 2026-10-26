@@ -8,6 +8,7 @@ use Aws\Sns\Message;
 use Aws\Sns\MessageValidator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
 use OpenSSLAsymmetricKey;
 use Tests\TestCase;
@@ -80,12 +81,18 @@ class SesMailWebhookTest extends TestCase
         $this->notification($delivered)->assertNotFound();
     }
 
-    public function test_signed_but_malformed_events_are_acknowledged_without_changes(): void
+    public function test_malformed_events_are_acknowledged_but_storage_failures_are_retried(): void
     {
         $delivery = $this->delivery('guest@example.test');
-        $this->notification(['eventType' => 'Delivery', 'delivery' => ['timestamp' => 'not a time', 'recipients' => ['guest@example.test']]])->assertNoContent();
         $this->sns(['Type' => 'Notification', 'Message' => 'not json'])->assertNoContent();
         $this->assertSame('sent', $delivery->fresh()->status);
+        // An unreadable timestamp still applies the outcome, timed on receipt.
+        $this->notification(['eventType' => 'Delivery', 'delivery' => ['timestamp' => 'not a time', 'recipients' => ['guest@example.test']]])->assertNoContent();
+        $this->assertSame('delivered', $delivery->fresh()->status);
+
+        // A storage failure must reach SNS as an error so it retries the bounce.
+        Schema::drop('mail_deliveries');
+        $this->notification(['eventType' => 'Bounce', 'bounce' => ['bounceType' => 'Permanent', 'bouncedRecipients' => [['emailAddress' => 'guest@example.test']]]])->assertServerError();
     }
 
     public function test_production_validator_fetches_once_caches_and_accepts_signature_version_2(): void

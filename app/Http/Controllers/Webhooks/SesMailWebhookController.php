@@ -7,6 +7,7 @@ use App\Services\Mail\MailDeliveryLog;
 use Aws\Sns\Message;
 use Aws\Sns\MessageValidator;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Http;
@@ -51,14 +52,11 @@ class SesMailWebhookController extends Controller
             return response()->noContent();
         }
         if ($message['Type'] === 'Notification') {
-            // A signed but malformed event must not 500: SNS would retry it for hours.
-            try {
-                $event = is_string($message['Message']) ? json_decode($message['Message'], true) : null;
-                if (is_array($event)) {
-                    $this->applyEvent($event, $log);
-                }
-            } catch (Throwable $exception) {
-                report($exception);
+            // Malformed content is acknowledged (SNS would retry it for hours), but
+            // storage failures still propagate so SNS retries the event.
+            $event = is_string($message['Message']) ? json_decode($message['Message'], true) : null;
+            if (is_array($event)) {
+                $this->applyEvent($event, $log);
             }
         }
 
@@ -92,7 +90,14 @@ class SesMailWebhookController extends Controller
             return;
         }
         $timestamp = is_array($detail) ? ($detail['timestamp'] ?? null) : null;
-        $at = is_string($timestamp) ? CarbonImmutable::parse($timestamp) : CarbonImmutable::now();
+        $at = CarbonImmutable::now();
+        if (is_string($timestamp)) {
+            try {
+                $at = CarbonImmutable::parse($timestamp);
+            } catch (InvalidFormatException) {
+                // Keep "now" for an unreadable timestamp rather than dropping the event.
+            }
+        }
         $reason = is_string($reason) ? $reason : null;
         if ($recipients === null) {
             $log->apply($messageId, null, $status, $reason, $at);
