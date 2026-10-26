@@ -55,7 +55,9 @@ async function buildDerivatives(file: File, type: 'photo' | 'video', signal: Abo
       const { thumbnail, perceptualHash, width, height } = await generatePhotoDerivatives(file);
       return { thumbnail, perceptualHash, width: width ?? null, height: height ?? null };
     }
-    return { thumbnail: await generateVideoPoster(file), perceptualHash: null, width: null, height: null };
+    const thumbnail = await generateVideoPoster(file, signal);
+    signal.throwIfAborted();
+    return { thumbnail, perceptualHash: null, width: null, height: null };
   } catch {
     return { thumbnail: null, perceptualHash: null, width: null, height: null };
   }

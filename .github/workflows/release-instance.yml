@@ -99,7 +99,8 @@ jobs:
       - name: Retain tested release
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: instance-release
+          # Per environment: two releases in one run must not share an artifact.
+          name: instance-release-${{ inputs.environment }}
           path: release.tgz
           retention-days: 7
 
@@ -131,7 +132,8 @@ jobs:
       - uses: actions/download-artifact@v5
         if: steps.target.outputs.enabled == 'true'
         with:
-          name: instance-release
+          # Per environment: two releases in one run must not share an artifact.
+          name: instance-release-${{ inputs.environment }}
 
       - name: Validate target and configure SSH
         if: steps.target.outputs.enabled == 'true'
