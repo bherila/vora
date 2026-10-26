@@ -15,3 +15,13 @@ jobs:
       environment: prod
       primary: true
     secrets: inherit
+
+  # The Event instance follows main while it is in development, after the
+  # primary release succeeds. Set DEPLOY_ENABLED=false on its environment to
+  # stop following main without a code change (pinned callers still work).
+  release-event:
+    needs: release
+    uses: ./.github/workflows/release-instance.yml
+    with:
+      environment: event-prod
+    secrets: inherit
