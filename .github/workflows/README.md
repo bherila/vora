@@ -23,6 +23,19 @@ Once the `prod` environment is created, you need to configure the following secr
     -   Generate from a trusted machine: `ssh-keyscan -H your.server.com`
     -   The hostname in this output must exactly match `SSH_HOST`.
 
+## Additional instances
+
+`deploy.yml` also releases each push to `main` to the Event instance through the
+`event-prod` environment, after the primary release succeeds. That environment
+needs the same secrets as `prod` plus the variables `DEPLOY_PROFILE=event` and
+`DEPLOY_ENABLED=true`. Set `DEPLOY_ENABLED=false` to stop following `main`.
+Instance repositories can still call `release-instance.yml` with a pinned
+`source_ref` for reviewed releases.
+
+Configure every secret and both variables on the environment itself, and
+restrict it to the `main` branch. An environment missing a value inherits the
+repository-level one, which belongs to the primary instance.
+
 ## Deployment Target
 
 
