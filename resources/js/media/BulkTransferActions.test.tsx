@@ -13,6 +13,20 @@ describe('BulkTransferActions', () => {
     jest.mocked(readInitialData).mockReturnValue({ instance: { profile: 'event' } });
   });
 
+  it('keeps the compact bar to short actions and only explains a limited download', () => {
+    const { rerender } = render(<BulkTransferActions compact source="events" ulids={['one', 'two']} downloadUlids={['one', 'two']} canSave onSaved={jest.fn()} onClear={jest.fn()} />);
+    expect(screen.getByRole('button', { name: /^Save selected to / })).toHaveTextContent(/^Save$/);
+    expect(screen.getByRole('button', { name: 'Download selected (ZIP)' })).toHaveTextContent(/^Download$/);
+    expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
+    expect(screen.queryByText(/ZIP downloads/)).toBeNull();
+    expect(screen.queryByText(/Saving adds private references/)).toBeNull();
+
+    const many = Array.from({ length: 51 }, (_, index) => `item-${index}`);
+    rerender(<BulkTransferActions compact source="events" ulids={many} downloadUlids={many} canSave onSaved={jest.fn()} />);
+    expect(screen.getByRole('button', { name: 'Download selected (ZIP)' })).toBeDisabled();
+    expect(screen.getByText(/ZIP downloads: up to 50 files/)).toBeInTheDocument();
+  });
+
   it('saves the exact selection privately and leaves a failed selection retryable', async () => {
     const saved = jest.fn();
     jest.mocked(fetchWrapper.post).mockRejectedValueOnce('Storage limit reached.').mockResolvedValueOnce({ success: true });

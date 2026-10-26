@@ -1,5 +1,5 @@
-import { ImagePlus, Link2, Pencil, RefreshCw, SlidersHorizontal } from 'lucide-react';
-import { type MouseEvent, type PointerEvent, useEffect, useRef, useState } from 'react';
+import { ImagePlus, Layers, LayoutGrid, Link2, List, Pencil, RefreshCw, SlidersHorizontal, Star } from 'lucide-react';
+import { type MouseEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -18,6 +18,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
 import { BulkTransferActions } from '@/media/BulkTransferActions';
 import { MediaGrid } from '@/media/MediaGrid';
+import { MediaThumbnailGrid } from '@/media/MediaThumbnailGrid';
 import { MediaUploadDialog } from '@/media/MediaUploadDialog';
 import type { PageMeta } from '@/media/types';
 
@@ -29,6 +30,14 @@ function pageUrl(params: URLSearchParams, changes: Record<string, string | null>
     else next.delete(key);
   }
   return `${pathname}${next.size ? `?${next.toString()}` : ''}`;
+}
+
+type GalleryView = 'gallery' | 'details';
+
+const GALLERY_VIEW_KEY = 'vora:events:view';
+
+function storedGalleryView(): GalleryView {
+  try { return localStorage.getItem(GALLERY_VIEW_KEY) === 'details' ? 'details' : 'gallery'; } catch { return 'gallery'; }
 }
 
 function eventDate(event: EventProfile): string | null {
@@ -45,6 +54,8 @@ export function EventsPage() {
   const [settings, setSettings] = useState<EventSettings | null>(null);
   const [items, setItems] = useState<EventMediaItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [view, setView] = useState<GalleryView>(storedGalleryView);
+  const [selecting, setSelecting] = useState(false);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -89,6 +100,12 @@ export function EventsPage() {
   const showMedia = !isEventIndex && !attendeeIndex;
   const refresh = (): void => setRevision((value) => value + 1);
   useEffect(() => { setSelectedIds([]); }, [location]);
+  const changeView = (next: GalleryView): void => {
+    setView(next);
+    setSelecting(false);
+    setSelectedIds([]);
+    try { localStorage.setItem(GALLERY_VIEW_KEY, next); } catch { /* Per-viewer convenience only. */ }
+  };
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id && item.upload_status === 'ready')));
   }, [items]);
@@ -294,6 +311,8 @@ export function EventsPage() {
 
   const tabClassName = 'shrink-0 whitespace-nowrap rounded-full bg-muted px-3 py-1.5 text-sm hover:bg-accent aria-[current=page]:bg-foreground aria-[current=page]:text-background';
   const showEventHeading = !!selectedEvent && mediaHeading === selectedEvent.name;
+  const hasSelection = !loading && selectedItems.length > 0;
+  const renderBulkActions = (compact: boolean): ReactNode => <BulkTransferActions compact={compact} source="events" ulids={selectedItems.map((item) => item.ulid)} downloadUlids={selectedItems.map((item) => item.ulid)} canSave={moduleEnabled('library') && selectedItems.some((item) => item.can_save_to_library)} onSaved={() => { setSelectedIds([]); refresh(); }} onClear={() => setSelectedIds([])} />;
 
   return <div className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-4 sm:space-y-6 sm:px-4 sm:py-8`} onPointerDownCapture={captureGalleryPointer} onClick={followInternalLink}>
     <Toaster />
@@ -341,13 +360,33 @@ export function EventsPage() {
         {attendees.length === 0 && <p>No attendee galleries are available yet.</p>}
         {attendees.map((attendee) => <Card key={attendee.id}><CardContent className="grid gap-3 p-4"><h2 className="font-semibold">{attendee.display_name}</h2><a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: null, page: null, item: null }, `/attendees/${attendee.id}`)}>View uploads by {attendee.display_name}</a>{favoritesEnabled && <a className="text-sm underline" href={pageUrl(params, { section: null, favorites_of: String(attendee.id), page: null, item: null }, '/events')}>View favorites by {attendee.display_name}</a>}</CardContent></Card>)}
       </section> : !isEventIndex && <section className="space-y-4" aria-label="Event media">
-        {!showEventHeading && <h2 className="text-lg font-semibold">{mediaHeading}</h2>}
-        {!loading && selectableItems.length > 0 && <Label className="flex w-fit items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedIds(checked ? selectableItems.map((item) => item.id) : [])} />Select all on this page</Label>}
-        {!loading && selectedItems.length > 0 && <BulkTransferActions source="events" ulids={selectedItems.map((item) => item.ulid)} downloadUlids={selectedItems.map((item) => item.ulid)} canSave={moduleEnabled('library') && selectedItems.some((item) => item.can_save_to_library)} onSaved={() => { setSelectedIds([]); refresh(); }} onClear={() => setSelectedIds([])} />}
-        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
+        <div className="flex flex-wrap items-center gap-2">
+          {!showEventHeading && <h2 className="mr-auto text-lg font-semibold">{mediaHeading}</h2>}
+          <div className="ml-auto flex items-center gap-2">
+            {view === 'gallery' && !loading && selectableItems.length > 0 && <Button size="sm" variant={selecting ? 'default' : 'outline'} aria-pressed={selecting} onClick={() => { if (selecting) setSelectedIds([]); setSelecting(!selecting); }}>{selecting ? 'Cancel' : 'Select'}</Button>}
+            <div role="group" aria-label="Layout" className="inline-flex overflow-hidden rounded-md border">
+              <Button variant="ghost" size="icon-sm" className="rounded-none aria-pressed:bg-muted" aria-label="Gallery view" title="Gallery view" aria-pressed={view === 'gallery'} onClick={() => changeView('gallery')}><LayoutGrid aria-hidden="true" /></Button>
+              <Button variant="ghost" size="icon-sm" className="rounded-none aria-pressed:bg-muted" aria-label="Details view" title="Details view" aria-pressed={view === 'details'} onClick={() => changeView('details')}><List aria-hidden="true" /></Button>
+            </div>
+          </div>
+        </div>
+        {!loading && selectableItems.length > 0 && (view === 'details' || selecting) && <Label className="flex w-fit items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedIds(checked ? selectableItems.map((item) => item.id) : [])} />Select all on this page</Label>}
+        {view === 'details' && hasSelection && renderBulkActions(false)}
+        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? <MediaThumbnailGrid items={items} selecting={selecting} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderOverlay={(media) => {
+          const item = items.find((entry) => entry.id === media.id);
+          if (!item) return null;
+          const status = eventMediaStatus(item);
+          return <>
+            {item.photo_versions && <span className="pointer-events-none absolute left-1 top-1 flex items-center gap-0.5 rounded bg-black/65 px-1 py-0.5 text-[11px] text-white"><Layers aria-hidden="true" className="size-3" /><span aria-hidden="true">{item.photo_versions.visible_count}</span><span className="sr-only">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</span></span>}
+            {status !== 'Shared' && <span className="pointer-events-none absolute bottom-1 left-1 max-w-[calc(100%-2rem)] truncate rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">{status}</span>}
+            {item.favorited && <span className="pointer-events-none absolute bottom-1 right-1 text-yellow-300 drop-shadow"><Star aria-hidden="true" className="size-4 fill-current" /><span className="sr-only">Favorited</span></span>}
+          </>;
+        }} /> : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
           const item = items.find((entry) => entry.id === media.id);
           return item && <div className="flex min-w-0 flex-wrap items-center gap-2">{favoritesEnabled && <FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} />}<span className="min-w-0 break-words text-xs text-muted-foreground">{item.uploader.display_name}{item.event && !eventUlid ? ` · ${item.event.name}` : ''} · {eventMediaStatus(item)}</span>{item.photo_versions && <Badge variant="secondary">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</Badge>}</div>;
         }} />}
+        {/* Below the grid and pinned to the viewport, so tapping a tile never shifts the tiles. */}
+        {view === 'gallery' && hasSelection && <div className="sticky bottom-2 z-20 rounded bg-background shadow-lg">{renderBulkActions(true)}</div>}
         {meta && meta.last_page > 1 && <nav className="flex items-center justify-between gap-3" aria-label="Media pages"><Button variant="outline" disabled={page <= 1 || loading} onClick={() => navigate(pageUrl(params, { page: String(page - 1), item: null }))}>Previous</Button><span className="text-sm">Page {meta.current_page} of {meta.last_page}</span><Button variant="outline" disabled={!meta.has_more || loading} onClick={() => navigate(pageUrl(params, { page: String(page + 1), item: null }))}>Next</Button></nav>}
       </section>}
       {settings?.is_admin && <details className="rounded border p-3"><summary className="cursor-pointer text-sm font-medium">Manage events</summary><div className="mt-3 flex flex-wrap items-center gap-2"><Button onClick={() => setEditor(null)}>Create event</Button><a className="text-sm underline" href="/events/organizer">Manage attendees</a>{favoritesEnabled && <Button variant="outline" onClick={() => setCuratorsOpen(true)}>Manage featured curators</Button>}</div></details>}
