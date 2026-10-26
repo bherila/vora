@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { gallerySections } from '@/events/capture-time';
 import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDialogs';
 import { EVENT_REFRESH_LIMIT, eventMediaStatus, eventRefreshDelay, mediaNeedsRefresh } from '@/events/media-status';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
@@ -314,6 +315,16 @@ export function EventsPage() {
   const tabClassName = 'shrink-0 whitespace-nowrap rounded-full bg-muted px-3 py-1.5 text-sm hover:bg-accent aria-[current=page]:bg-foreground aria-[current=page]:text-background';
   const showEventHeading = !!selectedEvent && mediaHeading === selectedEvent.name;
   const hasSelection = !loading && selectedItems.length > 0;
+  const renderThumbnails = (list: EventMediaItem[]): ReactNode => <MediaThumbnailGrid items={list} selecting={selecting} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderOverlay={(media) => {
+    const item = items.find((entry) => entry.id === media.id);
+    if (!item) return null;
+    const status = eventMediaStatus(item);
+    return <>
+      {item.photo_versions && <span className="pointer-events-none absolute left-1 top-1 flex items-center gap-0.5 rounded bg-black/65 px-1 py-0.5 text-[11px] text-white"><Layers aria-hidden="true" className="size-3" /><span aria-hidden="true">{item.photo_versions.visible_count}</span><span className="sr-only">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</span></span>}
+      {status !== 'Shared' && <span className="pointer-events-none absolute bottom-1 left-1 max-w-[calc(100%-2rem)] truncate rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">{status}</span>}
+      {item.favorited && <span className="pointer-events-none absolute bottom-1 right-1 text-yellow-300 drop-shadow"><Star aria-hidden="true" className="size-4 fill-current" /><span className="sr-only">Favorited</span></span>}
+    </>;
+  }} />;
   const renderBulkActions = (compact: boolean): ReactNode => <BulkTransferActions compact={compact} source="events" ulids={selectedItems.map((item) => item.ulid)} downloadUlids={selectedItems.map((item) => item.ulid)} canSave={moduleEnabled('library') && selectedItems.some((item) => item.can_save_to_library)} onSaved={() => { setSelectedIds([]); refresh(); }} onClear={() => setSelectedIds([])} />;
 
   return <div className={`mx-auto w-full ${BROWSING_PAGE_WIDTH} space-y-4 sm:space-y-6 sm:px-4 sm:py-8`} onPointerDownCapture={captureGalleryPointer} onClick={followInternalLink}>
@@ -375,16 +386,10 @@ export function EventsPage() {
         </div>
         {!loading && selectableItems.length > 0 && (view === 'details' || selecting) && <Label className="flex w-fit items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={selectedItems.length === selectableItems.length} indeterminate={selectedItems.length > 0 && selectedItems.length < selectableItems.length} onCheckedChange={(checked) => setSelectedIds(checked ? selectableItems.map((item) => item.id) : [])} />Select all on this page</Label>}
         {view === 'details' && hasSelection && renderBulkActions(false)}
-        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? <MediaThumbnailGrid items={items} selecting={selecting} selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderOverlay={(media) => {
-          const item = items.find((entry) => entry.id === media.id);
-          if (!item) return null;
-          const status = eventMediaStatus(item);
-          return <>
-            {item.photo_versions && <span className="pointer-events-none absolute left-1 top-1 flex items-center gap-0.5 rounded bg-black/65 px-1 py-0.5 text-[11px] text-white"><Layers aria-hidden="true" className="size-3" /><span aria-hidden="true">{item.photo_versions.visible_count}</span><span className="sr-only">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</span></span>}
-            {status !== 'Shared' && <span className="pointer-events-none absolute bottom-1 left-1 max-w-[calc(100%-2rem)] truncate rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">{status}</span>}
-            {item.favorited && <span className="pointer-events-none absolute bottom-1 right-1 text-yellow-300 drop-shadow"><Star aria-hidden="true" className="size-4 fill-current" /><span className="sr-only">Favorited</span></span>}
-          </>;
-        }} /> : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
+        {mediaError ? <div role="alert" className="space-y-2 text-sm text-destructive"><p>{mediaError}</p><Button variant="outline" onClick={refresh}>Try again</Button></div> : loading ? <p role="status">Loading media…</p> : items.length === 0 ? <div className="space-y-3 rounded-lg border border-dashed p-6 text-center"><p className="font-medium">{filtersActive ? 'No moments match these filters.' : events.length === 0 ? 'No events are available yet.' : 'Be the first to share a moment.'}</p><p className="text-sm text-muted-foreground">{filtersActive ? 'Try another attendee or remove the filters to see more.' : events.length === 0 ? 'An organizer will make events available here.' : 'Choose Add photos & videos to contribute.'}</p>{events.length === 0 && settings?.is_admin && <Button onClick={() => setEditor(null)}>Create event</Button>}{filtersActive && <a href={clearFiltersUrl} className="inline-block text-sm underline underline-offset-4">Show all media</a>}</div> : view === 'gallery' ? (recent ? renderThumbnails(items) : <div className="space-y-4">{gallerySections(items, selectedEvent?.timezone).map((section) => <section key={section.key} aria-label={section.label} className="space-y-1">
+          <h3 className="sticky top-0 z-10 -mx-4 flex items-baseline justify-between gap-2 bg-background/95 px-4 py-1.5 text-sm font-semibold backdrop-blur sm:mx-0 sm:px-0"><span>{section.label}</span>{section.span && <span className="text-xs font-normal text-muted-foreground">{section.span}</span>}</h3>
+          {renderThumbnails(section.items)}
+        </section>)}</div>) : <MediaGrid items={items} thumbnailSize="compact" selectedIds={selectedIds} onSelectionChange={setSelectedIds} canSelect={(item) => item.upload_status === 'ready'} getHref={(item) => pageUrl(params, { item: item.ulid })} renderActions={(media) => {
           const item = items.find((entry) => entry.id === media.id);
           return item && <div className="flex min-w-0 flex-wrap items-center gap-2">{favoritesEnabled && <FavoriteButton key={`${item.id}:${item.favorited}`} type="media" id={item.id} initialFavorited={item.favorited} />}<span className="min-w-0 break-words text-xs text-muted-foreground">{item.uploader.display_name}{item.event && !eventUlid ? ` · ${item.event.name}` : ''} · {eventMediaStatus(item)}</span>{item.photo_versions && <Badge variant="secondary">{item.photo_versions.visible_count} versions{item.photo_versions.is_preferred ? ' · Preferred' : ''}</Badge>}</div>;
         }} />}
