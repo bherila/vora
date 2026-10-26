@@ -22,6 +22,8 @@ class SesMailWebhookTest extends TestCase
 
     private OpenSSLAsymmetricKey $key;
 
+    private string $pem;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -31,6 +33,7 @@ class SesMailWebhookTest extends TestCase
         $this->key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         $certificate = openssl_csr_sign(openssl_csr_new(['commonName' => 'sns.amazonaws.com'], $this->key), null, $this->key, 1);
         openssl_x509_export($certificate, $pem);
+        $this->pem = $pem;
         $this->app->bind(MessageValidator::class, fn (): MessageValidator => new MessageValidator(
             fn (string $url): string|false => $url === self::CERT_URL ? $pem : false,
         ));
@@ -42,7 +45,8 @@ class SesMailWebhookTest extends TestCase
         $message = ['MessageId' => 'sns-1', 'TopicArn' => self::TOPIC, 'Timestamp' => '2026-10-26T18:00:00.000Z',
             'SignatureVersion' => '1', 'SigningCertURL' => self::CERT_URL, 'Signature' => '', ...$fields];
         if ($sign) {
-            openssl_sign((new MessageValidator)->getStringToSign(new Message($message)), $signature, $this->key, OPENSSL_ALGO_SHA1);
+            $algorithm = $message['SignatureVersion'] === '2' ? OPENSSL_ALGO_SHA256 : OPENSSL_ALGO_SHA1;
+            openssl_sign((new MessageValidator)->getStringToSign(new Message($message)), $signature, $this->key, $algorithm);
             $message['Signature'] = base64_encode($signature);
         }
 
@@ -82,6 +86,29 @@ class SesMailWebhookTest extends TestCase
         $this->notification(['eventType' => 'Delivery', 'delivery' => ['timestamp' => 'not a time', 'recipients' => ['guest@example.test']]])->assertNoContent();
         $this->sns(['Type' => 'Notification', 'Message' => 'not json'])->assertNoContent();
         $this->assertSame('sent', $delivery->fresh()->status);
+    }
+
+    public function test_production_validator_fetches_once_caches_and_accepts_signature_version_2(): void
+    {
+        $this->app->bind(MessageValidator::class, fn (): MessageValidator => AppServiceProvider::snsMessageValidator());
+        Http::fake([self::CERT_URL => Http::response($this->pem)]);
+        $delivery = $this->delivery('guest@example.test');
+        $body = json_encode(['eventType' => 'Delivery', 'mail' => ['messageId' => '0100018f-ses-id'], 'delivery' => ['timestamp' => '2026-10-26T18:00:01.000Z', 'recipients' => ['guest@example.test']]]);
+
+        $this->sns(['Type' => 'Notification', 'Message' => $body, 'SignatureVersion' => '2'])->assertNoContent();
+        $this->sns(['Type' => 'Notification', 'Message' => $body])->assertNoContent();
+        $this->assertSame('delivered', $delivery->fresh()->status);
+        Http::assertSentCount(1);
+    }
+
+    public function test_production_validator_rejects_when_the_certificate_cannot_be_fetched(): void
+    {
+        $this->app->bind(MessageValidator::class, fn (): MessageValidator => AppServiceProvider::snsMessageValidator());
+        Http::fake([self::CERT_URL => Http::response('missing', 404)]);
+        $this->notification(['eventType' => 'Send'])->assertForbidden();
+        $this->notification(['eventType' => 'Send'])->assertForbidden();
+        // Failures are not cached as if they were certificates.
+        Http::assertSentCount(2);
     }
 
     public function test_unsigned_requests_never_trigger_a_certificate_fetch(): void
