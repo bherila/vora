@@ -19,7 +19,10 @@ class ProviderAccounts
     public function resolve(OAuthIdentity $identity): User
     {
         try {
-            return DB::transaction(fn (): User => $this->resolveOnce($identity));
+            // On MariaDB two first sign-ins for one subject take gap locks on
+            // the missing rows and deadlock rather than meet the unique index;
+            // a retry then finds the account the other request committed.
+            return DB::transaction(fn (): User => $this->resolveOnce($identity), attempts: 3);
         } catch (UniqueConstraintViolationException) {
             // A concurrent first sign-in created the account between our read
             // and insert; the binding it committed is the answer.

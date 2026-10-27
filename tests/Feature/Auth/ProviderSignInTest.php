@@ -15,7 +15,7 @@ class ProviderSignInTest extends TestCase
     private const PROVIDER_URL = 'https://id.example.test';
 
     /** @var array<string, mixed> */
-    private array $identity = ['sub' => '42', 'name' => 'Avery Example', 'email' => 'avery@example.test', 'credential_version' => 1];
+    protected array $identity = ['sub' => '42', 'name' => 'Avery Example', 'email' => 'avery@example.test', 'credential_version' => 1];
 
     protected function setUp(): void
     {
