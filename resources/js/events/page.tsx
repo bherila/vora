@@ -15,6 +15,7 @@ import { gallerySections } from '@/events/capture-time';
 import { CuratorEditor, EventEditor, EventMediaDialog } from '@/events/EventDialogs';
 import { EVENT_REFRESH_LIMIT, eventMediaStatus, eventRefreshDelay, mediaNeedsRefresh } from '@/events/media-status';
 import type { ReviewAction } from '@/events/ReviewPanel';
+import { registerShareTarget, takeSharedFiles } from '@/events/sharedFiles';
 import { type EventAttendee, eventError, type EventMediaItem, type EventProfile, type EventSettings } from '@/events/types';
 import { fetchWrapper } from '@/fetchWrapper';
 import { moduleEnabled } from '@/instance';
@@ -120,6 +121,14 @@ export function EventsPage() {
     window.history.replaceState(window.history.state, '', url);
     setLocation(window.location.pathname + window.location.search);
   };
+  const [sharedFiles, setSharedFiles] = useState<File[]>();
+  useEffect(() => {
+    registerShareTarget();
+    if (new URLSearchParams(window.location.search).get('shared') !== '1') return;
+    replaceLocation(pageUrl(new URLSearchParams(window.location.search), { shared: null }));
+    void takeSharedFiles().then((files) => { if (files.length > 0) setSharedFiles(files); }).catch(() => undefined);
+     
+  }, []);
   const navigate = (url: string, scrollPosition = window.scrollY): void => {
     pendingScrollRestore.current = null;
     const target = new URL(url, window.location.origin);
@@ -355,7 +364,7 @@ export function EventsPage() {
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0"><h1 className="text-xl font-bold sm:text-2xl">Event photos & videos</h1><p className="mt-1 hidden text-sm text-muted-foreground sm:block">Browse the moments attendees shared, or add your own.</p></div>
       {/* Full-width on phones so the primary action is a large thumb target. */}
-      {!initialLoading && !error && <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto"><MediaUploadDialog eventOptions={events} eventUlid={selectedEvent?.ulid} eventUploadsRequireReview={settings?.uploads_require_review ?? true} characters={[]} lastInterestIds={[]} onUploaded={refresh} triggerLabel={<><ImagePlus aria-hidden="true" />Add photos & videos</>} /></div>}
+      {!initialLoading && !error && <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto"><MediaUploadDialog eventOptions={events} eventUlid={selectedEvent?.ulid} eventUploadsRequireReview={settings?.uploads_require_review ?? true} sharedFiles={sharedFiles} characters={[]} lastInterestIds={[]} onUploaded={refresh} triggerLabel={<><ImagePlus aria-hidden="true" />Add photos & videos</>} /></div>}
     </header>
     {/* One scrollable row on phones instead of wrapping onto several lines. */}
     <nav aria-label="Event navigation" className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">

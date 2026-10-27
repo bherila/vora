@@ -35,6 +35,16 @@ class AppIconController extends Controller
             'display' => 'standalone',
             'background_color' => '#ffffff',
         ];
+        if (InstanceFeatures::enabled('events')) {
+            // Android lists the installed app in its share sheet. The service
+            // worker receives this POST and hands the files to the gallery.
+            $manifest['share_target'] = [
+                'action' => '/events/share',
+                'method' => 'POST',
+                'enctype' => 'multipart/form-data',
+                'params' => ['files' => [['name' => 'media', 'accept' => ['image/*', 'video/*']]]],
+            ];
+        }
         $icons = [];
         foreach (['icon-192' => '192x192', 'icon-512' => '512x512'] as $variant => $sizes) {
             $url = $icon->url($variant);

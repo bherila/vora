@@ -8,6 +8,7 @@ use App\Http\Controllers\Events\EventMediaController;
 use App\Http\Controllers\Events\EventOrganizerController;
 use App\Models\Event;
 use App\Services\Events\EventAccess;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 // Bind only events this account may access. Missing and hidden ULIDs share
@@ -18,6 +19,11 @@ Route::bind('event', fn (string $ulid): Event => app(EventAccess::class)
 
 Route::get('/events/join/{ulid}', [EventJoinController::class, 'start'])->whereUlid('ulid')
     ->middleware('module:events')->name('events.join');
+
+// Normally answered by the service worker. Without one (a share before the app
+// has registered it), return to the gallery rather than failing on CSRF.
+Route::post('/events/share', fn () => redirect('/events', 303))
+    ->withoutMiddleware(PreventRequestForgery::class)->middleware('module:events')->name('events.share');
 
 Route::middleware(['auth', 'approved', 'module:events'])->group(function (): void {
     Route::get('/events/continue', [EventJoinController::class, 'continue'])->name('events.join.continue');
