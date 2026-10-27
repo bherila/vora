@@ -144,10 +144,11 @@ for deployment profiles, isolated storage, and additional targets.
 ### Name and Home Screen icon
 
 Each installation names itself with `APP_NAME` and sets its own icon in
-**Admin → App icon** (or `php artisan ops:app-icon path/to/icon.png`). The icon
+**Admin → App icon & name** (or `php artisan ops:app-icon path/to/icon.png`). The icon
 is stored under `storage/`, which deploys never overwrite, so no installation's
 branding lives in this repository. `/manifest.webmanifest` serves the name and
-icon to browsers that add the site to a Home Screen.
+icon to browsers that add the site to a Home Screen. A shorter **Home Screen
+name** can be set on the same page for the label under the icon.
 
 ### Shared cPanel scheduler and queue
 

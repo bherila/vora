@@ -98,7 +98,8 @@ what the original contains.
 ### Home Screen app and sharing
 
 The site can be added to a phone's Home Screen under the installation's
-`APP_NAME` and the icon set in **Admin → App icon**. On Android, the installed
+`APP_NAME` (or a shorter Home Screen name) and the icon set in **Admin → App
+icon & name**. On Android, the installed
 app also appears in the share sheet: photos and videos shared from the Photos
 app open the gallery's upload dialog with the files queued. The service worker
 receives the share and holds the files in the browser until the gallery takes

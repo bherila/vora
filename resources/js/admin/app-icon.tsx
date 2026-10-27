@@ -9,6 +9,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 
 interface AppIconData {
   app_name: string;
+  short_name: string | null;
   icon_url: string | null;
   apple_touch_icon_url: string | null;
 }
@@ -28,10 +29,11 @@ export function AppIconPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [shortName, setShortName] = useState('');
 
   useEffect(() => {
     fetchWrapper.get('/api/admin/app-icon')
-      .then((response: { data: AppIconData }) => setData(response.data))
+      .then((response: { data: AppIconData }) => { setData(response.data); setShortName(response.data.short_name ?? ''); })
       .catch((failure: unknown) => setError(failureMessage(failure, 'The current icon could not be loaded.')));
   }, []);
 
@@ -55,6 +57,23 @@ export function AppIconPage() {
     }
   };
 
+  const saveShortName = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetchWrapper.put('/api/admin/app-icon/short-name', { short_name: shortName.trim() || null }) as { data: AppIconData };
+      setData(response.data);
+      setShortName(response.data.short_name ?? '');
+      setNotice(response.data.short_name ? 'Home Screen name saved.' : `Home Screen name cleared; ${response.data.app_name} is used.`);
+    } catch (failure) {
+      setError(failureMessage(failure, 'The Home Screen name could not be saved.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async (): Promise<void> => {
     setBusy(true);
     setError('');
@@ -72,7 +91,7 @@ export function AppIconPage() {
 
   return <div className={`${READING_PAGE_WIDTH} space-y-6 px-4 py-6`}>
     <header className="space-y-1">
-      <h1 className="text-2xl font-semibold">App icon</h1>
+      <h1 className="text-2xl font-semibold">App icon & name</h1>
       <p className="text-sm text-muted-foreground">Shown in browser tabs and when someone adds {data?.app_name ?? 'this site'} to their Home Screen. Use a square PNG, JPEG or WebP image, at least 512 pixels wide.</p>
     </header>
     {data && <section aria-label="Current icon" className="flex items-center gap-4">
@@ -80,7 +99,7 @@ export function AppIconPage() {
         ? <img src={data.apple_touch_icon_url} alt="Current app icon" width={90} height={90} className="size-[90px] rounded-[20px] border" />
         : <div className="flex size-[90px] items-center justify-center rounded-[20px] border text-xs text-muted-foreground">No icon</div>}
       <div className="space-y-2 text-sm">
-        <p className="font-medium">{data.app_name}</p>
+        <p className="font-medium">{data.short_name ?? data.app_name}</p>
         {data.icon_url && <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove()}>Remove icon</Button>}
       </div>
     </section>}
@@ -90,6 +109,14 @@ export function AppIconPage() {
         <Input id="app-icon-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
       </div>
       <Button type="submit" className="w-fit" disabled={busy || !file}>{busy ? 'Saving…' : 'Save icon'}</Button>
+    </form>
+    <form className="grid gap-3" onSubmit={(event) => void saveShortName(event)}>
+      <div className="grid gap-1">
+        <Label htmlFor="app-short-name">Home Screen name</Label>
+        <Input id="app-short-name" maxLength={30} placeholder={data?.app_name} value={shortName} onChange={(event) => setShortName(event.target.value)} aria-describedby="app-short-name-help" />
+        <p id="app-short-name-help" className="text-xs text-muted-foreground">The label under the icon. About 12 characters fit without being cut off. Leave empty to use {data?.app_name ?? 'the site name'}.</p>
+      </div>
+      <Button type="submit" variant="outline" className="w-fit" disabled={busy || !data}>Save name</Button>
     </form>
     {notice && <p role="status" className="text-sm">{notice}</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

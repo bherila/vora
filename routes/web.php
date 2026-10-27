@@ -463,6 +463,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/app-icon', [AdminAppIconController::class, 'show']);
     Route::post('/app-icon', [AdminAppIconController::class, 'store']);
     Route::delete('/app-icon', [AdminAppIconController::class, 'destroy']);
+    Route::put('/app-icon/short-name', [AdminAppIconController::class, 'updateShortName']);
     Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
     Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 

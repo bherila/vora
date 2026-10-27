@@ -26,6 +26,11 @@ class AppIcon
 
     public const VERSION_SETTING = 'app_icon_version';
 
+    public const SHORT_NAME_SETTING = 'app_short_name';
+
+    /** Longer labels are allowed but get cut off under Home Screen icons. */
+    public const SHORT_NAME_MAX = 30;
+
     private const DIRECTORY = 'branding/app-icon';
 
     public function __construct(private readonly SettingsService $settings) {}
@@ -35,6 +40,28 @@ class AppIcon
         $version = $this->settings->get(self::VERSION_SETTING, '');
 
         return $version === null || $version === '' ? null : $version;
+    }
+
+    /** The label under the Home Screen icon, when it differs from APP_NAME. */
+    public function shortName(): ?string
+    {
+        $name = $this->settings->get(self::SHORT_NAME_SETTING, '');
+
+        return $name === null || $name === '' ? null : $name;
+    }
+
+    public function homeScreenName(): string
+    {
+        return $this->shortName() ?? (string) config('app.name');
+    }
+
+    public function setShortName(?string $name): void
+    {
+        $name = $name === null ? '' : trim($name);
+        if (mb_strlen($name) > self::SHORT_NAME_MAX) {
+            throw new InvalidArgumentException('The Home Screen name must be at most '.self::SHORT_NAME_MAX.' characters.');
+        }
+        $this->settings->set(self::SHORT_NAME_SETTING, $name === '' ? null : $name);
     }
 
     /** Root-relative, versioned URL for a variant, or null when no icon is set. */

@@ -10,7 +10,7 @@
       $__appIcon = app(\App\Services\Branding\AppIcon::class);
     @endphp
     <link rel="manifest" href="{{ route('manifest', [], false) }}">
-    <meta name="apple-mobile-web-app-title" content="{{ config('app.name') }}">
+    <meta name="apple-mobile-web-app-title" content="{{ $__appIcon->homeScreenName() }}">
     @if ($__appIcon->version() !== null)
       <link rel="icon" type="image/png" sizes="32x32" href="{{ $__appIcon->url('favicon') }}">
       <link rel="apple-touch-icon" href="{{ $__appIcon->url('apple-touch-icon') }}">
@@ -108,7 +108,7 @@
           ['type' => 'link', 'label' => 'Deleted content', 'href' => route('admin.deleted-content', [], false)],
           ['type' => 'link', 'label' => 'Static pages', 'href' => route('admin.pages', [], false)],
           ['type' => 'link', 'label' => 'Email delivery', 'href' => route('admin.mail-deliveries', [], false)],
-          ['type' => 'link', 'label' => 'App icon', 'href' => route('admin.app-icon', [], false)],
+          ['type' => 'link', 'label' => 'App icon & name', 'href' => route('admin.app-icon', [], false)],
           ['type' => 'link', 'label' => 'Audit log', 'href' => route('admin.audit-log', [], false)],
         ])),
       ] : null;
