@@ -122,6 +122,27 @@ class AppIconTest extends TestCase
         Storage::disk('local')->assertMissing('branding/app-icon/icon-512.png');
     }
 
+    public function test_a_short_home_screen_name_replaces_app_name_under_the_icon(): void
+    {
+        $this->get('/manifest.webmanifest')->assertJsonPath('short_name', 'Example Gathering');
+        $this->get('/privacy')->assertSee('<meta name="apple-mobile-web-app-title" content="Example Gathering">', false);
+
+        $member = User::factory()->create();
+        $this->actingAs($member)->putJson('/api/admin/app-icon/short-name', ['short_name' => 'Gathering'])->assertForbidden();
+
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin)->putJson('/api/admin/app-icon/short-name', ['short_name' => '  Gathering  '])
+            ->assertOk()->assertJsonPath('data.short_name', 'Gathering');
+        $this->putJson('/api/admin/app-icon/short-name', ['short_name' => str_repeat('x', 31)])
+            ->assertUnprocessable()->assertJsonValidationErrorFor('short_name');
+        // The full name stays the manifest name; only the label changes.
+        $this->get('/manifest.webmanifest')->assertJsonPath('short_name', 'Gathering')->assertJsonPath('name', 'Example Gathering');
+        $this->get('/privacy')->assertSee('<meta name="apple-mobile-web-app-title" content="Gathering">', false);
+
+        $this->putJson('/api/admin/app-icon/short-name', ['short_name' => ''])->assertOk()->assertJsonPath('data.short_name', null);
+        $this->get('/manifest.webmanifest')->assertJsonPath('short_name', 'Example Gathering');
+    }
+
     public function test_operators_can_set_the_icon_from_the_command_line(): void
     {
         $path = tempnam(sys_get_temp_dir(), 'icon');

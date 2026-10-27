@@ -35,7 +35,7 @@ class AppIconController extends Controller
         $manifest = [
             'id' => '/',
             'name' => $name,
-            'short_name' => $name,
+            'short_name' => $icon->homeScreenName(),
             'start_url' => InstanceFeatures::homePath(),
             'scope' => '/',
             'display' => 'standalone',

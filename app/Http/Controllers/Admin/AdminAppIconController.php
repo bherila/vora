@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAppIconRequest;
+use App\Http\Requests\Admin\UpdateAppShortNameRequest;
 use App\Services\Branding\AppIcon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -32,6 +33,13 @@ class AdminAppIconController extends Controller
         return $this->payload($icon);
     }
 
+    public function updateShortName(UpdateAppShortNameRequest $request, AppIcon $icon): JsonResponse
+    {
+        $icon->setShortName($request->validated('short_name'));
+
+        return $this->payload($icon);
+    }
+
     public function destroy(AppIcon $icon): JsonResponse
     {
         $icon->remove();
@@ -45,6 +53,7 @@ class AdminAppIconController extends Controller
             'success' => true,
             'data' => [
                 'app_name' => (string) config('app.name'),
+                'short_name' => $icon->shortName(),
                 'icon_url' => $icon->url('icon-512'),
                 'apple_touch_icon_url' => $icon->url('apple-touch-icon'),
             ],

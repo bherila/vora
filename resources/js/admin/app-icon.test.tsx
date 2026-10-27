@@ -4,10 +4,10 @@ import { fetchWrapper } from '@/fetchWrapper';
 
 import { AppIconPage } from './app-icon';
 
-jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), delete: jest.fn() } }));
+jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 
-const none = { app_name: 'Example Gathering', icon_url: null, apple_touch_icon_url: null };
-const set = { app_name: 'Example Gathering', icon_url: '/app-icon/icon-512.png?v=abc', apple_touch_icon_url: '/app-icon/apple-touch-icon.png?v=abc' };
+const none = { app_name: 'Example Gathering', short_name: null, icon_url: null, apple_touch_icon_url: null };
+const set = { app_name: 'Example Gathering', short_name: null, icon_url: '/app-icon/icon-512.png?v=abc', apple_touch_icon_url: '/app-icon/apple-touch-icon.png?v=abc' };
 
 describe('AppIconPage', () => {
   beforeEach(() => jest.mocked(fetchWrapper.get).mockResolvedValue({ data: none }));
@@ -31,6 +31,27 @@ describe('AppIconPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove icon' }));
     expect(await screen.findByText('No icon')).toBeInTheDocument();
     expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/admin/app-icon');
+  });
+
+  it('saves a Home Screen name and clears it back to the site name', async () => {
+    jest.mocked(fetchWrapper.put)
+      .mockResolvedValueOnce({ data: { ...none, short_name: 'Gathering' } })
+      .mockResolvedValueOnce({ data: none });
+    render(<AppIconPage />);
+    await screen.findByText('No icon');
+    const field = screen.getByLabelText('Home Screen name');
+    expect(field).toHaveAttribute('placeholder', 'Example Gathering');
+
+    fireEvent.change(field, { target: { value: ' Gathering ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+    expect(await screen.findByText('Home Screen name saved.')).toBeInTheDocument();
+    expect(fetchWrapper.put).toHaveBeenLastCalledWith('/api/admin/app-icon/short-name', { short_name: 'Gathering' });
+    expect(screen.getByText('Gathering', { selector: 'p' })).toBeInTheDocument();
+
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+    expect(await screen.findByText(/cleared; Example Gathering is used/)).toBeInTheDocument();
+    expect(fetchWrapper.put).toHaveBeenLastCalledWith('/api/admin/app-icon/short-name', { short_name: null });
   });
 
   it("shows the server's validation message", async () => {
