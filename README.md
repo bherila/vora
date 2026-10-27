@@ -141,6 +141,14 @@ See `.github/workflows/deploy.yml` for the primary production trigger. The reusa
 release to a selected GitHub environment. See [Event instances](docs/event-instances.md)
 for deployment profiles, isolated storage, and additional targets.
 
+### Name and Home Screen icon
+
+Each installation names itself with `APP_NAME` and sets its own icon in
+**Admin → App icon** (or `php artisan ops:app-icon path/to/icon.png`). The icon
+is stored under `storage/`, which deploys never overwrite, so no installation's
+branding lives in this repository. `/manifest.webmanifest` serves the name and
+icon to browsers that add the site to a Home Screen.
+
 ### Shared cPanel scheduler and queue
 
 The production cPanel account must run Laravel's scheduler once per minute. Add

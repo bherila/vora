@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 
 import { EVENT_REFRESH_LIMIT, eventRefreshDelay } from '@/events/media-status';
 import { EventsPage } from '@/events/page';
+import { registerShareTarget, takeSharedFiles } from '@/events/sharedFiles';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 
@@ -11,7 +12,8 @@ jest.mock('sonner', () => ({ Toaster: () => null, toast: { success: jest.fn(), e
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: ({ id }: { id: number }) => <button data-media-id={id}>Favorite</button> }));
 jest.mock('@/library/SaveToLibraryButton', () => ({ SaveToLibraryButton: ({ mediaUlid }: { mediaUlid: string }) => <button data-media-ulid={mediaUlid}>Save to Library</button> }));
 jest.mock('@/media/MediaPlayer', () => ({ MediaPlayer: ({ item }: { item: { video: { master_url: string } } }) => <div data-testid="player">{item.video?.master_url}</div> }));
-jest.mock('@/media/MediaUploadDialog', () => ({ MediaUploadDialog: ({ eventUlid, eventOptions, triggerLabel }: { eventUlid?: string; eventOptions: unknown[]; triggerLabel: string }) => <button data-event={eventUlid ?? ''} data-options={eventOptions.length}>{triggerLabel}</button> }));
+jest.mock('@/media/MediaUploadDialog', () => ({ MediaUploadDialog: ({ eventUlid, eventOptions, triggerLabel, sharedFiles }: { eventUlid?: string; eventOptions: unknown[]; triggerLabel: string; sharedFiles?: File[] }) => <button data-event={eventUlid ?? ''} data-options={eventOptions.length} data-shared={sharedFiles?.map((file) => file.name).join(',') ?? ''}>{triggerLabel}</button> }));
+jest.mock('@/events/sharedFiles', () => ({ registerShareTarget: jest.fn(), takeSharedFiles: jest.fn() }));
 
 const event = { ulid: 'event-one', name: 'Welcome', description: 'Welcome gathering', visibility: 'everyone', timezone: 'UTC', starts_at: null, ends_at: null, can_manage: true, member_ids: [] };
 const attendees = [{ id: 3, display_name: 'Alex' }, { id: 7, display_name: 'Sam' }];
@@ -45,6 +47,22 @@ describe('EventsPage', () => {
     // The default audience needs no badge; only a restricted Event says so.
     expect(screen.queryByText('All attendees', { selector: '[data-slot=badge]' })).toBeNull();
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/events/media?page=1&event_ulid=event-one'));
+  });
+
+  it('hands files shared from another app to the upload dialog once', async () => {
+    jest.mocked(takeSharedFiles).mockResolvedValue([new File(['a'], 'IMG_0001.HEIC', { type: 'image/heic' })]);
+    window.history.replaceState({}, '', '/events?shared=1');
+    render(<EventsPage />);
+    expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-shared', 'IMG_0001.HEIC');
+    expect(window.location.search).toBe('');
+    expect(takeSharedFiles).toHaveBeenCalledTimes(1);
+    expect(registerShareTarget).toHaveBeenCalled();
+  });
+
+  it('does not read shared files on an ordinary visit', async () => {
+    render(<EventsPage />);
+    expect(await screen.findByRole('button', { name: 'Add photos & videos' })).toHaveAttribute('data-shared', '');
+    expect(takeSharedFiles).not.toHaveBeenCalled();
   });
 
   it('defaults to the caption-free gallery and remembers the Details view', async () => {

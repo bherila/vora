@@ -95,6 +95,17 @@ Administrators check the stored original through an independent browser decode
 before approving HEIC media; an uploader-supplied preview alone does not establish
 what the original contains.
 
+### Home Screen app and sharing
+
+The site can be added to a phone's Home Screen under the installation's
+`APP_NAME` and the icon set in **Admin → App icon**. On Android, the installed
+app also appears in the share sheet: photos and videos shared from the Photos
+app open the gallery's upload dialog with the files queued. The service worker
+receives the share and holds the files in the browser until the gallery takes
+them; nothing is uploaded until the attendee chooses an Event and confirms.
+iOS does not let web apps receive shares, so iPhone users upload from the
+gallery's **Add photos & videos** button.
+
 The Event gallery groups likely cross-format photo versions while preserving
 every original and its metadata. See [Event photo versions](event-photo-versions.md)
 for matching limits, preferred-version ranking and private Save behavior.

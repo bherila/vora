@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Concerns;
 
+use App\Services\Branding\AppIcon;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
@@ -43,7 +44,7 @@ trait DeliversWebPush
         return (new WebPushMessage)
             ->title($title)
             ->body($body)
-            ->icon('/favicon.ico')
+            ->icon(app(AppIcon::class)->url('icon-192') ?? '/favicon.ico')
             ->data([
                 'url' => $data['url'] ?? '/',
                 'type' => $data['type'] ?? null,

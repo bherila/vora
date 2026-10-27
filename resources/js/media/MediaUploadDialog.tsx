@@ -60,6 +60,8 @@ interface MediaUploadDialogProps {
   /** Presence keeps this flow in Event context, including when the list is empty. */
   eventOptions?: EventUploadOption[] | undefined;
   eventUploadsRequireReview?: boolean;
+  /** Files shared to the app from another app; opens the dialog with them queued. */
+  sharedFiles?: File[] | undefined;
 }
 
 /**
@@ -79,6 +81,7 @@ export function MediaUploadDialog({
   eventUlid,
   eventOptions,
   eventUploadsRequireReview = true,
+  sharedFiles,
 }: MediaUploadDialogProps) {
   const uploadRestriction = activeRestriction('media.upload');
   const activeIdentityId = useActiveIdentityId();
@@ -134,6 +137,16 @@ export function MediaUploadDialog({
       id: nextIdRef.current++, file, title: defaultTitleForFile(file), status: 'queued', progress: 0, error: null, reservation: null,
     })));
   };
+
+  // A share from another app arrives once; queue it unless a batch is running.
+  useEffect(() => {
+    if (!sharedFiles?.length || batchStarted) return;
+    setPending(sharedFiles.map((file) => ({
+      id: nextIdRef.current++, file, title: defaultTitleForFile(file), status: 'queued', progress: 0, error: null, reservation: null,
+    })));
+    setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new share should reopen the dialog
+  }, [sharedFiles]);
 
   const updateItem = (id: number, update: Partial<QueuedUpload>): void => {
     setPending((items) => items.map((item) => item.id === id ? { ...item, ...update } : item));
