@@ -25,6 +25,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class RequireProviderAccount
 {
+    /** The binding this session signed in through, set by the provider callback. */
+    public const SESSION_KEY = 'provider_sign_in.binding';
+
     public function __construct(private readonly ProviderSession $sessions) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -35,8 +38,10 @@ class RequireProviderAccount
         }
 
         // Sessions from before the switch, or an account bound elsewhere, end
-        // here: they were not signed in through this provider.
-        if ($user->oauth_provider !== SignIn::provider() || ($user->oauth_subject ?? '') === '') {
+        // here: they were not signed in through this provider. Binding an
+        // account does not vouch for a password session it already had.
+        if ($user->oauth_provider !== SignIn::provider() || ($user->oauth_subject ?? '') === ''
+            || $request->session()->get(self::SESSION_KEY) !== [$user->oauth_provider, $user->oauth_subject]) {
             return $this->end($request);
         }
 

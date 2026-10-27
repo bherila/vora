@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\RequireProviderAccount;
 use App\Services\Auth\ProviderAccounts;
 use BWH\Auth\Contracts\AuthAuditLogger;
 use BWH\Auth\Contracts\AuthUserPolicy;
@@ -45,6 +46,7 @@ class ProviderLoginController extends Controller
             abort(503, 'Sign-in verification is unavailable. Please try again shortly.', ['Retry-After' => '30']);
         }
 
+        $request->session()->put(RequireProviderAccount::SESSION_KEY, [$user->oauth_provider, $user->oauth_subject]);
         $this->audit->loginSucceeded($request, $user, 'oauth');
 
         return redirect($policy->redirectAfterLogin($user, $request));

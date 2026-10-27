@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Http\Middleware\RequireProviderAccount;
 use App\Models\User;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -168,10 +169,15 @@ class ProviderSignInTest extends TestCase
         $this->assertGuest();
         $this->actingAs($local)->get('/user/settings')->assertRedirect('/login');
 
+        // Linking an account does not vouch for the password session it had.
         $bound = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '42']);
-        $this->actingAs($bound)->get('/user/invites')->assertNotFound();
+        $this->actingAs($bound)->get('/user/settings')->assertRedirect('/login');
+        $this->assertGuest();
+
+        $this->actingAs($bound)->withSession([RequireProviderAccount::SESSION_KEY => ['example', '42']]);
+        $this->get('/user/invites')->assertNotFound();
         $this->get('/privacy')->assertDontSee('Invites');
-        $settings = (string) $this->actingAs($bound)->get('/user/settings')->assertOk()->getContent();
+        $settings = (string) $this->get('/user/settings')->assertOk()->getContent();
         $this->assertStringContainsString('"provider_account_url":"'.self::PROVIDER_URL.'/settings"', str_replace('\\/', '/', $settings));
         $this->patchJson('/api/account', ['name' => $bound->name, 'email' => 'other@example.test'])
             ->assertForbidden()->assertJsonPath('message', 'Your email is managed by your sign-in provider.');
@@ -191,7 +197,8 @@ class ProviderSignInTest extends TestCase
         $admin = User::factory()->admin()->create(['oauth_provider' => 'example', 'oauth_subject' => '1']);
         $member = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '2']);
 
-        $this->actingAs($admin)->postJson("/api/admin/users/{$member->id}/invites", ['count' => 1])->assertNotFound();
+        $this->actingAs($admin)->withSession([RequireProviderAccount::SESSION_KEY => ['example', '1']]);
+        $this->postJson("/api/admin/users/{$member->id}/invites", ['count' => 1])->assertNotFound();
         $this->postJson('/api/admin/invites/issue', ['count' => 1])->assertNotFound();
         $this->postJson('/api/admin/waitlist/1/admit')->assertNotFound();
         $this->get('/privacy')->assertDontSee('Invitation requests');
