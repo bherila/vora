@@ -231,7 +231,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
-    provider_account_url: payload.provider_account_url ?? null,
+    provider_account_url: httpsUrl(payload.provider_account_url),
     notify_new_post: payload.notify_new_post ?? true,
     notify_post_reaction: payload.notify_post_reaction ?? true,
     notify_post_comment: payload.notify_post_comment ?? true,
@@ -255,6 +255,17 @@ function getInitialData(): UserSettingsInitialData {
 
 function normalizeAudience(value: unknown): Audience {
   return value === 'followers' || value === 'mutuals' || value === 'specific' ? value : 'everyone';
+}
+
+/** Only an absolute https: address may become the provider settings link. */
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeNumberList(value: unknown): number[] {

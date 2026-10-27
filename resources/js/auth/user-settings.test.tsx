@@ -142,6 +142,16 @@ describe('UserSettingsPage', () => {
     expect(screen.getByText('Your email is managed by your sign-in provider.')).toBeInTheDocument();
   });
 
+  it('never links to a provider address that is not https', () => {
+    mockProviderAccountUrl = 'javascript:alert(1)';
+    window.history.replaceState({}, '', '/user/settings?tab=security');
+
+    render(<UserSettingsPage />);
+
+    expect(screen.queryByRole('link', { name: 'Manage sign-in settings' })).not.toBeInTheDocument();
+    expect(screen.getByText('Change password form')).toBeInTheDocument();
+  });
+
   it('preserves unsaved notification changes while switching tabs', () => {
     window.history.replaceState({}, '', '/user/settings?tab=notifications');
     render(<UserSettingsPage />);
