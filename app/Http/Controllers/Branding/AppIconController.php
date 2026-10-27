@@ -6,17 +6,23 @@ use App\Http\Controllers\Controller;
 use App\Services\Branding\AppIcon;
 use App\Support\InstanceFeatures;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /** Public install metadata: the web app manifest and this installation's icon. */
 class AppIconController extends Controller
 {
-    public function icon(string $variant, AppIcon $icon): BinaryFileResponse
+    public function icon(Request $request, string $variant, AppIcon $icon): BinaryFileResponse|RedirectResponse
     {
         $path = $icon->path($variant);
         abort_if($path === null, 404);
+        // Only the current version may be cached forever; an older or missing
+        // version (a stale manifest or page) is sent to the current URL.
+        if ($request->query('v') !== $icon->version()) {
+            return redirect((string) $icon->url($variant))->header('Cache-Control', 'no-cache');
+        }
 
-        // Every upload changes the versioned URL, so a fetched icon never changes.
         return response()->file($path, [
             'Content-Type' => 'image/png',
             'Cache-Control' => 'public, max-age=31536000, immutable',

@@ -109,6 +109,11 @@ class AppIconTest extends TestCase
         $this->postJson('/api/admin/app-icon', ['icon' => $this->upload($this->png(640, 640))])->assertOk();
         $second = app(AppIcon::class)->version();
         $this->assertNotSame($first, $second);
+        // The old URL must not serve the new image under an immutable cache.
+        $this->get("/app-icon/icon-512.png?v={$first}")->assertRedirect("/app-icon/icon-512.png?v={$second}")
+            ->assertHeader('Cache-Control', 'no-cache, private');
+        $this->get('/app-icon/icon-512.png')->assertRedirect("/app-icon/icon-512.png?v={$second}");
+        $this->get("/app-icon/icon-512.png?v={$second}")->assertOk();
         $this->getJson('/api/admin/app-icon')->assertJsonPath('data.icon_url', "/app-icon/icon-512.png?v={$second}");
 
         $this->deleteJson('/api/admin/app-icon')->assertOk()->assertJsonPath('data.icon_url', null);
