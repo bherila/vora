@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
@@ -65,7 +66,7 @@ class ProviderSignInTest extends TestCase
         $guest = User::where('oauth_subject', '43')->sole();
         $this->assertFalse($guest->is_admin);
         $this->get('/feed')->assertRedirect('/age-eligibility');
-        $this->get('/age-eligibility')->assertOk()->assertSee('Enter your birth date to continue');
+        $this->get('/age-eligibility')->assertOk()->assertSee('Enter your birth date.')->assertSee('at least 18 years old');
 
         $this->post('/age-eligibility/birth-date', ['birth_date' => today()->subYears(10)->toDateString()])
             ->assertSessionHasErrors(['birth_date' => 'You must be at least 18 years old to hold an account on this site.']);
@@ -75,6 +76,19 @@ class ProviderSignInTest extends TestCase
         $this->get('/feed')->assertOk();
         // Corrections after that stay with administrators.
         $this->post('/age-eligibility/birth-date', ['birth_date' => today()->subYears(40)->toDateString()])->assertForbidden();
+    }
+
+    public function test_a_site_that_only_verifies_ages_still_asks_for_the_birth_date(): void
+    {
+        app(SettingsService::class)->set(SettingsService::MINIMUM_AGE, '');
+        app(SettingsService::class)->set(SettingsService::AGE_VERIFICATION_REQUIRED, '1');
+        User::factory()->admin()->create();
+
+        $this->signIn()->assertRedirect('/age-eligibility');
+        $this->get('/age-eligibility')->assertOk()->assertSee('Enter your birth date.')
+            ->assertSee('An administrator must confirm your age');
+        $this->post('/age-eligibility/birth-date', ['birth_date' => '1990-05-01'])->assertRedirect('/age-eligibility');
+        $this->assertSame('1990-05-01', User::where('oauth_subject', '42')->sole()->birth_date->toDateString());
     }
 
     public function test_an_existing_account_is_reached_only_once_an_operator_links_it(): void

@@ -3,8 +3,12 @@
 @section('content')
   <div class="mx-auto max-w-3xl space-y-4">
     <h1 class="text-2xl font-semibold">Account age requirements</h1>
-    @if ($needsBirthDate && $reason === 'minimum_age')
-      <p>This site requires account holders to be at least {{ $policy['minimum_age'] }} years old. Enter your birth date to continue. You can only enter it once; contact an administrator if it needs correcting later.</p>
+    @if ($needsBirthDate)
+      {{-- Accounts created through provider sign-in never saw the registration form. --}}
+      @if ($policy['minimum_age'] !== null)
+        <p>This site requires account holders to be at least {{ $policy['minimum_age'] }} years old.</p>
+      @endif
+      <p>Enter your birth date. You can only enter it once; contact an administrator if it needs correcting later.</p>
       <form method="POST" action="{{ route('age.birth-date') }}" class="space-y-3">
         @csrf
         <div class="grid max-w-xs gap-1">
@@ -21,9 +25,10 @@
           Continue
         </button>
       </form>
-    @elseif ($reason === 'minimum_age')
+    @endif
+    @if ($reason === 'minimum_age' && ! $needsBirthDate)
       <p>This site requires account holders to be at least {{ $policy['minimum_age'] }} years old. Your recorded birth date does not yet meet that requirement, or is missing.</p>
-    @else
+    @elseif ($reason !== 'minimum_age')
       <p>An administrator must confirm your age before you can access shared content. Contact the organizer to arrange confirmation. Do not upload identity documents here.</p>
     @endif
     <p>You can still manage, export, deactivate or delete your account in Settings. Contact an administrator if your recorded birth date is incorrect.</p>
