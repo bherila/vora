@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Decide account eligibility before resolving content model bindings;
         // an ineligible viewer must not probe existing versus missing objects.
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureAgeEligible::class);
+        // A session the identity provider no longer vouches for ends before any
+        // account gate sees it; the priority list would otherwise sort the age
+        // gate ahead of it.
+        $middleware->prependToPriorityList(EnsureAgeEligible::class, RequireProviderAccount::class);
 
         // Gate self-deactivated accounts to the reactivate page across the whole
         // web surface — including the package auth endpoints (password/passkeys)

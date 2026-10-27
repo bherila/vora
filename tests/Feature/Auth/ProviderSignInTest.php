@@ -165,6 +165,11 @@ class ProviderSignInTest extends TestCase
         $this->patchJson('/api/account', ['name' => $bound->name, 'email' => 'other@example.test'])
             ->assertForbidden()->assertJsonPath('message', 'Your email is managed by your sign-in provider.');
 
+        // Ended before any account gate answers for it, even one it would fail.
+        $ineligible = User::factory()->approved()->create(['birth_date' => null]);
+        $this->actingAs($ineligible)->get('/feed')->assertRedirect('/login');
+        $this->assertGuest();
+
         // An account bound to another provider is not this provider's either.
         $elsewhere = User::factory()->create(['oauth_provider' => 'other', 'oauth_subject' => '42']);
         $this->actingAs($elsewhere)->get('/user/settings')->assertRedirect('/login');
