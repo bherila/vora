@@ -75,7 +75,7 @@ class ProviderAccounts
     }
 
     /** @return Builder<User> */
-    private function bound(OAuthIdentity $identity)
+    private function bound(OAuthIdentity $identity): Builder
     {
         return User::withTrashed()
             ->where('oauth_provider', $identity->provider)
