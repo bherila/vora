@@ -98,7 +98,7 @@
           $__enabled('events') ? ['type' => 'link', 'label' => 'Events', 'href' => '/events'] : null,
           ['type' => 'link', 'label' => 'Users', 'href' => route('admin.users', [], false)],
           ['type' => 'link', 'label' => 'Invites & signups', 'href' => route('admin.invites', [], false)],
-          ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
+          \App\Services\Auth\SignIn::usesProvider() ? null : ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
           $__enabled('interests') ? ['type' => 'link', 'label' => 'Interests', 'href' => route('admin.interests', [], false)] : null,
           ['type' => 'link', 'label' => 'Media review', 'href' => route('admin.media', [], false)],
           ['type' => 'link', 'label' => 'Duplicate clusters', 'href' => route('admin.media-duplicates', [], false)],

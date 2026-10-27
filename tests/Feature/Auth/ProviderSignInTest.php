@@ -170,6 +170,19 @@ class ProviderSignInTest extends TestCase
         $this->actingAs($elsewhere)->get('/user/settings')->assertRedirect('/login');
     }
 
+    public function test_admins_cannot_issue_invites_nobody_could_redeem(): void
+    {
+        $admin = User::factory()->admin()->create(['oauth_provider' => 'example', 'oauth_subject' => '1']);
+        $member = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '2']);
+
+        $this->actingAs($admin)->postJson("/api/admin/users/{$member->id}/invites", ['count' => 1])->assertNotFound();
+        $this->postJson('/api/admin/invites/issue', ['count' => 1])->assertNotFound();
+        $this->postJson('/api/admin/waitlist/1/admit')->assertNotFound();
+        $this->get('/privacy')->assertDontSee('Invitation requests');
+        // The page itself stays: it also holds the age requirements.
+        $this->getJson('/api/admin/invites')->assertOk();
+    }
+
     public function test_sign_out_ends_the_provider_session_too(): void
     {
         $this->signIn();

@@ -472,14 +472,16 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'index']);
     Route::post('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'store']);
     Route::delete('/users/{user}/restrictions/{restriction}', [AdminUserRestrictionController::class, 'destroy']);
-    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites']);
+    // Invite links and waitlist admissions are redeemed at /register, which
+    // provider sign-in does not serve.
+    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites'])->middleware('sign-in:local');
     // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
     Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
 
     Route::get('/invites', [AdminInviteController::class, 'apiIndex']);
     Route::put('/invites/settings', [AdminInviteController::class, 'updateSettings']);
-    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
+    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll'])->middleware('sign-in:local');
 
     Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
     Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'apiIndex']);
@@ -487,7 +489,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/app-icon', [AdminAppIconController::class, 'store']);
     Route::delete('/app-icon', [AdminAppIconController::class, 'destroy']);
     Route::put('/app-icon/short-name', [AdminAppIconController::class, 'updateShortName']);
-    Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
+    Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit'])->middleware('sign-in:local');
     Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);
