@@ -98,7 +98,7 @@
           $__enabled('events') ? ['type' => 'link', 'label' => 'Events', 'href' => '/events'] : null,
           ['type' => 'link', 'label' => 'Users', 'href' => route('admin.users', [], false)],
           ['type' => 'link', 'label' => 'Invites & signups', 'href' => route('admin.invites', [], false)],
-          ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
+          \App\Services\Auth\SignIn::usesProvider() ? null : ['type' => 'link', 'label' => 'Invitation requests', 'href' => route('admin.waitlist', [], false)],
           $__enabled('interests') ? ['type' => 'link', 'label' => 'Interests', 'href' => route('admin.interests', [], false)] : null,
           ['type' => 'link', 'label' => 'Media review', 'href' => route('admin.media', [], false)],
           ['type' => 'link', 'label' => 'Duplicate clusters', 'href' => route('admin.media-duplicates', [], false)],
@@ -123,14 +123,16 @@
           $__enabled('community') ? ['type' => 'link', 'label' => 'Your activity', 'href' => route('activity.index', [], false)] : null,
           $__enabled('library') ? ['type' => 'link', 'label' => $__enabled('events') ? 'My collection' : 'Library', 'href' => route('library', [], false)] : null,
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
-          ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
+          // Under provider sign-in the identity provider admits people instead.
+          \App\Services\Auth\SignIn::usesProvider() ? null : ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],
         ])),
       ] : null;
       $__guestMenuItems = $__isAuthenticated ? [] : [
         ['label' => 'Log in', 'href' => route('login', [], false), 'variant' => 'link'],
-        ['label' => 'Sign up', 'href' => route('register', [], false), 'variant' => 'primary'],
+        \App\Services\Auth\SignIn::usesProvider() ? null : ['label' => 'Sign up', 'href' => route('register', [], false), 'variant' => 'primary'],
       ];
+      $__guestMenuItems = array_values(array_filter($__guestMenuItems));
       $__payload = ['agePolicy' => app(\App\Services\Auth\AgeEligibility::class)->policy(), 'instance' => ['profile' => config('instance.profile'), 'modules' => config('instance.modules'), 'home_path' => \App\Support\InstanceFeatures::homePath()], 'restrictions' => $__restrictions, 'navbar' => [
         'brand' => ['label' => config('app.name'), 'href' => route('home', [], false)],
         'authenticated' => $__isAuthenticated,

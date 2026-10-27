@@ -46,7 +46,8 @@ class VoraAuthUserPolicy implements AuthUserPolicy
             return route('approval.pending', [], false);
         }
 
-        if ($user->force_change_pw) {
+        // The identity provider owns passwords under provider sign-in.
+        if ($user->force_change_pw && ! SignIn::usesProvider()) {
             return route('user.settings', [], false);
         }
 

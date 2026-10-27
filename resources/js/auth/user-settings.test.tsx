@@ -6,6 +6,7 @@ import { currentBrowserPushSubscription } from '@/push';
 
 let mockInstance: InstanceBootstrap['instance'];
 let mockPushSupported = false;
+let mockProviderAccountUrl: string | null = null;
 
 import { UserSettingsPage } from './user-settings';
 
@@ -31,6 +32,7 @@ jest.mock('@/initialData', () => ({
       display_name: 'Public Name',
       birth_date: '1990-01-01',
       email: 'account@example.com',
+      provider_account_url: mockProviderAccountUrl,
       notify_new_post: true,
       notify_post_reaction: true,
       notify_post_comment: true,
@@ -90,6 +92,7 @@ describe('UserSettingsPage', () => {
   beforeEach(() => {
     mockInstance = undefined;
     mockPushSupported = false;
+    mockProviderAccountUrl = null;
     window.history.replaceState({}, '', '/user/settings');
     patch.mockReset();
     patch.mockResolvedValue(notificationResponse());
@@ -122,6 +125,31 @@ describe('UserSettingsPage', () => {
     expect(screen.getByText('Total stored originals')).toBeInTheDocument();
     expect(screen.getByText('1.50 MB')).toBeInTheDocument();
     expect(screen.getByText(/Size unavailable for 1 file;/)).toBeInTheDocument();
+  });
+
+  it('sends password, passkey and email changes to the sign-in provider when it owns them', () => {
+    mockProviderAccountUrl = 'https://id.example.test/settings';
+    window.history.replaceState({}, '', '/user/settings?tab=security');
+
+    render(<UserSettingsPage />);
+
+    expect(screen.getByRole('link', { name: 'Manage sign-in settings' })).toHaveAttribute('href', 'https://id.example.test/settings');
+    expect(screen.queryByText('Change password form')).not.toBeInTheDocument();
+    expect(screen.queryByText('Passkey settings')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Account' }));
+    expect(screen.getByLabelText('Email')).toBeDisabled();
+    expect(screen.getByText('Your email is managed by your sign-in provider.')).toBeInTheDocument();
+  });
+
+  it('never links to a provider address that is not https', () => {
+    mockProviderAccountUrl = 'javascript:alert(1)';
+    window.history.replaceState({}, '', '/user/settings?tab=security');
+
+    render(<UserSettingsPage />);
+
+    expect(screen.queryByRole('link', { name: 'Manage sign-in settings' })).not.toBeInTheDocument();
+    expect(screen.getByText('Change password form')).toBeInTheDocument();
   });
 
   it('preserves unsaved notification changes while switching tabs', () => {

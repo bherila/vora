@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
 import { ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
+import { logoutDestination } from '@/auth/logout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWrapper } from '@/fetchWrapper';
@@ -23,10 +24,11 @@ function PendingApprovalPage() {
     : 'Your account is waiting for admin approval.';
 
   const handleLogout = async () => {
+    let destination: string | null = null;
     try {
-      await fetchWrapper.post('/logout', {});
+      destination = logoutDestination(await fetchWrapper.post('/logout', {}));
     } finally {
-      window.location.href = joiningUrl ?? '/login';
+      window.location.href = destination ?? joiningUrl ?? '/login';
     }
   };
 

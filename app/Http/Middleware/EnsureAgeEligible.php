@@ -31,7 +31,7 @@ class EnsureAgeEligible
 
     private function allowed(Request $request): bool
     {
-        if (in_array($request->route()?->getName(), ['age.eligibility', 'events.join', 'user.settings', 'logout', 'privacy', 'terms', 'pages.show', 'verification.notice', 'verification.verify', 'verification.send', 'approval.pending'], true)) {
+        if (in_array($request->route()?->getName(), ['age.eligibility', 'age.birth-date', 'events.join', 'user.settings', 'logout', 'privacy', 'terms', 'pages.show', 'verification.notice', 'verification.verify', 'verification.send', 'approval.pending'], true)) {
             return true;
         }
 

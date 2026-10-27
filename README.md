@@ -10,6 +10,9 @@ taxonomy, and user interest ratings.
 - **Account settings**: users can update editable account fields, change
   password, and manage passkeys. Admins can lock name/email edits and manually
   record ID verification.
+- **Local or provider sign-in**: each installation either checks passwords,
+  email codes and passkeys itself, or sends people to an OAuth identity provider
+  (see [Sign-in through an identity provider](#sign-in-through-an-identity-provider)).
 - **Admin users**: admins can view users, approve verified users, toggle admin
   and disabled flags, and manage lock/verification fields.
 - **Interests**: admins define a hierarchical interest catalog. Users browse the
@@ -111,7 +114,8 @@ mobile Chromium journeys. See
 
 ## Key Routes
 
-- `/register`, `/login`, `/email/verify`, `/pending-approval`
+- `/register`, `/login`, `/email/verify`, `/pending-approval` (`/oauth/callback`
+  under provider sign-in, which turns `/register` off)
 - `/feed`, `/explore`, `/me`, `/me/activity`
 - `/users`, `/users/follow-requests`, `/c/{ulid}`
 - `/messages`, `/messages/{conversation}`
@@ -149,6 +153,38 @@ is stored under `storage/`, which deploys never overwrite, so no installation's
 branding lives in this repository. `/manifest.webmanifest` serves the name and
 icon to browsers that add the site to a Home Screen. A shorter **Home Screen
 name** can be set on the same page for the label under the icon.
+
+### Sign-in through an identity provider
+
+By default an installation signs people in itself. Set `AUTH_SIGN_IN=provider`
+to send them to an OAuth identity provider instead, which then owns passwords,
+passkeys, recovery and email addresses. Registration, invite links, the waitlist
+and the local password and passkey pages are turned off; the provider admits
+people by granting them this application. The first account to sign in becomes
+an administrator, as with local registration. Accounts created at sign-in are
+approved and email-verified, and enter their birth date once on the age page
+when the site has a minimum age.
+
+Accounts are linked by the provider's name (`OAUTH_PROVIDER`) and its opaque
+subject, never by email. To keep an existing local account, link it before
+switching, or the person's first sign-in is refused because the address is
+taken:
+
+```bash
+php artisan ops:bind-provider-account person@example.test 1234
+```
+
+Then set `OAUTH_PROVIDER`, `OAUTH_PROVIDER_URL`, `OAUTH_CLIENT_ID`,
+`OAUTH_CLIENT_SECRET` and `OAUTH_REDIRECT_URI` (`https://<site>/oauth/callback`),
+switch `AUTH_SIGN_IN=provider` and rebuild the config cache. Sessions that were
+not made through the provider end at the next request. Once the provider's
+identity-status endpoint answers for this client, set
+`BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED=true` so a session ends within five
+minutes of the person being disabled, deleted or ungranted at the provider;
+administrators' changes are checked immediately. Sign-out also ends the
+provider's session and returns to this site's home page, which the provider
+must accept for the client (a provider that matches it against the origin of
+the registered redirect URI needs nothing more).
 
 ### Shared cPanel scheduler and queue
 

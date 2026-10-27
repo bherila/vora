@@ -21,7 +21,9 @@ use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\AgeEligibilityController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\PendingApprovalController;
+use App\Http\Controllers\Auth\ProviderLoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\Branding\AppIconController;
@@ -58,6 +60,7 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
+use App\Services\Auth\SignIn;
 use App\Services\Branding\AppIcon;
 use App\Services\Media\AccountStorageUsage;
 use App\Support\InstanceFeatures;
@@ -81,6 +84,13 @@ Route::get('/page/{slug}', [StaticPageController::class, 'show'])->name('pages.s
 | 2FA); these routes own the pages and the password-login entrypoint.
 */
 Route::middleware('guest')->group(function () {
+    // Under provider sign-in this sends the person to the identity provider.
+    Route::get('/login', [LoginController::class, 'show'])->name('login');
+});
+
+// Local sign-in: registration, invites, password login and recovery. Under
+// provider sign-in the provider owns these and they are not served.
+Route::middleware(['guest', 'sign-in:local'])->group(function () {
     Route::get('/register', [RegisterController::class, 'show'])->name('register');
     Route::post('/register', [RegisterController::class, 'store']);
     Route::post('/api/auth/register', [RegisterController::class, 'store']);
@@ -93,7 +103,6 @@ Route::middleware('guest')->group(function () {
     Route::get('/waitlist/verify/{uuid}/{token}', [WaitlistController::class, 'verifyLink'])->name('waitlist.verify');
     Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1');
 
-    Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
     Route::post('/api/auth/login', [LoginController::class, 'store']);
     Route::get('/login/two-factor/{token}', [LoginController::class, 'showTwoFactor'])->name('login.two-factor');
@@ -101,6 +110,15 @@ Route::middleware('guest')->group(function () {
     Route::get('/forgot-password', fn () => view('auth.forgot-password'))->name('password.request');
     Route::get('/reset-password/{token}', fn (string $token) => view('auth.reset-password', ['token' => $token]))->name('password.reset');
 });
+
+// The identity provider returns here. Not guest-only: the package refuses a
+// response for a flow this session did not start.
+Route::get('/oauth/callback', [ProviderLoginController::class, 'callback'])
+    ->middleware(['sign-in:provider', 'throttle:30,1'])->name('oauth.callback');
+
+// Outside `auth`: a page left open past its session must still end the
+// provider's session, or the next sign-in returns without a prompt.
+Route::post('/logout', LogoutController::class)->name('logout');
 
 /*
 |--------------------------------------------------------------------------
@@ -136,6 +154,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/api/mutes', [MuteController::class, 'destroy']);
 
     Route::get('/age-eligibility', AgeEligibilityController::class)->name('age.eligibility');
+    Route::post('/age-eligibility/birth-date', [AgeEligibilityController::class, 'storeBirthDate'])
+        ->middleware('throttle:10,1')->name('age.birth-date');
     Route::get('/pending-approval', PendingApprovalController::class)->name('approval.pending');
     Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();
@@ -156,6 +176,7 @@ Route::middleware('auth')->group(function () {
             'id_verified_at' => $user->id_verified_at?->toIso8601String(),
             'name_locked' => (bool) $user->name_locked,
             'email_locked' => (bool) $user->email_locked,
+            'provider_account_url' => SignIn::accountSettingsUrl(),
             'notify_new_post' => (bool) $user->notify_new_post,
             'notify_post_reaction' => (bool) $user->notify_post_reaction,
             'notify_post_comment' => (bool) $user->notify_post_comment,
@@ -183,7 +204,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/account/restrictions', [ProfileController::class, 'restrictionsPage'])->name('account.restrictions');
     Route::post('/api/account/appeal', [ProfileController::class, 'appeal'])->name('account.appeal');
 
-    Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 });
 
 /*
@@ -225,11 +245,14 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
     Route::get('/personas/new', [CharacterController::class, 'createPage'])->name('characters.create');
 
-    // Invites the user can hand out (balance issued by an admin).
-    Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');
-    Route::get('/api/invites', [InviteController::class, 'apiIndex']);
-    Route::post('/api/invites', [InviteController::class, 'generate']);
-    Route::delete('/api/invites/{invite}', [InviteController::class, 'revoke']);
+    // Invites the user can hand out (balance issued by an admin). Under provider
+    // sign-in the provider admits people instead.
+    Route::middleware('sign-in:local')->group(function () {
+        Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');
+        Route::get('/api/invites', [InviteController::class, 'apiIndex']);
+        Route::post('/api/invites', [InviteController::class, 'generate']);
+        Route::delete('/api/invites/{invite}', [InviteController::class, 'revoke']);
+    });
 
     // /media is retired: media now lives on the profile (upload + management) and
     // Explore is the cross-profile browse. Redirect old links/bookmarks there.
@@ -449,14 +472,16 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'index']);
     Route::post('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'store']);
     Route::delete('/users/{user}/restrictions/{restriction}', [AdminUserRestrictionController::class, 'destroy']);
-    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites']);
+    // Invite links and waitlist admissions are redeemed at /register, which
+    // provider sign-in does not serve.
+    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites'])->middleware('sign-in:local');
     // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
     Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
 
     Route::get('/invites', [AdminInviteController::class, 'apiIndex']);
     Route::put('/invites/settings', [AdminInviteController::class, 'updateSettings']);
-    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
+    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll'])->middleware('sign-in:local');
 
     Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
     Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'apiIndex']);
@@ -464,7 +489,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::post('/app-icon', [AdminAppIconController::class, 'store']);
     Route::delete('/app-icon', [AdminAppIconController::class, 'destroy']);
     Route::put('/app-icon/short-name', [AdminAppIconController::class, 'updateShortName']);
-    Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
+    Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit'])->middleware('sign-in:local');
     Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 
     Route::get('/interests', [AdminInterestController::class, 'apiIndex']);

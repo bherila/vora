@@ -310,6 +310,15 @@ class ProfileController extends Controller
             ], 403);
         }
 
+        // The identity provider owns a bound account's address and sends it
+        // again at every sign-in.
+        if ($emailChanged && $user->oauth_subject !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your email is managed by your sign-in provider.',
+            ], 403);
+        }
+
         if ($emailChanged && $user->email_locked) {
             return response()->json([
                 'success' => false,

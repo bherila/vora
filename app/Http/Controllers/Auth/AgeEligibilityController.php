@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\StoreBirthDateRequest;
 use App\Services\Auth\AgeEligibility;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,18 @@ class AgeEligibilityController extends Controller
             return redirect($policy->redirectAfterLogin($user, $request));
         }
 
-        return view('auth.age-eligibility', ['reason' => $eligibility->reason($user), 'policy' => $eligibility->policy()]);
+        return view('auth.age-eligibility', [
+            'reason' => $eligibility->reason($user),
+            'policy' => $eligibility->policy(),
+            'needsBirthDate' => $user->birth_date === null,
+        ]);
+    }
+
+    public function storeBirthDate(StoreBirthDateRequest $request): RedirectResponse
+    {
+        $request->user()->forceFill(['birth_date' => $request->validated('birth_date')])->save();
+
+        // Back through the gate, which sends an eligible account onward.
+        return redirect()->route('age.eligibility');
     }
 }
