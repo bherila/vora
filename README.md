@@ -182,8 +182,9 @@ identity-status endpoint answers for this client, set
 `BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED=true` so a session ends within five
 minutes of the person being disabled, deleted or ungranted at the provider;
 administrators' changes are checked immediately. Sign-out also ends the
-provider's session, so register the site's origin as a post-sign-out
-destination for the client.
+provider's session and returns to this site's home page, which the provider
+must accept for the client (a provider that matches it against the origin of
+the registered redirect URI needs nothing more).
 
 ### Shared cPanel scheduler and queue
 
