@@ -5,6 +5,8 @@ use App\Http\Middleware\EnsureApproved;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsureNotBanned;
 use App\Http\Middleware\EnsureNotDeactivated;
+use App\Http\Middleware\EnsureSignInMode;
+use App\Http\Middleware\RequireProviderAccount;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'approved' => EnsureApproved::class,
             'module' => EnsureModuleEnabled::class,
+            'sign-in' => EnsureSignInMode::class,
         ]);
         // Decide account eligibility before resolving content model bindings;
         // an ineligible viewer must not probe existing versus missing objects.
@@ -30,6 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // web surface — including the package auth endpoints (password/passkeys)
         // and the public home page a fresh login would otherwise land them on.
         $middleware->web(append: [
+            // First: a session the identity provider no longer vouches for ends
+            // before any account gate or page sees it.
+            RequireProviderAccount::class,
             EnsureNotBanned::class,
             EnsureNotDeactivated::class,
             EnsureAgeEligible::class,

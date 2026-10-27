@@ -5,14 +5,15 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Services\Auth\SignIn;
 use App\Services\Events\EventJoining;
 use BWH\Auth\Concerns\ThrottlesLoginAttempts;
 use BWH\Auth\Contracts\AuthAuditLogger;
+use BWH\Auth\OAuth\OAuthClient;
 use BWH\Auth\Services\TwoFactorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -31,8 +32,12 @@ class LoginController extends Controller
         private readonly TwoFactorService $twoFactor,
     ) {}
 
-    public function show(Request $request, EventJoining $joining): View
+    public function show(Request $request, EventJoining $joining, OAuthClient $oauth): View|RedirectResponse
     {
+        if (SignIn::usesProvider()) {
+            return $oauth->redirect($request);
+        }
+
         return view('auth.login', ['initialData' => $joining->initialData($request)]);
     }
 
@@ -87,18 +92,5 @@ class LoginController extends Controller
         }
 
         return view('auth.two-factor', ['attemptToken' => $token, 'initialData' => app(EventJoining::class)->initialData($request)]);
-    }
-
-    public function logout(Request $request): RedirectResponse
-    {
-        $user = $request->user();
-
-        Auth::logout();
-        $this->audit->loggedOut($request, $user);
-
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()->route('login');
     }
 }

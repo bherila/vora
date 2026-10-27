@@ -2,15 +2,57 @@
 
 use App\Models\User;
 
+// With provider sign-in the identity provider owns passwords, passkeys and
+// recovery, so the package's local credential endpoints are not registered.
+$localCredentials = env('AUTH_SIGN_IN', 'local') !== 'provider';
+
 return [
     'routes' => [
         'enabled' => true,
         'prefix' => 'api',
         'middleware' => ['web'],
-        'passkeys' => true,
-        'password_resets' => true,
-        'change_password' => true,
-        'two_factor' => true,
+        'passkeys' => $localCredentials,
+        'password_resets' => $localCredentials,
+        'change_password' => $localCredentials,
+        'two_factor' => $localCredentials,
+    ],
+
+    // Provider sign-in (AUTH_SIGN_IN=provider). OAUTH_PROVIDER names the provider
+    // in every account binding: choose it once per provider and never change it.
+    'oauth_client' => [
+        'provider' => env('OAUTH_PROVIDER', 'identity'),
+        'base_url' => env('OAUTH_PROVIDER_URL', ''),
+        'client_id' => env('OAUTH_CLIENT_ID'),
+        'client_secret' => env('OAUTH_CLIENT_SECRET'),
+        'redirect_uri' => env('OAUTH_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/oauth/callback'),
+        'scope' => env('OAUTH_SCOPE', 'identity:read'),
+        'authorize_path' => '/oauth/authorize',
+        'token_path' => '/oauth/token',
+        'identity_path' => '/api/oauth/user',
+        'end_session_path' => '/oauth/end-session',
+        // The provider's exact issuer (defaults to base_url). Set
+        // OAUTH_AUTHORIZATION_RESPONSE_ISS=required once the provider sends RFC 9207 `iss`.
+        'issuer' => env('OAUTH_PROVIDER_ISSUER'),
+        'authorization_response_iss' => env('OAUTH_AUTHORIZATION_RESPONSE_ISS', 'when_present'),
+        'pending_flow_ttl' => 1800,
+        'pending_flow_cache_store' => env('BHERILA_AUTH_OAUTH_PENDING_FLOW_CACHE_STORE'),
+        'metadata_cache_seconds' => 3600,
+        'servers' => [],
+    ],
+
+    // Ends a signed-in session once the provider reports the identity disabled,
+    // deleted, reset or no longer granted this application. Enable only after the
+    // provider's identity-status endpoint is reachable with this client.
+    'provider_identity' => [
+        'enabled' => (bool) env('BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED', false),
+        'cache_store' => env('BHERILA_AUTH_PROVIDER_IDENTITY_CACHE_STORE'),
+        'binding' => [
+            'provider_column' => 'oauth_provider',
+            'subject_column' => 'oauth_subject',
+        ],
+        'expired_redirect_route' => 'home',
+        'except_routes' => ['logout'],
+        'bearer_guard' => 'api',
     ],
 
     'migrations' => [

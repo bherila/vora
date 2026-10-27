@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Events;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
+use App\Services\Auth\SignIn;
 use App\Services\Events\EventAccess;
 use App\Services\Events\EventJoining;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +28,7 @@ class EventJoinController extends Controller
         if ($ulid === null) {
             return redirect()->route('events.index');
         }
-        if ($request->user()->force_change_pw) {
+        if ($request->user()->force_change_pw && ! SignIn::usesProvider()) {
             return redirect()->route('user.settings');
         }
 

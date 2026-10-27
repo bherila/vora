@@ -1,6 +1,7 @@
 import { ChevronDown, Laptop, Menu, Moon, Sun, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 
+import { logoutDestination } from '@/auth/logout';
 import { NotificationBell } from '@/community/NotificationBell';
 import { Avatar } from '@/components/avatar';
 import {
@@ -216,10 +217,11 @@ export default function Navbar({
   }, []);
 
   const handleLogout = async () => {
+    let destination: string | null = null;
     try {
-      await fetchWrapper.post('/logout', {});
+      destination = logoutDestination(await fetchWrapper.post('/logout', {}));
     } finally {
-      window.location.href = '/login';
+      window.location.href = destination ?? '/login';
     }
   };
 

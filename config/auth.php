@@ -114,4 +114,18 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sign-in
+    |--------------------------------------------------------------------------
+    |
+    | "local": this installation registers people and checks their passwords,
+    | email codes and passkeys itself. "provider": people sign in through an
+    | OAuth identity provider (OAUTH_* in config/bherila-auth.php), and the
+    | local password, passkey, registration and invite pages are turned off.
+    |
+    */
+
+    'sign_in' => env('AUTH_SIGN_IN', 'local') === 'provider' ? 'provider' : 'local',
+
 ];

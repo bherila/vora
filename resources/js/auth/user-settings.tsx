@@ -7,7 +7,7 @@ import { AccountIdentitySettings } from '@/auth/account-identity-settings';
 import { ageRequirementMessage, ageVerificationMessage, getAgePolicy } from '@/auth/age-policy';
 import { Avatar } from '@/components/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +51,7 @@ interface UserSettingsInitialPayload {
   id_verified_at?: string | null;
   name_locked?: boolean | null;
   email_locked?: boolean | null;
+  provider_account_url?: string | null;
   notify_new_post?: boolean | null;
   notify_post_reaction?: boolean | null;
   notify_post_comment?: boolean | null;
@@ -82,6 +83,8 @@ interface UserSettingsInitialData {
   id_verified_at: string | null;
   name_locked: boolean;
   email_locked: boolean;
+  /** Set under provider sign-in: the provider owns email, password and passkeys. */
+  provider_account_url: string | null;
   notify_new_post: boolean;
   notify_post_reaction: boolean;
   notify_post_comment: boolean;
@@ -194,6 +197,7 @@ function emptyInitialData(): UserSettingsInitialData {
     id_verified_at: null,
     name_locked: false,
     email_locked: false,
+    provider_account_url: null,
     notify_new_post: true,
     notify_post_reaction: true,
     notify_post_comment: true,
@@ -227,6 +231,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     id_verified_at: payload.id_verified_at ?? null,
     name_locked: payload.name_locked ?? false,
     email_locked: payload.email_locked ?? false,
+    provider_account_url: payload.provider_account_url ?? null,
     notify_new_post: payload.notify_new_post ?? true,
     notify_post_reaction: payload.notify_post_reaction ?? true,
     notify_post_comment: payload.notify_post_comment ?? true,
@@ -270,7 +275,8 @@ export function UserSettingsPage() {
   const [accountEmail, setAccountEmail] = useState(initialData.email);
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
-  const [emailLocked] = useState(initialData.email_locked);
+  const providerAccountUrl = initialData.provider_account_url;
+  const [emailLocked] = useState(initialData.email_locked || providerAccountUrl !== null);
   const [notifyNewPost, setNotifyNewPost] = useState(initialData.notify_new_post);
   const [notifyPostReaction, setNotifyPostReaction] = useState(initialData.notify_post_reaction);
   const [notifyPostComment, setNotifyPostComment] = useState(initialData.notify_post_comment);
@@ -662,7 +668,9 @@ export function UserSettingsPage() {
                   {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
+                  {providerAccountUrl !== null
+                    ? 'Your email is managed by your sign-in provider.'
+                    : emailLocked ? 'Email is locked by an administrator.' : 'You can edit your email.'}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   ID verification: {accountVerificationDate ? `Verified (${new Date(accountVerificationDate).toLocaleString()})` : 'Not verified yet'}
@@ -864,6 +872,15 @@ export function UserSettingsPage() {
         </TabsContent>}
 
         <TabsContent value="security" className="space-y-4">
+          {providerAccountUrl !== null ? <Card>
+            <CardHeader>
+              <CardTitle>Sign-in and security</CardTitle>
+              <CardDescription>Your password, passkeys and email address are managed by your sign-in provider.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a href={providerAccountUrl} rel="noopener noreferrer" className={buttonVariants({ variant: 'outline' })}>Manage sign-in settings</a>
+            </CardContent>
+          </Card> : <>
           {passkeyMessage && <Alert><AlertDescription>{passkeyMessage}</AlertDescription></Alert>}
           <PasskeySection
             components={getAuthComponents()}
@@ -890,6 +907,7 @@ export function UserSettingsPage() {
               />
             </CardContent>
           </Card>
+          </>}
         </TabsContent>
 
         <TabsContent value="data" className="space-y-4">
