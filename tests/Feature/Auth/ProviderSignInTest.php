@@ -98,6 +98,15 @@ class ProviderSignInTest extends TestCase
         $user->refresh();
         $this->assertSame(['avery.new@example.test', 'Avery Local', 'Avery'], [$user->email, $user->name, $user->display_name]);
         $this->assertSame(1, User::count());
+
+        // A new address still held by another row, here a deleted account, is
+        // not adopted, and does not lock the bound account out.
+        $this->post('/logout');
+        User::factory()->create(['email' => 'taken@example.test'])->delete();
+        $this->identity['email'] = 'taken@example.test';
+        $this->signIn()->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+        $this->assertSame('avery.new@example.test', $user->fresh()->email);
     }
 
     public function test_the_bind_command_never_moves_an_existing_link(): void

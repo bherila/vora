@@ -41,20 +41,20 @@ class ProviderAccounts
 
         /** @var User|null $emailOwner */
         $emailOwner = User::withTrashed()->where('email', $identity->email)->lockForUpdate()->first();
-        abort_if(
-            $emailOwner !== null && $emailOwner->id !== $user?->id,
-            409,
-            'An account here already uses this email address. Ask an administrator to link it to your sign-in.',
-        );
+        $addressTaken = $emailOwner !== null && $emailOwner->id !== $user?->id;
 
         if ($user !== null) {
             // The provider owns the address; the local names stay the person's own.
-            if ($user->email !== $identity->email) {
+            // An address still held by another row (a deleted account, say) is
+            // not adopted, but never locks out an account bound by subject.
+            if ($user->email !== $identity->email && ! $addressTaken) {
                 $user->forceFill(['email' => $identity->email, 'email_verified_at' => now()])->save();
             }
 
             return $user;
         }
+
+        abort_if($addressTaken, 409, 'An account here already uses this email address. Ask an administrator to link it to your sign-in.');
 
         $user = new User;
         $user->name = Str::limit($identity->name, 255, '');
