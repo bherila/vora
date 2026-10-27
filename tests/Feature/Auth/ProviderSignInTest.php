@@ -135,6 +135,17 @@ class ProviderSignInTest extends TestCase
         $this->assertNull(User::where('email', 'b@example.test')->sole()->oauth_subject);
     }
 
+    public function test_subjects_differing_only_in_case_are_different_people(): void
+    {
+        User::factory()->create(['email' => 'first@example.test', 'oauth_provider' => 'example', 'oauth_subject' => 'AbC']);
+        $this->identity = ['sub' => 'abc', 'name' => 'Second Person', 'email' => 'second@example.test'];
+
+        $this->signIn()->assertRedirect();
+
+        $this->assertSame('second@example.test', auth()->user()->email);
+        $this->assertSame(2, User::count());
+    }
+
     public function test_a_disabled_account_is_not_signed_in(): void
     {
         User::factory()->create(['email' => 'avery@example.test', 'oauth_provider' => 'example', 'oauth_subject' => '42', 'is_disabled' => true]);

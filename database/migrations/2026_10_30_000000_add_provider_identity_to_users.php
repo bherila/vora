@@ -11,8 +11,14 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table): void {
             // The identity provider's name for itself (OAUTH_PROVIDER) and its
             // opaque subject. Provider sign-in binds on this pair, never email.
-            $table->string('oauth_provider', 64)->nullable()->after('email');
-            $table->string('oauth_subject', 255)->nullable()->after('oauth_provider');
+            $provider = $table->string('oauth_provider', 64)->nullable()->after('email');
+            $subject = $table->string('oauth_subject', 255)->nullable()->after('oauth_provider');
+            // Subjects are opaque and case-sensitive: under the default
+            // case-insensitive collation `AbC` and `abc` would bind one account.
+            if (in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+                $provider->collation('utf8mb4_bin');
+                $subject->collation('utf8mb4_bin');
+            }
             $table->unique(['oauth_provider', 'oauth_subject']);
         });
     }
