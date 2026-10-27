@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name') }}</title>
+    @php
+      $__appIcon = app(\App\Services\Branding\AppIcon::class);
+    @endphp
+    <link rel="manifest" href="{{ route('manifest', [], false) }}">
+    <meta name="apple-mobile-web-app-title" content="{{ config('app.name') }}">
+    @if ($__appIcon->version() !== null)
+      <link rel="icon" type="image/png" sizes="32x32" href="{{ $__appIcon->url('favicon') }}">
+      <link rel="apple-touch-icon" href="{{ $__appIcon->url('apple-touch-icon') }}">
+    @endif
     <meta name="color-scheme" content="dark light">
     <script @cspNonce>
       (function() {
@@ -99,6 +108,7 @@
           ['type' => 'link', 'label' => 'Deleted content', 'href' => route('admin.deleted-content', [], false)],
           ['type' => 'link', 'label' => 'Static pages', 'href' => route('admin.pages', [], false)],
           ['type' => 'link', 'label' => 'Email delivery', 'href' => route('admin.mail-deliveries', [], false)],
+          ['type' => 'link', 'label' => 'App icon', 'href' => route('admin.app-icon', [], false)],
           ['type' => 'link', 'label' => 'Audit log', 'href' => route('admin.audit-log', [], false)],
         ])),
       ] : null;

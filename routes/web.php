@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\Admin\AdminAppIconController;
 use App\Http\Controllers\Admin\AdminAuditController;
 use App\Http\Controllers\Admin\AdminDeletedContentController;
 use App\Http\Controllers\Admin\AdminInterestController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PendingApprovalController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
+use App\Http\Controllers\Branding\AppIconController;
 use App\Http\Controllers\BulkTransferController;
 use App\Http\Controllers\CanonicalDiscussionController;
 use App\Http\Controllers\CharacterController;
@@ -56,12 +58,17 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
+use App\Services\Branding\AppIcon;
 use App\Services\Media\AccountStorageUsage;
 use App\Support\InstanceFeatures;
 use Illuminate\Support\Facades\Route;
 
 // Home page and static pages (public).
 Route::get('/', [StaticPageController::class, 'home'])->name('home');
+// Install metadata: the manifest and this installation's uploaded icon.
+Route::get('/manifest.webmanifest', [AppIconController::class, 'manifest'])->name('manifest');
+Route::get('/app-icon/{variant}.png', [AppIconController::class, 'icon'])
+    ->whereIn('variant', array_keys(AppIcon::VARIANTS))->name('app-icon');
 Route::get('/privacy', [StaticPageController::class, 'show'])->defaults('slug', 'privacy')->name('privacy');
 Route::get('/terms', [StaticPageController::class, 'show'])->defaults('slug', 'terms')->name('terms');
 Route::get('/page/{slug}', [StaticPageController::class, 'show'])->name('pages.show');
@@ -417,6 +424,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
     Route::get('/waitlist', [AdminWaitlistController::class, 'index'])->name('waitlist');
     Route::get('/audit-log', [AdminAuditController::class, 'index'])->name('audit-log');
     Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'index'])->name('mail-deliveries');
+    Route::get('/app-icon', [AdminAppIconController::class, 'index'])->name('app-icon');
     Route::get('/interests', [AdminInterestController::class, 'index'])->name('interests');
     Route::get('/media', [AdminMediaController::class, 'index'])->name('media');
     Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'index'])->name('media-duplicates');
@@ -452,6 +460,9 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
 
     Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
     Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'apiIndex']);
+    Route::get('/app-icon', [AdminAppIconController::class, 'show']);
+    Route::post('/app-icon', [AdminAppIconController::class, 'store']);
+    Route::delete('/app-icon', [AdminAppIconController::class, 'destroy']);
     Route::post('/waitlist/{waitlistRequest}/admit', [AdminWaitlistController::class, 'admit']);
     Route::delete('/waitlist/{waitlistRequest}', [AdminWaitlistController::class, 'destroy']);
 
