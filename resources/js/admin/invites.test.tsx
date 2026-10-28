@@ -35,13 +35,39 @@ it('loads policy and saves a younger minimum with separate manual verification',
   expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
 });
 
-it('sends null for a disabled minimum without implicitly disabling verification', async () => {
+it('sends null when No minimum age is chosen, without implicitly disabling verification', async () => {
   get.mockResolvedValue(response(13, true));
   render(<AdminInvitesPage />);
   await waitFor(() => expect(screen.getByLabelText('Minimum account age (years)')).toHaveValue(13));
-  fireEvent.change(screen.getByLabelText('Minimum account age (years)'), { target: { value: '' } });
+  expect(screen.getByRole('checkbox', { name: 'No minimum age' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'No minimum age' }));
+  expect(screen.getByLabelText('Minimum account age (years)')).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Save defaults' }));
   await waitFor(() => expect(put).toHaveBeenCalledWith('/api/admin/invites/settings', expect.objectContaining({ minimum_age: null, age_verification_required: true })));
+});
+
+it('shows a saved No minimum age, and restores a number when it is switched off', async () => {
+  get.mockResolvedValue(response(null));
+  render(<AdminInvitesPage />);
+  const none = await screen.findByRole('checkbox', { name: 'No minimum age' });
+  await waitFor(() => expect(none).toBeChecked());
+  expect(screen.getByLabelText('Minimum account age (years)')).toBeDisabled();
+  expect(screen.getByText('Nobody is asked for a birth date. Changes also apply to existing accounts.')).toBeInTheDocument();
+
+  fireEvent.click(none);
+  expect(screen.getByLabelText('Minimum account age (years)')).toHaveValue(18);
+  fireEvent.click(screen.getByRole('button', { name: 'Save defaults' }));
+  await waitFor(() => expect(put).toHaveBeenCalledWith('/api/admin/invites/settings', expect.objectContaining({ minimum_age: 18 })));
+});
+
+it('refuses a blank minimum instead of treating it as no minimum', async () => {
+  render(<AdminInvitesPage />);
+  const minimum = await screen.findByLabelText('Minimum account age (years)');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save defaults' })).toBeEnabled());
+  fireEvent.change(minimum, { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save defaults' }));
+  expect(await screen.findByText('Enter a minimum age from 1 to 120, or choose No minimum age.')).toBeInTheDocument();
+  expect(put).not.toHaveBeenCalled();
 });
 
 it('does not overwrite an unknown policy after settings fail to load', async () => {
