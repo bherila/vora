@@ -167,6 +167,24 @@ class PreReviewVideoProcessingTest extends TestCase
         $this->assertTrue($video->fresh()->isApprovedContent());
     }
 
+    public function test_videos_that_keep_failing_do_not_block_newer_ones(): void
+    {
+        app(SettingsService::class)->set(SettingsService::PRE_REVIEW_VIDEO_PROCESSING, true);
+        $owner = User::factory()->approved()->create();
+        $missing = $this->upload($owner);
+        Storage::disk('s3')->delete($missing->object_key);
+        $this->travel(1)->minutes();
+        $newer = $this->upload($owner);
+        $this->travel(1)->minutes();
+
+        $this->artisan('media:prepare-videos-for-review', ['--limit' => 1])->assertSuccessful();
+        $this->assertNull($newer->fresh()->reviewed_object_key);
+        $this->artisan('media:prepare-videos-for-review', ['--limit' => 1])->assertSuccessful();
+
+        $this->assertNotNull($newer->fresh()->reviewed_object_key);
+        $this->assertNull($missing->fresh()->reviewed_object_key);
+    }
+
     public function test_only_administrators_change_the_setting_and_it_gates_the_schedule(): void
     {
         $this->actingAs(User::factory()->approved()->create())

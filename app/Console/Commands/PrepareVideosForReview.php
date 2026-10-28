@@ -35,6 +35,9 @@ class PrepareVideosForReview extends Command
             ->where('upload_status', 'ready')
             ->where('moderation_status', ModerationStatus::Pending->value)
             ->whereNull('reviewed_object_key')
+            // Least recently attempted first: a failed attempt touches the row,
+            // so videos that keep failing cannot hold every batch.
+            ->orderBy('updated_at')
             ->orderBy('id')
             ->limit(max(1, (int) $this->option('limit')))
             ->pluck('id');
@@ -47,11 +50,19 @@ class PrepareVideosForReview extends Command
                 // rejected, or deleted since it was listed.
                 $ok = DB::transaction(function () use ($id, $moderation): bool {
                     $media = Media::query()->whereKey($id)->lockForUpdate()->first();
+                    if (! $media instanceof Media) {
+                        return false;
+                    }
+                    if ($moderation->prepareForReview($media)) {
+                        return true;
+                    }
+                    $media->touch();
 
-                    return $media instanceof Media && $moderation->prepareForReview($media);
+                    return false;
                 });
             } catch (\Throwable $exception) {
                 report($exception);
+                Media::query()->whereKey($id)->touch();
                 $ok = false;
             }
             $ok ? $prepared++ : $failed++;
