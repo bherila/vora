@@ -101,6 +101,8 @@ class ProviderInvitationTest extends TestCase
             ->assertJsonPath('data.balance', 0)
             ->assertJsonPath('data.invitations.0.invited_by', null);
         $this->signedIn($guest)->postJson('/api/invitations', ['email' => 'another@example.test'])->assertForbidden();
+        // The page stays reachable to follow, resend or revoke what was sent.
+        $this->signedIn($guest)->get('/feed')->assertSee('/invitations');
     }
 
     public function test_a_new_invitation_replaces_the_pending_one_and_a_first_sign_in_marks_it_joined(): void

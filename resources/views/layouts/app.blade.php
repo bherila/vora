@@ -125,7 +125,7 @@
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
           // Under provider sign-in, invitations are emailed by the identity provider.
           \App\Services\Auth\SignIn::usesProvider()
-            ? (app(\App\Services\Auth\ProviderInvitationService::class)->canInvite($__currentUser) ? ['type' => 'link', 'label' => 'Invites', 'href' => route('invitations', [], false)] : null)
+            ? (app(\App\Services\Auth\ProviderInvitationService::class)->hasInvitesPage($__currentUser) ? ['type' => 'link', 'label' => 'Invites', 'href' => route('invitations', [], false)] : null)
             : ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],
         ])),

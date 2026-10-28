@@ -37,6 +37,12 @@ class ProviderInvitationService
         return $user->isAdmin() || $this->invites->availableBalance($user) > 0;
     }
 
+    /** Whether to offer the Invites page: to invite, or to follow invitations already sent. */
+    public function hasInvitesPage(User $user): bool
+    {
+        return $this->canInvite($user) || ProviderInvitation::query()->where('inviter_user_id', $user->id)->exists();
+    }
+
     public function canManage(User $user, ProviderInvitation $invitation): bool
     {
         return $user->isAdmin() || $invitation->inviter_user_id === $user->id;
