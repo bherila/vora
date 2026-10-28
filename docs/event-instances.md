@@ -54,8 +54,9 @@ exposed: changing visibility or membership preserves their media's access bounda
 
 Administrators set the minimum account age and optional manual age confirmation
 in **Invites & Signups**. Defaults remain 18 years and no manual verification.
-Leave the minimum blank to disable it; birth dates remain required for registration
-and invitation requests. This software policy does not determine legal eligibility.
+Choose **No minimum age** to disable it. Local registration and invitation
+requests still ask for a birth date; under provider sign-in nobody is asked unless
+manual verification is on. This software policy does not determine legal eligibility.
 When manual verification is enabled, an administrator confirms the attendee's age
 using the existing verification control in **Users**; the site does not collect
 identity-document uploads. Changing a recorded birth date clears prior verification.

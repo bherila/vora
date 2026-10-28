@@ -90,6 +90,8 @@ export function AdminInvitesPage() {
   // Settings form state.
   const [publicSignups, setPublicSignups] = useState(true);
   const [minimumAge, setMinimumAge] = useState('18');
+  // An explicit choice, so a cleared field is never mistaken for "no minimum".
+  const [noMinimumAge, setNoMinimumAge] = useState(false);
   const [ageVerificationRequired, setAgeVerificationRequired] = useState(false);
   const [defaultInvites, setDefaultInvites] = useState('0');
   const [defaultExpiryDays, setDefaultExpiryDays] = useState('');
@@ -104,7 +106,9 @@ export function AdminInvitesPage() {
       if (response.success) {
         const payload = response.data as InvitesData;
         setData(payload);
-        setMinimumAge(payload.settings.minimum_age === null ? '' : String(payload.settings.minimum_age ?? 18));
+        setNoMinimumAge(payload.settings.minimum_age === null);
+        // Keep a number to restore if the minimum is switched back on.
+        setMinimumAge(String(payload.settings.minimum_age ?? 18));
         setAgeVerificationRequired(payload.settings.age_verification_required === true);
         setPublicSignups(payload.settings.public_signups_enabled);
         setDefaultInvites(String(payload.settings.default_new_user_invites));
@@ -127,10 +131,15 @@ export function AdminInvitesPage() {
     if (data === null) return;
     setError('');
     setNotice('');
+    const age = Number(minimumAge);
+    if (!noMinimumAge && (minimumAge.trim() === '' || !Number.isInteger(age) || age < 1 || age > 120)) {
+      setError('Enter a minimum age from 1 to 120, or choose No minimum age.');
+      return;
+    }
     setBusy(true);
     try {
       await fetchWrapper.put('/api/admin/invites/settings', {
-        minimum_age: minimumAge.trim() === '' ? null : Number(minimumAge),
+        minimum_age: noMinimumAge ? null : age,
         age_verification_required: ageVerificationRequired,
         public_signups_enabled: nextPublicSignups,
         default_new_user_invites: Number(defaultInvites) || 0,
@@ -216,9 +225,17 @@ export function AdminInvitesPage() {
           </label>
 
           <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={noMinimumAge} onCheckedChange={(checked) => setNoMinimumAge(checked === true)} disabled={busy} />
+              No minimum age
+            </label>
             <Label htmlFor="minimum-age">Minimum account age (years)</Label>
-            <Input id="minimum-age" type="number" min={1} max={120} placeholder="No minimum" value={minimumAge} onChange={(event) => setMinimumAge(event.target.value)} disabled={busy} />
-            <p className="text-sm text-muted-foreground">Leave blank to disable the minimum. Changes also apply to existing accounts. These are site settings, not a determination of legal eligibility.</p>
+            <Input id="minimum-age" type="number" min={1} max={120} value={noMinimumAge ? '' : minimumAge} placeholder={noMinimumAge ? 'No minimum' : undefined} onChange={(event) => setMinimumAge(event.target.value)} disabled={busy || noMinimumAge} />
+            <p className="text-sm text-muted-foreground">
+              {noMinimumAge
+                ? 'Nobody is asked for a birth date. Changes also apply to existing accounts.'
+                : 'People enter their birth date once and must be at least this old. Changes also apply to existing accounts. These are site settings, not a determination of legal eligibility.'}
+            </p>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={ageVerificationRequired} onCheckedChange={(checked) => setAgeVerificationRequired(checked === true)} disabled={busy} />
