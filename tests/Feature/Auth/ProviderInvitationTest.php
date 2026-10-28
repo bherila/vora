@@ -7,11 +7,15 @@ use App\Models\InviteGrant;
 use App\Models\ProviderInvitation;
 use App\Models\User;
 use App\Services\Auth\ProviderAccounts;
+use App\Services\Auth\ProviderInvitationService;
 use BWH\Auth\OAuth\Invitations\ApplicationInvitationError;
+use BWH\Auth\OAuth\Invitations\ApplicationInvitations;
 use BWH\Auth\OAuth\OAuthIdentity;
 use BWH\Auth\Testing\FakeApplicationInvitations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
+use PDOException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class ProviderInvitationTest extends TestCase
@@ -175,6 +179,25 @@ class ProviderInvitationTest extends TestCase
 
         $this->signedIn($admin)->postJson('/api/invitations', ['email' => 'not an address'])->assertUnprocessable();
         $this->assertDatabaseCount('provider_invitations', 0);
+    }
+
+    public function test_a_balance_spent_meanwhile_is_refused_and_other_failures_are_not_reported_as_one(): void
+    {
+        $guest = $this->bound('8');
+        // Spent between the page's check and the request: nothing is sent.
+        try {
+            app(ProviderInvitationService::class)->create($guest, 'friend@example.test');
+            $this->fail('A spent balance must be refused.');
+        } catch (HttpException $refused) {
+            $this->assertSame([403, ProviderInvitationService::NO_INVITES], [$refused->getStatusCode(), $refused->getMessage()]);
+        }
+        $this->provider->assertNothingRequested();
+
+        InviteGrant::create(['user_id' => $guest->id, 'quantity' => 1, 'remaining' => 1]);
+        $this->mock(ApplicationInvitations::class)->shouldReceive('create')->andThrow(new PDOException('SQLSTATE[HY000] example-detail'));
+        $this->withoutExceptionHandling();
+        $this->expectException(PDOException::class);
+        $this->signedIn($guest)->postJson('/api/invitations', ['email' => 'friend@example.test']);
     }
 
     public function test_invitations_are_served_only_under_provider_sign_in(): void

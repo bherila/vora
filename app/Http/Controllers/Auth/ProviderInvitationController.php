@@ -22,7 +22,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use RuntimeException;
 
 /**
  * Email invitations sent through the identity provider, under provider sign-in.
@@ -57,13 +56,13 @@ class ProviderInvitationController extends Controller
         /** @var User $user */
         $user = $request->user();
         if (! $this->invitations->canInvite($user)) {
-            return $this->failure(403, 'You have no invites available. An administrator can issue you more.');
+            return $this->failure(403, ProviderInvitationService::NO_INVITES);
         }
 
         try {
             [$invitation, $issued] = $this->invitations->create($user, $request->validated('email'));
-        } catch (RuntimeException $refused) {
-            return $refused instanceof ApplicationInvitationException ? $this->refused($refused) : $this->failure(403, $refused->getMessage());
+        } catch (ApplicationInvitationException $refused) {
+            return $this->refused($refused);
         }
 
         return $this->issued($user, $invitation, $issued, 201);

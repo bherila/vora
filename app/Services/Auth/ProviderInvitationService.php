@@ -14,7 +14,7 @@ use BWH\Auth\OAuth\Invitations\IssuedInvitation;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Asks the identity provider to invite people to this installation, under
@@ -25,6 +25,8 @@ use RuntimeException;
  */
 class ProviderInvitationService
 {
+    public const NO_INVITES = 'You have no invites available. An administrator can issue you more.';
+
     public function __construct(
         private readonly ApplicationInvitations $provider,
         private readonly InviteService $invites,
@@ -46,7 +48,7 @@ class ProviderInvitationService
      *
      * @return array{0: ProviderInvitation, 1: IssuedInvitation}
      *
-     * @throws RuntimeException when the actor has no invites available
+     * @throws HttpException (403) when the actor has no invites available
      * @throws ApplicationInvitationException
      */
     public function create(User $actor, string $email): array
@@ -58,7 +60,8 @@ class ProviderInvitationService
             if (! $actor->isAdmin()) {
                 // Held until the invitation is recorded, so concurrent requests
                 // cannot spend the same invite twice.
-                $grant = $this->invites->lockNextGrant($actor) ?? throw new RuntimeException('You have no invites available.');
+                $grant = $this->invites->lockNextGrant($actor);
+                abort_if($grant === null, 403, self::NO_INVITES);
             }
 
             $issued = $this->call(fn (): IssuedInvitation => $this->provider->create($subject, $email));
