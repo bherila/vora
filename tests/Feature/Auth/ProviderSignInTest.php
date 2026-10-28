@@ -200,7 +200,7 @@ class ProviderSignInTest extends TestCase
         $this->actingAs($admin)->withSession([RequireProviderAccount::SESSION_KEY => ['example', '1']]);
         // A balance pays for invitations the provider emails (ProviderInvitationTest).
         $this->postJson("/api/admin/users/{$member->id}/invites", ['quantity' => 2])->assertOk();
-        $this->assertSame(2, $member->inviteGrants()->sum('remaining'));
+        $this->assertSame(2, (int) $member->inviteGrants()->sum('remaining'));
         $this->postJson('/api/admin/waitlist/1/admit')->assertNotFound();
         $this->get('/privacy')->assertDontSee('Invitation requests');
         // The page itself stays: it also holds the age requirements.
