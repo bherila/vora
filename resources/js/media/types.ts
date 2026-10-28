@@ -104,6 +104,8 @@ export interface AdminMediaItem extends MediaItem {
   moderated_at: string | null;
   moderated_by_user_id: number | null;
   download_url: string | null;
+  /** Sent back on approval so a stale review page cannot publish other bytes. */
+  review_version: string;
   /** Admin-only dedup signals. */
   file_hash: string | null;
   duplicate_of_media_id: number | null;

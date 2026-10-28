@@ -70,7 +70,7 @@ class EventPresenter
      * original so the reviewer can decode it before approving.
      *
      * @param  array<string, mixed>  $data
-     * @return array{pending: true, requires_original_check: bool, original_url: ?string, original_size_bytes: ?int, original_filename: string}|null
+     * @return array{pending: true, review_version: string, requires_original_check: bool, original_url: ?string, original_size_bytes: ?int, original_filename: string}|null
      */
     private function review(Media $media, User $viewer, bool $owned, bool $resolveHls, array &$data): ?array
     {
@@ -89,6 +89,7 @@ class EventPresenter
 
         return [
             'pending' => true,
+            'review_version' => $media->reviewVersion(),
             'requires_original_check' => $media->requiresPhotoPreview(),
             'original_url' => $media->requiresPhotoPreview() ? $extras['download_url'] : null,
             'original_size_bytes' => $media->size_bytes,

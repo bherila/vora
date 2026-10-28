@@ -103,6 +103,13 @@ class AdminMediaController extends Controller
             $notes = $request->validated()['notes'] ?? null;
 
             if ($request->validated()['action'] === 'approve') {
+                $reviewed = $request->validated()['review_version'] ?? null;
+                if ($reviewed !== null && ! hash_equals($media->reviewVersion(), $reviewed)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This media changed after you opened it. Reload and review it again before approving.',
+                    ], 409);
+                }
                 if (! $this->moderation->approve($media, $admin, $notes)) {
                     return response()->json([
                         'success' => false,

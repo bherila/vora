@@ -120,6 +120,7 @@ export function AdminMediaPage() {
       await fetchWrapper.post(`/api/admin/media/${item.id}/moderate`, {
         action,
         notes: notes[item.id]?.trim() || null,
+        review_version: item.review_version,
       });
       toast.success(`Media ${action === 'approve' ? 'approved' : 'rejected'}.`);
       await load(filter);

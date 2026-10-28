@@ -40,7 +40,7 @@ export interface EventMediaItem extends MediaItem {
   favorited: boolean;
   photo_versions?: { visible_count: number; preferred_ulid: string; is_preferred: boolean } | null;
   /** Present for admins on finished uploads awaiting review. */
-  review?: { pending: true; requires_original_check: boolean; original_url: string | null; original_size_bytes: number | null; original_filename: string } | null;
+  review?: { pending: true; review_version: string; requires_original_check: boolean; original_url: string | null; original_size_bytes: number | null; original_filename: string } | null;
   photo_details?: { width: number | null; height: number | null; metadata_known: boolean; has_gps: boolean; has_capture_time: boolean; has_camera: boolean } | null;
 }
 

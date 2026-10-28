@@ -68,6 +68,7 @@ class MediaPresenter
             'moderated_at' => $media->moderated_at?->toIso8601String(),
             'moderated_by_user_id' => $media->moderated_by_user_id,
             'download_url' => $extras['download_url'] ?? null,
+            'review_version' => $media->reviewVersion(),
             // Dedup signals are admin-only: the exact-bytes hash and a pointer to
             // an earlier item this one was flagged as a likely duplicate of.
             'file_hash' => $media->file_hash,

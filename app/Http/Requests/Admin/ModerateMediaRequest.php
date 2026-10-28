@@ -20,6 +20,9 @@ class ModerateMediaRequest extends FormRequest
         return [
             'action' => ['required', Rule::in(['approve', 'reject'])],
             'notes' => ['nullable', 'string', 'max:2000'],
+            // The review page's version of the media; approval is refused if
+            // the stored bytes it would publish have changed since.
+            'review_version' => ['sometimes', 'nullable', 'string', 'max:64'],
         ];
     }
 }

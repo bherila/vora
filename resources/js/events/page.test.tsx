@@ -108,8 +108,8 @@ describe('EventsPage', () => {
 
   it('gives organizers a review queue that advances after each decision', async () => {
     const queue = [
-      { ...media, id: 21, ulid: 'p1', title: 'First pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'a.jpg' } },
-      { ...media, id: 22, ulid: 'p2', title: 'Second pending', under_review: true, review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'b.jpg' } },
+      { ...media, id: 21, ulid: 'p1', title: 'First pending', under_review: true, review: { pending: true, review_version: 'v1', requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'a.jpg' } },
+      { ...media, id: 22, ulid: 'p2', title: 'Second pending', under_review: true, review: { pending: true, review_version: 'v1', requires_original_check: false, original_url: null, original_size_bytes: 5, original_filename: 'b.jpg' } },
     ];
     const implementation = jest.mocked(fetchWrapper.get).getMockImplementation()!;
     jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
@@ -132,7 +132,7 @@ describe('EventsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gallery view' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Open First pending' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/21/moderate', { action: 'approve', notes: null }));
+    await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/21/moderate', { action: 'approve', notes: null, review_version: 'v1' }));
     expect(await screen.findByRole('dialog', { name: 'Second pending' })).toBeInTheDocument();
     expect(window.location.search).toContain('item=p2');
   });

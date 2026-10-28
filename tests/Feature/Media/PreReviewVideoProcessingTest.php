@@ -145,6 +145,28 @@ class PreReviewVideoProcessingTest extends TestCase
         $this->assertSame([], array_values(array_filter(Storage::disk('s3')->allFiles(), fn (string $key): bool => str_starts_with($key, 'videos/'))));
     }
 
+    public function test_approval_from_a_review_page_loaded_before_preparation_is_refused(): void
+    {
+        app(SettingsService::class)->set(SettingsService::PRE_REVIEW_VIDEO_PROCESSING, true);
+        $video = $this->upload(User::factory()->approved()->create());
+        $stale = $this->actingAs($this->admin)->getJson('/api/admin/media?status=pending')->json('data.0.review_version');
+
+        // The page above links the original. The copy is made afterwards, and
+        // the upload URL can then replace the original the reviewer is shown.
+        $this->prepare();
+        Storage::disk('s3')->put($video->object_key, 'replaced after preparation');
+
+        $this->actingAs($this->admin)->postJson("/api/admin/media/{$video->id}/moderate", ['action' => 'approve', 'review_version' => $stale])
+            ->assertStatus(409);
+        $this->assertTrue($video->fresh()->isPendingReview());
+
+        $current = $this->actingAs($this->admin)->getJson("/api/events/media/{$video->ulid}")->json('data.review.review_version');
+        $this->assertNotSame($stale, $current);
+        $this->actingAs($this->admin)->postJson("/api/admin/media/{$video->id}/moderate", ['action' => 'approve', 'review_version' => $current])
+            ->assertOk()->assertJsonPath('data.review_version', $current);
+        $this->assertTrue($video->fresh()->isApprovedContent());
+    }
+
     public function test_only_administrators_change_the_setting_and_it_gates_the_schedule(): void
     {
         $this->actingAs(User::factory()->approved()->create())

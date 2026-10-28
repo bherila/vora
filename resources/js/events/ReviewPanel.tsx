@@ -31,7 +31,7 @@ export function ReviewPanel({ item, onModerated }: ReviewPanelProps) {
     setBusy(action);
     setError('');
     try {
-      await fetchWrapper.post(`/api/admin/media/${item.id}/moderate`, { action, notes: note.trim() || null });
+      await fetchWrapper.post(`/api/admin/media/${item.id}/moderate`, { action, notes: note.trim() || null, review_version: item.review.review_version });
       onModerated(action);
     } catch (failure) {
       setError(eventError(failure));

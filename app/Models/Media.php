@@ -318,6 +318,16 @@ class Media extends Model
         return $this->object_key;
     }
 
+    /**
+     * Identifies the stored bytes an administrator is reviewing. It changes
+     * when a reviewed copy is made, so an approval sent from a review page
+     * loaded before pre-review preparation cannot publish a copy it never saw.
+     */
+    public function reviewVersion(): string
+    {
+        return substr(hash('sha256', $this->playbackObjectKey().'|'.$this->playbackThumbnailKey()), 0, 16);
+    }
+
     public function playbackThumbnailKey(): ?string
     {
         if (! $this->isRejected() && $this->reviewed_thumbnail_key !== null) {

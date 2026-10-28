@@ -12,7 +12,7 @@ jest.mock('@/admin/HeifOriginalReview', () => ({
 function pending(review: Partial<NonNullable<EventMediaItem['review']>> = {}): EventMediaItem & { review: NonNullable<EventMediaItem['review']> } {
   return {
     id: 41, ulid: 'pending', type: 'photo', mime_type: 'image/jpeg', url: '/preview', title: 'Toast',
-    review: { pending: true, requires_original_check: false, original_url: null, original_size_bytes: 8, original_filename: 'toast.jpg', ...review },
+    review: { pending: true, review_version: 'v1', requires_original_check: false, original_url: null, original_size_bytes: 8, original_filename: 'toast.jpg', ...review },
   } as EventMediaItem & { review: NonNullable<EventMediaItem['review']> };
 }
 
@@ -25,13 +25,13 @@ describe('ReviewPanel', () => {
     render(<ReviewPanel item={pending()} onModerated={onModerated} />);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(onModerated).toHaveBeenCalledWith('approve'));
-    expect(fetchWrapper.post).toHaveBeenLastCalledWith('/api/admin/media/41/moderate', { action: 'approve', notes: null });
+    expect(fetchWrapper.post).toHaveBeenLastCalledWith('/api/admin/media/41/moderate', { action: 'approve', notes: null, review_version: 'v1' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add a note' }));
     fireEvent.change(screen.getByLabelText(/Note for the review record/), { target: { value: '  Blurry  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
     await waitFor(() => expect(onModerated).toHaveBeenLastCalledWith('reject'));
-    expect(fetchWrapper.post).toHaveBeenLastCalledWith('/api/admin/media/41/moderate', { action: 'reject', notes: 'Blurry' });
+    expect(fetchWrapper.post).toHaveBeenLastCalledWith('/api/admin/media/41/moderate', { action: 'reject', notes: 'Blurry', review_version: 'v1' });
   });
 
   it('keeps Approve disabled until a HEIC original has been checked, and reports failures', async () => {
