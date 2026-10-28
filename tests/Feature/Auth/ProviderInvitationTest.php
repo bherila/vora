@@ -36,7 +36,7 @@ class ProviderInvitationTest extends TestCase
         ]);
         $this->provider = FakeApplicationInvitations::swap();
         // Account 1 is always an administrator; keep it out of the way.
-        User::factory()->create();
+        User::factory()->create(['id' => 1]);
     }
 
     private function signedIn(User $user): static

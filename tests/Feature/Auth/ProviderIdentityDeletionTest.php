@@ -42,7 +42,7 @@ class ProviderIdentityDeletionTest extends TestCase
 
     public function test_people_deleted_at_the_provider_are_deleted_here_unless_an_administrator_must_decide(): void
     {
-        $primary = User::factory()->admin()->create(['oauth_provider' => 'example', 'oauth_subject' => '1']);
+        $primary = User::factory()->admin()->create(['id' => 1, 'oauth_provider' => 'example', 'oauth_subject' => '1']);
         $guest = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '42']);
         $held = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '43', 'legal_hold_at' => now()]);
         // Subjects are case-sensitive and never matched across providers.
