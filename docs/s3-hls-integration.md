@@ -36,7 +36,7 @@ see [media/storage-and-buckets.md](media/storage-and-buckets.md)):
 | Role (env var) | Purpose | App access | Transcoder access |
 | --- | --- | --- | --- |
 | video source (`AWS_BUCKET`) | raw uploaded videos (transcoder source) | read/write | read-only |
-| HLS output (`HLS_BUCKET`) | HLS renditions (transcoder output) | read/delete for permanent cleanup | read/write |
+| HLS output (`HLS_BUCKET`) | HLS renditions (transcoder output) | read; delete only for PDQ image mappings | read/write |
 
 - The HLS-output bucket has a **CORS** policy allowing `GET`/`HEAD` from any
   origin, required for hls.js to fetch segments via cross-origin XHR. (The
@@ -71,7 +71,7 @@ AWS_ACCESS_KEY_ID=…        AWS_SECRET_ACCESS_KEY=…
 AWS_BUCKET=…               AWS_ENDPOINT=…
 AWS_DEFAULT_REGION=auto    AWS_USE_PATH_STYLE_ENDPOINT=true
 
-# HLS output bucket (app reads playback and deletes unreferenced output)
+# HLS output bucket (app reads playback; the transcoder removes unreferenced output)
 HLS_ACCESS_KEY_ID=…        HLS_SECRET_ACCESS_KEY=…
 HLS_BUCKET=…               HLS_ENDPOINT=…
 HLS_REGION=auto            HLS_USE_PATH_STYLE_ENDPOINT=true

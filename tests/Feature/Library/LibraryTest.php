@@ -359,7 +359,9 @@ class LibraryTest extends TestCase
         ]);
         $this->actingAs($outsider)->getJson("/api/library/items/{$ulid}/hls/master.m3u8")->assertNotFound();
         $this->actingAs($viewer)->deleteJson('/api/library/items/'.$ulid)->assertOk();
-        Storage::disk('hls')->assertMissing('by-id/content-123/master.m3u8');
+        // The final reference purges the source; the transcoder then drops output nothing maps to.
+        Storage::disk('s3')->assertMissing($media->object_key);
+        $this->assertDatabaseMissing('media', ['id' => $media->id]);
     }
 
     public function test_library_uploads_are_private_unannounced_and_separate_from_profile_galleries(): void

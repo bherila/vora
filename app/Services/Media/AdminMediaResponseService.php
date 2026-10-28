@@ -64,7 +64,10 @@ class AdminMediaResponseService
         }
 
         if ($media->type->isVideo()) {
-            $extras['video'] = $this->hls->status($media, $resolveHls);
+            // Admins review pending videos from the list, so resolve their
+            // streams there too (rate-limited per row, like PDQ below);
+            // otherwise a video transcoded before review never shows as ready.
+            $extras['video'] = $this->hls->status($media, $resolveHls || $media->isPendingReview());
         } elseif ($media->type === MediaType::Photo) {
             // Resolve the worker's PDQ hash and flag a per-owner near-duplicate.
             // Unlike HLS this runs for the review *list* too (not just single

@@ -69,6 +69,28 @@ def transcode(s3, key):
         print("Transcoded a disposable local reviewed video.", flush=True)
 
 
+def cleanup(s3):
+    """Mirror the real transcoder's reference-counted cleanup: drop mappings
+    whose source is gone, then any output tree no remaining mapping uses."""
+    mappings = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=OUTPUT, Prefix="mappings/"):
+        for entry in page.get("Contents", []):
+            body = s3.get_object(Bucket=OUTPUT, Key=entry["Key"])["Body"].read()
+            mappings[entry["Key"]] = json.loads(body).get("contentId")
+    orphaned = set()
+    for mapping_key, content_id in mappings.items():
+        source_key = mapping_key[len("mappings/"):-len(".json")]
+        if not exists(s3, SOURCE, source_key):
+            s3.delete_object(Bucket=OUTPUT, Key=mapping_key)
+            orphaned.add(content_id)
+    live = {content_id for key, content_id in mappings.items() if exists(s3, OUTPUT, key)}
+    for content_id in orphaned - live:
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=OUTPUT, Prefix="by-id/" + content_id + "/"):
+            for entry in page.get("Contents", []):
+                s3.delete_object(Bucket=OUTPUT, Key=entry["Key"])
+        print("Removed unreferenced disposable local HLS output.", flush=True)
+
+
 def run():
     if os.environ.get("LOCAL_STAGING_ENABLED") != "1":
         raise SystemExit("Local staging opt-in is required.")
@@ -89,6 +111,7 @@ def run():
             for page in s3.get_paginator("list_objects_v2").paginate(Bucket=SOURCE, Prefix="uploads/reviewed/"):
                 for entry in page.get("Contents", []):
                     transcode(s3, entry["Key"])
+            cleanup(s3)
         except Exception as error:
             print("Local transcoder retry: " + type(error).__name__, flush=True)
         time.sleep(2)

@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\AdminInviteController;
 use App\Http\Controllers\Admin\AdminMailDeliveryController;
 use App\Http\Controllers\Admin\AdminMediaController;
 use App\Http\Controllers\Admin\AdminMediaDuplicateController;
+use App\Http\Controllers\Admin\AdminMediaSettingsController;
 use App\Http\Controllers\Admin\AdminPostCommentController;
 use App\Http\Controllers\Admin\AdminPostController;
 use App\Http\Controllers\Admin\AdminReportController;
@@ -516,6 +517,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/media-duplicates', [AdminMediaDuplicateController::class, 'apiIndex']);
     Route::post('/media/{media}/duplicate-review', [AdminMediaDuplicateController::class, 'queueReview']);
     Route::post('/media/{media}/moderate', [AdminMediaController::class, 'moderate'])->withTrashed();
+    Route::put('/media-settings', AdminMediaSettingsController::class);
 
     Route::get('/reports', [AdminReportController::class, 'apiIndex']);
     Route::post('/reports/{report}/act', [AdminReportController::class, 'act']);

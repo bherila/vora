@@ -17,7 +17,7 @@ const item: AdminMediaItem = {
   url: 'https://storage.test/uploader-preview.jpg', thumbnail_url: 'https://storage.test/uploader-preview.jpg', video: null,
   created_at: '2026-10-23T00:00:00Z', character_id: null, character: null, interests: [],
   moderation_status: 'pending', moderation_notes: null, moderated_at: null, moderated_by_user_id: null,
-  file_hash: null, duplicate_of_media_id: null, download_url: 'https://storage.test/stored-original.heic',
+  file_hash: null, duplicate_of_media_id: null, download_url: 'https://storage.test/stored-original.heic', review_version: 'v1',
   user: { id: 1, name: 'Uploader', email: 'uploader@example.test' },
 };
 const fetchOriginal = jest.fn();
@@ -48,7 +48,7 @@ test('approval requires independently fetching, decoding and displaying the stor
   fireEvent.load(decoded);
   await waitFor(() => expect(approve).toBeEnabled());
   fireEvent.click(approve);
-  await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/41/moderate', { action: 'approve', notes: null }));
+  await waitFor(() => expect(fetchWrapper.post).toHaveBeenCalledWith('/api/admin/media/41/moderate', { action: 'approve', notes: null, review_version: 'v1' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled());
   expect(await screen.findByRole('button', { name: 'Check original' })).toBeEnabled();
   view.unmount();

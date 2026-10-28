@@ -9,9 +9,11 @@ use App\Models\Media;
 use App\Services\Media\AdminMediaResponseService;
 use App\Services\Media\GlobalMediaDuplicateService;
 use App\Services\Media\MediaModerationService;
+use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class AdminMediaController extends Controller
@@ -20,6 +22,7 @@ class AdminMediaController extends Controller
         private readonly AdminMediaResponseService $responder,
         private readonly GlobalMediaDuplicateService $duplicates,
         private readonly MediaModerationService $moderation,
+        private readonly SettingsService $settings,
     ) {}
 
     /**
@@ -68,6 +71,7 @@ class AdminMediaController extends Controller
         return response()->json([
             'success' => true,
             'duplicate_scan' => $this->duplicates->scanStatus(),
+            'settings' => ['pre_review_video_processing' => $this->settings->preReviewVideoProcessing()],
             ...$page,
         ]);
     }
@@ -77,33 +81,55 @@ class AdminMediaController extends Controller
      */
     public function moderate(ModerateMediaRequest $request, Media $media): JsonResponse
     {
-        // Guard the same bypass as the listing: never let a not-yet-uploaded row
-        // be approved/rejected.
-        if (! $media->isReady()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This upload has not completed yet and cannot be reviewed.',
-            ], 422);
-        }
+        // Moderate a fresh, locked row: the scheduled pre-review preparation
+        // copies objects under the same lock, and a route-bound model loaded
+        // before it finished would miss (and so never delete) those copies.
+        $moderated = DB::transaction(function () use ($request, $media): JsonResponse|Media {
+            $media = Media::withTrashed()->whereKey($media->id)->lockForUpdate()->first();
+            if (! $media instanceof Media) {
+                abort(404);
+            }
 
-        $admin = $request->user();
-        $notes = $request->validated()['notes'] ?? null;
-
-        if ($request->validated()['action'] === 'approve') {
-            if (! $this->moderation->approve($media, $admin, $notes)) {
+            // Guard the same bypass as the listing: never let a not-yet-uploaded
+            // row be approved/rejected.
+            if (! $media->isReady()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Media could not be copied into reviewed storage.',
+                    'message' => 'This upload has not completed yet and cannot be reviewed.',
                 ], 422);
             }
-        } else {
-            $this->moderation->reject($media, $admin, $notes);
+
+            $admin = $request->user();
+            $notes = $request->validated()['notes'] ?? null;
+
+            if ($request->validated()['action'] === 'approve') {
+                $reviewed = $request->validated()['review_version'] ?? null;
+                if ($reviewed !== null && ! hash_equals($media->reviewVersion(), $reviewed)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This media changed after you opened it. Reload and review it again before approving.',
+                    ], 409);
+                }
+                if (! $this->moderation->approve($media, $admin, $notes)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Media could not be copied into reviewed storage.',
+                    ], 422);
+                }
+            } else {
+                $this->moderation->reject($media, $admin, $notes);
+            }
+
+            return $media;
+        });
+        if ($moderated instanceof JsonResponse) {
+            return $moderated;
         }
 
-        $media->load(['interests', 'user']);
+        $moderated->load(['interests', 'user']);
 
-        $data = $this->responder->item($media);
-        $data['cross_account_duplicates'] = $this->duplicates->summariesFor(collect([$media]))[$media->id];
+        $data = $this->responder->item($moderated);
+        $data['cross_account_duplicates'] = $this->duplicates->summariesFor(collect([$moderated]))[$moderated->id];
 
         return response()->json(['success' => true, 'data' => $data]);
     }

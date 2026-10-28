@@ -44,6 +44,9 @@ the same immutable reviewed copies as manual approval. Gallery, profile and
 private Library uploads still need review. Removing an exemption keeps already
 approved items approved; existing pending or rejected media are not reapproved.
 If reviewed-copy storage fails, the completed upload remains awaiting review.
+To have videos ready to play when they are approved, turn on **Process videos
+before review** in **Admin → Media review**: videos are transcoded while they
+await review and stay hidden from other attendees until approved.
 Event membership does not bypass
 moderation or account restrictions. Set the instance’s default storage quota in
 Admin → Users; unset account quotas inherit it, and explicit account overrides

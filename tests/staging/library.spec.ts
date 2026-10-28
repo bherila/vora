@@ -402,7 +402,8 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(recipient, 'POST', '/api/library/items/bulk', { action: 'delete', item_ulids: ownItems });
     expect((await api(recipient, 'GET', `/api/library/items/${savedPhoto.ulid}`)).status).toBe(404);
     expect((await api(recipient, 'GET', `/api/library/items/${savedVideo.ulid}`)).status).toBe(404);
-    expect((await recipient.request.get(segmentUrl)).status(), 'Final reference removal physically purges the real HLS segment').toBe(404);
+    // The app deletes the sources; the transcoder's reference-counted cleanup then removes the output.
+    await expect.poll(async () => (await recipient.request.get(segmentUrl)).status(), { message: 'Final reference removal leads the transcoder to purge the real HLS segment', timeout: 60_000 }).toBe(404);
     expect((await success<{ data: { used_bytes: number } }>(recipient, 'GET', '/api/account/storage')).data.used_bytes).toBe(baselineUsage.used_bytes);
   } finally {
     try {
