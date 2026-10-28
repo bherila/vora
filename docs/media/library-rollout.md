@@ -87,8 +87,8 @@ content, browser CORS, session authorization, and redirected segment downloads.
    remain until their final reference is released.
 3. Remove both saved items from the recipient's Library. Verify with read-only
    storage inspection that **only the exact original/reviewed keys recorded for
-   this run** and their private mappings are gone. Verify the test-only HLS tree
-   is removed when unreferenced. Never delete a broad prefix or a `by-id` tree
+   this run** are gone. After the transcoder's next sweep, verify their mappings
+   and the test-only HLS tree are removed when unreferenced. Never delete a broad prefix or a `by-id` tree
    merely because this run used it: content hashes can be shared by other media.
    If an object remains, investigate cleanup permissions/retention rather than
    manually sweeping a bucket. The diagnostic intentionally fails once its
@@ -102,11 +102,9 @@ content, browser CORS, session authorization, and redirected segment downloads.
 ## Required permissions
 
 The application needs read/write/delete access to source/photo objects and
-read/delete access to HLS mappings/output for its permanent-deletion path.
-`HlsService::deleteIfUnreferenced()` removes private mappings and removes a
-content-addressed HLS tree only after checking all media rows, including retained
-deleted rows, for a reference. A read-only HLS token permits playback but cannot
-complete that application cleanup. Verify the deployed token's permissions and
-the transcoder's reference cleanup configuration before claiming final-reference
-purging works. The diagnostic never attempts deletion and cannot prove delete
+read access to HLS output (plus delete for PDQ image mappings when they share that
+bucket). Permanent deletion removes source and reviewed objects;
+the transcoder's reference-counted cleanup (`CLEANUP_DELETED_SOURCES=true`) then
+removes their mappings and any content-addressed tree no remaining mapping uses.
+Verify that cleanup configuration before claiming final-reference purging works. The diagnostic never attempts deletion and cannot prove delete
 permissions; the disposable lifecycle above provides that evidence.

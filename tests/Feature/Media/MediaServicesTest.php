@@ -397,25 +397,54 @@ class MediaServicesTest extends TestCase
         $this->assertDatabaseMissing('media', ['id' => $media->id]);
     }
 
-    public function test_delete_removes_unshared_hls_output(): void
+    public function test_delete_removes_sources_and_leaves_hls_output_to_the_transcoder(): void
     {
         Storage::fake('videos');
         Storage::fake('hls');
         config(['media.hls_disk' => 'hls']);
-        $media = Media::factory()->video()->create([
+        $media = Media::factory()->video()->approved()->create([
             'disk' => 'videos',
             'object_key' => 'uploads/0/video.mp4',
+            'reviewed_object_key' => 'videos/reviewed/0/video.mp4',
             'hls_content_id' => 'sha256:abc',
         ]);
         Storage::disk('videos')->put($media->object_key, 'video');
-        Storage::disk('hls')->put('mappings/uploads/0/video.mp4.json', json_encode(['contentId' => 'sha256:abc']));
+        Storage::disk('videos')->put($media->reviewed_object_key, 'video');
+        Storage::disk('hls')->put('mappings/videos/reviewed/0/video.mp4.json', json_encode(['contentId' => 'sha256:abc']));
         Storage::disk('hls')->put('by-id/sha256:abc/master.m3u8', '#EXTM3U');
 
         app(MediaService::class)->delete($media);
 
+        // Deleting the sources is what lets the transcoder's cleanup find the
+        // orphaned mapping and drop the output if nothing else maps to it.
         Storage::disk('videos')->assertMissing('uploads/0/video.mp4');
-        Storage::disk('hls')->assertMissing('mappings/uploads/0/video.mp4.json');
-        Storage::disk('hls')->assertMissing('by-id/sha256:abc/master.m3u8');
+        Storage::disk('videos')->assertMissing('videos/reviewed/0/video.mp4');
+        Storage::disk('hls')->assertExists('mappings/videos/reviewed/0/video.mp4.json');
+        Storage::disk('hls')->assertExists('by-id/sha256:abc/master.m3u8');
         $this->assertDatabaseMissing('media', ['id' => $media->id]);
+    }
+
+    public function test_purging_one_duplicate_keeps_output_another_video_maps_to_before_it_is_played(): void
+    {
+        Storage::fake('videos');
+        Storage::fake('hls');
+        config(['media.hls_disk' => 'hls']);
+        $played = Media::factory()->video()->approved()->create(['disk' => 'videos', 'object_key' => 'uploads/0/a.mp4', 'hls_content_id' => 'sha256:same']);
+        // The transcoder deduplicated this upload onto the same output, but
+        // nobody has played it yet, so its row has no content id.
+        $unplayed = Media::factory()->video()->approved()->create(['disk' => 'videos', 'object_key' => 'uploads/0/b.mp4']);
+        foreach ([$played, $unplayed] as $video) {
+            Storage::disk('videos')->put($video->object_key, 'same bytes');
+            Storage::disk('hls')->put('mappings/'.$video->object_key.'.json', json_encode(['contentId' => 'sha256:same']));
+        }
+        Storage::disk('hls')->put('by-id/sha256:same/master.m3u8', '#EXTM3U');
+
+        app(MediaService::class)->delete($played);
+
+        // The transcoder treats a mapped source as done and never rebuilds
+        // missing output, so deleting this tree would break the other video.
+        Storage::disk('hls')->assertExists('by-id/sha256:same/master.m3u8');
+        $this->assertTrue(app(HlsService::class)->ensureResolved($unplayed->fresh()));
+        $this->assertNotNull(app(HlsService::class)->manifest($unplayed->fresh(), 'master.m3u8', fn (string $path): string => $path));
     }
 }

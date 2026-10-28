@@ -16,7 +16,6 @@ class MediaService
 {
     public function __construct(
         private readonly FileStorageService $storage,
-        private readonly HlsService $hls,
         private readonly PdqImageService $pdq,
     ) {}
 
@@ -60,7 +59,7 @@ class MediaService
      * Release the upload/publication reference. Independent Library references
      * retain the media row and its objects without the uploader identity. Once
      * there are no references, purge source/reviewed objects and derivatives.
-     * HLS cleanup also checks other media rows sharing the encoded content id.
+     * HLS output is left to the transcoder; see purgeObjects().
      */
     public function delete(Media $media): void
     {
@@ -107,7 +106,12 @@ class MediaService
             $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
         }
 
-        $this->hls->deleteIfUnreferenced($media);
+        // Leave HLS mappings and output to the transcoder's reference-counted
+        // cleanup, which removes them once their source objects are gone. Output
+        // is shared by content hash, and a duplicate's row records the content
+        // id only once it is first played, so this database cannot tell whether
+        // another video still uses it. Deleting a mapping here would also hide
+        // the deleted source from that cleanup and leak its output.
 
         // The PDQ mapping is row-private (just a hash), so it goes with the source.
         $this->pdq->deleteMapping($media);

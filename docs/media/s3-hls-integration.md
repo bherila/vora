@@ -59,12 +59,16 @@ cleanup must preserve outputs shared by another media row, including retained
 deleted rows and durable Library saves.
 
 `MediaService::delete()` retains objects while Library references remain. On
-final permanent removal it deletes source/reviewed objects and calls
-`HlsService::deleteIfUnreferenced()`. That removes source-private mappings and
-deletes the content-addressed output tree only when no other media row references
-its content ID. The app therefore needs HLS read/delete permissions; a read-only
-HLS token can play content but cannot complete permanent cleanup. The transcoder
-also owns a reference-counted cleanup pass for deleted sources.
+final permanent removal it deletes the source and reviewed objects and leaves HLS
+mappings and output to the transcoder. Its reference-counted cleanup pass deletes
+the mapping of each deleted source and removes an output tree only when no
+remaining mapping points at it. The app cannot make that decision itself: a media
+row records its content ID only when the video is first played, so an unplayed
+duplicate is invisible to the database, and the transcoder never rebuilds output
+for a source it has already mapped. Rejection likewise deletes the reviewed copy
+and lets the same pass remove its output. The app no longer deletes HLS output;
+it still deletes a photo's row-private PDQ mapping, which defaults to the same
+bucket.
 
 > **Operational requirement:** that cleanup must be enabled on the transcoder
 > (`CLEANUP_DELETED_SOURCES=true` in its environment). If it is off, transcoded
