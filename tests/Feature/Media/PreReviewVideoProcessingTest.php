@@ -90,6 +90,10 @@ class PreReviewVideoProcessingTest extends TestCase
         // pending video; other attendees still cannot see it.
         Storage::disk('hls')->put('mappings/'.$reviewed.'.json', json_encode(['contentId' => 'sha256:abc']));
         Storage::disk('hls')->put('by-id/sha256:abc/master.m3u8', "#EXTM3U\n720p/index.m3u8\n");
+        // The review queue picks the finished stream up without anyone opening it.
+        $this->travel(5)->minutes();
+        $queue = collect($this->actingAs($this->admin)->getJson('/api/admin/media?status=pending')->json('data'));
+        $this->assertSame('ready', $queue->firstWhere('id', $video->id)['video']['status']);
         $this->actingAs($this->admin)->get("/api/media/{$video->id}/hls/master.m3u8")->assertOk();
         $this->actingAs($owner)->get("/api/media/{$video->id}/hls/master.m3u8")->assertOk();
         $attendee = User::factory()->approved()->create();
