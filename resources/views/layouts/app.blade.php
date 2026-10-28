@@ -123,8 +123,10 @@
           $__enabled('community') ? ['type' => 'link', 'label' => 'Your activity', 'href' => route('activity.index', [], false)] : null,
           $__enabled('library') ? ['type' => 'link', 'label' => $__enabled('events') ? 'My collection' : 'Library', 'href' => route('library', [], false)] : null,
           ['type' => 'link', 'label' => 'Settings', 'href' => route('user.settings', [], false)],
-          // Under provider sign-in the identity provider admits people instead.
-          \App\Services\Auth\SignIn::usesProvider() ? null : ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
+          // Under provider sign-in, invitations are emailed by the identity provider.
+          \App\Services\Auth\SignIn::usesProvider()
+            ? (app(\App\Services\Auth\ProviderInvitationService::class)->canInvite($__currentUser) ? ['type' => 'link', 'label' => 'Invites', 'href' => route('invitations', [], false)] : null)
+            : ['type' => 'link', 'label' => 'Invites', 'href' => route('user.invites', [], false)],
           ['type' => 'action', 'label' => 'Log out', 'action' => 'logout'],
         ])),
       ] : null;

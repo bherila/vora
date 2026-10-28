@@ -144,9 +144,10 @@ Restricted and missing Events reveal no Event name, location, or membership
 before admission and return the same not-found response to unauthorized users.
 
 Under provider sign-in (`AUTH_SIGN_IN=provider`, see the README) there are no
-signup invitations or public sign-ups here: an attendee needs an account at the
-identity provider with access to this application, which the provider's
-administrators or invitations grant. A joining link still remembers its Event
+signup links or public sign-ups here: an attendee needs an account at the
+identity provider with access to this application. Organizers grant that by
+inviting the attendee's email address from **Invites**, which the provider
+emails, or at the provider directly. A joining link still remembers its Event
 through the provider's sign-in and the one-time birth date step.
 
 The same browser session retains the Event while switching between login and

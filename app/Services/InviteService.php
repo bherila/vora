@@ -95,10 +95,7 @@ class InviteService
     public function generate(User $user): Invite
     {
         return DB::transaction(function () use ($user): Invite {
-            $grant = $this->activeGrantsQuery($user)
-                ->orderByRaw('expires_at is null, expires_at asc')
-                ->lockForUpdate()
-                ->first();
+            $grant = $this->lockNextGrant($user);
 
             if ($grant === null) {
                 throw new RuntimeException('No invites available.');
@@ -118,6 +115,19 @@ class InviteService
                 'expires_at' => $expiresAt,
             ]);
         });
+    }
+
+    /**
+     * Lock the grant the user's next invite is drawn from (soonest to expire
+     * first), or null when they have none. Call inside a transaction and
+     * decrement it only once the invite exists.
+     */
+    public function lockNextGrant(User $user): ?InviteGrant
+    {
+        return $this->activeGrantsQuery($user)
+            ->orderByRaw('expires_at is null, expires_at asc')
+            ->lockForUpdate()
+            ->first();
     }
 
     /**

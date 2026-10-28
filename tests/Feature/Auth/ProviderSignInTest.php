@@ -192,14 +192,15 @@ class ProviderSignInTest extends TestCase
         $this->actingAs($elsewhere)->get('/user/settings')->assertRedirect('/login');
     }
 
-    public function test_admins_cannot_issue_invites_nobody_could_redeem(): void
+    public function test_admins_issue_invites_for_provider_invitations_but_admit_nobody_from_a_waitlist(): void
     {
         $admin = User::factory()->admin()->create(['oauth_provider' => 'example', 'oauth_subject' => '1']);
         $member = User::factory()->approved()->create(['oauth_provider' => 'example', 'oauth_subject' => '2']);
 
         $this->actingAs($admin)->withSession([RequireProviderAccount::SESSION_KEY => ['example', '1']]);
-        $this->postJson("/api/admin/users/{$member->id}/invites", ['count' => 1])->assertNotFound();
-        $this->postJson('/api/admin/invites/issue', ['count' => 1])->assertNotFound();
+        // A balance pays for invitations the provider emails (ProviderInvitationTest).
+        $this->postJson("/api/admin/users/{$member->id}/invites", ['quantity' => 2])->assertOk();
+        $this->assertSame(2, $member->inviteGrants()->sum('remaining'));
         $this->postJson('/api/admin/waitlist/1/admit')->assertNotFound();
         $this->get('/privacy')->assertDontSee('Invitation requests');
         // The page itself stays: it also holds the age requirements.

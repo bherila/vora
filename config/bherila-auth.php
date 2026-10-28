@@ -55,6 +55,19 @@ return [
         'bearer_guard' => 'api',
     ],
 
+    // Invitations people send from this installation through the provider
+    // (provider sign-in only). The provider must enable this installation and
+    // pin the public half of the key below; see README.
+    'application_invitations' => [
+        'issuer' => env('BHERILA_AUTH_INVITATION_ISSUER'),
+        'key_id' => env('BHERILA_AUTH_INVITATION_KEY_ID'),
+        'private_key_path' => env('BHERILA_AUTH_INVITATION_PRIVATE_KEY_PATH'),
+        'private_key' => env('BHERILA_AUTH_INVITATION_PRIVATE_KEY'),
+        'private_key_passphrase' => env('BHERILA_AUTH_INVITATION_PRIVATE_KEY_PASSPHRASE'),
+        'timeout_seconds' => (int) env('BHERILA_AUTH_INVITATION_TIMEOUT_SECONDS', 10),
+        'token_cache_store' => env('BHERILA_AUTH_INVITATION_TOKEN_CACHE_STORE'),
+    ],
+
     'migrations' => [
         'drop_tables_on_rollback' => false,
     ],

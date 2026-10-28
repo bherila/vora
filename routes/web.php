@@ -23,6 +23,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\PendingApprovalController;
+use App\Http\Controllers\Auth\ProviderInvitationController;
 use App\Http\Controllers\Auth\ProviderLoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BlockController;
@@ -245,13 +246,23 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/characters', fn () => redirect()->route('me'))->name('characters');
     Route::get('/personas/new', [CharacterController::class, 'createPage'])->name('characters.create');
 
-    // Invites the user can hand out (balance issued by an admin). Under provider
-    // sign-in the provider admits people instead.
+    // Invite links the user can hand out (balance issued by an admin).
     Route::middleware('sign-in:local')->group(function () {
         Route::get('/user/invites', [InviteController::class, 'page'])->name('user.invites');
         Route::get('/api/invites', [InviteController::class, 'apiIndex']);
         Route::post('/api/invites', [InviteController::class, 'generate']);
         Route::delete('/api/invites/{invite}', [InviteController::class, 'revoke']);
+    });
+    // Under provider sign-in the same balance (or being an administrator) lets
+    // people ask the provider to email an invitation instead.
+    Route::middleware('sign-in:provider')->group(function () {
+        Route::get('/invitations', [ProviderInvitationController::class, 'page'])->name('invitations');
+        Route::get('/api/invitations', [ProviderInvitationController::class, 'index']);
+        Route::middleware('throttle:20,1')->group(function () {
+            Route::post('/api/invitations', [ProviderInvitationController::class, 'store']);
+            Route::post('/api/invitations/{providerInvitation}/resend', [ProviderInvitationController::class, 'resend']);
+            Route::post('/api/invitations/{providerInvitation}/revoke', [ProviderInvitationController::class, 'revoke']);
+        });
     });
 
     // /media is retired: media now lives on the profile (upload + management) and
@@ -472,16 +483,15 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->
     Route::get('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'index']);
     Route::post('/users/{user}/restrictions', [AdminUserRestrictionController::class, 'store']);
     Route::delete('/users/{user}/restrictions/{restriction}', [AdminUserRestrictionController::class, 'destroy']);
-    // Invite links and waitlist admissions are redeemed at /register, which
-    // provider sign-in does not serve.
-    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites'])->middleware('sign-in:local');
+    // Invite balances fund invite links, or provider invitations under provider sign-in.
+    Route::post('/users/{user}/invites', [AdminUserController::class, 'issueInvites']);
     // Purge/restore also operate on soft-deleted users, so include trashed in the binding.
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->withTrashed();
     Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->withTrashed();
 
     Route::get('/invites', [AdminInviteController::class, 'apiIndex']);
     Route::put('/invites/settings', [AdminInviteController::class, 'updateSettings']);
-    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll'])->middleware('sign-in:local');
+    Route::post('/invites/issue', [AdminInviteController::class, 'issueToAll']);
 
     Route::get('/waitlist', [AdminWaitlistController::class, 'apiIndex']);
     Route::get('/mail-deliveries', [AdminMailDeliveryController::class, 'apiIndex']);

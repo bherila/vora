@@ -2,6 +2,7 @@
 
 namespace App\Services\Auth;
 
+use App\Models\ProviderInvitation;
 use App\Models\User;
 use BWH\Auth\OAuth\OAuthIdentity;
 use Illuminate\Database\Eloquent\Builder;
@@ -70,6 +71,10 @@ class ProviderAccounts
         $user->approved_at = now();
         $user->is_admin = User::withTrashed()->doesntExist();
         $user->save();
+
+        // Shown to whoever invited the address. The provider admits by link, not
+        // address, so this is a courtesy and grants nothing.
+        ProviderInvitation::query()->pendingTo($identity->provider, $identity->email)->update(['status' => ProviderInvitation::ACCEPTED]);
 
         return $user;
     }
