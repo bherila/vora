@@ -18,12 +18,14 @@ use App\Observers\StoryAuthorAnnouncementObserver;
 use App\Policies\CharacterPolicy;
 use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
+use App\Services\Auth\ProviderIdentityDeletion;
 use App\Services\Auth\VoraAuthUserPolicy;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\AnnouncementPostService;
 use App\Services\Privacy\ViewAsContext;
 use Aws\Sns\MessageValidator;
 use BWH\Auth\Contracts\AuthUserPolicy;
+use BWH\Auth\OAuth\Lifecycle\IdentityTombstoneHandler;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -51,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // App-specific auth policy consumed by the bherila/auth-laravel package.
         $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
+        // Deletions at the identity provider (provider sign-in; see routes/console.php).
+        $this->app->bind(IdentityTombstoneHandler::class, ProviderIdentityDeletion::class);
         $this->app->scoped(ViewAsContext::class);
         $this->app->scoped(RestrictionGate::class);
         // SNS signing certificates for SES delivery reports. The validator checks

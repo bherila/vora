@@ -199,6 +199,13 @@ The provider's operator then pins the public key under that key id, enables
 invitations for this application and allows the client credentials grant on its
 client.
 
+**Deletions.** Every five minutes the scheduler reads the provider's feed of
+people it deleted (`bherila-auth:consume-identity-tombstones`) and deletes each
+one's account here as if they had deleted it themselves: soft-deleted, so
+administrators can still restore or purge it. An account under a legal hold,
+and the primary administrator, are left for an administrator; the command
+exits non-zero and retries them on every run until then.
+
 ### Shared cPanel scheduler and queue
 
 The production cPanel account must run Laravel's scheduler once per minute. Add
