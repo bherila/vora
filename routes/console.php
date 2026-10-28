@@ -2,6 +2,7 @@
 
 use App\Console\Commands\QueueHealthCommand;
 use App\Models\MailDelivery;
+use App\Services\Auth\SignIn;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -29,3 +30,10 @@ Schedule::call(fn () => Cache::forever(QueueHealthCommand::HEARTBEAT_KEY, now()-
 Schedule::command('queue:work database --queue=chat-notifications,default --stop-when-empty --max-time=50 --timeout=45 --tries=3')
     ->everyMinute()
     ->withoutOverlapping(2);
+
+// Under provider sign-in, apply people the identity provider deleted. Its lease
+// keeps runs from overlapping; a run with a backlog is paced and takes minutes.
+Schedule::command('bherila-auth:consume-identity-tombstones')
+    ->everyFiveMinutes()
+    ->runInBackground()
+    ->when(fn (): bool => SignIn::usesProvider());

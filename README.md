@@ -160,7 +160,8 @@ By default an installation signs people in itself. Set `AUTH_SIGN_IN=provider`
 to send them to an OAuth identity provider instead, which then owns passwords,
 passkeys, recovery and email addresses. Registration, invite links, the waitlist
 and the local password and passkey pages are turned off; the provider admits
-people by granting them this application. The first account to sign in becomes
+people by granting them this application, or by an invitation sent from here
+(below). The first account to sign in becomes
 an administrator, as with local registration. Accounts created at sign-in are
 approved and email-verified, and enter their birth date once on the age page
 when the site has a minimum age.
@@ -185,6 +186,25 @@ administrators' changes are checked immediately. Sign-out also ends the
 provider's session and returns to this site's home page, which the provider
 must accept for the client (a provider that matches it against the origin of
 the registered redirect URI needs nothing more).
+
+**Invitations.** Administrators, and anyone holding invites an administrator
+issued, can invite people by email from **Invites** (`/invitations`). The
+provider sends the email and admits the person to this site's client; each
+invitation from a non-administrator spends one invite. The page also shows the
+acceptance link once, for sharing directly; it is never stored here. To enable
+it, generate an RSA key pair (at least 2048 bits) used for nothing else, keep
+the private key outside the web root, and set
+`BHERILA_AUTH_INVITATION_KEY_ID` and `BHERILA_AUTH_INVITATION_PRIVATE_KEY_PATH`.
+The provider's operator then pins the public key under that key id, enables
+invitations for this application and allows the client credentials grant on its
+client.
+
+**Deletions.** Every five minutes the scheduler reads the provider's feed of
+people it deleted (`bherila-auth:consume-identity-tombstones`) and deletes each
+one's account here as if they had deleted it themselves: soft-deleted, so
+administrators can still restore or purge it. An account under a legal hold,
+and the primary administrator, are left for an administrator; the command
+exits non-zero and retries them on every run until then.
 
 ### Shared cPanel scheduler and queue
 
