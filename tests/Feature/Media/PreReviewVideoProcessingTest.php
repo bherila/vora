@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
+use App\Services\Media\MediaModerationService;
 use App\Services\SettingsService;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
@@ -121,6 +122,27 @@ class PreReviewVideoProcessingTest extends TestCase
         // A rejected video is not prepared again.
         $this->prepare();
         $this->assertNull($video->fresh()->reviewed_object_key);
+    }
+
+    public function test_rejection_deletes_a_copy_prepared_while_the_request_was_loading(): void
+    {
+        app(SettingsService::class)->set(SettingsService::PRE_REVIEW_VIDEO_PROCESSING, true);
+        $video = $this->upload(User::factory()->approved()->create());
+        // Preparation finishes just after the request bound its model.
+        $prepared = false;
+        Media::retrieved(function (Media $media) use (&$prepared, $video): void {
+            if ($prepared || $media->id !== $video->id) {
+                return;
+            }
+            $prepared = true;
+            $this->assertTrue(app(MediaModerationService::class)->prepareForReview(Media::query()->findOrFail($media->id)));
+        });
+
+        $this->actingAs($this->admin)->postJson("/api/admin/media/{$video->id}/moderate", ['action' => 'reject'])->assertOk();
+
+        $this->assertTrue($prepared);
+        $this->assertNull($video->fresh()->reviewed_object_key);
+        $this->assertSame([], array_values(array_filter(Storage::disk('s3')->allFiles(), fn (string $key): bool => str_starts_with($key, 'videos/'))));
     }
 
     public function test_only_administrators_change_the_setting_and_it_gates_the_schedule(): void
