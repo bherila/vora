@@ -48,7 +48,8 @@ reviewed photo display, video decoding and advancing playback time, explicit
 sharing/revocation, durable Save after uploader purge, idempotent Save at the
 quota limit, rejection of additional upload reservations, and bulk collection
 add/move/removal. The run removes only its two saved references at the end and verifies a
-previously playable signed HLS segment then returns 404. Video metadata includes
+previously playable signed HLS segment then returns 404 once the local transcoder's
+reference-counted cleanup has run (the app deletes only the source objects). Video metadata includes
 a unique run marker so a previous run cannot retain the same content hash.
 Original fixture files are generated under `.fixtures/`; screenshots, traces,
 HTML report, and run identifiers stay under ignored `artifacts/`. Local artifacts

@@ -53,7 +53,9 @@ The scheduler also shares this namespace for storage cleanup operations.
 
 The worker polls reviewed video keys every two seconds, transcodes a single real
 H.264/AAC rendition with fMP4 segments, and writes the production-style
-`mappings/<reviewed-key>.json` and `by-id/sha256:<hash>/master.m3u8` layout. It is
+`mappings/<reviewed-key>.json` and `by-id/sha256:<hash>/master.m3u8` layout. Like
+the real transcoder's cleanup, it then deletes mappings whose source is gone and
+any `by-id/` tree no remaining mapping uses. It is
 a small local contract implementation; passing it does not validate the deployed
 external transcoder, Cloudflare R2 permissions, or production hosting.
 
