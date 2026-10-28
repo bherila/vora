@@ -22,7 +22,7 @@ return new class extends Migration
             $table->boolean('email_sent')->default(false);
             $table->timestamps();
 
-            $table->unique(['oauth_provider', 'provider_invitation_id']);
+            $table->unique(['oauth_provider', 'provider_invitation_id'], 'provider_invitations_provider_id_unique');
             $table->index(['status', 'email']);
         });
     }
