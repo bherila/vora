@@ -13,7 +13,79 @@ class MediaModerationService
     /** Null moderator is reserved for server-authorized automatic approval. */
     public function approve(Media $media, ?User $admin, ?string $notes = null): bool
     {
-        if (! $media->isReady() || ! $this->storage->fileExists($media->disk, $media->object_key)) {
+        if (! $media->isReady()) {
+            return false;
+        }
+
+        // A copy prepared before review is what the reviewer saw and what the
+        // transcoder already processed; publish it rather than re-copying the
+        // original, which the uploader's upload URL could still overwrite.
+        if (! $this->hasReviewedCopies($media) && ! $this->copyReviewedObjects($media)) {
+            return false;
+        }
+
+        $media->approve($admin, $notes);
+
+        return true;
+    }
+
+    /**
+     * Copy a video awaiting review into reviewed storage without approving it,
+     * so the transcoder can process it before an administrator decides. The
+     * video stays visible only to its uploader and administrators.
+     */
+    public function prepareForReview(Media $media): bool
+    {
+        if (! $media->isReady() || ! $media->isPendingReview() || ! $media->type->isVideo()) {
+            return false;
+        }
+
+        if ($this->hasReviewedCopies($media)) {
+            return true;
+        }
+
+        if (! $this->copyReviewedObjects($media)) {
+            return false;
+        }
+
+        $media->save();
+
+        return true;
+    }
+
+    public function reject(Media $media, User $admin, ?string $notes = null): void
+    {
+        $this->deleteReviewedCopies($media);
+
+        $media->reviewed_object_key = null;
+        $media->reviewed_thumbnail_key = null;
+        $media->hls_content_id = null;
+        $media->hls_checked_at = null;
+        $media->reject($admin, $notes);
+    }
+
+    public function deleteReviewedCopies(Media $media): void
+    {
+        if ($media->reviewed_object_key !== null) {
+            $this->storage->deleteFile($media->disk, $media->reviewed_object_key);
+        }
+
+        if ($media->reviewed_thumbnail_key !== null) {
+            $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
+        }
+    }
+
+    private function hasReviewedCopies(Media $media): bool
+    {
+        return $media->reviewed_object_key !== null
+            && ($media->thumbnail_key === null || $media->reviewed_thumbnail_key !== null)
+            && $this->storage->fileExists($media->disk, $media->reviewed_object_key);
+    }
+
+    /** Snapshot the original (and thumbnail) into reviewed keys; the caller saves. */
+    private function copyReviewedObjects(Media $media): bool
+    {
+        if (! $this->storage->fileExists($media->disk, $media->object_key)) {
             return false;
         }
 
@@ -46,31 +118,8 @@ class MediaModerationService
         $media->reviewed_thumbnail_key = $reviewedThumbnailKey;
         $media->hls_content_id = null;
         $media->hls_checked_at = null;
-        $media->approve($admin, $notes);
 
         return true;
-    }
-
-    public function reject(Media $media, User $admin, ?string $notes = null): void
-    {
-        $this->deleteReviewedCopies($media);
-
-        $media->reviewed_object_key = null;
-        $media->reviewed_thumbnail_key = null;
-        $media->hls_content_id = null;
-        $media->hls_checked_at = null;
-        $media->reject($admin, $notes);
-    }
-
-    public function deleteReviewedCopies(Media $media): void
-    {
-        if ($media->reviewed_object_key !== null) {
-            $this->storage->deleteFile($media->disk, $media->reviewed_object_key);
-        }
-
-        if ($media->reviewed_thumbnail_key !== null) {
-            $this->storage->deleteFile((string) config('media.thumbnail_disk'), $media->reviewed_thumbnail_key);
-        }
     }
 
     private function reviewedObjectKey(Media $media): string

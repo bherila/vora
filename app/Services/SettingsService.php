@@ -24,6 +24,8 @@ class SettingsService
 
     public const AGE_VERIFICATION_REQUIRED = 'age_verification_required';
 
+    public const PRE_REVIEW_VIDEO_PROCESSING = 'pre_review_video_processing';
+
     public const MAX_STORAGE_LIMIT_BYTES = 9007199254740991;
 
     private const CACHE_PREFIX = 'setting:';
@@ -64,6 +66,12 @@ class SettingsService
     public function ageVerificationRequired(): bool
     {
         return $this->getBool(self::AGE_VERIFICATION_REQUIRED);
+    }
+
+    /** Whether videos awaiting review are copied for transcoding before approval. */
+    public function preReviewVideoProcessing(): bool
+    {
+        return $this->getBool(self::PRE_REVIEW_VIDEO_PROCESSING);
     }
 
     public function setDefaultStorageLimitBytes(?int $bytes): void

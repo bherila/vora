@@ -3,6 +3,7 @@
 use App\Console\Commands\QueueHealthCommand;
 use App\Models\MailDelivery;
 use App\Services\Auth\SignIn;
+use App\Services\SettingsService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -14,6 +15,12 @@ Artisan::command('inspire', function () {
 
 // Sweep abandoned (never-completed) uploads hourly.
 Schedule::command('media:prune-orphans')->hourly();
+
+// When enabled, copy videos awaiting review for transcoding before approval.
+Schedule::command('media:prepare-videos-for-review')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->when(fn (): bool => app(SettingsService::class)->preReviewVideoProcessing());
 
 // Email delivery records are operational evidence, not history: keep 90 days.
 Schedule::command('model:prune', ['--model' => [MailDelivery::class]])->daily();

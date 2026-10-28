@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { fetchWrapper } from '@/fetchWrapper';
 
@@ -8,6 +8,7 @@ jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
     get: jest.fn(),
     post: jest.fn(),
+    put: jest.fn(),
   },
 }));
 
@@ -34,4 +35,26 @@ it('warns when duplicate summaries come from a truncated scan', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Duplicate signals cover only the newest 500 eligible photos',
   );
+});
+
+it('turns on processing videos before review', async () => {
+  // Base UI forwards checkbox clicks as PointerEvent, which jsdom lacks.
+  Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent });
+  jest.mocked(fetchWrapper.get).mockResolvedValue({
+    success: true,
+    data: [],
+    meta: { current_page: 1, last_page: 1, per_page: 24, total: 0, has_more: false },
+    settings: { pre_review_video_processing: false },
+  });
+  jest.mocked(fetchWrapper.put).mockResolvedValue({ success: true, data: { pre_review_video_processing: true } });
+
+  render(<AdminMediaPage />);
+  const toggle = await screen.findByRole('checkbox', { name: 'Process videos before review' });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  expect(toggle).not.toBeChecked();
+
+  fireEvent.click(toggle);
+
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Process videos before review' })).toBeChecked());
+  expect(fetchWrapper.put).toHaveBeenCalledWith('/api/admin/media-settings', { pre_review_video_processing: true });
 });

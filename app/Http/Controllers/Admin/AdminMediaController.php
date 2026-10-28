@@ -9,6 +9,7 @@ use App\Models\Media;
 use App\Services\Media\AdminMediaResponseService;
 use App\Services\Media\GlobalMediaDuplicateService;
 use App\Services\Media\MediaModerationService;
+use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class AdminMediaController extends Controller
         private readonly AdminMediaResponseService $responder,
         private readonly GlobalMediaDuplicateService $duplicates,
         private readonly MediaModerationService $moderation,
+        private readonly SettingsService $settings,
     ) {}
 
     /**
@@ -68,6 +70,7 @@ class AdminMediaController extends Controller
         return response()->json([
             'success' => true,
             'duplicate_scan' => $this->duplicates->scanStatus(),
+            'settings' => ['pre_review_video_processing' => $this->settings->preReviewVideoProcessing()],
             ...$page,
         ]);
     }

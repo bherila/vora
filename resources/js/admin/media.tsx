@@ -7,6 +7,7 @@ import { HeifOriginalReview } from '@/admin/HeifOriginalReview';
 import { ProtectedImage } from '@/components/protected-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { fetchWrapper } from '@/fetchWrapper';
 import { isHeifMimeType } from '@/media/heifPhoto';
@@ -23,8 +24,13 @@ interface DuplicateScanStatus {
   scan_limit: number;
 }
 
+interface MediaSettings {
+  pre_review_video_processing: boolean;
+}
+
 interface AdminMediaResponse extends PagedResponse<AdminMediaItem> {
   duplicate_scan?: DuplicateScanStatus;
+  settings?: MediaSettings;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -54,6 +60,8 @@ export function AdminMediaPage() {
   const [checkedOriginals, setCheckedOriginals] = useState<Record<number, string>>({});
   const [reviewEpoch, setReviewEpoch] = useState(0);
   const [scanStatus, setScanStatus] = useState<DuplicateScanStatus | null>(null);
+  const [settings, setSettings] = useState<MediaSettings | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // page 1 replaces the list (filter change / after a moderation action); higher
   // pages append for the "Load more" control.
@@ -75,6 +83,7 @@ export function AdminMediaPage() {
       setItems((current) => (nextPage > 1 ? [...current, ...rows] : rows));
       setHasMore(response.meta?.has_more ?? false);
       setScanStatus(response.duplicate_scan ?? null);
+      if (response.settings) setSettings(response.settings);
       setPage(nextPage);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -87,6 +96,19 @@ export function AdminMediaPage() {
   useEffect(() => {
     void load(filter);
   }, [filter]);
+
+  const savePreReviewProcessing = async (enabled: boolean): Promise<void> => {
+    setSavingSettings(true);
+    try {
+      const response = (await fetchWrapper.put('/api/admin/media-settings', { pre_review_video_processing: enabled })) as { data: MediaSettings };
+      setSettings(response.data);
+      toast.success(enabled ? 'Videos will be processed before review.' : 'Videos will be processed after approval.');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const moderate = async (item: AdminMediaItem, action: 'approve' | 'reject'): Promise<void> => {
     if (action === 'approve' && isHeifMimeType(item.mime_type) && checkedOriginals[item.id] !== `${reviewEpoch}:${item.download_url}`) {
@@ -117,6 +139,20 @@ export function AdminMediaPage() {
       <Button asChild type="button" size="sm" variant="outline" className="mb-6">
         <a href="/admin/media-duplicates">Review cross-account duplicate clusters</a>
       </Button>
+      <div className="mb-6 space-y-1">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <Checkbox
+            checked={settings?.pre_review_video_processing ?? false}
+            onCheckedChange={(checked) => void savePreReviewProcessing(checked === true)}
+            disabled={settings === null || savingSettings}
+          />
+          Process videos before review
+        </label>
+        <p className="text-sm text-muted-foreground">
+          Starts transcoding each uploaded video while it awaits review, so it can play as soon as you approve it.
+          Videos stay hidden from other people until approved, and rejecting one deletes the copy made for processing.
+        </p>
+      </div>
       {scanStatus?.truncated && (
         <p role="alert" className="mb-6 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800">
           Duplicate signals cover only the newest {scanStatus.scanned_media_count} eligible photos.

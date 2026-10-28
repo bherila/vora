@@ -304,9 +304,14 @@ class Media extends Model
         };
     }
 
+    /**
+     * A reviewed copy is an immutable snapshot: approved media plays from it, and
+     * a pending video prepared before review is reviewed from the same bytes it
+     * will publish. Rejection and re-upload clear the reviewed keys.
+     */
     public function playbackObjectKey(): string
     {
-        if ($this->isApprovedContent() && $this->reviewed_object_key !== null) {
+        if (! $this->isRejected() && $this->reviewed_object_key !== null) {
             return $this->reviewed_object_key;
         }
 
@@ -315,7 +320,7 @@ class Media extends Model
 
     public function playbackThumbnailKey(): ?string
     {
-        if ($this->isApprovedContent() && $this->reviewed_thumbnail_key !== null) {
+        if (! $this->isRejected() && $this->reviewed_thumbnail_key !== null) {
             return $this->reviewed_thumbnail_key;
         }
 

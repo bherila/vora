@@ -14,7 +14,11 @@ conventions — there is no shared database or API between them.
 1. The app uploads a source video to the **video-source** bucket under
    `<prefix>/<user-id>/<ulid>.<ext>`.
 2. When the video is approved, the app copies that exact reviewed object to
-   `<prefix>/reviewed/<user-id>/<ulid>.<ext>`.
+   `<prefix>/reviewed/<user-id>/<ulid>.<ext>`. With **Process videos before
+   review** turned on in **Admin → Media review**, the scheduled
+   `media:prepare-videos-for-review` command makes that copy while the video
+   still awaits review (within about five minutes of the upload finishing), and
+   approval publishes the same copy instead of copying again.
 3. The transcoder polls that bucket on a schedule, transcodes new videos, and
    writes output to the **HLS-output** bucket.
 4. For each source it writes a mapping object:
@@ -70,7 +74,10 @@ also owns a reference-counted cleanup pass for deleted sources.
 
 Approved videos resolve HLS from the reviewed copy key. This prevents an uploader
 from overwriting the original presigned PUT key after approval and having a later
-transcode expose unreviewed bytes.
+transcode expose unreviewed bytes. A video prepared before review also plays from
+its reviewed copy, so administrators review the bytes that approval publishes;
+until approval only the uploader and administrators can play it. Rejection
+deletes the copy, and the transcoder's source cleanup removes its output.
 
 `resources/js/media/HlsVideoPlayer.tsx` plays the adaptive HLS stream via hls.js
 (native HLS on Safari/iOS) against the proxy `master_url`. Playback failures do
