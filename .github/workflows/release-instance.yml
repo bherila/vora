@@ -27,6 +27,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # cPanel EasyApache PHP 8.5. Must match composer's platform pin and the ea-php85 handler in htaccess-append.txt.
+  DEPLOY_PHP_BINARY: /opt/cpanel/ea-php85/root/usr/bin/php
+
 concurrency:
   group: release-instance-${{ inputs.environment }}
   cancel-in-progress: false
@@ -112,7 +116,6 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_PHP_BINARY: ${{ secrets.DEPLOY_PHP_BINARY }}
       DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
       DEPLOY_HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
       DEPLOY_PROFILE: ${{ vars.DEPLOY_PROFILE || (inputs.primary && 'vora') || '' }}
@@ -171,6 +174,39 @@ jobs:
           rsync -a --delete --exclude='.env' --exclude='storage' \
             -e "ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4" \
             release/ "$SSH_USERNAME@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Verify PHP 8.5 on server (CLI and web handler)
+        if: steps.target.outputs.enabled == 'true'
+        run: |
+          ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "$SSH_USERNAME@$SSH_HOST" \
+            "bash -s -- '$DEPLOY_PATH' '$DEPLOY_PHP_BINARY' '$DEPLOY_WEB_ROOTS'" <<'REMOTE'
+          set -euo pipefail
+          deploy_path=$1
+          php_binary=$2
+          web_roots=${3:-}
+          version=$("$php_binary" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+          if [ "$version" != "8.5" ]; then
+            echo "CLI PHP is $version, expected 8.5" >&2
+            exit 1
+          fi
+          handler='^[[:space:]]*AddHandler[[:space:]]+application/x-httpd-ea-php85[[:space:]]'
+          grep -Eq "$handler" "$HOME/$deploy_path/public/.htaccess" || {
+            echo "Live $deploy_path/public/.htaccess does not set the ea-php85 AddHandler" >&2
+            exit 1
+          }
+          # Web roots are symlinks to the application's public directory; check each existing one resolves to it.
+          IFS=',' read -r -a roots <<< "$web_roots"
+          for root in "${roots[@]}"; do
+            test -n "$root" || continue
+            test -e "$HOME/$root" || continue
+            grep -Eq "$handler" "$HOME/$root/.htaccess" || {
+              echo "Web root $root does not serve an .htaccess with the ea-php85 AddHandler" >&2
+              exit 1
+            }
+          done
+          echo "CLI PHP $version; web handler ea-php85 present"
+          REMOTE
 
       - name: Configure, verify profile, migrate and refresh web roots
         if: steps.target.outputs.enabled == 'true'
