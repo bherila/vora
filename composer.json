@@ -9,7 +9,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.4.1",
+        "php": "^8.5",
         "aws/aws-php-sns-message-validator": "^1.10",
         "bherila/auth-laravel": "^0.27.0",
         "erusev/parsedown": "^1.8.0",
@@ -92,7 +92,7 @@
     },
     "config": {
         "platform": {
-            "php": "8.4.1"
+            "php": "8.5.0"
         },
         "optimize-autoloader": true,
         "preferred-install": "dist",
