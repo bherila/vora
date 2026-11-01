@@ -172,7 +172,7 @@ switching, or the person's first sign-in is refused because the address is
 taken:
 
 ```bash
-php artisan ops:bind-provider-account person@example.test 1234
+php artisan oauth:bind-subject <account-id> 1234
 ```
 
 Then set `OAUTH_PROVIDER`, `OAUTH_PROVIDER_URL`, `OAUTH_CLIENT_ID`,

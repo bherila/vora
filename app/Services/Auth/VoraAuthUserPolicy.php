@@ -20,7 +20,8 @@ class VoraAuthUserPolicy implements AuthUserPolicy
             return false;
         }
 
-        return $user->canLogin();
+        // A deleted account stays bound to its subject but cannot sign in.
+        return ! $user->trashed() && $user->canLogin();
     }
 
     public function canPasskeyLogin(Authenticatable $user, Request $request): bool
