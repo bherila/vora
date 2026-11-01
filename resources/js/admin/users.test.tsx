@@ -232,7 +232,7 @@ describe('AdminUsersPage storage defaults', () => {
     let exempt = false;
     jest.mocked(fetchWrapper.get).mockImplementation(async () => ({ success: true, data: [{ ...user, event_uploads_auto_approved: exempt }], settings: { default_storage_limit_bytes: null } }));
     jest.mocked(globalThis.fetch).mockImplementation(async (_url, options) => {
-      exempt = (JSON.parse(String(options?.body)) as { event_uploads_auto_approved: boolean }).event_uploads_auto_approved;
+      exempt = (JSON.parse(options?.body as string) as { event_uploads_auto_approved: boolean }).event_uploads_auto_approved;
       return { ok: true, json: async () => ({ success: true }) } as Response;
     });
     render(<AdminUsersPage />);

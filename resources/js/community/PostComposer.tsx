@@ -115,7 +115,7 @@ export function PostComposer({ onCreated, contextInterest = null, lockContext = 
   useEffect(() => {
     let active = true;
 
-    Promise.allSettled([
+    void Promise.allSettled([
       personasEnabled ? fetchWrapper.get('/api/characters') as Promise<CharacterResponse> : Promise.reject(new Error('off')),
       moduleEnabled('profiles') ? fetchWrapper.get('/api/media') as Promise<PagedResponse<MediaItem>> : Promise.reject(new Error('off')),
       moduleEnabled('stories') ? fetchWrapper.get('/api/stories') as Promise<StoriesResponse> : Promise.reject(new Error('off')),

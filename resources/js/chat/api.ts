@@ -23,7 +23,7 @@ async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': csrfToken(),
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init.headers,
+      ...Object.fromEntries(new Headers(init.headers)),
     },
   });
   const text = await response.text();

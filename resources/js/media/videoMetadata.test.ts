@@ -21,7 +21,7 @@ beforeAll(() => {
 function box(type: string, body: Uint8Array): Uint8Array {
   const bytes = new Uint8Array(8 + body.length);
   new DataView(bytes.buffer).setUint32(0, bytes.length);
-  bytes.set([...type].map((char) => char.charCodeAt(0)), 4);
+  bytes.set(Array.from(type, (char) => char.charCodeAt(0)), 4);
   bytes.set(body, 8);
   return bytes;
 }
