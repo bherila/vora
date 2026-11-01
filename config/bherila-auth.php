@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Services\Auth\ProviderAccounts;
 
 // With provider sign-in the identity provider owns passwords, passkeys and
 // recovery, so the package's local credential endpoints are not registered.
@@ -38,6 +39,11 @@ return [
         'pending_flow_cache_store' => env('BHERILA_AUTH_OAUTH_PENDING_FLOW_CACHE_STORE'),
         'metadata_cache_seconds' => 3600,
         'servers' => [],
+    ],
+
+    // How a provider identity maps to a local account.
+    'oauth_login' => [
+        'accounts' => ProviderAccounts::class,
     ],
 
     // Ends a signed-in session once the provider reports the identity disabled,

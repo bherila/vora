@@ -6,11 +6,9 @@ use App\Http\Middleware\RequireProviderAccount;
 use App\Models\InviteGrant;
 use App\Models\ProviderInvitation;
 use App\Models\User;
-use App\Services\Auth\ProviderAccounts;
 use App\Services\Auth\ProviderInvitationService;
 use BWH\Auth\OAuth\Invitations\ApplicationInvitationError;
 use BWH\Auth\OAuth\Invitations\ApplicationInvitations;
-use BWH\Auth\OAuth\OAuthIdentity;
 use BWH\Auth\Testing\FakeApplicationInvitations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
@@ -105,7 +103,7 @@ class ProviderInvitationTest extends TestCase
         $this->signedIn($guest)->get('/feed')->assertSee('/invitations');
     }
 
-    public function test_a_new_invitation_replaces_the_pending_one_and_a_first_sign_in_marks_it_joined(): void
+    public function test_a_new_invitation_replaces_the_pending_one(): void
     {
         $admin = $this->bound('7', admin: true);
         $this->signedIn($admin)->postJson('/api/invitations', ['email' => 'Guest@Example.test'])->assertCreated();
@@ -113,12 +111,6 @@ class ProviderInvitationTest extends TestCase
 
         $this->assertSame(
             [ProviderInvitation::SUPERSEDED, ProviderInvitation::PENDING],
-            ProviderInvitation::orderBy('id')->pluck('status')->all(),
-        );
-
-        app(ProviderAccounts::class)->resolve(new OAuthIdentity('example', '99', 'Guest', 'guest@example.test'));
-        $this->assertSame(
-            [ProviderInvitation::SUPERSEDED, ProviderInvitation::ACCEPTED],
             ProviderInvitation::orderBy('id')->pluck('status')->all(),
         );
     }

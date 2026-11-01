@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Http\Middleware\RequireProviderAccount;
+use App\Models\ProviderInvitation;
 use App\Models\User;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -100,7 +101,7 @@ class ProviderSignInTest extends TestCase
         $this->signIn()->assertStatus(409);
         $this->assertGuest();
 
-        $this->artisan('ops:bind-provider-account', ['email' => 'avery@example.test', 'subject' => '42'])->assertSuccessful();
+        $this->artisan('oauth:bind-subject', ['user' => $user->id, 'subject' => '42'])->assertSuccessful();
         // A local forced password change has nothing to change here any more.
         $this->signIn()->assertRedirect('/');
         $this->assertAuthenticatedAs($user);
@@ -124,18 +125,6 @@ class ProviderSignInTest extends TestCase
         $this->assertSame('avery.new@example.test', $user->fresh()->email);
     }
 
-    public function test_the_bind_command_never_moves_an_existing_link(): void
-    {
-        User::factory()->create(['email' => 'a@example.test', 'oauth_provider' => 'example', 'oauth_subject' => '42']);
-        User::factory()->create(['email' => 'b@example.test']);
-
-        $this->artisan('ops:bind-provider-account', ['email' => 'missing@example.test', 'subject' => '7'])->assertFailed();
-        $this->artisan('ops:bind-provider-account', ['email' => 'a@example.test', 'subject' => '7'])->assertFailed();
-        $this->artisan('ops:bind-provider-account', ['email' => 'b@example.test', 'subject' => '42'])->assertFailed();
-        $this->artisan('ops:bind-provider-account', ['email' => 'a@example.test', 'subject' => '42'])->assertSuccessful();
-        $this->assertNull(User::where('email', 'b@example.test')->sole()->oauth_subject);
-    }
-
     public function test_subjects_differing_only_in_case_are_different_people(): void
     {
         User::factory()->create(['email' => 'first@example.test', 'oauth_provider' => 'example', 'oauth_subject' => 'AbC']);
@@ -153,6 +142,51 @@ class ProviderSignInTest extends TestCase
 
         $this->signIn()->assertForbidden();
         $this->assertGuest();
+    }
+
+    public function test_a_deleted_bound_account_is_refused_and_keeps_its_subject_and_address(): void
+    {
+        $user = User::factory()->create(['email' => 'avery@example.test', 'oauth_provider' => 'example', 'oauth_subject' => '42']);
+        $user->delete();
+
+        $this->signIn()->assertForbidden();
+        $this->assertGuest();
+        $this->assertSame(1, User::withTrashed()->count());
+
+        // A different person arriving with the deleted account's address is refused, not linked.
+        $this->identity = ['sub' => '43', 'name' => 'Blake', 'email' => 'avery@example.test'];
+        $this->signIn()->assertStatus(409);
+        $this->assertSame(1, User::withTrashed()->count());
+    }
+
+    public function test_a_first_sign_in_accepts_the_pending_invitation_to_its_address(): void
+    {
+        $invitation = fn (string $email, string $status) => ProviderInvitation::create([
+            'oauth_provider' => 'example', 'provider_invitation_id' => random_int(1, 99999), 'email' => $email,
+            'status' => $status, 'expires_at' => now()->addDay(), 'email_sent' => true,
+        ]);
+        $older = $invitation('avery@example.test', ProviderInvitation::SUPERSEDED);
+        $pending = $invitation('avery@example.test', ProviderInvitation::PENDING);
+        $other = $invitation('someone@example.test', ProviderInvitation::PENDING);
+
+        $this->signIn()->assertRedirect();
+
+        $this->assertSame(ProviderInvitation::SUPERSEDED, $older->fresh()->status);
+        $this->assertSame(ProviderInvitation::ACCEPTED, $pending->fresh()->status);
+        $this->assertSame(ProviderInvitation::PENDING, $other->fresh()->status);
+    }
+
+    public function test_a_refused_sign_in_accepts_no_invitation(): void
+    {
+        User::factory()->create(['email' => 'avery@example.test', 'oauth_provider' => 'example', 'oauth_subject' => '42', 'is_disabled' => true]);
+        $pending = ProviderInvitation::create([
+            'oauth_provider' => 'example', 'provider_invitation_id' => 5, 'email' => 'avery@example.test',
+            'status' => ProviderInvitation::PENDING, 'expires_at' => now()->addDay(), 'email_sent' => true,
+        ]);
+
+        $this->signIn()->assertForbidden();
+
+        $this->assertSame(ProviderInvitation::PENDING, $pending->fresh()->status);
     }
 
     public function test_local_credential_pages_are_not_served_and_unbound_sessions_end(): void

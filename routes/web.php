@@ -22,7 +22,6 @@ use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\AgeEligibilityController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\PendingApprovalController;
 use App\Http\Controllers\Auth\ProviderInvitationController;
 use App\Http\Controllers\Auth\ProviderLoginController;
@@ -120,7 +119,7 @@ Route::get('/oauth/callback', [ProviderLoginController::class, 'callback'])
 
 // Outside `auth`: a page left open past its session must still end the
 // provider's session, or the next sign-in returns without a prompt.
-Route::post('/logout', LogoutController::class)->name('logout');
+Route::post('/logout', [ProviderLoginController::class, 'logout'])->name('logout');
 
 /*
 |--------------------------------------------------------------------------
