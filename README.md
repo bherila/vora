@@ -156,6 +156,9 @@ name** can be set on the same page for the label under the icon.
 
 ### Sign-in through an identity provider
 
+vora has three auth modes (local, external, and embedded, which is coming);
+see [docs/auth-modes.md](docs/auth-modes.md) for choosing and switching.
+
 By default an installation signs people in itself. Set `AUTH_SIGN_IN=provider`
 to send them to an OAuth identity provider instead, which then owns passwords,
 passkeys, recovery and email addresses. Registration, invite links, the waitlist
