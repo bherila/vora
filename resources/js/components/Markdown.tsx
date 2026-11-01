@@ -35,8 +35,7 @@ const components: Components = {
         {...props}
         href={safeHref}
         className="text-primary underline underline-offset-4"
-        rel={safeHref.startsWith('http') ? 'noopener noreferrer' : undefined}
-        target={safeHref.startsWith('http') ? '_blank' : undefined}
+        {...(safeHref.startsWith('http') ? { rel: 'noopener noreferrer', target: '_blank' } : {})}
       >
         {children}
       </a>

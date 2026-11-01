@@ -20,8 +20,8 @@ function RequestsPage() {
   const [message, setMessage] = useState('');
 
   const load = (): void => {
-    fetchWrapper.get('/api/users/follow-requests').then((r) => setFollowRequests((r as FollowInboxResponse).data));
-    fetchWrapper.get('/api/authorship-invites').then((r) => setInvites((r as AuthorshipInboxResponse).data));
+    void fetchWrapper.get('/api/users/follow-requests').then((r) => setFollowRequests((r as FollowInboxResponse).data));
+    void fetchWrapper.get('/api/authorship-invites').then((r) => setInvites((r as AuthorshipInboxResponse).data));
   };
 
   const decideFollow = async (id: number, action: 'accept' | 'decline'): Promise<void> => {
