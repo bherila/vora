@@ -40,6 +40,8 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
+              - 'patches/**'
+              - 'tests/dependencies/**'
               - 'tsconfig*.json'
               - 'vite.config.*'
               - 'jest.config.*'
@@ -142,6 +144,9 @@ jobs:
       # this job needs neither the PHP toolchain nor `artisan key:generate`.
       - name: Prepare environment
         run: cp .env.example .env
+
+      - name: Dependency security regressions
+        run: pnpm run test:dependencies
 
       - name: Build frontend assets
         run: pnpm run build

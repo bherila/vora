@@ -7,6 +7,7 @@
         "build": "vite build",
         "dev": "vite",
         "test": "jest --passWithNoTests",
+        "test:dependencies": "node --test tests/dependencies/*.test.cjs",
         "test:browser": "pnpm run build && playwright test",
         "type-check": "tsc --noEmit && tsc -p tests/browser/tsconfig.json && tsc -p tests/staging/tsconfig.json",
         "lint": "oxlint --type-aware",
