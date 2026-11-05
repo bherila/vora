@@ -9,6 +9,16 @@ Make the smallest coherent change that solves the problem. Include adjacent low-
 Treat user requests as the minimum bar, not a ceiling: finish the adjacent checks
 and low-risk cleanup needed for the result to hold up in review.
 
+Use CI for heavy validation: full test suites, PHPStan, full-repository Pint,
+production builds, and mutation/coverage runs. Run these locally only when the
+user explicitly requests local execution. Keep local checks focused on small
+relevant tests, file-scoped formatting/linting, and targeted browser verification.
+Push a focused candidate promptly and use required CI results on that exact
+candidate commit as the validation gate. Inspect actual mutation artifacts when
+a green advisory job can conceal escaped mutations; do not weaken checks or
+deadlines to make a candidate pass. This overrides older guidance requiring
+heavy local runs; see TESTING.AGENTS.md for the CI gates.
+
 Keep instance-specific domains, host/account names, and deployment paths in
 private operational records and GitHub environment secrets. Use reserved example
 domains and generic instance names in documentation and tests.
@@ -19,7 +29,7 @@ Never run `npm`, `npm ci`, or `npx` in this repo.
 
 ## Project shape
 
-- **Stack**: Laravel 13 on PHP ^8.3, React 19 + TypeScript, Vite, Tailwind CSS v4.
+- **Stack**: Laravel 13 on PHP ^8.5, React 19 + TypeScript, Vite, Tailwind CSS v4.
 - **UI primitives**: shadcn-style local components built on Base UI, not Radix UI.
 - **Package manager**: pnpm — never use npm or npx directly.
 - **Database**: SQLite in development and by default in tests (in-memory);
@@ -44,18 +54,18 @@ composer dev
 php artisan serve
 pnpm run dev
 
-# Frontend checks
+# Frontend CI checks (use focused checks during local iteration)
 pnpm run type-check
 pnpm run lint
 pnpm run test
 pnpm run build
 
-# Backend checks
+# Backend CI checks (use focused tests and file-scoped Pint locally)
 ./vendor/bin/pint --test
 composer test
 
 # CI runs the MariaDB job with `composer test:parallel` (same suite, one
-# database per process). Local runs stay on the sequential command above.
+# database per process). Explicitly requested full local runs stay sequential.
 ```
 
 ## Database safety
