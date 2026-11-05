@@ -1,8 +1,10 @@
 overrides:
-  glob: ">=10.5.0"
-  # Legacy tooling still requests minimatch 3.x, whose brace-expansion 1.x
-  # dependency has no release patched for GHSA-mh99-v99m-4gvg.
-  minimatch@<10.2.5: ">=10.2.5"
+  # Glob 13 bundles the old matcher; update the actual implementation too.
+  # GHSA-3g3m-2fjr-6pw4 is fixed in 14.0.2 and later.
+  glob: "14.0.3"
+  # v11 fixes GHSA-g3hv-75wg-m249 using nonrecursive matching and avoids
+  # legacy brace-expansion versions affected by GHSA-mh99-v99m-4gvg.
+  minimatch@<11.0.1: "11.0.4"
   # Force the patched js-yaml into jest's deep istanbul coverage chain
   # (@istanbuljs/load-nyc-config pins js-yaml 3.x; GHSA-h67p-54hq-rp68).
   js-yaml@<4.1.2: ">=4.1.2"
@@ -21,3 +23,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - bwh-auth
   - react-hook-form@7.90.0
+# No upstream release fixes GHSA-gcqx-w48m-w2h4 yet. Keep the real version
+# visible to audits while patching all published merge implementations.
+patchedDependencies:
+  deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
