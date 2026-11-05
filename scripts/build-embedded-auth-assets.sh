@@ -20,7 +20,9 @@ tar -C "$provider_dir" \
   --exclude='./node_modules' --exclude='./vendor' --exclude='./.git' \
   --exclude='./storage' --exclude='./.env' --exclude='./.env.*' \
   --exclude='./public/hot' -cf - . | tar -C "$build_dir" -xf -
-pnpm --dir "$build_dir" install --ignore-workspace --frozen-lockfile
+# The disposable directory is outside the host workspace. Keep the provider's
+# own workspace policy, including its reviewed dependency build allowlist.
+pnpm --dir "$build_dir" install --frozen-lockfile
 pnpm --dir "$build_dir" run build
 test -s "$build_dir/public/build/manifest.json"
 mkdir -p "$provider_dir/public/build"
