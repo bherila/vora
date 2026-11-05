@@ -56,6 +56,9 @@ jobs:
       - name: Prepare Laravel environment
         run: cp .env.example .env && php artisan key:generate --no-interaction --force
 
+      - name: Prepare identity-provider assets
+        run: bash scripts/build-embedded-auth-assets.sh
+
       - name: Run auth, identity, and two-account backend journeys
         run: |
           php artisan test \

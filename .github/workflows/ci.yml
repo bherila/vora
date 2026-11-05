@@ -43,6 +43,7 @@ jobs:
               - 'tsconfig*.json'
               - 'vite.config.*'
               - 'jest.config.*'
+              - 'scripts/build-embedded-auth-assets.sh'
               - '.oxlintrc.json'
               - 'resources/**'
               - 'tests-ts/**'
