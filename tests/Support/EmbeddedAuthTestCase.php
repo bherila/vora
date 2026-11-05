@@ -6,9 +6,11 @@ use BWH\AuthManager\Embedded\EmbeddedContext;
 use BWH\AuthManager\Models\User as ProviderUser;
 use BWH\AuthManager\Services\OAuthClientGrantService;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Foundation\Testing\WithConsoleEvents;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\ParallelTesting;
 use Illuminate\Support\Str;
 use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
@@ -18,7 +20,7 @@ use Tests\TestCase;
 /** A real mounted provider, sharing the host's isolated test database. */
 abstract class EmbeddedAuthTestCase extends TestCase
 {
-    use WithConsoleEvents;
+    use DatabaseMigrations, WithConsoleEvents;
 
     protected const ORIGIN = 'http://127.0.0.1:4188';
 
@@ -53,10 +55,6 @@ abstract class EmbeddedAuthTestCase extends TestCase
 
         parent::setUp();
 
-        $this->hostConnection = DB::getDefaultConnection();
-        $this->assertDatabaseIsSafe();
-        $this->artisan('migrate:fresh', ['--force' => true])->assertSuccessful();
-
         // A second :memory: PDO would be a second database. Sharing this safe PDO
         // exercises the production arrangement of prefixed tables beside host tables.
         $host = DB::connection();
@@ -86,6 +84,25 @@ abstract class EmbeddedAuthTestCase extends TestCase
         file_put_contents($this->keysDirectory.'/oauth-public.key', $details['key']);
         chmod($this->keysDirectory.'/oauth-private.key', 0600);
         chmod($this->keysDirectory.'/oauth-public.key', 0600);
+    }
+
+    /**
+     * Keep Laravel's parallel database detection while avoiding historical down()
+     * migrations. tearDown wipes this isolated test database instead of rollback.
+     */
+    public function runDatabaseMigrations(): void
+    {
+        $this->assertDatabaseIsSafe();
+        $connection = DB::connection();
+        $token = ParallelTesting::token();
+        if ($connection->getDriverName() === 'mariadb' && $token !== false) {
+            $this->assertSame('vora_ci_test_'.$token, $connection->getDatabaseName(),
+                'Parallel embedded tests must never wipe the shared base CI database.');
+        }
+        // Set only after every guard passes so failed setup cannot wipe a base
+        // database during teardown either.
+        $this->hostConnection = DB::getDefaultConnection();
+        $this->artisan('migrate:fresh', ['--force' => true])->assertSuccessful();
     }
 
     protected function tearDown(): void
