@@ -243,17 +243,21 @@ directory, switching credentials back is a migration and must be rehearsed rathe
 than treated as a config-only rollback.
 
 **Switching** from local or external to embedded means moving accounts between
-directories. The unfinished bulk local-account binding work remains tracked in
-[auth-manager#105](https://github.com/bherila/auth-manager/issues/105). Copying an
-existing provider directory preserves subjects; keep `OAUTH_PROVIDER` unchanged.
+directories. For local accounts, use the dry-run-first
+[local identity migration](local-identity-migration.md), with a same-database
+embedded destination. Copying an existing provider directory preserves subjects;
+keep `OAUTH_PROVIDER` unchanged.
 
 ## Moving between modes
 
 Accounts are keyed differently per mode (local email and password versus
 provider name and subject), so a switch is an account migration, not just a
-config change. For local-to-provider, create the provider identity, bind each
-existing vora account with `oauth:bind-subject` and test on a copy before switching.
-Bulk local binding is still [auth-manager#105](https://github.com/bherila/auth-manager/issues/105).
+config change. For bulk local-to-provider moves, use
+[`ops:local-identities`](local-identity-migration.md): it creates owned embedded
+identities and exact bindings atomically, with a default dry run and resumable
+per-account commits. A manually prepared identity can still be bound individually
+with `oauth:bind-subject`; the bulk tool refuses to adopt such an existing binding
+without its own ownership checkpoint.
 
 For embedded-to-external, export/import the provider directory with subjects intact,
 register the application client on the destination, update its client credentials,
