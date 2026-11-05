@@ -131,8 +131,9 @@ permissions at `/admin/users`. Those are separate roles and separate people reco
 
 **Install**
 
-The Composer lock installs the pinned auth-manager source release, including its
-compiled `public/build` assets. Package auto-discovery is disabled: vora registers
+The Composer lock installs the pinned auth-manager source. Deployment artifacts
+include matching compiled `public/build` assets, prepared by CI. Package
+auto-discovery is disabled: vora registers
 the provider only when `AUTH_SIGN_IN=embedded`. Local and external installations
 serve no embedded provider routes.
 
@@ -202,9 +203,13 @@ Laravel requires `--no-reload` to honor that worker setting. A plain single-work
 another server with concurrent workers also works. Keep `APP_URL` and the OAuth
 callback URL consistent with the reachable local origin.
 
-**Assets and deployment.** Provider pages serve the release's compiled assets at
-`/auth/build/assets/...`; no provider frontend build or asset publication is needed
-on the server. The release archive already includes the package under `vendor/`.
+**Assets and deployment.** Provider pages serve compiled assets at
+`/auth/build/assets/...`. CI and container builds run
+`bash scripts/build-embedded-auth-assets.sh`, reusing packaged assets when present
+or building the pinned source in a disposable directory. Deployment archives
+include the provider and its matching assets under `vendor/`; the server needs no
+frontend build or asset publication. When explicitly developing embedded mode
+from a source-only Composer package, run that script before serving provider pages.
 After caching configuration and checking the instance profile, the deploy script
 runs vora's migrations and, only in embedded mode,
 `auth-manager:migrate --force --no-interaction`. A failed provider migration fails
@@ -215,11 +220,16 @@ external mode. The signing key, provider-side public key and client permission m
 still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
-**Release updates.** The package definition and lock pin a reviewed source archive
-with compiled assets and a Composer checksum. Before updating that pin, verify the
-new archive's `SHA256SUMS-source` and GitHub provenance attestation as described in
-the provider's [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
-Run the host and embedded CI checks against the resulting lock file.
+**Release updates.** The provider is temporarily pinned to merged commit
+`a78af87a1f199b943b29e66eaa7a5c5275048799`, which adds complete directory migration
+([upstream change](https://github.com/bherila/auth-manager/pull/122)). The package
+definition and lock identify that immutable source archive and its Composer
+checksum; CI builds its matching frontend. This source pin is not a tagged,
+attested release. Replace it with a tagged release containing the change when
+available, verifying the release's `SHA256SUMS-source` and GitHub provenance
+attestation as described in the provider's
+[packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
+Run the host and embedded CI checks against any resulting lock file.
 
 The shared `auth-laravel` client is temporarily pinned to reviewed commit
 `9fc65e08bb7d1161f52a7a58be852ef629c8c4dc`, which adds invitation support for
