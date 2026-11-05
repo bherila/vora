@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1e35534e04d94b8da45a30f29ecbb9af",
+    "content-hash": "d54438533316010a7bec11e8719e2441",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -218,16 +218,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.28.3",
+            "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-laravel.git",
-                "reference": "401e3397e75de0ae878efb6e068c272ccad604a3"
+                "reference": "9fc65e08bb7d1161f52a7a58be852ef629c8c4dc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/401e3397e75de0ae878efb6e068c272ccad604a3",
-                "reference": "401e3397e75de0ae878efb6e068c272ccad604a3",
+                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/9fc65e08bb7d1161f52a7a58be852ef629c8c4dc",
+                "reference": "9fc65e08bb7d1161f52a7a58be852ef629c8c4dc",
                 "shasum": ""
             },
             "require": {
@@ -254,6 +254,7 @@
             "suggest": {
                 "laravel/passport": "Required only when using the optional OAuth authorization-server helpers."
             },
+            "default-branch": true,
             "type": "library",
             "extra": {
                 "laravel": {
@@ -277,7 +278,7 @@
                 "issues": "https://github.com/bherila/auth-laravel/issues",
                 "source": "https://github.com/bherila/auth-laravel"
             },
-            "time": "2026-11-02T18:49:17+00:00"
+            "time": "2026-11-05T07:16:03+00:00"
         },
         {
             "name": "bherila/auth-manager",
@@ -12168,9 +12169,18 @@
             "time": "2025-12-08T11:19:18+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "bherila/auth-laravel",
+            "version": "dev-main",
+            "alias": "0.28.3",
+            "alias_normalized": "0.28.3.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "bherila/auth-laravel": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -221,6 +221,13 @@ new archive's `SHA256SUMS-source` and GitHub provenance attestation as described
 the provider's [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
 Run the host and embedded CI checks against the resulting lock file.
 
+The shared `auth-laravel` client is temporarily pinned to reviewed commit
+`9fc65e08bb7d1161f52a7a58be852ef629c8c4dc`, which adds invitation support for
+path-based issuers ([upstream fix](https://github.com/bherila/auth-laravel/pull/127)).
+Composer's compatibility alias satisfies the provider's existing version range;
+the lock file installs that exact commit. Replace the pin with a tagged release
+containing the fix when one is available.
+
 **Same-origin caveat.** Because auth-manager is served from vora's origin,
 its cookies, session and any script on `/auth` share an origin with vora. A
 cross-site scripting flaw in either side exposes the other, and vora cannot
