@@ -2,6 +2,7 @@ FROM node:24-bookworm-slim AS assets
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches patches
 COPY scripts/spotlight-noindex.mjs scripts/spotlight-noindex.mjs
 RUN pnpm install --frozen-lockfile
 COPY resources resources
