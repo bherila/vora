@@ -10,6 +10,8 @@ $localCredentials = ! in_array(env('AUTH_SIGN_IN'), ['provider', 'embedded'], tr
 
 return [
     'routes' => [
+        // Credential routes only: audit endpoints are registered independently
+        // through audit.routes_enabled below, including in embedded mode.
         'enabled' => ! $embedded,
         'prefix' => 'api',
         'middleware' => ['web'],
