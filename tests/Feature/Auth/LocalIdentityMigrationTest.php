@@ -178,6 +178,31 @@ class LocalIdentityMigrationTest extends EmbeddedAuthTestCase
         $this->assertSame($before, (array) DB::table('auth_passkeys')->find($key->id));
     }
 
+    public function test_an_ip_origin_cannot_copy_passkeys_using_a_dns_suffix_as_its_rp(): void
+    {
+        $source = User::factory()->approved()->create();
+        $key = PasskeyCredential::create([
+            'user_id' => $source->id, 'credential_id' => 'invalid-ip-rp',
+            'public_key' => base64_encode('key'), 'counter' => 3, 'rp_id' => '0.0.1',
+        ]);
+        $before = (array) DB::table('auth_passkeys')->find($key->id);
+        config([
+            'bherila-auth.passkeys.rp_id' => '0.0.1',
+            'auth-manager-embedded.overlay.bherila-auth.passkeys.rp_id' => '0.0.1',
+        ]);
+
+        foreach ([false, true] as $apply) {
+            $report = app(LocalIdentityMigration::class)->run($apply, copyPasskeys: true, rpId: '0.0.1', origin: self::ORIGIN);
+            $this->assertTrue($report['failed']);
+            $this->assertSame('passkey_origin_or_rp_incompatible', $report['accounts'][0]['reason']);
+        }
+        $this->assertDatabaseCount('auth_manager_users', 0);
+        $this->assertDatabaseCount('auth_manager_webauthn_credentials', 0);
+        $this->assertDatabaseCount('local_identity_migrations', 0);
+        $this->assertNull($source->fresh()->oauth_subject);
+        $this->assertSame($before, (array) DB::table('auth_passkeys')->find($key->id));
+    }
+
     public function test_incompatible_hashes_and_unknown_passkey_rp_fail_closed_unless_omission_is_explicit(): void
     {
         $badHash = User::factory()->approved()->create();

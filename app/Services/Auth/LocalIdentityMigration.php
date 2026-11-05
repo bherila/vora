@@ -261,7 +261,8 @@ class LocalIdentityMigration
         $hostOrigins = array_unique([$appUrl, ...(array) config('bherila-auth.passkeys.allowed_origins', [])]);
         $providerOrigins = array_unique([$appUrl, ...(array) config('auth-manager-embedded.overlay.bherila-auth.passkeys.allowed_origins', [])]);
         if (! $secure || isset($parts['path']) || $origin !== $appUrl || $rpId === null || $rpId !== $hostRp || $rpId !== $providerRp
-            || ($rpId !== $host && ! str_ends_with($host, '.'.$rpId))
+            || ($rpId !== $host && (filter_var($host, FILTER_VALIDATE_IP) !== false
+                || filter_var($rpId, FILTER_VALIDATE_IP) !== false || ! str_ends_with($host, '.'.$rpId)))
             || $hostVerification === null || $providerVerification === null || $providerVerification < $hostVerification
             || array_diff($providerOrigins, $hostOrigins) !== []) {
             return 'passkey_origin_or_rp_incompatible';
