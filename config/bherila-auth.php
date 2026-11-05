@@ -5,11 +5,14 @@ use App\Services\Auth\ProviderAccounts;
 
 // With provider sign-in the identity provider owns passwords, passkeys and
 // recovery, so the package's local credential endpoints are not registered.
-$localCredentials = env('AUTH_SIGN_IN', 'local') !== 'provider';
+$embedded = env('AUTH_SIGN_IN') === 'embedded';
+$localCredentials = ! in_array(env('AUTH_SIGN_IN'), ['provider', 'embedded'], true);
 
 return [
     'routes' => [
-        'enabled' => true,
+        // Credential routes only: audit endpoints are registered independently
+        // through audit.routes_enabled below, including in embedded mode.
+        'enabled' => ! $embedded,
         'prefix' => 'api',
         'middleware' => ['web'],
         'passkeys' => $localCredentials,
@@ -22,7 +25,9 @@ return [
     // in every account binding: choose it once per provider and never change it.
     'oauth_client' => [
         'provider' => env('OAUTH_PROVIDER', 'identity'),
-        'base_url' => env('OAUTH_PROVIDER_URL', ''),
+        'base_url' => env('OAUTH_PROVIDER_URL', $embedded
+            ? rtrim((string) env('APP_URL'), '/').'/'.trim((string) env('AUTH_MANAGER_EMBEDDED_PREFIX', 'auth'), '/')
+            : ''),
         'client_id' => env('OAUTH_CLIENT_ID'),
         'client_secret' => env('OAUTH_CLIENT_SECRET'),
         'redirect_uri' => env('OAUTH_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/oauth/callback'),

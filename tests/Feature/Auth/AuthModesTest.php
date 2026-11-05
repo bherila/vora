@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\ProviderLoginController;
 use App\Http\Middleware\RequireProviderAccount;
 use App\Models\User;
 use App\Services\Auth\SignIn;
+use BWH\AuthManager\Providers\EmbeddedServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
@@ -26,7 +27,7 @@ class AuthModesTest extends TestCase
     /** @return array<string, array{0: string, 1: string}> */
     public static function modes(): array
     {
-        return ['local' => ['local', 'local'], 'external' => ['provider', 'provider']];
+        return ['local' => ['local', 'local'], 'external' => ['provider', 'provider'], 'embedded' => ['embedded', 'embedded']];
     }
 
     #[DataProvider('modes')]
@@ -35,12 +36,12 @@ class AuthModesTest extends TestCase
         config(['auth.sign_in' => $value]);
 
         $this->assertSame($expected, SignIn::mode());
-        $this->assertSame($expected === 'provider', SignIn::usesProvider());
+        $this->assertSame($expected !== 'local', SignIn::usesProvider());
     }
 
     public function test_an_unrecognised_mode_falls_back_to_local(): void
     {
-        config(['auth.sign_in' => 'embedded']);
+        config(['auth.sign_in' => 'unknown-mode']);
 
         $this->assertSame('local', SignIn::mode());
     }
@@ -109,8 +110,11 @@ class AuthModesTest extends TestCase
         $this->assertStringStartsWith('https://id.example.test/oauth/end-session?', (string) $response->json('redirect'));
     }
 
-    public function test_embedded_mode_is_covered_once_auth_manager_ships_it(): void
+    public function test_the_provider_is_not_mounted_in_local_or_external_mode(): void
     {
-        $this->markTestSkipped('Embedded mode (auth-manager mounted under /auth) waits on bherila/auth-manager#104; see docs/auth-modes.md.');
+        $this->assertFalse(app()->providerIsLoaded(EmbeddedServiceProvider::class));
+        $this->get('/auth/login')->assertNotFound();
+        $this->post('/auth/oauth/token')->assertNotFound();
+        $this->assertNull(config('auth.guards.auth-manager'));
     }
 }

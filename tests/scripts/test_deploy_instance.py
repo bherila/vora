@@ -49,8 +49,14 @@ class InstanceDeploymentTest(unittest.TestCase):
         self.php.write_text('''#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$*" >> "$TEST_DEPLOY_COMMAND_LOG"
+if [ "$1" = -r ]; then
+  if [ "${TEST_DEPLOY_CONFIG_READ_FAIL:-false}" = true ]; then exit 1; fi
+  printf '%s' "${TEST_DEPLOY_SIGN_IN:-local}"
+  exit 0
+fi
 if [ "$2" = config:cache ]; then touch bootstrap/cache/config.php; fi
 if [ "$2" = ops:instance-profile ] && [ "${TEST_DEPLOY_PROFILE_MATCH:-true}" = false ]; then exit 1; fi
+if [ "$2" = auth-manager:migrate ] && [ "${TEST_DEPLOY_EMBEDDED_MIGRATION_FAIL:-false}" = true ]; then exit 1; fi
 ''')
         self.php.chmod(0o700)
         self.target = self.root / 'web'
@@ -58,12 +64,16 @@ if [ "$2" = ops:instance-profile ] && [ "${TEST_DEPLOY_PROFILE_MATCH:-true}" = f
     def tearDown(self):
         self.workspace.cleanup()
 
-    def deploy(self, roots=None, profile_matches=True, path=None):
+    def deploy(self, roots=None, profile_matches=True, path=None, sign_in='local',
+               config_read_fails=False, embedded_migration_fails=False):
         return subprocess.run([
             'bash', str(SCRIPT), str((path or self.app).relative_to(Path.home())), str(self.php),
             'event', str(self.target.relative_to(Path.home())) if roots is None else roots,
         ], env={**os.environ, 'TEST_DEPLOY_COMMAND_LOG': str(self.log),
-                'TEST_DEPLOY_PROFILE_MATCH': str(profile_matches).lower()},
+                'TEST_DEPLOY_PROFILE_MATCH': str(profile_matches).lower(),
+                'TEST_DEPLOY_SIGN_IN': sign_in,
+                'TEST_DEPLOY_CONFIG_READ_FAIL': str(config_read_fails).lower(),
+                'TEST_DEPLOY_EMBEDDED_MIGRATION_FAIL': str(embedded_migration_fails).lower()},
             text=True, capture_output=True, check=False)
 
     def test_release_preserves_state_and_creates_public_symlink(self):
@@ -113,6 +123,33 @@ if [ "$2" = ops:instance-profile ] && [ "${TEST_DEPLOY_PROFILE_MATCH:-true}" = f
 
     def test_direct_document_root_requires_no_symlink(self):
         self.assertEqual(self.deploy(roots='').returncode, 0)
+        self.assertFalse(self.target.exists())
+
+    def test_only_embedded_mode_migrates_provider_tables(self):
+        for mode in ['local', 'provider']:
+            with self.subTest(mode=mode):
+                self.log.unlink(missing_ok=True)
+                self.assertEqual(self.deploy(sign_in=mode).returncode, 0)
+                self.assertNotIn('artisan auth-manager:migrate', self.log.read_text())
+
+    def test_embedded_schema_is_migrated_before_final_checks_and_web_roots(self):
+        result = self.deploy(sign_in='embedded')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = self.log.read_text().splitlines()
+        embedded = commands.index('artisan auth-manager:migrate --force --no-interaction')
+        self.assertLess(commands.index('artisan migrate --force --no-interaction'), embedded)
+        self.assertLess(embedded, commands.index('artisan schema:assert-persona'))
+        self.assertEqual(self.target.readlink(), self.app / 'public')
+
+    def test_provider_migration_failure_stops_deployment(self):
+        result = self.deploy(sign_in='embedded', embedded_migration_fails=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('artisan schema:assert-persona', self.log.read_text())
+        self.assertFalse(self.target.exists())
+
+    def test_configuration_read_failure_cannot_silently_skip_provider_migrations(self):
+        self.assertNotEqual(self.deploy(config_read_fails=True).returncode, 0)
+        self.assertNotIn('artisan schema:assert-persona', self.log.read_text())
         self.assertFalse(self.target.exists())
 
 

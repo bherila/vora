@@ -123,9 +123,10 @@ return [
     | email codes and passkeys itself. "provider": people sign in through an
     | OAuth identity provider (OAUTH_* in config/bherila-auth.php), and the
     | local password, passkey, registration and invite pages are turned off.
+    | "embedded" mounts that provider under this application's /auth prefix.
     |
     */
 
-    'sign_in' => env('AUTH_SIGN_IN', 'local') === 'provider' ? 'provider' : 'local',
+    'sign_in' => in_array(env('AUTH_SIGN_IN'), ['provider', 'embedded'], true) ? env('AUTH_SIGN_IN') : 'local',
 
 ];

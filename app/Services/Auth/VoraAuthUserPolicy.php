@@ -5,6 +5,9 @@ namespace App\Services\Auth;
 use App\Models\User;
 use App\Services\Events\EventJoining;
 use BWH\Auth\Contracts\AuthUserPolicy;
+use BWH\Auth\Services\DefaultAuthUserPolicy;
+use BWH\AuthManager\Embedded\EmbeddedContext;
+use BWH\AuthManager\Models\User as ProviderUser;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
 
@@ -16,6 +19,10 @@ class VoraAuthUserPolicy implements AuthUserPolicy
 {
     public function canLogin(Authenticatable $user, Request $request): bool
     {
+        if ($this->isProviderUser($user)) {
+            return app(DefaultAuthUserPolicy::class)->canLogin($user, $request);
+        }
+
         if (! $user instanceof User) {
             return false;
         }
@@ -26,6 +33,10 @@ class VoraAuthUserPolicy implements AuthUserPolicy
 
     public function canPasskeyLogin(Authenticatable $user, Request $request): bool
     {
+        if ($this->isProviderUser($user)) {
+            return app(DefaultAuthUserPolicy::class)->canPasskeyLogin($user, $request);
+        }
+
         if (! $user instanceof User) {
             return false;
         }
@@ -35,6 +46,10 @@ class VoraAuthUserPolicy implements AuthUserPolicy
 
     public function redirectAfterLogin(Authenticatable $user, Request $request): string
     {
+        if ($this->isProviderUser($user)) {
+            return app(DefaultAuthUserPolicy::class)->redirectAfterLogin($user, $request);
+        }
+
         if (! $user instanceof User) {
             return '/login';
         }
@@ -59,6 +74,14 @@ class VoraAuthUserPolicy implements AuthUserPolicy
         return app(EventJoining::class)->url($request)
             ?? $this->safeIntended($request)
             ?? $user->getLoginRedirectUrl();
+    }
+
+    /** Shared credential controllers resolve this policy before their context middleware. */
+    private function isProviderUser(Authenticatable $user): bool
+    {
+        return SignIn::mode() === SignIn::EMBEDDED
+            && $user instanceof ProviderUser
+            && app(EmbeddedContext::class)->active();
     }
 
     private function safeIntended(Request $request): ?string

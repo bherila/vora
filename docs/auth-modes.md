@@ -6,7 +6,7 @@ vora supports three ways of signing people in. Pick one per installation.
 | --- | --- | --- | --- |
 | [local](#local) | Available, default, not deprecated | vora | `local` (or unset) |
 | [external](#external) | Available | A standalone auth-manager at `id.<domain>` | `provider` |
-| [embedded](#embedded) | Coming ([auth-manager#104](https://github.com/bherila/auth-manager/issues/104)) | An auth-manager mounted in vora under `/auth` | not yet |
+| [embedded](#embedded) | Available, opt-in | An auth-manager mounted in vora under `/auth` | `embedded` |
 
 Local mode stays. Deprecation is deferred until embedded has shipped, has
 become the default for new installs, and no installation still runs on local
@@ -25,7 +25,7 @@ another service.
 
 | Key | Value |
 | --- | --- |
-| `AUTH_SIGN_IN` | `local` (default; any value other than `provider` means local) |
+| `AUTH_SIGN_IN` | `local` (default; unrecognised values also mean local) |
 
 Nothing else is required. `OAUTH_*` keys are ignored.
 
@@ -97,17 +97,136 @@ then returns to the home page. Script callers get `{"redirect": ...}` as JSON.
 
 ## Embedded
 
-Coming; tracked in [auth-manager#104](https://github.com/bherila/auth-manager/issues/104).
-The planned setup mounts an auth-manager instance inside vora's own app under
-`/auth`, so there is one deployment and one database but vora still delegates
-credentials to auth-manager's code rather than its own.
+An auth-manager instance runs inside vora under `/auth`. There is one deployment,
+but the provider owns its own directory, credentials, session and prefixed tables.
+vora remains an OAuth relying party: the authorize, token, identity and end-session
+requests use the same protocol as external mode.
 
-This section describes the plan and will be updated when #104 ships. Config
-keys and install steps are not final.
+**Choose it** for a self-hosted installation that wants auth-manager's identity
+features without running another service. It is opt-in; installing this release
+does not change an existing installation's mode or make embedded the default.
 
-**Choose it** (once available) for a self-hosted install that wants
-auth-manager's identity features without running a second service. It is
-planned to become the default for new installs.
+**Config**
+
+| Key | Meaning |
+| --- | --- |
+| `AUTH_SIGN_IN=embedded` | Mounts the provider and turns on provider sign-in |
+| `APP_URL` | This installation's HTTPS origin, e.g. `https://app.example.test` |
+| `AUTH_MANAGER_EMBEDDED_PREFIX` | Mount path, default `auth` |
+| `AUTH_MANAGER_OAUTH_ISSUER` | Exact provider issuer, default `APP_URL` plus the mount path |
+| `OAUTH_PROVIDER` | Stable provider name; keep it unchanged when moving the directory |
+| `OAUTH_PROVIDER_URL` | Defaults to `APP_URL` plus the mount path in embedded mode |
+| `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | A confidential client registered in the embedded provider |
+| `OAUTH_REDIRECT_URI` | Default `APP_URL/oauth/callback`, outside the provider mount |
+| `AUTH_MANAGER_EMBEDDED_DB_CONNECTION` | Optional source connection; defaults to the host's connection |
+| `AUTH_MANAGER_EMBEDDED_TABLE_PREFIX` | Default `auth_manager_`; keep it unchanged after setup |
+| `AUTH_MANAGER_EMBEDDED_SESSION_COOKIE` | Default `auth_manager_session`; distinct from vora's cookie |
+| `AUTH_MANAGER_EMBEDDED_KEYS_PATH` | Default `storage/app/private/auth-manager/oauth` |
+
+Use the identity profile (`AUTH_MANAGER_PROFILE=identity`) for ordinary sign-in.
+The provider shares the host's mailer, scheduler, cache and `APP_KEY`. The provider's
+session cookie is host-only and scoped to the mount path. Provider administrators
+manage the directory at `/auth/admin/users`; vora administrators manage application
+permissions at `/admin/users`. Those are separate roles and separate people records.
+
+**Install**
+
+The Composer lock installs the pinned auth-manager source release, including its
+compiled `public/build` assets. Package auto-discovery is disabled: vora registers
+the provider only when `AUTH_SIGN_IN=embedded`. Local and external installations
+serve no embedded provider routes.
+
+1. Configure the embedded values above in private runtime configuration. Keep the
+   instance closed to visitors during first setup, and configure working email.
+2. Clear and rebuild cached configuration so the provider's commands are registered:
+
+   ```sh
+   php artisan config:clear
+   php artisan config:cache
+   ```
+
+3. During the installation's explicitly scheduled schema update, create the provider's
+   tables separately from vora's, then generate its signing keys once:
+
+   ```sh
+   php artisan auth-manager:migrate --force --no-interaction
+   php artisan passport:keys --no-interaction
+   ```
+
+   These commands use the provider's connection and prefixed migration repository.
+   Preserve its tables, key directory and `APP_KEY` across releases. Do not regenerate
+   keys on every deploy.
+4. Bootstrap the first provider administrator in an empty provider directory:
+
+   ```sh
+   php artisan ops:embedded-admin admin@example.test "Administrator"
+   ```
+
+   It prompts for a hidden password and confirmation, refuses a nonempty directory,
+   and creates no vora account. For an existing provider directory, use the
+   dry-run-first [identity copy procedure](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/identity-copy.md),
+   then grant a chosen existing identity with
+   `php artisan auth-manager:user-roles admin@example.test --add=admin`.
+   Neither path copies or binds vora's local accounts automatically.
+5. Register vora's confidential authorization-code client in the provider. Capture
+   the one-time client secret into a private file outside the repository and web root:
+
+   ```sh
+   umask 077
+   php artisan passport:client --name="Example application" \
+     --redirect_uri="https://app.example.test/oauth/callback" \
+     --no-interaction > "$PRIVATE_DIR/vora-oauth-client.txt"
+   ```
+
+   Set `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from that file without posting them
+   in logs or tickets, remove the capture file, and rebuild cached configuration.
+   Grant intended people this client in `/auth/admin/users`. The provider's
+   [application connection guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/connecting-an-application.md)
+   explains client grants and optional application registration.
+6. Verify a granted account can complete `/login` → `/auth/...` → `/oauth/callback`
+   and reach vora, and an ungranted account cannot. Log out and check both sessions
+   end. Confirm provider settings and vora settings open their respective surfaces.
+   Then enable `BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED=true` and verify revocation.
+
+**Local HTTP workers.** Embedded OAuth makes server-to-server requests back to this
+same installation during the callback and provider-status checks. The HTTP server
+must handle those requests while the original request is still running. For local
+development on a platform supporting PHP CLI workers, run:
+
+```sh
+PHP_CLI_SERVER_WORKERS=4 php artisan serve --no-reload
+```
+
+Laravel requires `--no-reload` to honor that worker setting. A plain single-worker
+`php artisan serve` can stall while waiting for its own token request. PHP-FPM or
+another server with concurrent workers also works. Keep `APP_URL` and the OAuth
+callback URL consistent with the reachable local origin.
+
+**Assets and deployment.** Provider pages serve the release's compiled assets at
+`/auth/build/assets/...`; no provider frontend build or asset publication is needed
+on the server. The release archive already includes the package under `vendor/`.
+After caching configuration and checking the instance profile, the deploy script
+runs vora's migrations and, only in embedded mode,
+`auth-manager:migrate --force --no-interaction`. A failed provider migration fails
+the deployment. Vora's migration repository never owns the provider's schema.
+
+**Invitations.** Vora's `/invitations` uses the same provider invitation contract as
+external mode. The signing key, provider-side public key and client permission must
+still be configured; mounting the provider does not grant invitation privileges.
+Use the issuer with its full mount path when configuring invitation assertions.
+
+**Release updates.** The package definition and lock pin a reviewed source archive
+with compiled assets and a Composer checksum. Before updating that pin, verify the
+new archive's `SHA256SUMS-source` and GitHub provenance attestation as described in
+the provider's [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
+Run the host and embedded CI checks against the resulting lock file.
+
+The shared `auth-laravel` client is temporarily pinned to reviewed commit
+`9fc65e08bb7d1161f52a7a58be852ef629c8c4dc`, which adds invitation support for
+path-based issuers ([upstream fix](https://github.com/bherila/auth-laravel/pull/127)).
+Composer's compatibility alias satisfies the provider's existing version range;
+the lock file installs that exact commit. Replace the pin with a tagged release
+containing the fix when one is available.
 
 **Same-origin caveat.** Because auth-manager is served from vora's origin,
 its cookies, session and any script on `/auth` share an origin with vora. A
@@ -115,21 +234,41 @@ cross-site scripting flaw in either side exposes the other, and vora cannot
 rely on the origin boundary that external mode gives. Treat both as one trust
 domain.
 
+**Rollback.** Before first enabling embedded, retain the previous private auth
+configuration and back up the host/provider databases, keys and `APP_KEY`. To undo
+a staged switch, restore the previous auth configuration, clear/rebuild the config
+cache and verify sign-in using that mode. Keep the provider tables and keys; do not
+run migration rollbacks or delete its directory. After people begin using a new
+directory, switching credentials back is a migration and must be rehearsed rather
+than treated as a config-only rollback.
+
 **Switching** from local or external to embedded means moving accounts between
-directories. Use the import and export in
-[auth-manager#105](https://github.com/bherila/auth-manager/issues/105).
+directories. The unfinished bulk local-account binding work remains tracked in
+[auth-manager#105](https://github.com/bherila/auth-manager/issues/105). Copying an
+existing provider directory preserves subjects; keep `OAUTH_PROVIDER` unchanged.
 
 ## Moving between modes
 
 Accounts are keyed differently per mode (local email and password versus
 provider name and subject), so a switch is an account migration, not just a
-config change. Plan it with the directory import and export in
-[auth-manager#105](https://github.com/bherila/auth-manager/issues/105), and
-test on a copy first.
+config change. For local-to-provider, create the provider identity, bind each
+existing vora account with `oauth:bind-subject` and test on a copy before switching.
+Bulk local binding is still [auth-manager#105](https://github.com/bherila/auth-manager/issues/105).
+
+For embedded-to-external, export/import the provider directory with subjects intact,
+register the application client on the destination, update its client credentials,
+change the provider base URL/issuer and set `AUTH_SIGN_IN=provider`. Keep
+`OAUTH_PROVIDER` unchanged so vora's bindings still identify the same people. Review
+the upstream [copy limitations](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/identity-copy.md):
+the current copy is not a complete portable archive of clients, invitations or
+`APP_KEY`-derived secrets. Passkeys also need an RP ID valid on the new host. Set
+`WEBAUTHN_RP_ID` deliberately before enrolling them. Rehearse the complete move on
+an isolated copy; this release performs no account migration.
 
 ## Tests
 
-`tests/Feature/Auth/AuthModesTest.php` covers mode selection, route
-resolution and sign-out for local and external. `AuthFlowTest` and
-`ProviderSignInTest` cover the full flows. Embedded has a skipped placeholder
-that waits on #104.
+`tests/Feature/Auth/AuthModesTest.php` covers mode selection and route resolution.
+`AuthFlowTest` and `ProviderSignInTest` cover local and external credential flows.
+`tests/Feature/Auth/EmbeddedAuthTest.php` covers the mounted provider's isolation;
+`tests/embedded/auth.spec.ts` exercises real HTTP OAuth sign-in and sign-out through
+the mounted provider. Full suites and browser builds run in CI.

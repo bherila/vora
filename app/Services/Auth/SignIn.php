@@ -15,14 +15,18 @@ class SignIn
 
     public const PROVIDER = 'provider';
 
+    public const EMBEDDED = 'embedded';
+
     public static function mode(): string
     {
-        return config('auth.sign_in') === self::PROVIDER ? self::PROVIDER : self::LOCAL;
+        $mode = config('auth.sign_in');
+
+        return in_array($mode, [self::PROVIDER, self::EMBEDDED], true) ? $mode : self::LOCAL;
     }
 
     public static function usesProvider(): bool
     {
-        return self::mode() === self::PROVIDER;
+        return self::mode() !== self::LOCAL;
     }
 
     /** The provider name every account binding is stored under. */

@@ -36,6 +36,13 @@ mkdir -p storage/framework/cache/data storage/framework/sessions storage/framewo
 chmod 600 bootstrap/cache/config.php
 "$php_binary" artisan ops:instance-profile --expect="$expected_profile"
 "$php_binary" artisan migrate --force --no-interaction
+# Read the cached configuration used by the application, rather than parsing
+# .env. Provider tables have their own migration repository and are never
+# migrated by the host's command above. A PHP/config error must stop deployment.
+sign_in_mode=$("$php_binary" -r '$config = require "bootstrap/cache/config.php"; echo $config["auth"]["sign_in"] ?? "local";')
+if [ "$sign_in_mode" = embedded ]; then
+  "$php_binary" artisan auth-manager:migrate --force --no-interaction
+fi
 "$php_binary" artisan schema:assert-persona
 "$php_binary" artisan view:clear
 
