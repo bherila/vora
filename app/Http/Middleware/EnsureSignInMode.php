@@ -15,7 +15,7 @@ class EnsureSignInMode
 {
     public function handle(Request $request, Closure $next, string $mode): Response
     {
-        abort_unless(SignIn::mode() === $mode, 404);
+        abort_unless($mode === SignIn::PROVIDER ? SignIn::usesProvider() : SignIn::mode() === $mode, 404);
 
         return $next($request);
     }

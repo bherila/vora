@@ -19,6 +19,7 @@ use App\Policies\CharacterPolicy;
 use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
 use App\Services\Auth\ProviderIdentityDeletion;
+use App\Services\Auth\SignIn;
 use App\Services\Auth\VoraAuthUserPolicy;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\AnnouncementPostService;
@@ -26,6 +27,7 @@ use App\Services\Privacy\ViewAsContext;
 use Aws\Sns\MessageValidator;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use BWH\Auth\OAuth\Lifecycle\IdentityTombstoneHandler;
+use BWH\AuthManager\Embedded\EmbeddedContext;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -89,7 +91,7 @@ class AppServiceProvider extends ServiceProvider
         // (see config/bherila-auth.php audit.admin_ability), including JSON endpoints
         // that do not otherwise pass the `approved` middleware, so a pending or
         // disabled admin must not slip through here.
-        Gate::define('admin-only', fn (User $user): bool => $user->isAdmin() && $user->isApproved() && $user->canLogin());
+        Gate::define('admin-only', fn ($user): bool => $user instanceof User && $user->isAdmin() && $user->isApproved() && $user->canLogin());
 
         Gate::policy(Character::class, CharacterPolicy::class);
         Gate::policy(Media::class, MediaPolicy::class);
@@ -120,6 +122,11 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         View::composer('layouts.app', function ($view): void {
+            // The provider has its own view with this name and its own database.
+            if (SignIn::mode() === SignIn::EMBEDDED && app(EmbeddedContext::class)->active()) {
+                return;
+            }
+
             // Privacy/Terms are required links and always present. Database footer
             // pages are merged in by slug: a stored privacy/terms row overrides the
             // default entry, and any other footer page is appended — so adding a
