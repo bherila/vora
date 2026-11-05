@@ -221,7 +221,7 @@ still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
 **Release updates.** The provider is temporarily pinned to reviewed source commit
-`c08efcdc942de90d9c36112defa58505a2cdd70f`, which includes complete directory migration
+`a38ecfbfc7b0b37f6893a0342b9f2e6edd67e865`, which includes complete directory migration
 and persistent passkey sign-in plus provider administrator controls
 ([directory migration](https://github.com/bherila/auth-manager/pull/122),
 [passkey sign-in](https://github.com/bherila/auth-manager/pull/125),
