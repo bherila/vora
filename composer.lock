@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d54438533316010a7bec11e8719e2441",
+    "content-hash": "14a7de3fc1fae4345b7db1303ae7ae57",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -282,12 +282,17 @@
         },
         {
             "name": "bherila/auth-manager",
-            "version": "0.1.3",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/bherila/auth-manager.git",
+                "reference": "a78af87a1f199b943b29e66eaa7a5c5275048799"
+            },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.3/auth-manager-source-v0.1.3.zip",
-                "reference": "719b000ba6d7dea8ae011855cd16f7a49790b6ab",
-                "shasum": "b153e55944bb9ac43866a41a68d3fb2542e4f8ae"
+                "url": "https://api.github.com/repos/bherila/auth-manager/zipball/a78af87a1f199b943b29e66eaa7a5c5275048799",
+                "reference": "a78af87a1f199b943b29e66eaa7a5c5275048799",
+                "shasum": "de89529cd88152cc6d4726033996b2b12be7fc74"
             },
             "require": {
                 "bherila/auth-laravel": "^0.28.3",
@@ -12175,11 +12180,18 @@
             "version": "dev-main",
             "alias": "0.28.3",
             "alias_normalized": "0.28.3.0"
+        },
+        {
+            "package": "bherila/auth-manager",
+            "version": "dev-main",
+            "alias": "0.1.3",
+            "alias_normalized": "0.1.3.0"
         }
     ],
     "minimum-stability": "stable",
     "stability-flags": {
-        "bherila/auth-laravel": 20
+        "bherila/auth-laravel": 20,
+        "bherila/auth-manager": 20
     },
     "prefer-stable": true,
     "prefer-lowest": false,
