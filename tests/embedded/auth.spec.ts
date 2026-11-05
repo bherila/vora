@@ -59,9 +59,11 @@ test('a real provider passkey honors remember-me without creating a host remembe
     await page.getByLabel('Keep me signed in', { exact: true }).check();
     const options = page.waitForResponse((response) => response.url().endsWith('/auth/api/passkeys/auth/options') && response.request().method() === 'POST');
     const authenticated = page.waitForResponse((response) => response.url().endsWith('/auth/api/passkeys/auth') && response.request().method() === 'POST');
+    // Enable presence before the fresh explicit ceremony; the button cancels
+    // the pending conditional request before starting its own.
+    await devtools.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: true });
     await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
     expect((await options).ok()).toBe(true);
-    await devtools.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: true });
     expect((await authenticated).ok()).toBe(true);
     await expect(page).toHaveURL(/\/auth\/?$/);
     const cookies = await context.cookies();
@@ -70,9 +72,12 @@ test('a real provider passkey honors remember-me without creating a host remembe
     expect(remembered?.httpOnly).toBe(true);
     expect(remembered?.expires).toBeGreaterThan(Date.now() / 1000);
     expect(cookies.some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
+    expect((await (await page.request.get('/__embedded/account')).json()).count).toBe(0);
   } finally {
-    await devtools.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
-    await devtools.detach();
+    // Preserve the original assertion failure if Playwright already closed the
+    // context while cleaning up a failed ceremony.
+    await devtools.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
+    await devtools.detach().catch(() => {});
   }
 });
 
