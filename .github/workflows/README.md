@@ -69,6 +69,15 @@ This fails the deployment immediately when any database column required by the
 persona models is missing. The assertion complements `/up`: the health endpoint
 can stay green when reads degrade but persona writes cannot succeed.
 
+When the cached `auth.sign_in` mode is `embedded`, the remote script also runs
+`auth-manager:migrate --force --no-interaction` after the host migrations and
+before the final schema/view checks. Local and external modes do not run provider
+migrations. Provider migration errors fail deployment. The tested release includes
+the pinned Composer package's compiled assets; there is no server-side provider
+frontend build. Initial provider keys and client registration are operator setup,
+described in [authentication modes](../../docs/auth-modes.md#embedded), and persist
+under `storage/` across releases.
+
 The deployment workflow runs `ops:queue-health --json` after each release. A
 failing check requires inspection of the cPanel cron and
 `storage/logs/scheduler.log`; failed jobs must be investigated before they are

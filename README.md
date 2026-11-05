@@ -140,6 +140,11 @@ php artisan schema:assert-persona
 php artisan view:clear
 ```
 
+In embedded auth mode, deployment also runs
+`php artisan auth-manager:migrate --force --no-interaction` after vora's migrations.
+The provider has its own prefixed tables and migration repository. Its signing keys
+under `storage/` are initialized once and retained across deploys.
+
 See `.github/workflows/deploy.yml` for the primary production trigger. The reusable
 `release-instance.yml` workflow tests and builds once, then transfers that exact
 release to a selected GitHub environment. See [Event instances](docs/event-instances.md)
@@ -156,8 +161,15 @@ name** can be set on the same page for the label under the icon.
 
 ### Sign-in through an identity provider
 
-vora has three auth modes (local, external, and embedded, which is coming);
+vora has three auth modes: local (the default), external, and opt-in embedded;
 see [docs/auth-modes.md](docs/auth-modes.md) for choosing and switching.
+
+Set `AUTH_SIGN_IN=embedded` to run the packaged identity provider under `/auth` in
+this installation. It owns separate credentials, tables and a session, and vora
+still signs in through OAuth. Its released frontend assets are included in the
+Composer package. Follow the [embedded setup](docs/auth-modes.md#embedded) to create
+its schema and keys, provision identities and register vora's client before use.
+Existing local or external installations keep their configured mode.
 
 By default an installation signs people in itself. Set `AUTH_SIGN_IN=provider`
 to send them to an OAuth identity provider instead, which then owns passwords,
