@@ -6,11 +6,17 @@ use App\Http\Middleware\RequireProviderAccount;
 use App\Models\MailDelivery;
 use App\Models\User;
 use App\Services\Auth\SignIn;
+use App\Services\Auth\VoraAuthUserPolicy;
+use BWH\Auth\Contracts\AuthUserPolicy;
+use BWH\Auth\Http\Controllers\TwoFactorController;
+use BWH\Auth\Mail\TwoFactorLoginMail;
+use BWH\Auth\Models\TwoFactorAttempt;
 use BWH\Auth\OAuth\Invitations\ApplicationInvitationClient;
 use BWH\Auth\OAuth\Invitations\ApplicationInvitations;
 use BWH\AuthManager\Embedded\EmbeddedContext;
 use BWH\AuthManager\Models\User as ProviderUser;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
@@ -21,6 +27,73 @@ use Tests\Support\EmbeddedAuthTestCase;
 
 class EmbeddedAuthTest extends EmbeddedAuthTestCase
 {
+    public function test_the_shared_two_factor_controller_finishes_provider_password_and_code_login_only_in_its_guard(): void
+    {
+        config(['auth-manager.sign_in.code_after_password' => true]);
+        Mail::fake();
+        [$provider] = $this->grantedClient();
+        $host = User::factory()->approved()->create(['email' => $provider->email]);
+        $this->assertInstanceOf(VoraAuthUserPolicy::class, app(AuthUserPolicy::class));
+        // Laravel can resolve a credential controller before EnterEmbeddedContext
+        // runs. Keep that exact instance to exercise its host-resolved policy.
+        $this->app->instance(TwoFactorController::class, app(TwoFactorController::class));
+        $page = $this->get('/auth/login')->assertOk();
+        $session = $page->getCookie('auth_manager_session');
+        $this->assertNotNull($session);
+
+        $challenge = $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())
+            ->post('/auth/login', ['email' => $provider->email, 'password' => self::PASSWORD])
+            ->assertRedirect(self::ORIGIN.'/auth/login');
+
+        $this->assertGuest('auth-manager');
+        $this->assertGuest('web');
+        $attempt = app(EmbeddedContext::class)->run(fn () => TwoFactorAttempt::sole());
+        $this->assertSame($provider->getKey(), $attempt->user_id);
+        Mail::assertSent(TwoFactorLoginMail::class, fn (TwoFactorLoginMail $mail): bool => $mail->hasTo($provider->email)
+            && str_starts_with($mail->confirmUrl, self::ORIGIN.'/auth/api/auth/two-factor/'));
+        $session = $challenge->getCookie('auth_manager_session');
+        $this->assertNotNull($session);
+        $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())->get('/auth/login')
+            ->assertOk()->assertSee('data-attempt-token="'.$attempt->token.'"', false);
+
+        $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())
+            ->postJson('/auth/api/auth/two-factor/verify', [
+                'attempt_token' => $attempt->token,
+                'code' => $attempt->code === '000000' ? '000001' : '000000',
+            ])->assertStatus(422);
+        $this->assertGuest('auth-manager');
+        $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())
+            ->postJson('/auth/api/auth/two-factor/verify', ['attempt_token' => $attempt->token, 'code' => $attempt->code])
+            ->assertOk()->assertJsonPath('success', true)->assertJsonPath('redirect', '/auth');
+
+        $this->assertAuthenticatedAs($provider, 'auth-manager');
+        $this->assertGuest('web');
+        $this->assertTrue(app(EmbeddedContext::class)->run(fn () => $attempt->fresh()->is_used));
+        $this->assertNull($host->fresh()->last_login_at);
+    }
+
+    public function test_the_host_policy_accepts_provider_credentials_only_inside_the_active_embedded_context(): void
+    {
+        [$provider] = $this->grantedClient();
+        $policy = app(AuthUserPolicy::class);
+        $request = Request::create(self::ORIGIN.'/auth/login');
+
+        $this->assertFalse($policy->canLogin($provider, $request));
+        $this->assertFalse($policy->canPasskeyLogin($provider, $request));
+        app(EmbeddedContext::class)->run(function () use ($policy, $provider, $request): void {
+            $this->assertTrue($policy->canLogin($provider, $request));
+            $this->assertTrue($policy->canPasskeyLogin($provider, $request));
+            $provider->forceFill(['disabled_at' => now()]);
+            $this->assertFalse($policy->canLogin($provider, $request));
+            $this->assertFalse($policy->canPasskeyLogin($provider, $request));
+            $provider->forceFill(['disabled_at' => null, 'deleted_at' => now()]);
+            $this->assertFalse($policy->canLogin($provider, $request));
+            $this->assertFalse($policy->canPasskeyLogin($provider, $request));
+        });
+        $this->assertFalse($policy->canLogin($provider, $request));
+        $this->assertFalse($policy->canPasskeyLogin($provider, $request));
+    }
+
     public function test_invitations_use_the_real_client_and_sign_the_mounted_endpoint_audience(): void
     {
         config([
