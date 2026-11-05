@@ -3,6 +3,8 @@
 namespace Tests\Browser;
 
 use App\Models\User;
+use BWH\AuthManager\Embedded\EmbeddedContext;
+use BWH\AuthManager\Models\User as ProviderUser;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Vite;
 use Illuminate\Http\Request;
@@ -19,7 +21,7 @@ use Tests\Support\EmbeddedAuthTestCase;
  */
 class EmbeddedBrowserServerTest extends EmbeddedAuthTestCase
 {
-    protected const ORIGIN = 'https://127.0.0.1:4188';
+    protected const ORIGIN = 'https://localhost:4188';
 
     public function test_embedded_browser_worker(): void
     {
@@ -40,6 +42,13 @@ class EmbeddedBrowserServerTest extends EmbeddedAuthTestCase
         $provider = getenv('VORA_EMBEDDED_BROWSER_ROLE') === 'provider';
         if ($provider) {
             [$person, $client, $secret] = $this->grantedClient();
+            app(EmbeddedContext::class)->run(function () use ($person): void {
+                $person->forceFill(['name' => 'Example Person'])->save();
+                ProviderUser::factory()->create([
+                    'name' => 'Example Administrator', 'email' => 'admin@example.test',
+                    'password' => self::PASSWORD, 'user_role' => 'admin',
+                ]);
+            });
             $this->emit(['ready' => true, 'client' => (string) $client->getKey(), 'secret' => $secret, 'email' => $person->email]);
         } else {
             $this->emit(['ready' => true]);

@@ -111,6 +111,7 @@ function LoginPage() {
                   components={{ Button }}
                   endpoints={{ csrfToken: getCsrfToken() }}
                   className="w-full"
+                  remember={remember}
                   onSuccess={(redirectUrl) => window.location.replace(redirectUrl)}
                 />
               </>

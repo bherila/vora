@@ -1,5 +1,86 @@
 import { expect, test } from '@playwright/test';
 
+test('mounted directory changes provider authority and preserves its last administrator', async ({ page }) => {
+  await page.goto('/auth/login');
+  await page.getByLabel('Email', { exact: true }).fill('admin@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('correct horse battery staple');
+  await page.locator('#password-login-form').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\/?$/);
+  await page.goto('/auth/admin/users');
+  await expect(page.getByRole('heading', { name: 'Directory administration', exact: true })).toBeVisible();
+  await page.getByLabel('Your current password', { exact: true }).fill('correct horse battery staple');
+  await page.getByRole('button', { name: 'Confirm provider administration', exact: true }).click();
+  await expect(page.getByText('Provider administration confirmed for five minutes.', { exact: true })).toBeVisible();
+
+  const person = page.locator('[data-slot="card"]').filter({ has: page.getByText('Example Person', { exact: true }) });
+  page.once('dialog', (dialog) => dialog.accept());
+  await person.getByRole('button', { name: 'Grant provider administrator', exact: true }).click();
+  await expect(person.getByRole('button', { name: 'Remove provider administrator', exact: true })).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await person.getByRole('button', { name: 'Remove provider administrator', exact: true }).click();
+  await expect(person.getByRole('button', { name: 'Grant provider administrator', exact: true })).toBeVisible();
+
+  const administrator = page.locator('[data-slot="card"]').filter({ has: page.getByText('Example Administrator', { exact: true }) });
+  page.once('dialog', (dialog) => dialog.accept());
+  await administrator.getByRole('button', { name: 'Remove provider administrator', exact: true }).click();
+  await expect(page.getByText('The last active provider administrator cannot be demoted.', { exact: false })).toBeVisible();
+  await expect(administrator.getByRole('button', { name: 'Remove provider administrator', exact: true })).toBeVisible();
+});
+
+test('a real provider passkey honors remember-me without creating a host remember cookie', async ({ page, context }) => {
+  const devtools = await context.newCDPSession(page);
+  await devtools.send('WebAuthn.enable');
+  const { authenticatorId } = await devtools.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
+      hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
+    },
+  });
+  try {
+    await page.goto('/auth/login');
+    await page.getByLabel('Email', { exact: true }).fill('person@example.test');
+    await page.getByLabel('Password', { exact: true }).fill('correct horse battery staple');
+    await page.locator('#password-login-form').getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(/\/auth\/?$/);
+    await page.goto('/auth/settings/passkeys');
+    await page.getByLabel('Passkey name', { exact: true }).fill('Synthetic browser device');
+    await page.getByRole('button', { name: 'Add Passkey', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Passkey registered successfully.');
+
+    // Hold presence while the login page starts conditional mediation, so the
+    // visible button can start its own ceremony after the choice is checked.
+    await devtools.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: false });
+    const loggedOut = await page.evaluate(async () => {
+      const csrf = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+      return (await fetch('/auth/logout', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf } })).ok;
+    });
+    expect(loggedOut).toBe(true);
+    await page.goto('/auth/login');
+    await page.getByLabel('Keep me signed in', { exact: true }).check();
+    const options = page.waitForResponse((response) => response.url().endsWith('/auth/api/passkeys/auth/options') && response.request().method() === 'POST');
+    const authenticated = page.waitForResponse((response) => response.url().endsWith('/auth/api/passkeys/auth') && response.request().method() === 'POST');
+    // Enable presence before the fresh explicit ceremony; the button cancels
+    // the pending conditional request before starting its own.
+    await devtools.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId, enabled: true });
+    await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
+    expect((await options).ok()).toBe(true);
+    expect((await authenticated).ok()).toBe(true);
+    await expect(page).toHaveURL(/\/auth\/?$/);
+    const cookies = await context.cookies();
+    const remembered = cookies.find((cookie) => cookie.name.startsWith('remember_auth-manager_'));
+    expect(remembered?.path).toBe('/auth');
+    expect(remembered?.httpOnly).toBe(true);
+    expect(remembered?.expires).toBeGreaterThan(Date.now() / 1000);
+    expect(cookies.some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
+    expect((await (await page.request.get('/__embedded/account')).json()).count).toBe(0);
+  } finally {
+    // Preserve the original assertion failure if Playwright already closed the
+    // context while cleaning up a failed ceremony.
+    await devtools.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => {});
+    await devtools.detach().catch(() => {});
+  }
+});
+
 test('mounted provider signs in over OAuth, keeps separate cookies and ends both sessions', async ({ page, context }) => {
   const failures: string[] = [];
   page.on('pageerror', (error) => failures.push(error.message));

@@ -52,7 +52,7 @@
         "@hookform/resolvers": "^5.9.1",
         "@noble/hashes": "^2.4.0",
         "blockhash-core": "^0.1.0",
-        "bwh-auth": "0.4.0",
+        "bwh-auth": "https://github.com/bherila/auth-react/releases/download/bwh-auth-v0.6.2/bwh-auth-0.6.2.tgz",
         "class-variance-authority": "^0.7.1",
         "classnames": "^2.5.1",
         "clsx": "^2.1.1",

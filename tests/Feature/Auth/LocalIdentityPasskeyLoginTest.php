@@ -9,11 +9,19 @@ use BWH\AuthManager\Embedded\EmbeddedContext;
 use Illuminate\Support\Facades\DB;
 use Laravel\Passport\ClientRepository;
 use OpenSSLAsymmetricKey;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\EmbeddedAuthTestCase;
 
 class LocalIdentityPasskeyLoginTest extends EmbeddedAuthTestCase
 {
-    public function test_the_original_credential_signs_a_real_provider_assertion_after_migration_without_signing_in_to_the_host(): void
+    /** @return array<string, array{?bool}> */
+    public static function rememberChoices(): array
+    {
+        return ['legacy omitted' => [null], 'session only' => [false], 'remember provider' => [true]];
+    }
+
+    #[DataProvider('rememberChoices')]
+    public function test_the_original_credential_signs_a_real_provider_assertion_after_migration_without_signing_in_to_the_host(?bool $remember): void
     {
         [$clientId, $secret] = app(EmbeddedContext::class)->run(function (): array {
             $client = app(ClientRepository::class)->createAuthorizationCodeGrantClient('Vora', [self::ORIGIN.'/oauth/callback']);
@@ -56,9 +64,27 @@ class LocalIdentityPasskeyLoginTest extends EmbeddedAuthTestCase
         $session = $options->getCookie('auth_manager_session');
         $this->assertNotNull($session);
         $assertion = $this->assertion($credentialId, (string) $options->json('challenge'), $source->id, 30, $privateKey);
-        $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())
-            ->postJson('/auth/api/passkeys/auth', ['credential' => $assertion])
+        $payload = ['credential' => $assertion];
+        if ($remember !== null) {
+            $payload['remember'] = $remember;
+        }
+        $response = $this->freshRequest()->withCookie('auth_manager_session', (string) $session->getValue())
+            ->postJson('/auth/api/passkeys/auth', $payload)
             ->assertOk()->assertJsonPath('success', true)->assertJsonPath('redirect', '/auth');
+
+        $cookies = collect($response->headers->getCookies());
+        $recaller = $cookies->first(static fn ($cookie): bool => str_starts_with($cookie->getName(), 'remember_auth-manager_'));
+        if ($remember === true) {
+            $this->assertNotNull($recaller);
+            $this->assertSame('/auth', $recaller->getPath());
+            $this->assertTrue($recaller->isHttpOnly());
+            $this->assertGreaterThan(now()->getTimestamp(), $recaller->getExpiresTime());
+            $this->assertNotEmpty(DB::table('auth_manager_users')->where('id', $source->id)->value('remember_token'));
+        } else {
+            $this->assertNull($recaller);
+            $this->assertNull(DB::table('auth_manager_users')->where('id', $source->id)->value('remember_token'));
+        }
+        $this->assertFalse($cookies->contains(static fn ($cookie): bool => str_starts_with($cookie->getName(), 'remember_web_')));
 
         $this->assertSame(41, auth('auth-manager')->id());
         $this->assertGuest('web');
