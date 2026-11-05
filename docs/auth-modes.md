@@ -220,11 +220,12 @@ external mode. The signing key, provider-side public key and client permission m
 still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
-**Release updates.** The provider is temporarily pinned to merged commit
-`fc6b211ce745c101515b634a18d332dbd3eac740`, which includes complete directory migration
-and persistent passkey sign-in
+**Release updates.** The provider is temporarily pinned to reviewed source commit
+`c08efcdc942de90d9c36112defa58505a2cdd70f`, which includes complete directory migration
+and persistent passkey sign-in plus provider administrator controls
 ([directory migration](https://github.com/bherila/auth-manager/pull/122),
-[passkey sign-in](https://github.com/bherila/auth-manager/pull/125)). The package
+[passkey sign-in](https://github.com/bherila/auth-manager/pull/125),
+[administrator controls](https://github.com/bherila/auth-manager/pull/126)). The package
 definition and lock identify that immutable source archive and its Composer
 checksum; CI builds its matching frontend. This source pin is not a tagged,
 attested release. Replace it with a tagged release containing the change when

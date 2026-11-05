@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f4828d985719654f665ed5f59658dc7b",
+    "content-hash": "5a414e41e34d9b282ed8c4f74d3f6792",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -285,13 +285,13 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-manager.git",
-                "reference": "fc6b211ce745c101515b634a18d332dbd3eac740"
+                "reference": "c08efcdc942de90d9c36112defa58505a2cdd70f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth-manager/zipball/fc6b211ce745c101515b634a18d332dbd3eac740",
-                "reference": "fc6b211ce745c101515b634a18d332dbd3eac740",
-                "shasum": "5fa60701a73e83a3f2917e880218e44f41b05df5"
+                "url": "https://api.github.com/repos/bherila/auth-manager/zipball/c08efcdc942de90d9c36112defa58505a2cdd70f",
+                "reference": "c08efcdc942de90d9c36112defa58505a2cdd70f",
+                "shasum": "e7abb017885470314bc2209059bc4093f0d973fc"
             },
             "require": {
                 "bherila/auth-laravel": "^0.28.4",
