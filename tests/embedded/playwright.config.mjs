@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   use: {
-    baseURL: 'https://127.0.0.1:4188',
+    baseURL: 'https://localhost:4188',
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     command: 'node tests/embedded/server.mjs',
-    url: 'https://127.0.0.1:4188/__embedded/ready',
+    url: 'https://localhost:4188/__embedded/ready',
     ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 6_000 },

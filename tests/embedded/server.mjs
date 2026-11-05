@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 // Both replicas boot the real embedded application, with separate in-memory
 // databases. Routing /auth to its own worker allows the host callback to make
 // real HTTP token/identity requests without blocking its own request loop.
-const origin = 'https://127.0.0.1:4188';
+const origin = 'https://localhost:4188';
 const publicRoot = resolve('public/build');
 if (!existsSync(join(publicRoot, 'manifest.json'))) throw new Error('Run pnpm run build before browser tests.');
 if (existsSync('public/hot')) throw new Error('Stop Vite before browser tests.');
@@ -17,7 +17,7 @@ const certificate = join(certificateDirectory, 'certificate.pem');
 const privateKey = join(certificateDirectory, 'private.pem');
 execFileSync('openssl', [
   'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
-  '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1',
+  '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost',
   '-keyout', privateKey, '-out', certificate,
 ], { stdio: 'ignore' });
 
@@ -89,7 +89,7 @@ await host.readiness;
 
 server = createServer({ key: readFileSync(privateKey), cert: readFileSync(certificate) }, async (request, response) => {
   try {
-    if (request.headers.host !== '127.0.0.1:4188') { response.writeHead(400).end(); return; }
+    if (request.headers.host !== 'localhost:4188') { response.writeHead(400).end(); return; }
     const url = new URL(request.url, origin);
     if (url.pathname === '/__embedded/ready') { response.writeHead(200).end('ready'); return; }
     if (url.pathname.startsWith('/build/')) {

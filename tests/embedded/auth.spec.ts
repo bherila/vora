@@ -1,5 +1,32 @@
 import { expect, test } from '@playwright/test';
 
+test('mounted directory changes provider authority and preserves its last administrator', async ({ page }) => {
+  await page.goto('/auth/login');
+  await page.getByLabel('Email', { exact: true }).fill('admin@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('correct horse battery staple');
+  await page.locator('#password-login-form').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\/?$/);
+  await page.goto('/auth/admin/users');
+  await expect(page.getByRole('heading', { name: 'Directory administration', exact: true })).toBeVisible();
+  await page.getByLabel('Your current password', { exact: true }).fill('correct horse battery staple');
+  await page.getByRole('button', { name: 'Confirm provider administration', exact: true }).click();
+  await expect(page.getByText('Provider administration confirmed for five minutes.', { exact: true })).toBeVisible();
+
+  const person = page.locator('[data-slot="card"]').filter({ has: page.getByText('Example Person', { exact: true }) });
+  page.once('dialog', (dialog) => dialog.accept());
+  await person.getByRole('button', { name: 'Grant provider administrator', exact: true }).click();
+  await expect(person.getByRole('button', { name: 'Remove provider administrator', exact: true })).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await person.getByRole('button', { name: 'Remove provider administrator', exact: true }).click();
+  await expect(person.getByRole('button', { name: 'Grant provider administrator', exact: true })).toBeVisible();
+
+  const administrator = page.locator('[data-slot="card"]').filter({ has: page.getByText('Example Administrator', { exact: true }) });
+  page.once('dialog', (dialog) => dialog.accept());
+  await administrator.getByRole('button', { name: 'Remove provider administrator', exact: true }).click();
+  await expect(page.getByText('The last active provider administrator cannot be demoted.', { exact: false })).toBeVisible();
+  await expect(administrator.getByRole('button', { name: 'Remove provider administrator', exact: true })).toBeVisible();
+});
+
 test('a real provider passkey honors remember-me without creating a host remember cookie', async ({ page, context }) => {
   const devtools = await context.newCDPSession(page);
   await devtools.send('WebAuthn.enable');
