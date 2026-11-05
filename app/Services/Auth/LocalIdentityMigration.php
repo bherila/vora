@@ -130,10 +130,22 @@ class LocalIdentityMigration
             throw new RuntimeException('Configure the embedded issuer, a stable OAUTH_PROVIDER and this installation\'s OAUTH_CLIENT_ID before migration.');
         }
         $client = $this->provider->table('oauth_clients')->where('id', $this->clientId)->where('revoked', false)->first();
-        if ($client === null
-            || ! in_array('authorization_code', json_decode((string) $client->grant_types, true) ?? [], true)
-            || ! in_array((string) config('bherila-auth.oauth_client.redirect_uri'), json_decode((string) $client->redirect_uris, true) ?? [], true)) {
-            throw new RuntimeException('The configured provider client must be active and allow authorization-code sign-in with this installation\'s exact callback.');
+        $secret = config('bherila-auth.oauth_client.client_secret');
+        $secretValid = false;
+        if ($client !== null && is_string($secret) && $secret !== '' && is_string($client->secret) && $client->secret !== '') {
+            try {
+                // Match Passport's configured verifier, including its algorithm policy.
+                $secretValid = app('hash')->check($secret, $client->secret);
+            } catch (RuntimeException) {
+                // An incompatible hash is a refused client, never a secret-bearing diagnostic.
+            }
+        }
+        $grants = $client === null ? null : json_decode((string) $client->grant_types, true);
+        $callbacks = $client === null ? null : json_decode((string) $client->redirect_uris, true);
+        if ($client === null || ! $secretValid || ! in_array($client->provider, [null, 'auth-manager-users'], true)
+            || ! is_array($grants) || ! in_array('authorization_code', $grants, true)
+            || ! is_array($callbacks) || ! in_array((string) config('bherila-auth.oauth_client.redirect_uri'), $callbacks, true)) {
+            throw new RuntimeException('The configured provider client must be active and confidential, verify OAUTH_CLIENT_SECRET, use the embedded user provider and allow authorization-code sign-in with this installation\'s exact callback.');
         }
         if (! $this->host->getSchemaBuilder()->hasTable('local_identity_migrations')) {
             throw new RuntimeException('Apply the host migrations before planning local identities.');

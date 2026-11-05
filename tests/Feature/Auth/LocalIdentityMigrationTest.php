@@ -12,6 +12,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Laravel\Passport\ClientRepository;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\Support\EmbeddedAuthTestCase;
 
@@ -245,5 +246,48 @@ class LocalIdentityMigrationTest extends EmbeddedAuthTestCase
         $this->assertDatabaseCount('auth_manager_users', 0);
         $this->assertDatabaseCount('local_identity_migrations', 0);
         $this->assertNull(User::firstOrFail()->oauth_provider);
+    }
+
+    /** @return array<string, array{string, bool}> */
+    public static function invalidClients(): array
+    {
+        $cases = [];
+        foreach (['wrong_secret', 'public_client', 'host_provider', 'foreign_provider'] as $case) {
+            $cases[$case.' dry run'] = [$case, false];
+            $cases[$case.' apply'] = [$case, true];
+        }
+
+        return $cases;
+    }
+
+    #[DataProvider('invalidClients')]
+    public function test_invalid_clients_are_refused_before_any_write(string $case, bool $apply): void
+    {
+        $source = User::factory()->approved()->create();
+        $sequence = new TableSequence(DB::connection('auth-manager'));
+        $before = $sequence->next('users');
+        if ($case === 'wrong_secret') {
+            config(['bherila-auth.oauth_client.client_secret' => 'wrong-client-secret']);
+        } else {
+            $change = match ($case) {
+                'public_client' => ['secret' => null],
+                'host_provider' => ['provider' => 'users'],
+                default => ['provider' => 'a-foreign-provider'],
+            };
+            DB::table('auth_manager_oauth_clients')->where('id', config('bherila-auth.oauth_client.client_id'))->update($change);
+        }
+
+        try {
+            app(LocalIdentityMigration::class)->run($apply);
+            $this->fail('A client that cannot complete embedded OAuth must not accept migration writes.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('active and confidential', $exception->getMessage());
+            $this->assertStringNotContainsString('wrong-client-secret', $exception->getMessage());
+        }
+        $this->assertDatabaseCount('auth_manager_users', 0);
+        $this->assertDatabaseCount('auth_manager_oauth_client_grants', 0);
+        $this->assertDatabaseCount('local_identity_migrations', 0);
+        $this->assertNull($source->fresh()->oauth_provider);
+        $this->assertSame($before, $sequence->next('users'));
     }
 }

@@ -23,9 +23,11 @@ export/import tooling, preserving subjects and `OAUTH_PROVIDER`.
    using the deployment procedure. Start with an empty provider directory;
    **do not run `ops:embedded-admin` first**. Existing provider subjects or email
    addresses are conflicts, even when an address matches the local account.
-4. Register the Vora authorization-code client, with the exact callback URI,
-   and configure its `OAUTH_CLIENT_ID` and credentials. Keep `OAUTH_PROVIDER`
-   stable. The command verifies that this client belongs to the staged provider.
+4. Register a confidential Vora authorization-code client, with the exact callback
+   URI, and configure its `OAUTH_CLIENT_ID` and secret. Leave its user provider
+   unset or select `auth-manager-users`; the host's `users` provider is refused.
+   Keep `OAUTH_PROVIDER` stable. The command verifies the client secret with the
+   provider's configured hash verifier before any migration or sequence write.
 5. Preserve local password-plus-email-code assurance:
    `AUTH_MANAGER_REQUIRE_CODE_AFTER_PASSWORD=true` and
    `AUTH_MANAGER_ALLOW_CODE_ONLY_SIGN_IN=false`. Verify mail delivery on the
