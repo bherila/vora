@@ -221,8 +221,10 @@ still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
 **Release updates.** The provider is temporarily pinned to merged commit
-`a78af87a1f199b943b29e66eaa7a5c5275048799`, which adds complete directory migration
-([upstream change](https://github.com/bherila/auth-manager/pull/122)). The package
+`fc6b211ce745c101515b634a18d332dbd3eac740`, which includes complete directory migration
+and persistent passkey sign-in
+([directory migration](https://github.com/bherila/auth-manager/pull/122),
+[passkey sign-in](https://github.com/bherila/auth-manager/pull/125)). The package
 definition and lock identify that immutable source archive and its Composer
 checksum; CI builds its matching frontend. This source pin is not a tagged,
 attested release. Replace it with a tagged release containing the change when
@@ -231,12 +233,17 @@ attestation as described in the provider's
 [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
 Run the host and embedded CI checks against any resulting lock file.
 
-The shared `auth-laravel` client is temporarily pinned to reviewed commit
-`9fc65e08bb7d1161f52a7a58be852ef629c8c4dc`, which adds invitation support for
-path-based issuers ([upstream fix](https://github.com/bherila/auth-laravel/pull/127)).
-Composer's compatibility alias satisfies the provider's existing version range;
-the lock file installs that exact commit. Replace the pin with a tagged release
-containing the fix when one is available.
+The shared `auth-laravel` client uses the tagged `0.28.4` release, which includes
+invitation support for mounted issuers and optional persistent passkey login.
+The Composer lock fixes the exact installed release; no development alias is
+needed for the client.
+
+The browser helper uses the official `bwh-auth` `0.6.2` GitHub release tarball
+while that version is unavailable from npm's public registry. The signed release
+tag and successful release build identify its source; the pnpm lock verifies the
+artifact's integrity. Its install script has an exact-source build approval,
+with other dependency build checks retained. Switch the dependency specification
+back to the same registry version when its availability is confirmed.
 
 **Same-origin caveat.** Because auth-manager is served from vora's origin,
 its cookies, session and any script on `/auth` share an origin with vora. A
