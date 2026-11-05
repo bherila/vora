@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "../embedded/*.ts"]
 }

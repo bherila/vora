@@ -85,6 +85,9 @@ jobs:
       - name: Run desktop, mobile and iPhone WebKit browser journeys
         run: pnpm run test:browser
 
+      - name: Run embedded identity-provider OAuth browser journey
+        run: pnpm exec playwright test --config=tests/embedded/playwright.config.mjs
+
       - name: Upload browser failure traces and screenshots
         if: failure()
         uses: actions/upload-artifact@v6
