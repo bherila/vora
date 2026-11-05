@@ -2,9 +2,20 @@
 
 Routine validation checks for AI coding agents in this template.
 
+## Where validation runs
+
+Use CI for heavy validation, including full test suites, PHPStan, full-repository
+Pint, production builds, and mutation/coverage runs. Run these locally only when
+the user explicitly requests local execution. During local iteration, run small
+relevant tests, file-scoped formatting/linting, and targeted browser verification.
+Push a focused candidate promptly so CI can run the expensive jobs. Required CI
+results must pass on the exact candidate commit before merging. Inspect mutation
+artifacts when a green advisory job can conceal escaped mutations; never weaken
+checks or deadlines to make a candidate pass.
+
 ## Frontend gate
 
-Run before committing frontend changes (TypeScript, React, CSS, Vite config):
+CI runs these for frontend changes (TypeScript, React, CSS, Vite config):
 
 ```bash
 pnpm run type-check
@@ -13,18 +24,20 @@ pnpm run test
 pnpm run build
 ```
 
-All four must pass. Fix type errors and lint violations before pushing — do not suppress them without justification.
+All four must pass in CI before merging. Fix type errors and lint violations;
+do not suppress them without justification.
 
 ## Backend gate
 
-Run before committing PHP changes:
+CI runs these for PHP changes:
 
 ```bash
 ./vendor/bin/pint --test
 composer test
 ```
 
-`pint --test` checks formatting without writing; fix violations by running `./vendor/bin/pint` (without `--test`).
+`pint --test` checks formatting without writing; fix violations by running
+`./vendor/bin/pint` with the changed file paths (without `--test`).
 
 During iteration, targeted tests are acceptable:
 
@@ -33,7 +46,7 @@ php artisan test tests/Feature/SomeFeatureTest.php
 php artisan test --filter="some_specific_test"
 ```
 
-Before finalizing, broaden to the full backend gate.
+Before merging, wait for the full backend gate in CI on the candidate commit.
 
 SQLite in-memory is the default for every local and developer test run. CI also
 runs the backend gate against a MariaDB 10.6 service container in the `sql` job
@@ -44,7 +57,7 @@ That job runs `composer test:parallel`, so Laravel gives each PHPUnit process
 its own `vora_ci_test_<n>` database. Nothing changes locally: the parallel
 plumbing is skipped entirely for in-memory SQLite
 (`TestDatabases::whenNotUsingInMemoryDatabase`), and `composer test` remains the
-sequential command the backend gate above asks for.
+sequential command for explicitly requested full local runs.
 
 ## Two-account acceptance
 
@@ -95,9 +108,11 @@ Back/Forward, blocking, unblocking, and logout. Profile actions update on block
 and unblock without a reload. Blocked threads disappear; unblocking restores
 retained history without restoring removed follows or allowing new messages.
 
-Run the browser journeys locally after installing the frozen Composer and pnpm
-dependencies and stopping any Vite dev server. Run these separately from the
-backend suite, which changes shared view/cache files during tests:
+CI runs the full browser journeys. For targeted local browser verification,
+install the frozen Composer and pnpm dependencies and stop any Vite dev server.
+Keep browser checks separate from backend tests, which change shared view/cache
+files. The full command below includes a production build and is for CI or an
+explicitly requested full local run:
 
 ```bash
 pnpm exec playwright install chromium webkit
