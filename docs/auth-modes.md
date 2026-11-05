@@ -188,6 +188,20 @@ serve no embedded provider routes.
    end. Confirm provider settings and vora settings open their respective surfaces.
    Then enable `BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED=true` and verify revocation.
 
+**Local HTTP workers.** Embedded OAuth makes server-to-server requests back to this
+same installation during the callback and provider-status checks. The HTTP server
+must handle those requests while the original request is still running. For local
+development on a platform supporting PHP CLI workers, run:
+
+```sh
+PHP_CLI_SERVER_WORKERS=4 php artisan serve --no-reload
+```
+
+Laravel requires `--no-reload` to honor that worker setting. A plain single-worker
+`php artisan serve` can stall while waiting for its own token request. PHP-FPM or
+another server with concurrent workers also works. Keep `APP_URL` and the OAuth
+callback URL consistent with the reachable local origin.
+
 **Assets and deployment.** Provider pages serve the release's compiled assets at
 `/auth/build/assets/...`; no provider frontend build or asset publication is needed
 on the server. The release archive already includes the package under `vendor/`.
