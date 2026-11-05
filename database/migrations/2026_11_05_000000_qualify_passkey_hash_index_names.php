@@ -15,13 +15,20 @@ return new class extends Migration
 
         // SQLite names indexes across the whole database. The provider's separate
         // passkey table must not collide with the host's former generic names.
+        $indexes = collect(Schema::getIndexes($tableName))->keyBy('name');
         foreach (['unique', 'index'] as $kind) {
             $old = 'passkey_credential_id_hash_'.$kind;
             $new = $tableName.'_credential_id_hash_'.$kind;
-            if (! Schema::hasIndex($tableName, $old)) {
+            $original = $indexes->get($old);
+            if ($original === null) {
                 continue;
             }
-            $qualifiedExists = Schema::hasIndex($tableName, $new);
+            $qualified = $indexes->get($new);
+            if ($original['columns'] !== ['credential_id_hash'] || $original['unique'] !== ($kind === 'unique')
+                || ($qualified !== null && ($qualified['columns'] !== ['credential_id_hash'] || ($kind === 'unique' && ! $qualified['unique'])))) {
+                throw new RuntimeException('A passkey hash index has an unexpected definition; its uniqueness was left intact.');
+            }
+            $qualifiedExists = $qualified !== null;
             Schema::table($tableName, static function (Blueprint $table) use ($old, $new, $kind, $qualifiedExists): void {
                 // Fresh hosts already have the generated qualified index as well.
                 if ($qualifiedExists) {

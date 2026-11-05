@@ -7,7 +7,10 @@ return [
     'config' => [
         'bherila-auth' => [
             // Provider administration uses its own screens and administrator guard.
-            'audit' => ['routes_enabled' => false, 'admin_ability' => null],
+            'audit' => ['table' => 'audit_log', 'routes_enabled' => false, 'admin_ability' => null],
+            // MariaDB FK constraint names are schema-wide even though indexes
+            // are table-scoped. These logical names differ from Vora's tables.
+            'two_factor' => ['table' => 'two_factor_attempts'],
         ],
     ],
 ];

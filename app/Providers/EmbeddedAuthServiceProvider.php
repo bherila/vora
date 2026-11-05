@@ -16,7 +16,9 @@ class EmbeddedAuthServiceProvider extends ServiceProvider
 
             // SQLite index names are database-wide. The provider's users table
             // must not reuse names such as users_email_unique from Vora's table.
-            config(['database.connections.auth-manager.prefix_indexes' => true]);
+            // MariaDB indexes are table-scoped, and prefixing its longer names
+            // would exceed its 64-character identifier limit.
+            config(['database.connections.auth-manager.prefix_indexes' => config('database.connections.auth-manager.driver') === 'sqlite']);
         }
     }
 }
