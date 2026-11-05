@@ -13,6 +13,10 @@ class EmbeddedAuthServiceProvider extends ServiceProvider
     {
         if (config('auth.sign_in') === SignIn::EMBEDDED) {
             $this->app->register(EmbeddedServiceProvider::class);
+
+            // SQLite index names are database-wide. The provider's users table
+            // must not reuse names such as users_email_unique from Vora's table.
+            config(['database.connections.auth-manager.prefix_indexes' => true]);
         }
     }
 }

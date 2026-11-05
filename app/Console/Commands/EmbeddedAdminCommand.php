@@ -51,7 +51,12 @@ class EmbeddedAdminCommand extends Command
                 return self::FAILURE;
             }
 
-            DB::transaction(static function () use ($values): void {
+            $created = DB::transaction(static function () use ($values): bool {
+                // Password entry may take time; another operator may finish setup meanwhile.
+                if (User::withTrashed()->lockForUpdate()->exists()) {
+                    return false;
+                }
+
                 $user = User::create([
                     'email' => $values['email'],
                     'name' => $values['name'],
@@ -65,7 +70,14 @@ class EmbeddedAdminCommand extends Command
                     'auth_method' => 'console',
                     'succeeded' => true,
                 ]);
+
+                return true;
             });
+            if (! $created) {
+                $this->error('The provider directory already contains people. Use its administrator screens.');
+
+                return self::FAILURE;
+            }
             $this->info('Provider administrator created. Register the Vora OAuth client and grant this person access before signing in to Vora.');
 
             return self::SUCCESS;
