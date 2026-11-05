@@ -172,6 +172,11 @@ class LocalIdentityMigration
         if ($user === null) {
             return $this->result($id, 'conflict', 'source_disappeared');
         }
+        // Provider mode intentionally has no local forced-password-change gate.
+        // Do not turn an incomplete local credential reset into a usable provider login.
+        if ($user->force_change_pw) {
+            return $this->result($id, 'unsupported', 'local_password_change_required');
+        }
         $passkeys = $this->host->table($this->sourcePasskeys)->where('user_id', $id)->orderBy('id')
             ->when($apply, static fn ($query) => $query->lockForUpdate())
             ->get()->map(static fn (object $row): array => (array) $row)->all();
@@ -231,11 +236,6 @@ class LocalIdentityMigration
         return array_keys(array_filter([
             'disabled' => $user->is_disabled,
             'deleted' => $user->trashed(),
-            'unapproved' => ! $user->isApproved(),
-            'unverified' => ! $user->hasVerifiedEmail(),
-            'banned' => $user->isBanned(),
-            'deactivated' => $user->isDeactivated(),
-            'password_change_required' => $user->force_change_pw,
         ]));
     }
 

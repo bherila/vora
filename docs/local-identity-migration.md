@@ -8,8 +8,9 @@ The supported destination is the embedded provider in the **same physical
 database**, with its separate prefixed tables. Separate databases, read/write
 splitting and pre-existing transactions are refused. A move to an external
 provider has two stages: migrate local accounts to embedded, then move the
-provider directory to the standalone instance with the provider's portable
-export/import tooling, preserving subjects and `OAUTH_PROVIDER`.
+provider directory to the standalone instance with the provider's
+[portable directory export/import runbook](https://github.com/bherila/auth-manager/blob/a78af87a1f199b943b29e66eaa7a5c5275048799/docs/portable-directory.md),
+preserving subjects and `OAUTH_PROVIDER`.
 
 ## Prepare
 
@@ -114,12 +115,23 @@ administrator. Provider administration is a separate, deliberate operator step:
 php artisan auth-manager:user-roles admin@example.test --add=admin
 ```
 
-Disabled, deleted, unapproved, unverified, banned, deactivated and forced-password-
-change accounts receive disabled provider identities and **no client grant**.
-Their local flags remain unchanged. A deleted source remains deleted at the
-provider. Later restoration, approval or password recovery needs an explicit
-review on both sides; rerunning the migration never enables an account or
-restores a revoked grant.
+Disabled and deleted accounts receive disabled provider identities and **no
+client grant**. A deleted source remains deleted at the provider. Restoration
+needs an explicit review on both sides; rerunning the migration never enables
+an account or restores a revoked grant.
+
+Unapproved, unverified, banned and self-deactivated accounts retain their ability
+to authenticate, with an active provider identity and this installation's coarse
+client grant. Their existing Vora flags remain unchanged: pending users still
+land on the approval page, unverified users on email verification, banned users
+can reach their appeal/deletion flows, and deactivated users can reactivate.
+Authentication does not bypass those host authorization gates.
+
+An outstanding local forced-password-change requirement reports
+`local_password_change_required` without migrating the account. Complete that
+local reset before retrying. Provider sign-in intentionally skips Vora's local
+password-change screen, so copying such an account would bypass its unfinished
+credential requirement.
 
 The host `local_identity_migrations` table is ownership proof committed with the
 new provider subject and binding. Retain it and its backups. An existing
@@ -128,8 +140,9 @@ bindings without this checkpoint require manual review; this tool does not
 reinterpret them as a successful migration.
 
 Before reopening, verify password-plus-code and passkey sign-in with an eligible
-account, access to the original Vora profile and content, logout, and refusal of
-disabled/deleted/pending accounts. Confirm Vora and provider administrator roles
+account, access to the original Vora profile and content, logout, refusal of
+disabled/deleted accounts, and preservation of approval, verification, appeal
+and reactivation gates. Confirm Vora and provider administrator roles
 separately. After provider use begins, rollback is another credential migration:
 do not blindly restore old password or passkey counters. Keep the ownership
 ledger, provider tables, signing keys and both databases while rehearsing that

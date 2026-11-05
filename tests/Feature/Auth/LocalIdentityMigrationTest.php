@@ -88,13 +88,10 @@ class LocalIdentityMigrationTest extends EmbeddedAuthTestCase
         $this->assertDatabaseHas('auth_manager_users', ['password' => 'provider-changed-hash']);
     }
 
-    public function test_ineligible_accounts_keep_their_host_state_and_receive_disabled_provider_accounts_without_grants(): void
+    public function test_disabled_and_deleted_accounts_keep_their_host_state_and_receive_disabled_provider_accounts_without_grants(): void
     {
         $states = [
             'disabled' => ['is_disabled' => true], 'deleted' => ['deleted_at' => now()],
-            'unapproved' => ['approved_at' => null], 'unverified' => ['email_verified_at' => null],
-            'banned' => ['banned_at' => now()], 'deactivated' => ['deactivated_at' => now()],
-            'password_change_required' => ['force_change_pw' => true],
         ];
         foreach ($states as $attributes) {
             User::factory()->approved()->create($attributes);
@@ -107,10 +104,24 @@ class LocalIdentityMigrationTest extends EmbeddedAuthTestCase
         }
         $this->assertDatabaseCount('auth_manager_oauth_client_grants', 0);
         $this->assertDatabaseHas('users', ['is_disabled' => true]);
-        $this->assertDatabaseHas('users', ['approved_at' => null]);
-        $this->assertDatabaseHas('users', ['email_verified_at' => null]);
         $this->assertSame(1, User::withTrashed()->whereNotNull('deleted_at')->count());
         $this->assertSame(1, DB::table('auth_manager_users')->whereNotNull('deleted_at')->count());
+    }
+
+    public function test_an_incomplete_local_password_change_requires_local_recovery_before_migration(): void
+    {
+        $source = User::factory()->approved()->create(['force_change_pw' => true]);
+        foreach ([false, true] as $apply) {
+            $report = app(LocalIdentityMigration::class)->run($apply);
+            $this->assertTrue($report['failed']);
+            $this->assertSame('unsupported', $report['accounts'][0]['status']);
+            $this->assertSame('local_password_change_required', $report['accounts'][0]['reason']);
+        }
+        $this->assertDatabaseCount('auth_manager_users', 0);
+        $this->assertDatabaseCount('auth_manager_oauth_client_grants', 0);
+        $this->assertDatabaseCount('local_identity_migrations', 0);
+        $this->assertNull($source->fresh()->oauth_subject);
+        $this->assertTrue($source->fresh()->force_change_pw);
     }
 
     public function test_conflicts_are_never_adopted_by_email_or_subject_and_other_accounts_can_resume(): void
