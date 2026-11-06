@@ -38,7 +38,7 @@ it('keeps the event context, shell and links while posting login choices once wi
   fireEvent.submit(email.closest('form')!);
   await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
   expect(screen.getByRole('button', { name: 'Signing in...' })).toBeDisabled();
-  const [url, options] = request.mock.calls[0];
+  const [url, options] = request.mock.calls[0]!;
   expect(url).toBe('/api/auth/login');
   expect(options?.headers).toMatchObject({ 'X-CSRF-TOKEN': 'synthetic-csrf', Accept: 'application/json' });
   expect(JSON.parse(String(options?.body))).toEqual({ email: 'person@example.test', password: 'synthetic-password', remember: true });
@@ -94,7 +94,7 @@ it('validates matching eight-character passwords and sends the bootstrapped rese
   expect(request).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Resetting...' })).toBeDisabled();
-  const [url, options] = request.mock.calls[0];
+  const [url, options] = request.mock.calls[0]!;
   expect(url).toBe('/api/auth/reset-password');
   expect(options?.headers).toMatchObject({ 'X-CSRF-TOKEN': 'synthetic-csrf' });
   expect(JSON.parse(String(options?.body))).toEqual({ email: 'person@example.test', token: 'synthetic-reset-token', password: 'new-password', password_confirmation: 'new-password' });
