@@ -1,9 +1,13 @@
 import { expect, test } from '@playwright/test';
 
-import { type TestAccounts } from './helpers';
+import { peerContext, type TestAccounts } from './helpers';
+
+function isFeedUrl(url: URL): boolean {
+  return url.pathname === '/feed' && (url.search === '' || url.search === '?scope=mixed');
+}
 
 for (const remember of [false, true]) {
-  test(`local password and MFA login ${remember ? 'persists' : 'does not persist'} after session cookies are discarded`, async ({ page, context, request }) => {
+  test(`local password and MFA login ${remember ? 'persists' : 'does not persist'} after session cookies are discarded`, async ({ browser, page, context, request }) => {
     const fixture = await request.get('/__browser/fixtures');
     expect(fixture.ok()).toBeTruthy();
     const { alice } = await fixture.json() as TestAccounts;
@@ -23,7 +27,7 @@ for (const remember of [false, true]) {
     const { code } = await challenge.json() as { code: string };
     await page.getByLabel('Verification Code', { exact: true }).fill(code);
     await page.getByRole('button', { name: 'Verify Code', exact: true }).click();
-    await expect(page).toHaveURL(/\/feed$/);
+    await expect(page).toHaveURL(isFeedUrl);
     const identity = page.getByRole('button', { name: 'Account and identity menu (currently Alice)' });
     await expect(identity).toBeVisible();
     const recallers = (await context.cookies()).filter((cookie) => cookie.name.startsWith('remember_web_'));
@@ -35,16 +39,33 @@ for (const remember of [false, true]) {
       expect(recaller.path).toBe('/');
       expect(recaller.expires).toBeGreaterThan(Date.now() / 1000);
     }
-    // Recreate the browser's next session with only the persistent login cookie.
-    await context.clearCookies();
-    await context.addCookies(recallers);
-    await page.goto('/feed');
-    if (remember) {
-      await expect(page).toHaveURL(/\/feed$/);
-      await expect(identity).toBeVisible();
-    } else {
-      await expect(page).toHaveURL(/\/login$/);
-      await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
+    // A fresh cookie jar also excludes late Set-Cookie responses from the old
+    // page's background requests, which can repopulate a cleared active jar.
+    const nextContext = await peerContext(browser);
+    try {
+      await nextContext.addCookies(recallers);
+      expect((await nextContext.cookies()).map((cookie) => cookie.name)).toEqual(recallers.map((cookie) => cookie.name));
+      const nextPage = await nextContext.newPage();
+      const navigation = await nextPage.goto('/feed');
+      if (!navigation) throw new Error('The next browser session did not receive a document response.');
+      expect(navigation.status()).toBe(200);
+      const originalRequest = navigation.request().redirectedFrom() ?? navigation.request();
+      expect(new URL(originalRequest.url()).pathname).toBe('/feed');
+      const cookieHeader = (await originalRequest.allHeaders()).cookie ?? '';
+      const cookieNames = cookieHeader.split(';').filter(Boolean).map((cookie) => cookie.trim().split('=')[0]);
+      expect(cookieNames).toEqual(recallers.map((cookie) => cookie.name));
+      if (remember) {
+        expect(navigation.request().redirectedFrom()).toBeNull();
+        await expect(nextPage).toHaveURL(isFeedUrl);
+        await expect(nextPage.getByRole('button', { name: 'Account and identity menu (currently Alice)' })).toBeVisible();
+      } else {
+        const rejection = await originalRequest.response();
+        expect(rejection?.status()).toBe(302);
+        await expect(nextPage).toHaveURL(/\/login$/);
+        await expect(nextPage.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
+      }
+    } finally {
+      await nextContext.close();
     }
   });
 }
@@ -97,12 +118,21 @@ test('local password recovery keeps account privacy and completes a real reset f
   expect(resetRequests).toHaveLength(0);
   await password.fill('new-synthetic-password');
   await confirmation.fill('new-synthetic-password');
-  const resetResponse = page.waitForResponse((response) => response.url().endsWith('/api/auth/reset-password') && response.request().method() === 'POST');
+  let captureResult!: (result: { status: number; body: string }) => void;
+  const resetResult = new Promise<{ status: number; body: string }>((resolve) => { captureResult = resolve; });
+  // Forward the real backend response unchanged, but capture its body before
+  // releasing it to the page: success immediately navigates to another document.
+  await page.route('**/api/auth/reset-password', async (route) => {
+    const response = await route.fetch({ maxRedirects: 0 });
+    captureResult({ status: response.status(), body: await response.text() });
+    await route.fulfill({ response });
+  });
   await page.getByRole('button', { name: 'Reset Password', exact: true }).click();
-  const result = await resetResponse;
-  expect(result.ok()).toBeTruthy();
-  expect(await result.json()).toMatchObject({ success: true });
+  const result = await resetResult;
+  expect(result.status).toBe(200);
+  const payload: unknown = JSON.parse(result.body);
+  expect(payload).toMatchObject({ success: true });
   expect(resetRequests).toHaveLength(1);
-  await expect(page).toHaveURL(/\/feed$/);
+  await expect(page).toHaveURL(isFeedUrl);
   await expect(page.getByRole('button', { name: 'Account and identity menu (currently Alice)' })).toBeVisible();
 });
