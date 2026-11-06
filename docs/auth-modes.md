@@ -246,8 +246,9 @@ attestation as described in the provider's
 [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
 Run the host and embedded CI checks against any resulting lock file.
 
-The shared `auth-laravel` client uses the tagged `0.28.4` release, which includes
-invitation support for mounted issuers and optional persistent passkey login.
+The shared `auth-laravel` client uses the tagged `0.28.5` release, which includes
+password preflight and intended-destination validation alongside invitation
+support for mounted issuers and optional persistent passkey login.
 The Composer lock fixes the exact installed release; no development alias is
 needed for the client.
 
