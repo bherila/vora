@@ -16,7 +16,18 @@ become the default for new installs, and no installation still runs on local
 
 vora keeps its own accounts: passwords, email codes, passkeys, registration,
 invite links, the waitlist and recovery. The credential code lives in
-`bherila/auth-laravel` and is shared with other apps.
+`bherila/auth-laravel` and is shared with other apps. Local password sign-in uses
+its `PasswordCredentials` preflight before issuing the mandatory email-code
+challenge. Preflight verifies credentials and account policy without creating a
+login session or remember cookie. Vora owns challenge handoff, throttling and
+audit calls; the shared service performs configured password rehashing.
+
+Login and recovery pages compose `bwh-auth` forms inside Vora's card, Event
+joining notice and navigation. The password reset page opts into matching
+passwords and an eight-character minimum. Registration, invitations, approval,
+age eligibility, and Event joining remain application policy. Intended return
+URLs use the shared `IntendedUrl` helper with Vora's relative-path and strict
+one-decode checks after those gates.
 
 **Choose it** for a self-hosted single install, or when you do not want to run
 another service.
