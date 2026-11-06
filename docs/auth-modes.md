@@ -251,12 +251,11 @@ invitation support for mounted issuers and optional persistent passkey login.
 The Composer lock fixes the exact installed release; no development alias is
 needed for the client.
 
-The browser helper uses the official `bwh-auth` `0.6.3` GitHub release tarball
-while that version is unavailable from npm's public registry. The signed release
-tag and successful release build identify its source; the pnpm lock verifies the
-artifact's integrity. Its install script has an exact-source build approval,
-with other dependency build checks retained. Switch the dependency specification
-back to the same registry version when its availability is confirmed.
+The browser helper uses the published `bwh-auth` `0.6.3` npm release. Its signed
+release tag and successful publication identify the reviewed source; the pnpm
+lock verifies the registry artifact's integrity. The shared forms supply local
+login and recovery controls, while Vora retains its surrounding workflow and
+account policy. Other dependency build checks remain enabled.
 
 **Same-origin caveat.** Because auth-manager is served from vora's origin,
 its cookies, session and any script on `/auth` share an origin with vora. A
