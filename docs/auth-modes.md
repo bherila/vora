@@ -142,8 +142,9 @@ permissions at `/admin/users`. Those are separate roles and separate people reco
 
 **Install**
 
-The Composer lock installs the pinned auth-manager source. Deployment artifacts
-include matching compiled `public/build` assets, prepared by CI. Package
+The Composer lock installs the `0.1.4` source ZIP from the signed auth-manager
+release. It includes matching compiled `public/build` assets, which CI and
+deployment reuse. Package
 auto-discovery is disabled: vora registers
 the provider only when `AUTH_SIGN_IN=embedded`. Local and external installations
 serve no embedded provider routes.
@@ -176,7 +177,7 @@ serve no embedded provider routes.
 
    It prompts for a hidden password and confirmation, refuses a nonempty directory,
    and creates no vora account. For an existing provider directory, use the
-   dry-run-first [identity copy procedure](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/identity-copy.md),
+   dry-run-first [identity copy procedure](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/identity-copy.md),
    then grant a chosen existing identity with
    `php artisan auth-manager:user-roles admin@example.test --add=admin`.
    Neither path copies or binds vora's local accounts automatically.
@@ -193,7 +194,7 @@ serve no embedded provider routes.
    Set `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from that file without posting them
    in logs or tickets, remove the capture file, and rebuild cached configuration.
    Grant intended people this client in `/auth/admin/users`. The provider's
-   [application connection guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/connecting-an-application.md)
+   [application connection guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/connecting-an-application.md)
    explains client grants and optional application registration.
 6. Verify a granted account can complete `/login` → `/auth/...` → `/oauth/callback`
    and reach vora, and an ungranted account cannot. Log out and check both sessions
@@ -217,7 +218,8 @@ callback URL consistent with the reachable local origin.
 **Assets and deployment.** Provider pages serve compiled assets at
 `/auth/build/assets/...`. CI and container builds run
 `bash scripts/build-embedded-auth-assets.sh`, reusing packaged assets when present
-or building the pinned source in a disposable directory. Deployment archives
+as they are in the pinned release. The source-only development fallback builds
+matching assets in a disposable directory. Deployment archives
 include the provider and its matching assets under `vendor/`; the server needs no
 frontend build or asset publication. When explicitly developing embedded mode
 from a source-only Composer package, run that script before serving provider pages.
@@ -231,25 +233,30 @@ external mode. The signing key, provider-side public key and client permission m
 still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
-**Release updates.** The provider is temporarily pinned to reviewed source commit
-`0212b78ca696e72dd805d0cb0ad4afbf7c779c92`, which includes complete directory migration
-and persistent passkey sign-in plus provider administrator controls
-([directory migration](https://github.com/bherila/auth-manager/pull/122),
-[passkey sign-in](https://github.com/bherila/auth-manager/pull/125),
-[administrator controls](https://github.com/bherila/auth-manager/pull/126),
-[OAuth guard isolation](https://github.com/bherila/auth-manager/pull/127),
-[shared password preflight](https://github.com/bherila/auth-manager/pull/128)). The package
-definition and lock identify that immutable source archive and its Composer
-checksum; CI builds its matching frontend. This source pin is not a tagged,
-attested release. Replace it with a tagged release containing the change when
-available, verifying the release's `SHA256SUMS-source` and GitHub provenance
-attestation as described in the provider's
-[packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
-Run the host and embedded CI checks against any resulting lock file.
+**Release updates.** The provider uses the stable, signed and attested `0.1.4`
+[source release](https://github.com/bherila/auth-manager/releases/tag/v0.1.4),
+from commit `92661dead4ff616f799a45f65e36be72bd63aa4d`. Its
+[upgrade guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/releases/v0.1.4.md)
+covers directory migration, administrator controls, credential/session isolation,
+passkey persistence and the schema/cache requirements for upgrading from `0.1.3`.
+Embedded confirmation/report names use `auth-manager.two-factor.*`; Vora's local
+credential routes remain disabled in embedded mode. Rebuild route caches when
+activating this version.
 
-The shared `auth-laravel` client uses the tagged `0.28.5` release, which includes
-password preflight and intended-destination validation alongside invitation
-support for mounted issuers and optional persistent passkey login.
+The adopted `auth-manager-source-v0.1.4.zip` has SHA-256
+`bdfa9d36f7798a8152eb85fd3672dbbf9c6e95609ca2204545dd59dfdd944bd5`.
+Its `SHA256SUMS-source` and provenance were verified against the exact source
+commit, `refs/tags/v0.1.4` and the provider's release workflow. The Composer
+package definition repeats the archive's actual dependency/autoload/provider
+metadata and pins its release URL, version, source reference and SHA-1 checksum.
+For future updates, repeat the checksum and provenance checks in the provider's
+[packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/embedded-mode.md#packaging),
+then run the host and embedded CI checks against the resulting lock file.
+
+The shared `auth-laravel` client uses the tagged `0.28.6` release, which includes
+two-factor route namespaces, password preflight and intended-destination
+validation alongside invitation support for mounted issuers and optional
+persistent passkey login.
 The Composer lock fixes the exact installed release; no development alias is
 needed for the client.
 
@@ -290,15 +297,16 @@ per-account commits. A manually prepared identity can still be bound individuall
 with `oauth:bind-subject`; the bulk tool refuses to adopt such an existing binding
 without its own ownership checkpoint.
 
-For embedded-to-external, export/import the provider directory with subjects intact,
-register the application client on the destination, update its client credentials,
-change the provider base URL/issuer and set `AUTH_SIGN_IN=provider`. Keep
-`OAUTH_PROVIDER` unchanged so vora's bindings still identify the same people. Review
-the upstream [copy limitations](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/identity-copy.md):
-the current copy is not a complete portable archive of clients, invitations or
-`APP_KEY`-derived secrets. Passkeys also need an RP ID valid on the new host. Set
-`WEBAUTHN_RP_ID` deliberately before enrolling them. Rehearse the complete move on
-an isolated copy; this release performs no account migration.
+For embedded-to-external, follow the provider's
+[portable directory procedure](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/portable-directory.md)
+to preserve exact subjects, compatible credentials, client registrations and grants
+in a fresh destination. Keep `OAUTH_PROVIDER` unchanged so vora's bindings identify
+the same people. Verify the destination's client registration and supported secret,
+change the provider base URL/issuer and set `AUTH_SIGN_IN=provider`.
+The archive excludes runtime keys, sessions and transient sign-in material; align
+the destination's sign-in assurance, password hasher and effective passkey RP ID as
+the procedure requires. Rehearse the complete move on an isolated copy; this
+release performs no account migration.
 
 ## Tests
 
