@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ac54230c664fb26542d3de08e54d1630",
+    "content-hash": "bbc068f86efd8682c22b7dc66963d22c",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -285,16 +285,16 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-manager.git",
-                "reference": "8143a2e615565e76c1d91e2176b00ddb2ec2068d"
+                "reference": "0212b78ca696e72dd805d0cb0ad4afbf7c779c92"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth-manager/zipball/8143a2e615565e76c1d91e2176b00ddb2ec2068d",
-                "reference": "8143a2e615565e76c1d91e2176b00ddb2ec2068d",
-                "shasum": "a3a3b637f17063a42b63702deec0c83d81125bf8"
+                "url": "https://api.github.com/repos/bherila/auth-manager/zipball/0212b78ca696e72dd805d0cb0ad4afbf7c779c92",
+                "reference": "0212b78ca696e72dd805d0cb0ad4afbf7c779c92",
+                "shasum": "aca40e1e55cf58ca17c04533e01431c3cb5ea7fc"
             },
             "require": {
-                "bherila/auth-laravel": "^0.28.4",
+                "bherila/auth-laravel": "^0.28.5",
                 "laravel/framework": "^13.17",
                 "laravel/passport": "^13.4",
                 "laravel/tinker": "^3.0",

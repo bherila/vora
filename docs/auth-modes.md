@@ -232,12 +232,13 @@ still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
 **Release updates.** The provider is temporarily pinned to reviewed source commit
-`8143a2e615565e76c1d91e2176b00ddb2ec2068d`, which includes complete directory migration
+`0212b78ca696e72dd805d0cb0ad4afbf7c779c92`, which includes complete directory migration
 and persistent passkey sign-in plus provider administrator controls
 ([directory migration](https://github.com/bherila/auth-manager/pull/122),
 [passkey sign-in](https://github.com/bherila/auth-manager/pull/125),
 [administrator controls](https://github.com/bherila/auth-manager/pull/126),
-[OAuth guard isolation](https://github.com/bherila/auth-manager/pull/127)). The package
+[OAuth guard isolation](https://github.com/bherila/auth-manager/pull/127),
+[shared password preflight](https://github.com/bherila/auth-manager/pull/128)). The package
 definition and lock identify that immutable source archive and its Composer
 checksum; CI builds its matching frontend. This source pin is not a tagged,
 attested release. Replace it with a tagged release containing the change when

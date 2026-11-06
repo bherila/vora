@@ -12,7 +12,7 @@
         "php": "^8.5",
         "aws/aws-php-sns-message-validator": "^1.10",
         "bherila/auth-laravel": "^0.28.5",
-        "bherila/auth-manager": "dev-main#8143a2e615565e76c1d91e2176b00ddb2ec2068d as 0.1.3",
+        "bherila/auth-manager": "dev-main#0212b78ca696e72dd805d0cb0ad4afbf7c779c92 as 0.1.3",
         "erusev/parsedown": "^1.8.0",
         "laravel-notification-channels/webpush": "^13.0.1",
         "laravel/framework": "^13.35.0",
@@ -117,7 +117,7 @@
                 "type": "project",
                 "require": {
                     "php": "^8.4",
-                    "bherila/auth-laravel": "^0.28.4",
+                    "bherila/auth-laravel": "^0.28.5",
                     "laravel/framework": "^13.17",
                     "laravel/passport": "^13.4",
                     "laravel/tinker": "^3.0",
@@ -141,14 +141,14 @@
                 },
                 "dist": {
                     "type": "zip",
-                    "url": "https://api.github.com/repos/bherila/auth-manager/zipball/8143a2e615565e76c1d91e2176b00ddb2ec2068d",
-                    "shasum": "a3a3b637f17063a42b63702deec0c83d81125bf8",
-                    "reference": "8143a2e615565e76c1d91e2176b00ddb2ec2068d"
+                    "url": "https://api.github.com/repos/bherila/auth-manager/zipball/0212b78ca696e72dd805d0cb0ad4afbf7c779c92",
+                    "shasum": "aca40e1e55cf58ca17c04533e01431c3cb5ea7fc",
+                    "reference": "0212b78ca696e72dd805d0cb0ad4afbf7c779c92"
                 },
                 "source": {
                     "type": "git",
                     "url": "https://github.com/bherila/auth-manager.git",
-                    "reference": "8143a2e615565e76c1d91e2176b00ddb2ec2068d"
+                    "reference": "0212b78ca696e72dd805d0cb0ad4afbf7c779c92"
                 }
             }
         }
