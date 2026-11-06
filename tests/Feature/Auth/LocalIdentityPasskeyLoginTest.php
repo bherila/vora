@@ -41,11 +41,15 @@ class LocalIdentityPasskeyLoginTest extends EmbeddedAuthTestCase
         $this->assertInstanceOf(OpenSSLAsymmetricKey::class, $privateKey);
         $details = openssl_pkey_get_details($privateKey);
         $this->assertIsArray($details);
-        $this->assertSame(32, strlen($details['ec']['x']));
-        $this->assertSame(32, strlen($details['ec']['y']));
+        // OpenSSL may omit an unsigned coordinate's leading zero bytes; COSE
+        // P-256 coordinates always use exactly 32 bytes.
+        $x = str_pad($details['ec']['x'], 32, "\0", STR_PAD_LEFT);
+        $y = str_pad($details['ec']['y'], 32, "\0", STR_PAD_LEFT);
+        $this->assertSame(32, strlen($x));
+        $this->assertSame(32, strlen($y));
         // COSE EC2 / ES256 / P-256 map: {1:2, 3:-7, -1:1, -2:x, -3:y}.
-        $publicKey = "\xa5\x01\x02\x03\x26\x20\x01\x21\x58\x20".$details['ec']['x']
-            ."\x22\x58\x20".$details['ec']['y'];
+        $publicKey = "\xa5\x01\x02\x03\x26\x20\x01\x21\x58\x20".$x
+            ."\x22\x58\x20".$y;
         $credentialId = $this->base64Url(random_bytes(32));
         $credential = PasskeyCredential::create([
             'user_id' => $source->id, 'credential_id' => $credentialId,
