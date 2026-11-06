@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Validation contract: @TESTING.AGENTS.md
+
 For AI coding agents working in this Laravel + React/TypeScript/Vite starter template.
 
 ## Operating principle
@@ -37,8 +39,8 @@ Never run `npm`, `npm ci`, or `npx` in this repo.
   container matching production.
 - **Dependency management**: Composer (PHP) + pnpm (JS). Do not mix.
 - **Docs**: README.md is the human-facing project overview; AGENTS.md is the
-  agent contract; TESTING.AGENTS.md owns validation details; CLAUDE.md should
-  only point to those files and avoid duplicating their content.
+  agent contract; TESTING.AGENTS.md owns validation details; there is no CLAUDE.md
+  (Claude Code reads AGENTS.md directly).
 
 ## Commands
 
