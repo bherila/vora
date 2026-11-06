@@ -65,7 +65,7 @@ class EmbeddedAuditTest extends EmbeddedAuthTestCase
         $this->postJson('/api/change-password')->assertNotFound();
 
         $this->assertSame('api/auth/audit-log/all', Route::getRoutes()->getByName('bherila-auth.audit.all')?->uri());
-        $this->assertSame('auth/api/auth/two-factor/confirm/{token}', Route::getRoutes()->getByName('bherila-auth.two-factor.confirm')?->uri());
+        $this->assertSame('auth/api/auth/two-factor/confirm/{token}', Route::getRoutes()->getByName('auth-manager.two-factor.confirm')?->uri());
         $this->assertSame('/login', route('login', absolute: false));
         $this->assertSame('/auth/login', route('auth-manager.login', absolute: false));
     }
