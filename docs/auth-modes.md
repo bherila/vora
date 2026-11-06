@@ -16,7 +16,18 @@ become the default for new installs, and no installation still runs on local
 
 vora keeps its own accounts: passwords, email codes, passkeys, registration,
 invite links, the waitlist and recovery. The credential code lives in
-`bherila/auth-laravel` and is shared with other apps.
+`bherila/auth-laravel` and is shared with other apps. Local password sign-in uses
+its `PasswordCredentials` preflight before issuing the mandatory email-code
+challenge. Preflight verifies credentials and account policy without creating a
+login session or remember cookie. Vora owns challenge handoff, throttling and
+audit calls; the shared service performs configured password rehashing.
+
+Login and recovery pages compose `bwh-auth` forms inside Vora's card, Event
+joining notice and navigation. The password reset page opts into matching
+passwords and an eight-character minimum. Registration, invitations, approval,
+age eligibility, and Event joining remain application policy. Intended return
+URLs use the shared `IntendedUrl` helper with Vora's relative-path and strict
+one-decode checks after those gates.
 
 **Choose it** for a self-hosted single install, or when you do not want to run
 another service.
@@ -221,12 +232,13 @@ still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
 **Release updates.** The provider is temporarily pinned to reviewed source commit
-`8143a2e615565e76c1d91e2176b00ddb2ec2068d`, which includes complete directory migration
+`0212b78ca696e72dd805d0cb0ad4afbf7c779c92`, which includes complete directory migration
 and persistent passkey sign-in plus provider administrator controls
 ([directory migration](https://github.com/bherila/auth-manager/pull/122),
 [passkey sign-in](https://github.com/bherila/auth-manager/pull/125),
 [administrator controls](https://github.com/bherila/auth-manager/pull/126),
-[OAuth guard isolation](https://github.com/bherila/auth-manager/pull/127)). The package
+[OAuth guard isolation](https://github.com/bherila/auth-manager/pull/127),
+[shared password preflight](https://github.com/bherila/auth-manager/pull/128)). The package
 definition and lock identify that immutable source archive and its Composer
 checksum; CI builds its matching frontend. This source pin is not a tagged,
 attested release. Replace it with a tagged release containing the change when
@@ -235,17 +247,17 @@ attestation as described in the provider's
 [packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.3/docs/embedded-mode.md#packaging).
 Run the host and embedded CI checks against any resulting lock file.
 
-The shared `auth-laravel` client uses the tagged `0.28.4` release, which includes
-invitation support for mounted issuers and optional persistent passkey login.
+The shared `auth-laravel` client uses the tagged `0.28.5` release, which includes
+password preflight and intended-destination validation alongside invitation
+support for mounted issuers and optional persistent passkey login.
 The Composer lock fixes the exact installed release; no development alias is
 needed for the client.
 
-The browser helper uses the official `bwh-auth` `0.6.2` GitHub release tarball
-while that version is unavailable from npm's public registry. The signed release
-tag and successful release build identify its source; the pnpm lock verifies the
-artifact's integrity. Its install script has an exact-source build approval,
-with other dependency build checks retained. Switch the dependency specification
-back to the same registry version when its availability is confirmed.
+The browser helper uses the published `bwh-auth` `0.6.3` npm release. Its signed
+release tag and successful publication identify the reviewed source; the pnpm
+lock verifies the registry artifact's integrity. The shared forms supply local
+login and recovery controls, while Vora retains its surrounding workflow and
+account policy. Other dependency build checks remain enabled.
 
 **Same-origin caveat.** Because auth-manager is served from vora's origin,
 its cookies, session and any script on `/auth` share an origin with vora. A

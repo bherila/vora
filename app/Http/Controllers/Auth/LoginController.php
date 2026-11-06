@@ -4,17 +4,17 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Models\User;
 use App\Services\Auth\SignIn;
 use App\Services\Events\EventJoining;
 use BWH\Auth\Concerns\ThrottlesLoginAttempts;
 use BWH\Auth\Contracts\AuthAuditLogger;
 use BWH\Auth\OAuth\OAuthClient;
+use BWH\Auth\Services\PasswordCredentials;
 use BWH\Auth\Services\TwoFactorService;
+use BWH\Auth\Support\PasswordCredentialStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -30,6 +30,7 @@ class LoginController extends Controller
     public function __construct(
         private readonly AuthAuditLogger $audit,
         private readonly TwoFactorService $twoFactor,
+        private readonly PasswordCredentials $passwords,
     ) {}
 
     public function show(Request $request, EventJoining $joining, OAuthClient $oauth): View|RedirectResponse
@@ -54,10 +55,9 @@ class LoginController extends Controller
             ]);
         }
 
-        /** @var User|null $user */
-        $user = User::where('email', $email)->first();
-
-        if (! $user || ! Hash::check((string) $request->validated()['password'], $user->password)) {
+        $result = $this->passwords->verify($request, $request->safe()->only(['email', 'password']));
+        $user = $result->user;
+        if ($result->status === PasswordCredentialStatus::InvalidCredentials || $user === null) {
             $this->audit->loginFailed($request, $user, $email, 'invalid_credentials');
 
             throw ValidationException::withMessages([
@@ -65,7 +65,7 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! $user->canLogin()) {
+        if ($result->status === PasswordCredentialStatus::AccountDisabled) {
             $this->audit->loginFailed($request, $user, $email, 'account_disabled');
 
             throw ValidationException::withMessages([
