@@ -14,6 +14,12 @@ function jsonResponse(body: Record<string, unknown>, ok = true): Response {
   return { ok, json: async () => body } as Response;
 }
 
+function jsonRequestBody(options: RequestInit | undefined): unknown {
+  const body = options?.body;
+  if (typeof body !== 'string') throw new Error('Expected a JSON request body');
+  return JSON.parse(body);
+}
+
 beforeEach(() => {
   request.mockReset();
   globalThis.fetch = request;
@@ -41,7 +47,7 @@ it('keeps the event context, shell and links while posting login choices once wi
   const [url, options] = request.mock.calls[0]!;
   expect(url).toBe('/api/auth/login');
   expect(options?.headers).toMatchObject({ 'X-CSRF-TOKEN': 'synthetic-csrf', Accept: 'application/json' });
-  expect(JSON.parse(String(options?.body))).toEqual({ email: 'person@example.test', password: 'synthetic-password', remember: true });
+  expect(jsonRequestBody(options)).toEqual({ email: 'person@example.test', password: 'synthetic-password', remember: true });
   finish(jsonResponse({ success: false, message: 'Credentials rejected' }));
   expect(await screen.findByText('Credentials rejected')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Sign In' })).toBeEnabled();
@@ -97,7 +103,7 @@ it('validates matching eight-character passwords and sends the bootstrapped rese
   const [url, options] = request.mock.calls[0]!;
   expect(url).toBe('/api/auth/reset-password');
   expect(options?.headers).toMatchObject({ 'X-CSRF-TOKEN': 'synthetic-csrf' });
-  expect(JSON.parse(String(options?.body))).toEqual({ email: 'person@example.test', token: 'synthetic-reset-token', password: 'new-password', password_confirmation: 'new-password' });
+  expect(jsonRequestBody(options)).toEqual({ email: 'person@example.test', token: 'synthetic-reset-token', password: 'new-password', password_confirmation: 'new-password' });
   finish(jsonResponse({ success: false, message: 'Reset link expired' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Reset link expired');
   expect(screen.getByRole('button', { name: 'Reset Password' })).toBeEnabled();
