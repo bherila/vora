@@ -17,8 +17,8 @@ allowBuilds:
   '@swc/core': true
   '@parcel/watcher': true
   bwh-auth: true
-  # The signed 0.6.2 release artifact has a separate, exact-source build identity.
-  'bwh-auth@https://github.com/bherila/auth-react/releases/download/bwh-auth-v0.6.2/bwh-auth-0.6.2.tgz': true
+  # The signed 0.6.3 release artifact has a separate, exact-source build identity.
+  'bwh-auth@https://github.com/bherila/auth-react/releases/download/bwh-auth-v0.6.3/bwh-auth-0.6.3.tgz': true
   unrs-resolver: true
 # bwh-auth is a first-party package; skip the release-age supply-chain gate so a
 # freshly published version installs immediately in policy-enabled environments.

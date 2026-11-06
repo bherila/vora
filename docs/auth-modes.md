@@ -251,7 +251,7 @@ invitation support for mounted issuers and optional persistent passkey login.
 The Composer lock fixes the exact installed release; no development alias is
 needed for the client.
 
-The browser helper uses the official `bwh-auth` `0.6.2` GitHub release tarball
+The browser helper uses the official `bwh-auth` `0.6.3` GitHub release tarball
 while that version is unavailable from npm's public registry. The signed release
 tag and successful release build identify its source; the pnpm lock verifies the
 artifact's integrity. Its install script has an exact-source build approval,
