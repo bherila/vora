@@ -33,6 +33,7 @@ export function ResetPasswordPage({ token, email }: ResetPasswordPageProps) {
           <ResetPasswordForm
             components={getAuthComponents()}
             endpoints={{ resetPassword: '/api/auth/reset-password', csrfToken: getCsrfToken() }}
+            idPrefix="new-password"
             token={token}
             email={email}
             minPasswordLength={8}

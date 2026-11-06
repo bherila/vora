@@ -74,7 +74,7 @@ it.each(['accepted', 'rejected', 'offline'])('keeps forgot-password responses pr
 it('validates matching eight-character passwords and sends the bootstrapped reset token once', async () => {
   let finish!: (response: Response) => void;
   request.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-  render(<ResetPasswordPage token="synthetic-reset-token" email="person@example.test" />);
+  render(<div id="reset-password"><ResetPasswordPage token="synthetic-reset-token" email="person@example.test" /></div>);
   expect(screen.getByLabelText('Email')).toHaveValue('person@example.test');
   const password = screen.getByLabelText('New Password');
   const confirmation = screen.getByLabelText('Confirm New Password');
