@@ -14,12 +14,15 @@ use App\Services\Events\EventSettings;
 use App\Services\FileStorageService;
 use App\Services\Story\StoryService;
 use App\Services\UserAccountService;
+use BWH\Auth\Mail\PasswordResetConfirmationMail;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Support\Facades\Event as EventFacade;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Notification;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -54,6 +57,19 @@ class BrowserServerTest extends TestCase
         $admin = User::factory()->admin()->create(['display_name' => 'Browser Admin']);
         $defaultInstance = config('instance');
         Notification::fake([VerifyEmail::class]);
+        // Observe the real rendered mail delivered to the array transport. Only
+        // this isolated worker exposes links; the application registers no route.
+        $resetLinks = [];
+        EventFacade::listen(MessageSent::class, static function (MessageSent $event) use (&$resetLinks): void {
+            if (($event->data['__laravel_mailable'] ?? null) !== PasswordResetConfirmationMail::class) {
+                return;
+            }
+            $user = $event->data['user'] ?? null;
+            $url = $event->data['resetUrl'] ?? null;
+            if ($user instanceof User && is_string($url)) {
+                $resetLinks[$user->email] = $url;
+            }
+        });
         // Object storage is faked; media requests still use normal policies
         // and protected asset routes, including after access is revoked.
         $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwmDnzPwAEwQJir+BoFQAAAABJRU5ErkJggg==', true);
@@ -104,6 +120,13 @@ class BrowserServerTest extends TestCase
                 $notification = Notification::sent($user, VerifyEmail::class)->last();
                 $this->assertInstanceOf(VerifyEmail::class, $notification);
                 $this->emitJson($input['id'], ['url' => $notification->toMail($user)->actionUrl]);
+
+                continue;
+            }
+
+            if ($input['path'] === '/__browser/password-reset-link') {
+                $email = $input['headers']['x-browser-email'] ?? '';
+                $this->emitJson($input['id'], ['url' => $resetLinks[$email] ?? null]);
 
                 continue;
             }
