@@ -142,7 +142,7 @@ permissions at `/admin/users`. Those are separate roles and separate people reco
 
 **Install**
 
-The Composer lock installs the `0.1.4` source ZIP from the signed auth-manager
+The Composer lock installs the `0.1.5` source ZIP from the signed auth-manager
 release. It includes matching compiled `public/build` assets, which CI and
 deployment reuse. Package
 auto-discovery is disabled: vora registers
@@ -177,7 +177,7 @@ serve no embedded provider routes.
 
    It prompts for a hidden password and confirmation, refuses a nonempty directory,
    and creates no vora account. For an existing provider directory, use the
-   dry-run-first [identity copy procedure](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/identity-copy.md),
+   dry-run-first [identity copy procedure](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/identity-copy.md),
    then grant a chosen existing identity with
    `php artisan auth-manager:user-roles admin@example.test --add=admin`.
    Neither path copies or binds vora's local accounts automatically.
@@ -194,7 +194,7 @@ serve no embedded provider routes.
    Set `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from that file without posting them
    in logs or tickets, remove the capture file, and rebuild cached configuration.
    Grant intended people this client in `/auth/admin/users`. The provider's
-   [application connection guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/connecting-an-application.md)
+   [application connection guide](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/connecting-an-application.md)
    explains client grants and optional application registration.
 6. Verify a granted account can complete `/login` → `/auth/...` → `/oauth/callback`
    and reach vora, and an ungranted account cannot. Log out and check both sessions
@@ -233,24 +233,45 @@ external mode. The signing key, provider-side public key and client permission m
 still be configured; mounting the provider does not grant invitation privileges.
 Use the issuer with its full mount path when configuring invitation assertions.
 
-**Release updates.** The provider uses the stable, signed and attested `0.1.4`
-[source release](https://github.com/bherila/auth-manager/releases/tag/v0.1.4),
-from commit `92661dead4ff616f799a45f65e36be72bd63aa4d`. Its
-[upgrade guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/releases/v0.1.4.md)
-covers directory migration, administrator controls, credential/session isolation,
-passkey persistence and the schema/cache requirements for upgrading from `0.1.3`.
+**Synthetic browser-test logins.** Embedded operators can explicitly provision
+short-lived synthetic identities with `php artisan auth-manager:test-logins`; see
+the provider
+[private-file provisioning and lifecycle guide](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/test-logins.md).
+Creation requires an allowed testing address, a future UTC expiry, explicit static
+OAuth client grants and a new private credential file outside the application and
+web roots. Password-only sign-in skips the emailed factor only for these flagged
+identities and records single-factor assurance; it grants no provider administrator
+role and does not satisfy requested MFA or fresh passkey proof. Ordinary host and
+provider accounts retain their existing policy. Provider expiry denies authentication
+immediately, and the shared scheduler disables expired provider identities. Enable
+`BHERILA_AUTH_PROVIDER_IDENTITY_ENABLED=true` after verifying the status endpoint
+so existing Vora sessions are checked within the provider-status freshness window
+(up to five minutes); provider expiry is not instant cross-application revocation.
+Retire these identities through the dedicated CLI lifecycle
+before exporting a live directory.
+
+**Release updates.** The provider uses the stable, signed and attested `0.1.5`
+[source release](https://github.com/bherila/auth-manager/releases/tag/v0.1.5),
+from commit `be50212514125d8190b43fe25187c403b9f74016`. Its
+[upgrade guide](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/releases/v0.1.5.md)
+covers synthetic-login lifecycle, schema activation and account-management
+acceptance. The new provider migration adds an opt-in flag and expiry; existing
+accounts remain ordinary. Deployments run provider migrations through the normal
+reviewed schema step before activation; updating the package creates no account.
+For an upgrade from `0.1.3`, also review the
+[0.1.4 upgrade guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/releases/v0.1.4.md).
 Embedded confirmation/report names use `auth-manager.two-factor.*`; Vora's local
 credential routes remain disabled in embedded mode. Rebuild route caches when
 activating this version.
 
-The adopted `auth-manager-source-v0.1.4.zip` has SHA-256
-`bdfa9d36f7798a8152eb85fd3672dbbf9c6e95609ca2204545dd59dfdd944bd5`.
+The adopted `auth-manager-source-v0.1.5.zip` has SHA-256
+`3c6acb22b72232ba089d0edd58bb527da02eb3fb64d4d1bdce90e3f3d47779b1`.
 Its `SHA256SUMS-source` and provenance were verified against the exact source
-commit, `refs/tags/v0.1.4` and the provider's release workflow. The Composer
+commit, `refs/tags/v0.1.5` and the provider's release workflow. The Composer
 package definition repeats the archive's actual dependency/autoload/provider
 metadata and pins its release URL, version, source reference and SHA-1 checksum.
 For future updates, repeat the checksum and provenance checks in the provider's
-[packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/embedded-mode.md#packaging),
+[packaging guide](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/embedded-mode.md#packaging),
 then run the host and embedded CI checks against the resulting lock file.
 
 The shared `auth-laravel` client uses the tagged `0.28.6` release, which includes
@@ -298,7 +319,7 @@ with `oauth:bind-subject`; the bulk tool refuses to adopt such an existing bindi
 without its own ownership checkpoint.
 
 For embedded-to-external, follow the provider's
-[portable directory procedure](https://github.com/bherila/auth-manager/blob/v0.1.4/docs/portable-directory.md)
+[portable directory procedure](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/portable-directory.md)
 to preserve exact subjects, compatible credentials, client registrations and grants
 in a fresh destination. Keep `OAUTH_PROVIDER` unchanged so vora's bindings identify
 the same people. Verify the destination's client registration and supported secret,

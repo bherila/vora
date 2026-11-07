@@ -12,7 +12,7 @@
         "php": "^8.5",
         "aws/aws-php-sns-message-validator": "^1.10",
         "bherila/auth-laravel": "^0.28.6",
-        "bherila/auth-manager": "0.1.4",
+        "bherila/auth-manager": "0.1.5",
         "erusev/parsedown": "^1.8.0",
         "laravel-notification-channels/webpush": "^13.0.1",
         "laravel/framework": "^13.35.0",
@@ -113,7 +113,7 @@
             "type": "package",
             "package": {
                 "name": "bherila/auth-manager",
-                "version": "0.1.4",
+                "version": "0.1.5",
                 "type": "project",
                 "require": {
                     "php": "^8.4",
@@ -141,14 +141,14 @@
                 },
                 "dist": {
                     "type": "zip",
-                    "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.4/auth-manager-source-v0.1.4.zip",
-                    "shasum": "2c9a4f9f0c3c88bd616d9a76b8a734e9cdc4e8fe",
-                    "reference": "92661dead4ff616f799a45f65e36be72bd63aa4d"
+                    "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.5/auth-manager-source-v0.1.5.zip",
+                    "shasum": "db35fc2d229307b1291bcc12b54e075fc08b3495",
+                    "reference": "be50212514125d8190b43fe25187c403b9f74016"
                 },
                 "source": {
                     "type": "git",
                     "url": "https://github.com/bherila/auth-manager.git",
-                    "reference": "92661dead4ff616f799a45f65e36be72bd63aa4d"
+                    "reference": "be50212514125d8190b43fe25187c403b9f74016"
                 }
             }
         }
