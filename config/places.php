@@ -14,8 +14,9 @@
 */
 
 return [
-    // One of GeoNames' city dumps: cities500, cities1000, cities5000, cities15000
-    // (minimum population). Smaller numbers mean more, smaller places.
+    // Default GeoNames city dump: cities500, cities1000, cities5000, cities15000
+    // (minimum population). Smaller numbers mean more, smaller places. The
+    // dataset chosen on Admin → City list takes precedence.
     'dataset' => env('PLACES_DATASET', 'cities5000'),
 
     'base_url' => env('PLACES_BASE_URL', 'https://download.geonames.org/export/dump'),
@@ -24,7 +25,7 @@ return [
     // truncated download must never empty the table.
     'minimum_rows' => (int) env('PLACES_MINIMUM_ROWS', 1000),
 
-    // Re-import monthly from the scheduler. Off by default; the command can
-    // always be run by hand.
+    // Default for the monthly refresh; Admin → City list can turn it on or
+    // off. The command can always be run by hand.
     'auto_refresh' => (bool) env('PLACES_AUTO_REFRESH', false),
 ];

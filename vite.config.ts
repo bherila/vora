@@ -40,6 +40,7 @@ export default defineConfig({
                 'resources/js/admin/stories.tsx',
                 'resources/js/admin/deleted-content.tsx',
                 'resources/js/admin/static-pages.tsx',
+                'resources/js/location/admin-places.tsx',
                 'resources/js/community/feed.tsx',
                 'resources/js/community/post-view.tsx',
                 'resources/js/interests/page.tsx',

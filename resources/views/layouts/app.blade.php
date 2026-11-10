@@ -109,6 +109,7 @@
           ['type' => 'link', 'label' => 'Static pages', 'href' => route('admin.pages', [], false)],
           ['type' => 'link', 'label' => 'Email delivery', 'href' => route('admin.mail-deliveries', [], false)],
           ['type' => 'link', 'label' => 'App icon & name', 'href' => route('admin.app-icon', [], false)],
+          $__enabled('profiles') ? ['type' => 'link', 'label' => 'City list', 'href' => route('admin.places', [], false)] : null,
           ['type' => 'link', 'label' => 'Audit log', 'href' => route('admin.audit-log', [], false)],
         ])),
       ] : null;

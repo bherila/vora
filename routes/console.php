@@ -3,6 +3,7 @@
 use App\Console\Commands\QueueHealthCommand;
 use App\Models\MailDelivery;
 use App\Services\Auth\SignIn;
+use App\Services\Location\PlaceImportRequests;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -45,10 +46,18 @@ Schedule::command('bherila-auth:consume-identity-tombstones')
     ->runInBackground()
     ->when(fn (): bool => SignIn::usesProvider());
 
-// Optionally refresh the GeoNames city list monthly. The list is data, not
-// code: `places:import` can also be run by hand at any time.
-Schedule::command('places:import')
-    ->monthlyOn(3, '04:17')
-    ->withoutOverlapping(120)
+// GeoNames city list: run imports requested from Admin → City list (and the
+// optional monthly refresh, which queues one). The list is data, not code;
+// `places:import` can also be run by hand at any time.
+Schedule::command('places:run-requested')
+    ->everyMinute()
+    ->withoutOverlapping(180)
     ->runInBackground()
-    ->when(fn (): bool => (bool) config('places.auto_refresh'));
+    ->when(fn (): bool => app(PlaceImportRequests::class)->hasPending());
+Schedule::call(fn () => app(PlaceImportRequests::class)->request(
+    ['mode' => 'update', 'rehome' => false, 'dry_run' => false, 'upload_dir' => null, 'source' => 'schedule'],
+    null,
+))
+    ->name('places:monthly-refresh')
+    ->monthlyOn(3, '04:17')
+    ->when(fn (): bool => app(PlaceImportRequests::class)->autoRefresh());

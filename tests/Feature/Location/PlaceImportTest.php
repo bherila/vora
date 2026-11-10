@@ -4,6 +4,8 @@ namespace Tests\Feature\Location;
 
 use App\Models\Place;
 use App\Models\User;
+use App\Services\Location\PlaceDirectory;
+use App\Services\Location\PlaceImportRequests;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -74,6 +76,78 @@ class PlaceImportTest extends TestCase
         $this->assertSame('Portland, Oregon State, United States', Place::query()->findOrFail(5746545)->label());
     }
 
+    public function test_dry_run_reports_changes_without_writing(): void
+    {
+        $this->importGeoNamesFixture();
+        User::factory()->approved()->create(['place_id' => 5735238]);
+        $before = Place::query()->orderBy('id')->get()->toArray();
+
+        $this->importGeoNamesFixture(['--cities' => $this->citiesWithout(['5735238', '2198148']), '--dry-run' => true]);
+
+        $this->assertSame($before, Place::query()->orderBy('id')->get()->toArray());
+        $status = app(PlaceImportRequests::class)->status();
+        $this->assertSame('succeeded', $status['state']);
+        $this->assertSame(['parsed' => 7, 'added' => 0, 'updated' => 7, 'removed' => 1, 'kept_in_use' => 1, 'accounts_affected' => 1], array_intersect_key(
+            $status['result'],
+            array_flip(['parsed', 'added', 'updated', 'removed', 'kept_in_use', 'accounts_affected']),
+        ));
+    }
+
+    public function test_kept_cities_leave_search_but_stay_on_their_owners_profile(): void
+    {
+        $this->importGeoNamesFixture();
+        $owner = User::factory()->approved()->create(['place_id' => 5735238, 'location_city_audience' => 'everyone', 'location_country_audience' => 'everyone']);
+
+        $this->importGeoNamesFixture(['--cities' => $this->citiesWithout(['5735238'])]);
+
+        $this->assertNotNull(Place::query()->find(5735238));
+        $this->assertSame([], app(PlaceDirectory::class)->search('salem')->all());
+        $viewer = User::factory()->approved()->create();
+        $this->actingAs($viewer)->getJson("/api/users/{$owner->id}")->assertJsonPath('data.location.label', 'Salem, Oregon, United States');
+    }
+
+    public function test_replace_moves_people_off_dropped_cities_and_prunes_unused_lookups(): void
+    {
+        $this->importGeoNamesFixture();
+        $owner = User::factory()->approved()->create(['place_id' => 5735238]);
+        // Drop Salem (in use) and every Fijian city.
+        $cities = $this->citiesWithout(['5735238', '2198148', '9999993']);
+
+        $this->importGeoNamesFixture(['--cities' => $cities, '--mode' => 'replace', '--rehome' => true]);
+
+        $this->assertNull(Place::query()->find(5735238));
+        // Beaverton is the nearest remaining city to Salem in the fixture.
+        $this->assertSame(5747882, $owner->fresh()->place_id);
+        $this->assertSame(0, DB::table('place_regions')->where('country_code', 'FJ')->count());
+        $this->assertSame(0, DB::table('place_countries')->where('code', 'FJ')->count());
+        $this->assertSame(1, app(PlaceImportRequests::class)->status()['result']['rehomed']);
+    }
+
+    public function test_update_mode_never_moves_people_or_prunes_lookups(): void
+    {
+        $this->importGeoNamesFixture();
+        $owner = User::factory()->approved()->create(['place_id' => 5735238]);
+
+        $this->importGeoNamesFixture(['--cities' => $this->citiesWithout(['5735238', '2198148', '9999993']), '--rehome' => true]);
+
+        $this->assertSame(5735238, $owner->fresh()->place_id);
+        $this->assertSame(1, DB::table('place_countries')->where('code', 'FJ')->count());
+    }
+
+    public function test_accepts_a_cities_zip_whose_text_file_has_another_name(): void
+    {
+        $zipPath = tempnam(sys_get_temp_dir(), 'zip').'.zip';
+        $zip = new ZipArchive;
+        $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFile(base_path('tests/Fixtures/geonames/cities.txt'), 'my-export.txt');
+        $zip->close();
+
+        $this->importGeoNamesFixture(['--cities' => $zipPath]);
+        unlink($zipPath);
+
+        $this->assertSame(9, Place::query()->count());
+    }
+
     public function test_small_import_refuses_to_prune(): void
     {
         $this->importGeoNamesFixture();
@@ -110,5 +184,23 @@ class PlaceImportTest extends TestCase
     public function test_rejects_unknown_dataset(): void
     {
         $this->artisan('places:import', ['--dataset' => 'everything'])->assertFailed();
+    }
+
+    /**
+     * A copy of the fixture cities file without the given GeoNames ids.
+     *
+     * @param  list<string>  $ids
+     */
+    private function citiesWithout(array $ids): string
+    {
+        $lines = array_filter(
+            file(base_path('tests/Fixtures/geonames/cities.txt')) ?: [],
+            fn (string $line): bool => ! in_array(strtok($line, "\t"), $ids, true),
+        );
+        $path = tempnam(sys_get_temp_dir(), 'cities');
+        file_put_contents($path, implode('', $lines));
+        $this->beforeApplicationDestroyed(fn () => @unlink($path));
+
+        return $path;
     }
 }

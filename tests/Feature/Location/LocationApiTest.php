@@ -63,8 +63,9 @@ class LocationApiTest extends TestCase
     {
         // From (0, 0): the corner city is inside the first 0.5° window but
         // about 77 km away; the edge city is outside it and about 57 km away.
-        Place::query()->create(['id' => 9000001, 'name' => 'Corner', 'search_name' => 'corner', 'country_code' => 'FJ', 'lat_e4' => 4900, 'lng_e4' => 4900]);
-        Place::query()->create(['id' => 9000002, 'name' => 'Edge', 'search_name' => 'edge', 'country_code' => 'FJ', 'lat_e4' => 5100, 'lng_e4' => 0]);
+        $batch = (int) Place::query()->max('import_batch');
+        Place::query()->create(['id' => 9000001, 'name' => 'Corner', 'search_name' => 'corner', 'country_code' => 'FJ', 'lat_e4' => 4900, 'lng_e4' => 4900, 'import_batch' => $batch]);
+        Place::query()->create(['id' => 9000002, 'name' => 'Edge', 'search_name' => 'edge', 'country_code' => 'FJ', 'lat_e4' => 5100, 'lng_e4' => 0, 'import_batch' => $batch]);
         $user = User::factory()->approved()->create();
 
         $this->actingAs($user)->postJson('/api/location/places/nearest', ['latitude' => 0, 'longitude' => 0])
