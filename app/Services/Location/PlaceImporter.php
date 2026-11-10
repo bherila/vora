@@ -73,7 +73,7 @@ class PlaceImporter
             }
 
             $this->writeCountries($countries);
-            $regions = $this->writeRegions($regionRows);
+            $regions = $this->writeRegions($regionRows, $this->usedRegionKeys($citiesPath, $countries));
 
             // Strictly increasing, so a row from any earlier run differs.
             $batch = max(now()->getTimestamp(), (int) Place::query()->max('import_batch') + 1);
@@ -134,11 +134,11 @@ class PlaceImporter
      */
     private function preview(PlaceImportOptions $options, string $citiesPath, array $countries, array $regionRows, array $existing, array $inUse): PlaceImportResult
     {
-        // Every region a real run would hold after inserting the file's.
-        $regionKeys = DB::table('place_regions')->get(['country_code', 'code'])
-            ->map(fn (object $r): string => $r->country_code.'.'.$r->code)
-            ->merge(array_keys($regionRows))->unique()->values()->all();
-        $regionIndex = array_flip($regionKeys);
+        // A real run inserts only regions some city uses, so only existing
+        // regions can be pruned.
+        $existingRegionKeys = DB::table('place_regions')->get(['country_code', 'code'])
+            ->map(fn (object $r): string => $r->country_code.'.'.$r->code)->all();
+        $regionIndex = array_flip(array_values(array_unique([...$existingRegionKeys, ...array_keys($regionRows)])));
 
         $seen = [];
         $usedRegions = [];
@@ -168,7 +168,7 @@ class PlaceImporter
                     }
                 }
             }
-            $regionsRemoved = count($regionKeys) - count($usedRegions);
+            $regionsRemoved = count(array_filter($existingRegionKeys, fn (string $key): bool => ! isset($usedRegions[$regionIndex[$key]])));
             $allCountries = DB::table('place_countries')->pluck('code')->merge(array_keys($countries))->unique();
             $countriesRemoved = $allCountries->reject(fn (string $code): bool => isset($usedCountries[$code]))->count();
         }
@@ -188,7 +188,7 @@ class PlaceImporter
         $places = 0;
         $stale = Place::query()->where('import_batch', '<', $batch)->get();
         foreach ($stale as $place) {
-            $target = $this->directory->nearest($place->latitude, $place->longitude);
+            $target = $this->directory->nearest($place->latitude, $place->longitude, anywhere: true);
             if (! $target instanceof Place || $target->id === $place->id) {
                 continue;
             }
@@ -363,14 +363,16 @@ class PlaceImporter
     }
 
     /**
-     * Inserts new regions and renames changed ones in place by id. An upsert
-     * would spend an AUTO_INCREMENT value per existing row on MariaDB/MySQL
-     * and exhaust the SMALLINT key after a few dozen refreshes.
+     * Inserts the new regions some city uses and renames changed ones in place
+     * by id. Never inserting a region only to prune it, and never upserting
+     * (which spends an AUTO_INCREMENT value per existing row on MariaDB/MySQL),
+     * keeps repeated imports from exhausting the SMALLINT key.
      *
      * @param  array<string, array{country_code: string, code: string, name: string, search_name: string}>  $rows
+     * @param  array<string, true>  $used  region keys the cities file refers to
      * @return array<string, int> "US.OR" => region id
      */
-    private function writeRegions(array $rows): array
+    private function writeRegions(array $rows, array $used): array
     {
         $existing = DB::table('place_regions')->get(['id', 'country_code', 'code', 'name', 'search_name'])
             ->keyBy(fn (object $r): string => $r->country_code.'.'.$r->code);
@@ -378,7 +380,9 @@ class PlaceImporter
         foreach ($rows as $key => $row) {
             $current = $existing->get($key);
             if ($current === null) {
-                $inserts[] = $row;
+                if (isset($used[$key])) {
+                    $inserts[] = $row;
+                }
             } elseif ($current->name !== $row['name'] || $current->search_name !== $row['search_name']) {
                 DB::table('place_regions')->where('id', $current->id)
                     ->update(['name' => $row['name'], 'search_name' => $row['search_name']]);
@@ -418,6 +422,44 @@ class PlaceImporter
     }
 
     /**
+     * Whether a cities-file row is a populated place someone lives in today,
+     * in a known country, with usable coordinates.
+     *
+     * Columns: geonameid, name, asciiname, alternatenames, lat, lng, class,
+     * code, country, cc2, admin1, admin2, admin3, admin4, population, ...
+     *
+     * @param  list<string>  $c
+     * @param  array<string, mixed>  $countries
+     */
+    private function importable(array $c, array $countries): bool
+    {
+        return count($c) >= 15
+            && ctype_digit($c[0])
+            && $c[6] === 'P'
+            && ! in_array($c[7], self::SKIPPED_FEATURE_CODES, true)
+            && isset($countries[$c[8]])
+            && is_numeric($c[4]) && is_numeric($c[5]);
+    }
+
+    /**
+     * Region keys ("US.OR") the importable cities in a file refer to.
+     *
+     * @param  array<string, mixed>  $countries
+     * @return array<string, true>
+     */
+    private function usedRegionKeys(string $path, array $countries): array
+    {
+        $used = [];
+        foreach ($this->lines($path) as $c) {
+            if ($this->importable($c, $countries) && $c[10] !== '') {
+                $used[$c[8].'.'.$c[10]] = true;
+            }
+        }
+
+        return $used;
+    }
+
+    /**
      * @param  array<string, mixed>  $countries
      * @param  array<string, int>  $regions
      * @return Generator<int, array{id: int, name: string, search_name: string, region_id: int|null, country_code: string, lat_e4: int, lng_e4: int, population: int, import_batch: int}>
@@ -426,15 +468,10 @@ class PlaceImporter
     {
         $scale = Place::COORDINATE_SCALE;
         foreach ($this->lines($path) as $c) {
-            // geonameid, name, asciiname, alternatenames, lat, lng, class, code,
-            // country, cc2, admin1, admin2, admin3, admin4, population, ...
-            if (count($c) < 15 || ! ctype_digit($c[0]) || $c[6] !== 'P' || in_array($c[7], self::SKIPPED_FEATURE_CODES, true)) {
+            if (! $this->importable($c, $countries)) {
                 continue;
             }
             $country = $c[8];
-            if (! isset($countries[$country]) || ! is_numeric($c[4]) || ! is_numeric($c[5])) {
-                continue;
-            }
 
             yield [
                 'id' => (int) $c[0],

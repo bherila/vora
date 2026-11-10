@@ -146,6 +146,38 @@ class PlaceImportTest extends TestCase
         ]);
     }
 
+    public function test_repeated_replace_imports_never_insert_regions_no_city_uses(): void
+    {
+        $admin1 = tempnam(sys_get_temp_dir(), 'admin1');
+        file_put_contents($admin1, file_get_contents(base_path('tests/Fixtures/geonames/admin1CodesASCII.txt'))."US.CA\tCalifornia\tCalifornia\t5332921\n");
+
+        $this->importGeoNamesFixture(['--admin1' => $admin1, '--mode' => 'replace']);
+        $maxId = DB::table('place_regions')->max('id');
+        $this->importGeoNamesFixture(['--admin1' => $admin1, '--mode' => 'replace']);
+        unlink($admin1);
+
+        $this->assertSame(0, DB::table('place_regions')->where('code', 'CA')->count());
+        $this->assertSame($maxId, DB::table('place_regions')->max('id'));
+        $this->assertSame(0, app(PlaceImportRequests::class)->status()['result']['regions_removed']);
+    }
+
+    public function test_rehoming_finds_a_city_beyond_the_snap_windows(): void
+    {
+        $this->importGeoNamesFixture();
+        $owner = User::factory()->approved()->create(['place_id' => 2198148]); // Suva, Fiji
+        $options = ['--cities' => $this->citiesWithout(['2198148', '9999993']), '--mode' => 'replace', '--rehome' => true];
+
+        $this->importGeoNamesFixture($options + ['--dry-run' => true]);
+        $preview = app(PlaceImportRequests::class)->status()['result'];
+        $this->importGeoNamesFixture($options);
+        $applied = app(PlaceImportRequests::class)->status()['result'];
+
+        $this->assertNotContains($owner->fresh()->place_id, [null, 2198148]);
+        $this->assertNull(Place::query()->find(2198148));
+        $this->assertSame(1, $applied['rehomed']);
+        $this->assertSame([$preview['rehomed'], $preview['removed'], $preview['countries_removed']], [$applied['rehomed'], $applied['removed'], $applied['countries_removed']]);
+    }
+
     public function test_update_mode_never_moves_people_or_prunes_lookups(): void
     {
         $this->importGeoNamesFixture();

@@ -59,6 +59,9 @@ class AdminPlacesController extends Controller
             if (($status['state'] ?? null) !== 'succeeded' || ($status['dry_run'] ?? false) !== true) {
                 return response()->json(['success' => false, 'message' => 'There is no preview to apply.'], 422);
             }
+            if (($status['local_files'] ?? false) === true) {
+                return response()->json(['success' => false, 'message' => 'That preview read files on the server. Run the import with the same files from the command line, or preview it from this page.'], 422);
+            }
             $dir = $this->requests->previewUploadDir();
             if ($dir === null && ($status['upload_dir'] ?? null) !== null) {
                 return response()->json(['success' => false, 'message' => 'The previewed files are no longer available. Upload them again.'], 422);

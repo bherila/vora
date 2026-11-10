@@ -77,9 +77,11 @@ class PlaceDirectory
 
     /**
      * The city nearest a coordinate, or null when none is within the widest
-     * search window (e.g. open ocean, or an empty gazetteer).
+     * search window (e.g. open ocean, or an empty gazetteer). With $anywhere,
+     * falls back to scanning every current city, so it only returns null for
+     * an empty gazetteer; imports use it to move people off dropped cities.
      */
-    public function nearest(float $latitude, float $longitude): ?Place
+    public function nearest(float $latitude, float $longitude, bool $anywhere = false): ?Place
     {
         foreach (self::SNAP_WINDOWS as $window) {
             $best = $this->closest($latitude, $longitude, $window);
@@ -95,7 +97,24 @@ class PlaceDirectory
             return $this->closest($latitude, $longitude, self::degreesFor($km)) ?? $best;
         }
 
-        return null;
+        return $anywhere ? $this->closestAnywhere($latitude, $longitude) : null;
+    }
+
+    private function closestAnywhere(float $latitude, float $longitude): ?Place
+    {
+        $bestId = null;
+        $bestKm = INF;
+        $this->current(Place::query())->select(['id', 'lat_e4', 'lng_e4'])->chunkById(2000, function ($places) use ($latitude, $longitude, &$bestId, &$bestKm): void {
+            foreach ($places as $place) {
+                $km = self::distanceKm($latitude, $longitude, $place->latitude, $place->longitude);
+                if ($km < $bestKm) {
+                    $bestKm = $km;
+                    $bestId = $place->id;
+                }
+            }
+        });
+
+        return $bestId !== null ? Place::query()->with(['region', 'country'])->find($bestId) : null;
     }
 
     private function closest(float $latitude, float $longitude, float $latitudeDegrees): ?Place

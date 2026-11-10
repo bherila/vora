@@ -32,6 +32,8 @@ interface ImportStatus {
   mode?: ImportMode;
   rehome?: boolean;
   dry_run?: boolean;
+  /** A command-line preview of files on the server; it cannot be applied here. */
+  local_files?: boolean;
   started_at?: string;
   finished_at?: string;
   error?: string;
@@ -317,7 +319,10 @@ export function AdminPlacesPage() {
             {status.state === 'failed' && <p role="alert" className="text-sm text-destructive">{status.error}</p>}
             {status.state === 'running' && <p role="status" className="text-sm text-muted-foreground">Importing… this page updates on its own.</p>}
             <ResultSummary status={status} />
-            {status.state === 'succeeded' && status.dry_run && (
+            {status.state === 'succeeded' && status.dry_run && status.local_files && (
+              <p className="text-sm text-muted-foreground">This preview read files on the server from the command line, so it can only be applied there.</p>
+            )}
+            {status.state === 'succeeded' && status.dry_run && !status.local_files && (
               <Button type="button" disabled={busy || active} onClick={() => queue(false, true)}>Apply this preview</Button>
             )}
           </CardContent>

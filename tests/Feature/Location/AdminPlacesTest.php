@@ -118,6 +118,19 @@ class AdminPlacesTest extends TestCase
             ->assertJsonPath('data.status.state', 'succeeded');
     }
 
+    public function test_a_command_line_preview_of_server_files_cannot_be_applied_here(): void
+    {
+        $dir = base_path('tests/Fixtures/geonames');
+        $this->artisan('places:import', [
+            '--cities' => "{$dir}/cities.txt", '--admin1' => "{$dir}/admin1CodesASCII.txt", '--countries' => "{$dir}/countryInfo.txt", '--dry-run' => true,
+        ])->assertSuccessful();
+
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'update'])
+            ->assertUnprocessable();
+        $this->assertNull(app(PlaceImportRequests::class)->pending());
+        $this->getJson('/api/admin/places')->assertJsonPath('data.status.local_files', true);
+    }
+
     public function test_uploads_need_all_three_files_and_known_types(): void
     {
         $this->actingAs($this->admin)->post('/api/admin/places/import', [

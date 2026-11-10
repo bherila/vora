@@ -55,7 +55,15 @@ class ImportPlaces extends Command
 
         try {
             $result = $requests->track(
-                ['source' => 'command', 'dataset' => $dataset, 'mode' => $mode, 'rehome' => $options->rehome, 'dry_run' => $options->dryRun],
+                [
+                    'source' => 'command',
+                    'dataset' => $dataset,
+                    'mode' => $mode,
+                    'rehome' => $options->rehome,
+                    'dry_run' => $options->dryRun,
+                    // Local files are not kept, so such a preview cannot be applied from the admin page.
+                    'local_files' => $options->citiesPath !== null || $options->admin1Path !== null || $options->countriesPath !== null,
+                ],
                 fn () => $importer->run($options, fn (string $message) => $this->line($message)),
             );
         } catch (RuntimeException $e) {
