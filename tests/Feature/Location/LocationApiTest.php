@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Location;
 
+use App\Models\Place;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -56,6 +57,19 @@ class LocationApiTest extends TestCase
         $this->postJson('/api/places/nearest', ['latitude' => 91, 'longitude' => 0])->assertUnprocessable();
 
         $this->assertNull($user->fresh()->place_id);
+    }
+
+    public function test_nearest_checks_beyond_the_corner_of_the_first_window(): void
+    {
+        // From (0, 0): the corner city is inside the first 0.5° window but
+        // about 77 km away; the edge city is outside it and about 57 km away.
+        Place::query()->create(['id' => 9000001, 'name' => 'Corner', 'search_name' => 'corner', 'country_code' => 'FJ', 'lat_e4' => 4900, 'lng_e4' => 4900]);
+        Place::query()->create(['id' => 9000002, 'name' => 'Edge', 'search_name' => 'edge', 'country_code' => 'FJ', 'lat_e4' => 5100, 'lng_e4' => 0]);
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->postJson('/api/places/nearest', ['latitude' => 0, 'longitude' => 0])
+            ->assertOk()
+            ->assertJsonPath('data.id', 9000002);
     }
 
     public function test_owner_sets_and_clears_location_with_separate_audiences(): void

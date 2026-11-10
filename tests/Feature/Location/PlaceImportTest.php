@@ -58,6 +58,22 @@ class PlaceImportTest extends TestCase
         $this->assertSame(1, DB::table('place_regions')->where('code', 'OR')->count());
     }
 
+    public function test_reimport_keeps_region_ids_and_applies_renames(): void
+    {
+        $this->importGeoNamesFixture();
+        $ids = DB::table('place_regions')->orderBy('id')->pluck('id', 'code')->all();
+
+        $dir = base_path('tests/Fixtures/geonames');
+        $admin1 = tempnam(sys_get_temp_dir(), 'admin1');
+        file_put_contents($admin1, str_replace("US.OR\tOregon\tOregon", "US.OR\tOregon State\tOregon State", (string) file_get_contents("{$dir}/admin1CodesASCII.txt")));
+        $this->importGeoNamesFixture(['--admin1' => $admin1]);
+        unlink($admin1);
+
+        $this->assertSame($ids, DB::table('place_regions')->orderBy('id')->pluck('id', 'code')->all());
+        $this->assertSame('Oregon State', DB::table('place_regions')->where('code', 'OR')->value('name'));
+        $this->assertSame('Portland, Oregon State, United States', Place::query()->findOrFail(5746545)->label());
+    }
+
     public function test_small_import_refuses_to_prune(): void
     {
         $this->importGeoNamesFixture();
