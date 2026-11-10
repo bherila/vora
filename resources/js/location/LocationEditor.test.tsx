@@ -40,7 +40,7 @@ describe('LocationEditor', () => {
 
     fireEvent.change(screen.getByRole('combobox', { name: 'City' }), { target: { value: 'portl' } });
     await act(async () => { jest.advanceTimersByTime(300); });
-    expect(mocked.get).toHaveBeenCalledWith('/api/places/search?q=portl');
+    expect(mocked.get).toHaveBeenCalledWith('/api/location/places?q=portl');
 
     const option = await screen.findByRole('option', { name: 'Portland, Oregon, United States' });
     fireEvent.mouseDown(option);
@@ -50,7 +50,7 @@ describe('LocationEditor', () => {
     fireEvent.change(screen.getByLabelText('Who can see your city'), { target: { value: 'mutuals' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save location' }));
 
-    await waitFor(() => expect(mocked.put).toHaveBeenCalledWith('/api/account/location', {
+    await waitFor(() => expect(mocked.put).toHaveBeenCalledWith('/api/location', {
       place_id: 5746545,
       country_audience: 'everyone',
       city_audience: 'mutuals',
@@ -82,7 +82,7 @@ describe('LocationEditor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Use my current location/ }));
 
-    await waitFor(() => expect(mocked.post).toHaveBeenCalledWith('/api/places/nearest', { latitude: 45.52, longitude: -122.68 }));
+    await waitFor(() => expect(mocked.post).toHaveBeenCalledWith('/api/location/places/nearest', { latitude: 45.52, longitude: -122.68 }));
     expect(await screen.findByTestId('selected-place')).toHaveTextContent('Portland, Oregon, United States');
   });
 

@@ -9,6 +9,7 @@ use App\Http\Requests\Location\SearchPlacesRequest;
 use App\Http\Requests\Location\UpdateLocationRequest;
 use App\Models\Place;
 use App\Models\User;
+use App\Services\Location\LocationPresenter;
 use App\Services\Location\PlaceDirectory;
 use Illuminate\Http\JsonResponse;
 
@@ -18,7 +19,10 @@ use Illuminate\Http\JsonResponse;
  */
 class LocationController extends Controller
 {
-    public function __construct(private readonly PlaceDirectory $places) {}
+    public function __construct(
+        private readonly PlaceDirectory $places,
+        private readonly LocationPresenter $presenter,
+    ) {}
 
     public function search(SearchPlacesRequest $request): JsonResponse
     {
@@ -58,25 +62,7 @@ class LocationController extends Controller
         return response()->json([
             'success' => true,
             'message' => $user->place_id === null ? 'Location removed.' : 'Location saved.',
-            'data' => self::settingsPayload($user),
+            'data' => $this->presenter->settings($user),
         ]);
-    }
-
-    /**
-     * The owner's own location settings, as hydrated into the profile editor.
-     *
-     * @return array{place: array<string, mixed>|null, country_audience: string, city_audience: string}
-     */
-    public static function settingsPayload(User $user): array
-    {
-        $place = $user->place_id !== null
-            ? $user->place()->with(['region', 'country'])->first()
-            : null;
-
-        return [
-            'place' => $place?->toPickerArray(),
-            'country_audience' => $user->location_country_audience->value,
-            'city_audience' => $user->location_city_audience->value,
-        ];
     }
 }

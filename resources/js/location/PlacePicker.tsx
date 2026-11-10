@@ -54,7 +54,7 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
     let active = true;
     setSearching(true);
     const timer = window.setTimeout(() => {
-      fetchWrapper.get(`/api/places/search?q=${encodeURIComponent(term)}`)
+      fetchWrapper.get(`/api/location/places?q=${encodeURIComponent(term)}`)
         .then((response: PlaceListResponse) => {
           if (!active) return;
           setResults(response.data ?? []);
@@ -100,7 +100,7 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        fetchWrapper.post('/api/places/nearest', {
+        fetchWrapper.post('/api/location/places/nearest', {
           latitude: roundCoordinate(position.coords.latitude),
           longitude: roundCoordinate(position.coords.longitude),
         })
