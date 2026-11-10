@@ -26,7 +26,7 @@ import {
 } from '@/identity';
 import { readInitialData } from '@/initialData';
 import { LocationEditor } from '@/location/LocationEditor';
-import { normalizeLocationSettings, type VisibleLocation } from '@/location/types';
+import { type LocationSettings, normalizeLocationSettings, type VisibleLocation } from '@/location/types';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
@@ -315,6 +315,11 @@ export function FollowProfilePage() {
   const [tab, setTab] = useState<TabKey>('media');
   const [editOpen, setEditOpen] = useState(false);
   const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
+  // Saved location settings outlive the dialog, so reopening it shows what
+  // was last saved rather than the page's bootstrap values.
+  const [locationSettings, setLocationSettings] = useState<LocationSettings | null>(
+    () => editable?.location ? normalizeLocationSettings(editable.location) : null,
+  );
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
   const userId = profile?.id ?? null;
   const restricted = profile?.restricted ?? true;
@@ -632,21 +637,24 @@ export function FollowProfilePage() {
                 gender: summary.gender,
               } : current)}
             />
-            {editable.location && (
+            {locationSettings && (
               <div className="border-t border-border pt-4">
                 <LocationEditor
-                  initial={normalizeLocationSettings(editable.location)}
-                  onSaved={(settings) => setProfile((current) => current ? {
-                    ...current,
-                    location: settings.place ? {
-                      level: 'city',
-                      label: settings.place.label,
-                      city: settings.place.name,
-                      region: settings.place.region,
-                      country_code: settings.place.country_code,
-                      country_name: settings.place.country_name,
-                    } : null,
-                  } : current)}
+                  initial={locationSettings}
+                  onSaved={(settings) => {
+                    setLocationSettings(settings);
+                    setProfile((current) => current ? {
+                      ...current,
+                      location: settings.place ? {
+                        level: 'city',
+                        label: settings.place.label,
+                        city: settings.place.name,
+                        region: settings.place.region,
+                        country_code: settings.place.country_code,
+                        country_name: settings.place.country_name,
+                      } : null,
+                    } : current);
+                  }}
                 />
               </div>
             )}

@@ -40,6 +40,23 @@ jest.mock('@/media/OwnerMediaManager', () => ({
 }));
 jest.mock('@/stories/OwnerStoriesManager', () => ({ OwnerStoriesManager: () => null }));
 jest.mock('@/user/profile-identity-editor', () => ({ ProfileIdentityEditor: () => null }));
+// Stands in for the location form: shows the settings it was opened with and
+// "saves" a new city with narrower audiences.
+jest.mock('@/location/LocationEditor', () => ({
+  LocationEditor: ({ initial, onSaved }: {
+    initial: { place: { label: string } | null; city_audience: string };
+    onSaved: (settings: unknown) => void;
+  }) => (
+    <div>
+      <p data-testid="location-editor-initial">{initial.place?.label ?? 'none'} / {initial.city_audience}</p>
+      <button type="button" onClick={() => onSaved({
+        place: { id: 1, name: 'Salem', region: 'Oregon', country_code: 'US', country_name: 'United States', label: 'Salem, Oregon, United States' },
+        country_audience: 'followers',
+        city_audience: 'mutuals',
+      })}>Fake save location</button>
+    </div>
+  ),
+}));
 jest.mock('@/community/PostCard', () => ({ PostCard: () => null }));
 jest.mock('@/explore/StoryGrid', () => ({ StoryGrid: () => null }));
 jest.mock('@/media/MediaGrid', () => ({ MediaGrid: () => null }));
@@ -103,6 +120,29 @@ describe('FollowProfilePage (/me)', () => {
     jest.clearAllMocks();
     (fetchWrapper.post as jest.Mock).mockResolvedValue({});
     window.confirm = jest.fn(() => true);
+  });
+
+  it('reopens the profile editor with the location settings saved last', async () => {
+    setInitialData(ownerInitialData({}, {
+      profileEditable: {
+        name: 'Ben', email: 'ben@example.com', display_name: 'Ben', bio: null, pronouns: null,
+        gender: null, gender_other: null, user_type: null, user_type_other: null,
+        preferred_user_types: [], preferred_genders: [], profile_audience: 'everyone', audience_user_ids: [],
+        can_manage_interests: false,
+        location: { place: null, country_audience: 'everyone', city_audience: 'everyone' },
+      },
+    }));
+    render(<FollowProfilePage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit profile' }));
+    expect(await screen.findByTestId('location-editor-initial')).toHaveTextContent('none / everyone');
+    fireEvent.click(screen.getByRole('button', { name: 'Fake save location' }));
+    expect(screen.getByTestId('profile-location')).toHaveTextContent('Salem, Oregon, United States');
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('location-editor-initial')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit profile' }));
+    expect(await screen.findByTestId('location-editor-initial')).toHaveTextContent('Salem, Oregon, United States / mutuals');
   });
 
   it('uses the full browsing width with a responsive summary and action layout', async () => {

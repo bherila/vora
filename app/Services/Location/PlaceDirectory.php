@@ -74,18 +74,29 @@ class PlaceDirectory
     public function nearest(float $latitude, float $longitude): ?Place
     {
         foreach (self::SNAP_WINDOWS as $window) {
-            $candidates = $this->withinBox(Place::query()->with(['region', 'country']), 'places', $latitude, $longitude, $window)->get();
-            if ($candidates->isEmpty()) {
+            $best = $this->closest($latitude, $longitude, $window);
+            if (! $best instanceof Place) {
                 continue;
             }
 
-            /** @var Place */
-            return $candidates
-                ->sortBy(fn (Place $place): float => self::distanceKm($latitude, $longitude, $place->latitude, $place->longitude))
-                ->first();
+            // A closer city can sit just outside the square window (near its
+            // corner the window reaches farther than at its edges), so check
+            // the whole circle whose radius is the best distance found.
+            $km = self::distanceKm($latitude, $longitude, $best->latitude, $best->longitude);
+
+            return $this->closest($latitude, $longitude, self::degreesFor($km)) ?? $best;
         }
 
         return null;
+    }
+
+    private function closest(float $latitude, float $longitude, float $latitudeDegrees): ?Place
+    {
+        /** @var Place|null */
+        return $this->withinBox(Place::query()->with(['region', 'country']), 'places', $latitude, $longitude, $latitudeDegrees)
+            ->get()
+            ->sortBy(fn (Place $place): float => self::distanceKm($latitude, $longitude, $place->latitude, $place->longitude))
+            ->first();
     }
 
     /**
@@ -110,7 +121,7 @@ class PlaceDirectory
 
     /**
      * Constrains a query on `places` (directly, or joined as $table) to a
-     * latitude/longitude box around a point. The box is the cheap, indexable
+     * latitude/longitude box enclosing a circle around a point. The box is the cheap, indexable
      * prefilter; callers compute exact distances in PHP so the query stays
      * portable across SQLite and MariaDB.
      *
@@ -122,8 +133,11 @@ class PlaceDirectory
     public function withinBox(Builder $query, string $table, float $latitude, float $longitude, float $latitudeDegrees): Builder
     {
         $scale = Place::COORDINATE_SCALE;
-        $cos = cos(deg2rad($latitude));
-        $longitudeDegrees = $cos > 0.01 ? min(180.0, $latitudeDegrees / $cos) : 180.0;
+        // The box encloses every point within $latitudeDegrees of arc: the
+        // widest longitude offset on that circle is asin(sin(r) / cos(lat)),
+        // and a circle reaching a pole spans every longitude.
+        $ratio = sin(deg2rad(min(90.0, $latitudeDegrees))) / max(cos(deg2rad($latitude)), 1e-9);
+        $longitudeDegrees = $ratio >= 1.0 ? 180.0 : rad2deg(asin($ratio));
 
         $query->whereBetween("{$table}.lat_e4", [
             (int) floor(($latitude - $latitudeDegrees) * $scale),

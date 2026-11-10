@@ -159,7 +159,8 @@ class ImportPlaces extends Command
     }
 
     /**
-     * Upserts first-level regions and returns their ids by GeoNames key.
+     * Adds new first-level regions, renames changed ones, and returns their
+     * ids by GeoNames key.
      *
      * @param  array<string, true>  $countries
      * @return array<string, int> "US.OR" => region id
@@ -177,15 +178,31 @@ class ImportPlaces extends Command
                 continue;
             }
             $ascii = ($c[2] ?? '') !== '' ? $c[2] : $c[1];
-            $rows[] = [
+            $rows[$country.'.'.$code] = [
                 'country_code' => $country,
                 'code' => $code,
                 'name' => Str::limit($c[1], 200, ''),
                 'search_name' => Str::limit(PlaceDirectory::searchKey($ascii), 200, ''),
             ];
         }
-        foreach (array_chunk($rows, self::CHUNK) as $chunk) {
-            DB::table('place_regions')->upsert($chunk, ['country_code', 'code'], ['name', 'search_name']);
+        // Only new regions are inserted, and changed ones updated in place by
+        // id. An upsert would spend an AUTO_INCREMENT value per existing row
+        // on MariaDB/MySQL and exhaust the SMALLINT key after a few dozen
+        // refreshes.
+        $existing = DB::table('place_regions')->get(['id', 'country_code', 'code', 'name', 'search_name'])
+            ->keyBy(fn (object $r): string => $r->country_code.'.'.$r->code);
+        $inserts = [];
+        foreach ($rows as $key => $row) {
+            $current = $existing->get($key);
+            if ($current === null) {
+                $inserts[] = $row;
+            } elseif ($current->name !== $row['name'] || $current->search_name !== $row['search_name']) {
+                DB::table('place_regions')->where('id', $current->id)
+                    ->update(['name' => $row['name'], 'search_name' => $row['search_name']]);
+            }
+        }
+        foreach (array_chunk($inserts, self::CHUNK) as $chunk) {
+            DB::table('place_regions')->insert($chunk);
         }
 
         return DB::table('place_regions')->get(['id', 'country_code', 'code'])
