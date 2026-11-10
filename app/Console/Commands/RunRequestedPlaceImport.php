@@ -29,38 +29,52 @@ class RunRequestedPlaceImport extends Command
 
         $dir = is_string($request['upload_dir'] ?? null) ? $request['upload_dir'] : null;
         $dryRun = (bool) ($request['dry_run'] ?? false);
-        $options = new PlaceImportOptions(
-            dataset: (string) ($request['dataset'] ?? $requests->dataset()),
-            mode: in_array($request['mode'] ?? null, PlaceImportOptions::MODES, true) ? $request['mode'] : PlaceImportOptions::MODE_UPDATE,
-            rehome: (bool) ($request['rehome'] ?? false),
-            dryRun: $dryRun,
-            minimumRows: (int) config('places.minimum_rows'),
-            citiesPath: $dir !== null ? $this->uploaded($dir, ['cities.zip', 'cities.txt']) : null,
-            admin1Path: $dir !== null ? $this->uploaded($dir, ['admin1CodesASCII.txt']) : null,
-            countriesPath: $dir !== null ? $this->uploaded($dir, ['countryInfo.txt']) : null,
-        );
-
-        if ($dir !== null && ($options->citiesPath === null || $options->admin1Path === null || $options->countriesPath === null)) {
+        $dataset = (string) ($request['dataset'] ?? $requests->dataset());
+        // A downloaded preview keeps its files, like an uploaded one, so that
+        // applying it imports exactly what was previewed even if GeoNames
+        // publishes new data in between.
+        $download = $dryRun && $dir === null;
+        if ($download) {
+            $dir = $requests->newUploadDir();
+        } elseif ($dir !== null && ! $this->hasAllFiles($dir)) {
             $requests->discardUploads($dir);
             $this->error('The uploaded GeoNames files are missing.');
 
             return self::FAILURE;
         }
 
+        $mode = in_array($request['mode'] ?? null, PlaceImportOptions::MODES, true) ? $request['mode'] : PlaceImportOptions::MODE_UPDATE;
+        $rehome = (bool) ($request['rehome'] ?? false);
         $meta = [
             'request_id' => $request['id'] ?? null,
             'source' => $request['source'] ?? 'admin',
-            'dataset' => $options->dataset,
-            'mode' => $options->mode,
-            'rehome' => $options->rehome,
+            'dataset' => $dataset,
+            'mode' => $mode,
+            'rehome' => $rehome,
             'dry_run' => $dryRun,
             'requested_by' => $request['requested_by'] ?? null,
-            // A preview's uploads are kept so the admin can apply them next.
+            // A preview's files are kept so the admin can apply them next.
             'upload_dir' => $dryRun ? $dir : null,
         ];
+        $log = fn (string $message) => $this->line($message);
 
         try {
-            $requests->track($meta, fn () => $importer->run($options, fn (string $message) => $this->line($message)));
+            $requests->track($meta, function () use ($importer, $download, $dataset, $dir, $mode, $rehome, $dryRun, $log) {
+                if ($download && $dir !== null) {
+                    $importer->download($dataset, $dir, $log);
+                }
+
+                return $importer->run(new PlaceImportOptions(
+                    dataset: $dataset,
+                    mode: $mode,
+                    rehome: $rehome,
+                    dryRun: $dryRun,
+                    minimumRows: (int) config('places.minimum_rows'),
+                    citiesPath: $dir !== null ? $this->uploaded($dir, ['cities.zip', 'cities.txt']) : null,
+                    admin1Path: $dir !== null ? $this->uploaded($dir, ['admin1CodesASCII.txt']) : null,
+                    countriesPath: $dir !== null ? $this->uploaded($dir, ['countryInfo.txt']) : null,
+                ), $log);
+            });
         } catch (Throwable $e) {
             $this->error($e->getMessage());
             $requests->discardUploads($dir);
@@ -73,6 +87,13 @@ class RunRequestedPlaceImport extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function hasAllFiles(string $dir): bool
+    {
+        return $this->uploaded($dir, ['cities.zip', 'cities.txt']) !== null
+            && $this->uploaded($dir, ['admin1CodesASCII.txt']) !== null
+            && $this->uploaded($dir, ['countryInfo.txt']) !== null;
     }
 
     /**

@@ -257,8 +257,33 @@ class PlaceImporter
             return $local;
         }
 
+        return $this->fetch($remoteName, $workDir.'/'.$remoteName, $log);
+    }
+
+    /**
+     * Downloads a dataset's three GeoNames files into $dir under the names an
+     * uploaded set uses, so a preview can be applied to exactly these files.
+     *
+     * @param  (Closure(string): void)|null  $log
+     */
+    public function download(string $dataset, string $dir, ?Closure $log = null): void
+    {
+        if (! in_array($dataset, PlaceImportOptions::DATASETS, true)) {
+            throw new RuntimeException("Unknown dataset [{$dataset}].");
+        }
+        $log ??= static function (string $message): void {};
+
+        $this->fetch('countryInfo.txt', $dir.'/countryInfo.txt', $log);
+        $this->fetch('admin1CodesASCII.txt', $dir.'/admin1CodesASCII.txt', $log);
+        $this->fetch("{$dataset}.zip", $dir.'/cities.zip', $log);
+    }
+
+    /**
+     * @param  Closure(string): void  $log
+     */
+    private function fetch(string $remoteName, string $target, Closure $log): string
+    {
         $url = rtrim((string) config('places.base_url'), '/').'/'.$remoteName;
-        $target = $workDir.'/'.$remoteName;
         $log("Downloading {$url}");
         $response = Http::timeout(300)->withOptions(['sink' => $target])->get($url);
         if (! $response->successful()) {

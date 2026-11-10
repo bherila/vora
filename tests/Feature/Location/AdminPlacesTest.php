@@ -25,6 +25,9 @@ class AdminPlacesTest extends TestCase
         parent::setUp();
         config(['places.minimum_rows' => 1]);
         $this->admin = User::factory()->admin()->create();
+        // Previews keep their files on disk; start and end each test clean.
+        File::deleteDirectory(storage_path('app/private/geonames'));
+        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory(storage_path('app/private/geonames')));
     }
 
     public function test_only_admins_reach_the_city_list(): void
@@ -151,6 +154,29 @@ class AdminPlacesTest extends TestCase
         $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->previewId(), 'mode' => 'update', 'rehome' => false])->assertStatus(202);
         $pending = app(PlaceImportRequests::class)->pending();
         $this->assertSame(['replace', true, false], [$pending['mode'], $pending['rehome'], $pending['dry_run']]);
+    }
+
+    public function test_applying_a_downloaded_preview_imports_the_files_it_previewed(): void
+    {
+        $this->fakeGeoNames('cities5000');
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'update', 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+        $this->getJson('/api/admin/places')->assertJsonPath('data.status.result.added', 9);
+        $previewDir = app(PlaceImportRequests::class)->previewUploadDir();
+        $this->assertNotNull($previewDir);
+        $this->assertFileExists($previewDir.'/cities.zip');
+
+        // GeoNames publishes different data before the admin applies.
+        Http::fake(['*' => fn () => Http::response('', 500)]);
+
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->previewId()])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+
+        $this->assertSame(9, Place::query()->count());
+        $this->getJson('/api/admin/places')
+            ->assertJsonPath('data.status.dry_run', false)
+            ->assertJsonPath('data.status.result.added', 9);
+        $this->assertDirectoryDoesNotExist($previewDir);
     }
 
     public function test_uploads_need_all_three_files_and_known_types(): void

@@ -66,8 +66,10 @@ class AdminPlacesController extends Controller
                 || $status['request_id'] !== $request->validated('preview_id')) {
                 return response()->json(['success' => false, 'message' => 'That preview is no longer the latest one from this page. Reload and preview again.'], 409);
             }
+            // Every page preview keeps the files it read (downloaded or
+            // uploaded); without them it cannot be repeated exactly.
             $dir = $this->requests->previewUploadDir();
-            if ($dir === null && ($status['upload_dir'] ?? null) !== null) {
+            if ($dir === null) {
                 return response()->json(['success' => false, 'message' => 'The previewed files are no longer available. Upload them again.'], 422);
             }
         }
