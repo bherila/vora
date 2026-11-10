@@ -253,21 +253,34 @@ Profile locations are city-level and optional. People can search for a city or
 use their browser's location, which is matched to the nearest city on the server;
 the coordinates are never stored. City data comes from a local copy of
 [GeoNames](https://www.geonames.org/) (CC BY 4.0), so no paid or external lookup
-API is used. The data is not shipped with releases. Load it, or refresh it at
-any time, with:
+API is used. The data is not shipped with releases: load or refresh it at any
+time from **Admin → City list**, or with:
 
 ```bash
 php artisan places:import
 ```
 
-The command downloads `cities5000` (places with at least 5,000 people) plus the
-country and region lists. Choose another set with `--dataset=cities500`,
-`cities1000` or `cities15000`, or set `PLACES_DATASET`. Re-running only applies
-changes. Cities that GeoNames removes are deleted unless an account uses them.
-Pruning is skipped when fewer than `PLACES_MINIMUM_ROWS` (default 1,000) cities
-were read. `--cities`, `--admin1` and `--countries` take local files in place
-of a download. Set `PLACES_AUTO_REFRESH=true` to re-import monthly from the
-scheduler.
+Imports download `cities5000` (places with at least 5,000 people) plus the
+country and region lists. Admins choose another set (`cities500`, `cities1000`
+or `cities15000`) on the City list page; `--dataset` or `PLACES_DATASET`
+work too. Admins can also upload the three GeoNames files instead of
+downloading them, preview an import before applying it, and turn on a monthly
+refresh. Imports queued from the page run in the background from the
+scheduler within a minute, so the cron entry below must be active.
+
+Two modes:
+
+- **Update** (default) adds and refreshes cities and removes cities the new
+  data dropped, unless an account uses them. Those stay on their owners'
+  profiles but leave search.
+- **Replace** also removes regions and countries no city uses and, when
+  asked, moves people off dropped cities to the nearest remaining one.
+
+Re-running only applies changes, in multi-row statements. Nothing is pruned
+when fewer than `PLACES_MINIMUM_ROWS` (default 1,000) cities were read, so a
+truncated file cannot empty the list. On the command line, `--mode=replace`,
+`--rehome`, `--dry-run`, `--no-prune`, and `--cities`/`--admin1`/`--countries`
+(local files) mirror the page's options.
 
 ## License
 

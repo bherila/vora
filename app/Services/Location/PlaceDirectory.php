@@ -5,6 +5,7 @@ namespace App\Services\Location;
 use App\Models\Place;
 use App\Models\PlaceCountry;
 use App\Models\PlaceRegion;
+use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
  */
 class PlaceDirectory
 {
+    public function __construct(private readonly SettingsService $settings) {}
+
     private const EARTH_RADIUS_KM = 6371.0;
 
     /**
@@ -54,7 +57,7 @@ class PlaceDirectory
             return collect();
         }
 
-        $builder = Place::query()
+        $builder = $this->current(Place::query())
             ->with(['region', 'country'])
             ->where('search_name', 'like', self::likePrefix($parts[0]))
             ->orderByDesc('population')
@@ -74,9 +77,11 @@ class PlaceDirectory
 
     /**
      * The city nearest a coordinate, or null when none is within the widest
-     * search window (e.g. open ocean, or an empty gazetteer).
+     * search window (e.g. open ocean, or an empty gazetteer). With $anywhere,
+     * falls back to scanning every current city, so it only returns null for
+     * an empty gazetteer; imports use it to move people off dropped cities.
      */
-    public function nearest(float $latitude, float $longitude): ?Place
+    public function nearest(float $latitude, float $longitude, bool $anywhere = false): ?Place
     {
         foreach (self::SNAP_WINDOWS as $window) {
             $best = $this->closest($latitude, $longitude, $window);
@@ -92,13 +97,30 @@ class PlaceDirectory
             return $this->closest($latitude, $longitude, self::degreesFor($km)) ?? $best;
         }
 
-        return null;
+        return $anywhere ? $this->closestAnywhere($latitude, $longitude) : null;
+    }
+
+    private function closestAnywhere(float $latitude, float $longitude): ?Place
+    {
+        $bestId = null;
+        $bestKm = INF;
+        $this->current(Place::query())->select(['id', 'lat_e4', 'lng_e4'])->chunkById(2000, function ($places) use ($latitude, $longitude, &$bestId, &$bestKm): void {
+            foreach ($places as $place) {
+                $km = self::distanceKm($latitude, $longitude, $place->latitude, $place->longitude);
+                if ($km < $bestKm) {
+                    $bestKm = $km;
+                    $bestId = $place->id;
+                }
+            }
+        });
+
+        return $bestId !== null ? Place::query()->with(['region', 'country'])->find($bestId) : null;
     }
 
     private function closest(float $latitude, float $longitude, float $latitudeDegrees): ?Place
     {
         /** @var Place|null */
-        return $this->withinBox(Place::query()->with(['region', 'country']), 'places', $latitude, $longitude, $latitudeDegrees)
+        return $this->withinBox($this->current(Place::query())->with(['region', 'country']), 'places', $latitude, $longitude, $latitudeDegrees)
             ->get()
             ->sortBy(fn (Place $place): float => self::distanceKm($latitude, $longitude, $place->latitude, $place->longitude))
             ->first();
@@ -168,6 +190,21 @@ class PlaceDirectory
                 $q->whereBetween($column, [$west, $east]);
             }
         });
+    }
+
+    /**
+     * Only cities in the latest complete import. Cities a later import dropped
+     * but someone still uses stay in the table for that person's profile; they
+     * are not offered to anyone else.
+     *
+     * @param  Builder<Place>  $query
+     * @return Builder<Place>
+     */
+    private function current(Builder $query): Builder
+    {
+        $batch = $this->settings->getInt(PlaceImporter::CURRENT_BATCH_SETTING);
+
+        return $batch > 0 ? $query->where('places.import_batch', '>=', $batch) : $query;
     }
 
     private static function likePrefix(string $value): string
