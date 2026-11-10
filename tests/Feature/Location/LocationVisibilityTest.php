@@ -114,7 +114,7 @@ class LocationVisibilityTest extends TestCase
         Block::query()->create(['blocker_id' => $blocked->id, 'blocked_user_id' => $viewer->id]);
         Mute::query()->create(['user_id' => $viewer->id, 'muted_user_id' => $muted->id]);
 
-        $response = $this->actingAs($viewer)->getJson('/api/users/nearby')
+        $response = $this->actingAs($viewer)->getJson('/api/location/nearby')
             ->assertOk()
             ->assertJsonPath('data.has_location', true)
             ->assertJsonPath('data.radius_km', 50);
@@ -125,14 +125,14 @@ class LocationVisibilityTest extends TestCase
             ->assertJsonPath('data.people.1.location.label', 'Beaverton, Oregon, United States');
         $this->assertStringNotContainsString('lat', (string) json_encode($response->json('data.people')));
 
-        $wide = $this->getJson('/api/users/nearby?radius=100');
+        $wide = $this->getJson('/api/location/nearby?radius=100');
         $this->assertSame(['Same City', 'Beaverton Person', 'Salem Person'], array_column($wide->json('data.people'), 'display_name'));
         $wide->assertJsonPath('data.people.2.within_km', 100);
 
         $this->follow($viewer, $followersOnly);
-        $this->assertContains('Followers Only', array_column($this->getJson('/api/users/nearby')->json('data.people'), 'display_name'));
+        $this->assertContains('Followers Only', array_column($this->getJson('/api/location/nearby')->json('data.people'), 'display_name'));
 
-        $this->getJson('/api/users/nearby?radius=7')->assertUnprocessable();
+        $this->getJson('/api/location/nearby?radius=7')->assertUnprocessable();
         $this->assertNotContains($countryOnly->id, array_column($wide->json('data.people'), 'id'));
         $this->assertNotContains($far->id, array_column($wide->json('data.people'), 'id'));
     }
@@ -142,7 +142,7 @@ class LocationVisibilityTest extends TestCase
         $viewer = User::factory()->approved()->create();
         $this->located(self::PORTLAND, LocationAudience::Everyone, LocationAudience::Everyone);
 
-        $this->actingAs($viewer)->getJson('/api/users/nearby')
+        $this->actingAs($viewer)->getJson('/api/location/nearby')
             ->assertOk()
             ->assertJsonPath('data.has_location', false)
             ->assertJsonCount(0, 'data.people');
@@ -160,7 +160,7 @@ class LocationVisibilityTest extends TestCase
         $persona = $this->actingAs($viewer)->get("/c/{$separate->ulid}")->assertOk();
         $this->assertStringNotContainsString('Portland', (string) $persona->getContent());
 
-        $nearby = $this->getJson('/api/users/nearby');
+        $nearby = $this->getJson('/api/location/nearby');
         $this->assertSame([$owner->id], array_column($nearby->json('data.people'), 'id'));
         $this->assertStringNotContainsString($separate->display_name, (string) $nearby->getContent());
     }

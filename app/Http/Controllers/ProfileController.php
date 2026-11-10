@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
-use App\Http\Controllers\Location\LocationController;
 use App\Http\Requests\Profile\BanAppealRequest;
 use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
@@ -16,6 +15,7 @@ use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
 use App\Services\Chat\ChatState;
+use App\Services\Location\LocationPresenter;
 use App\Services\Media\AccountStorageUsage;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
@@ -423,7 +423,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function export(Request $request, RecentProfileTrail $recentProfiles): JsonResponse
+    public function export(Request $request, RecentProfileTrail $recentProfiles, LocationPresenter $location): JsonResponse
     {
         $user = $request->user();
 
@@ -479,7 +479,7 @@ class ProfileController extends Controller
                     'profile_audience_user_ids' => $user->profileAudienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
                     'preferred_user_types' => $user->preferred_user_types,
                     'preferred_genders' => $user->preferred_genders,
-                    'location' => LocationController::settingsPayload($user),
+                    'location' => $location->settings($user),
                     'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                     'approved_at' => $user->approved_at?->toIso8601String(),
                     'deactivated_at' => $user->deactivated_at?->toIso8601String(),

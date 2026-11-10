@@ -33,6 +33,6 @@ describe('NearbyPeople', () => {
     expect(screen.getAllByRole('link', { name: 'View profile' })[1]).toHaveAttribute('href', '/users/3');
 
     fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '100' } });
-    await waitFor(() => expect(mocked.get).toHaveBeenLastCalledWith('/api/users/nearby?radius=100'));
+    await waitFor(() => expect(mocked.get).toHaveBeenLastCalledWith('/api/location/nearby?radius=100'));
   });
 });

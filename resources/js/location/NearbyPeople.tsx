@@ -45,7 +45,7 @@ export function NearbyPeople() {
   useEffect(() => {
     let active = true;
     setState('loading');
-    fetchWrapper.get(`/api/users/nearby?radius=${radius}`)
+    fetchWrapper.get(`/api/location/nearby?radius=${radius}`)
       .then((response: NearbyResponse) => {
         if (!active) return;
         setHasLocation(response.data?.has_location ?? false);

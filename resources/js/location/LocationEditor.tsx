@@ -44,7 +44,7 @@ export function LocationEditor({ initial, onSaved }: LocationEditorProps) {
     setMessage('');
     setError('');
     try {
-      const response = await fetchWrapper.put('/api/account/location', {
+      const response = await fetchWrapper.put('/api/location', {
         place_id: place?.id ?? null,
         country_audience: countryAudience,
         city_audience: cityAudience,

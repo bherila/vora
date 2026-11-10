@@ -13,6 +13,11 @@ use Illuminate\Support\Str;
  * Search and reverse-lookup over the local GeoNames city table. Nothing here
  * calls an external service: typed queries and browser coordinates never leave
  * the server.
+ *
+ * Naming across the feature: "places" is the imported GeoNames data (the
+ * `places*` tables, Place models, `places:import`, config/places.php);
+ * "Location" is the user-facing feature built on it (this namespace, the
+ * Location controllers and requests, routes/location.php, resources/js/location).
  */
 class PlaceDirectory
 {

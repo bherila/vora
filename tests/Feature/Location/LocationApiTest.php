@@ -22,39 +22,39 @@ class LocationApiTest extends TestCase
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->getJson('/api/places/search?q=portl')
+        $this->actingAs($user)->getJson('/api/location/places?q=portl')
             ->assertOk()
             ->assertJsonPath('data.0.label', 'Portland, Oregon, United States')
             ->assertJsonPath('data.1.label', 'Portland, Maine, United States');
 
-        $this->getJson('/api/places/search?q=portland,%20maine')
+        $this->getJson('/api/location/places?q=portland,%20maine')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', 4975802);
 
-        $this->getJson('/api/places/search?q=paris,%20fr')->assertJsonPath('data.0.country_name', 'France');
+        $this->getJson('/api/location/places?q=paris,%20fr')->assertJsonPath('data.0.country_name', 'France');
         // Accents are folded for search and kept for display.
-        $this->getJson('/api/places/search?q=saint-etienne')->assertJsonPath('data.0.name', 'Saint-Étienne-du-Rouvray');
+        $this->getJson('/api/location/places?q=saint-etienne')->assertJsonPath('data.0.name', 'Saint-Étienne-du-Rouvray');
         // LIKE wildcards are literal.
-        $this->getJson('/api/places/search?q=%25%25')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson('/api/places/search?q=p')->assertUnprocessable();
+        $this->getJson('/api/location/places?q=%25%25')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/location/places?q=p')->assertUnprocessable();
     }
 
     public function test_nearest_snaps_coordinates_to_a_city_without_storing_them(): void
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->postJson('/api/places/nearest', ['latitude' => 45.5, 'longitude' => -122.7])
+        $this->actingAs($user)->postJson('/api/location/places/nearest', ['latitude' => 45.5, 'longitude' => -122.7])
             ->assertOk()
             ->assertJsonPath('data.id', 5746545);
         // Across the antimeridian: Taveuni East is at -179.9.
-        $this->postJson('/api/places/nearest', ['latitude' => -16.8, 'longitude' => 179.95])
+        $this->postJson('/api/location/places/nearest', ['latitude' => -16.8, 'longitude' => 179.95])
             ->assertJsonPath('data.id', 9999993);
         // Open ocean, nothing within the widest window.
-        $this->postJson('/api/places/nearest', ['latitude' => -50, 'longitude' => -140])
+        $this->postJson('/api/location/places/nearest', ['latitude' => -50, 'longitude' => -140])
             ->assertOk()
             ->assertJsonPath('data', null);
-        $this->postJson('/api/places/nearest', ['latitude' => 91, 'longitude' => 0])->assertUnprocessable();
+        $this->postJson('/api/location/places/nearest', ['latitude' => 91, 'longitude' => 0])->assertUnprocessable();
 
         $this->assertNull($user->fresh()->place_id);
     }
@@ -67,7 +67,7 @@ class LocationApiTest extends TestCase
         Place::query()->create(['id' => 9000002, 'name' => 'Edge', 'search_name' => 'edge', 'country_code' => 'FJ', 'lat_e4' => 5100, 'lng_e4' => 0]);
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->postJson('/api/places/nearest', ['latitude' => 0, 'longitude' => 0])
+        $this->actingAs($user)->postJson('/api/location/places/nearest', ['latitude' => 0, 'longitude' => 0])
             ->assertOk()
             ->assertJsonPath('data.id', 9000002);
     }
@@ -76,7 +76,7 @@ class LocationApiTest extends TestCase
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->putJson('/api/account/location', [
+        $this->actingAs($user)->putJson('/api/location', [
             'place_id' => 5746545,
             'country_audience' => 'everyone',
             'city_audience' => 'mutuals',
@@ -89,7 +89,7 @@ class LocationApiTest extends TestCase
 
         $this->getJson('/api/account/export')->assertJsonPath('data.account.location.place.id', 5746545);
 
-        $this->putJson('/api/account/location', [
+        $this->putJson('/api/location', [
             'place_id' => null,
             'country_audience' => 'nobody',
             'city_audience' => 'nobody',
@@ -101,30 +101,43 @@ class LocationApiTest extends TestCase
     {
         $user = User::factory()->approved()->create();
 
-        $this->actingAs($user)->putJson('/api/account/location', [
+        $this->actingAs($user)->putJson('/api/location', [
             'place_id' => 5746545,
             'country_audience' => 'followers',
             'city_audience' => 'everyone',
         ])->assertUnprocessable()->assertJsonValidationErrors('city_audience');
 
-        $this->putJson('/api/account/location', [
+        $this->putJson('/api/location', [
             'place_id' => 123,
             'country_audience' => 'everyone',
             'city_audience' => 'everyone',
         ])->assertUnprocessable()->assertJsonValidationErrors('place_id');
 
-        $this->putJson('/api/account/location', [
+        $this->putJson('/api/location', [
             'place_id' => 5746545,
             'country_audience' => 'specific',
             'city_audience' => 'nobody',
         ])->assertUnprocessable()->assertJsonValidationErrors('country_audience');
     }
 
+    public function test_location_endpoints_follow_the_profiles_module(): void
+    {
+        config(['instance.modules.profiles' => false]);
+        $user = User::factory()->approved()->create();
+
+        $this->actingAs($user)->getJson('/api/location/places?q=portland')->assertNotFound();
+        $this->getJson('/api/location/nearby')->assertNotFound();
+        $this->putJson('/api/location', [
+            'place_id' => 5746545, 'country_audience' => 'everyone', 'city_audience' => 'everyone',
+        ])->assertNotFound();
+        $this->assertNull($user->fresh()->place_id);
+    }
+
     public function test_location_endpoints_require_an_approved_account(): void
     {
-        $this->getJson('/api/places/search?q=portland')->assertUnauthorized();
+        $this->getJson('/api/location/places?q=portland')->assertUnauthorized();
         $pending = User::factory()->create(['approved_at' => null]);
-        $this->actingAs($pending)->putJson('/api/account/location', [
+        $this->actingAs($pending)->putJson('/api/location', [
             'place_id' => 5746545, 'country_audience' => 'everyone', 'city_audience' => 'everyone',
         ])->assertForbidden();
     }

@@ -1,4 +1,4 @@
-import { BookOpen, Images, MapPin, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { BookOpen, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
@@ -25,8 +25,8 @@ import {
   useIdentityStore,
 } from '@/identity';
 import { readInitialData } from '@/initialData';
-import { LocationEditor } from '@/location/LocationEditor';
-import { type LocationSettings, normalizeLocationSettings, type VisibleLocation } from '@/location/types';
+import { initialLocationSettings, ProfileLocationLine, ProfileLocationSection, visibleLocationFromSettings } from '@/location/ProfileLocation';
+import { type LocationSettings, type VisibleLocation } from '@/location/types';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
@@ -317,9 +317,7 @@ export function FollowProfilePage() {
   const [editable] = useState<ProfileEditable | null>(() => readInitialData<{ profileEditable?: ProfileEditable }>().profileEditable ?? null);
   // Saved location settings outlive the dialog, so reopening it shows what
   // was last saved rather than the page's bootstrap values.
-  const [locationSettings, setLocationSettings] = useState<LocationSettings | null>(
-    () => editable?.location ? normalizeLocationSettings(editable.location) : null,
-  );
+  const [locationSettings, setLocationSettings] = useState<LocationSettings | null>(() => initialLocationSettings(editable?.location));
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
   const userId = profile?.id ?? null;
   const restricted = profile?.restricted ?? true;
@@ -460,12 +458,7 @@ export function FollowProfilePage() {
                   {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
                 </CardDescription>
               )}
-              {profile.location && (
-                <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground" data-testid="profile-location">
-                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span className="sr-only">Location: </span>{profile.location.label}
-                </p>
-              )}
+              <ProfileLocationLine location={profile.location} />
             </div>
           </div>
           {profile.is_self ? (
@@ -638,25 +631,13 @@ export function FollowProfilePage() {
               } : current)}
             />
             {locationSettings && (
-              <div className="border-t border-border pt-4">
-                <LocationEditor
-                  initial={locationSettings}
-                  onSaved={(settings) => {
-                    setLocationSettings(settings);
-                    setProfile((current) => current ? {
-                      ...current,
-                      location: settings.place ? {
-                        level: 'city',
-                        label: settings.place.label,
-                        city: settings.place.name,
-                        region: settings.place.region,
-                        country_code: settings.place.country_code,
-                        country_name: settings.place.country_name,
-                      } : null,
-                    } : current);
-                  }}
-                />
-              </div>
+              <ProfileLocationSection
+                settings={locationSettings}
+                onSaved={(settings) => {
+                  setLocationSettings(settings);
+                  setProfile((current) => current ? { ...current, location: visibleLocationFromSettings(settings) } : current);
+                }}
+              />
             )}
           </DialogContent>
         </Dialog>
