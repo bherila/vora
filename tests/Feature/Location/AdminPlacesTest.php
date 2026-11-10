@@ -99,6 +99,25 @@ class AdminPlacesTest extends TestCase
         $this->assertSame([], File::directories(storage_path('app/private/geonames/uploads')));
     }
 
+    public function test_applying_a_preview_keeps_the_previewed_dataset(): void
+    {
+        $this->fakeGeoNames('cities15000');
+        $this->actingAs($this->admin)->putJson('/api/admin/places/settings', ['dataset' => 'cities15000', 'auto_refresh' => false])->assertOk();
+        $this->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'update', 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+
+        // The admin switches datasets before applying the preview.
+        $this->putJson('/api/admin/places/settings', ['dataset' => 'cities500', 'auto_refresh' => false])->assertOk();
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'update'])->assertStatus(202);
+        $this->assertSame('cities15000', app(PlaceImportRequests::class)->pending()['dataset']);
+
+        $this->artisan('places:run-requested')->assertSuccessful();
+        $this->getJson('/api/admin/places')
+            ->assertJsonPath('data.status.dataset', 'cities15000')
+            ->assertJsonPath('data.status.dry_run', false)
+            ->assertJsonPath('data.status.state', 'succeeded');
+    }
+
     public function test_uploads_need_all_three_files_and_known_types(): void
     {
         $this->actingAs($this->admin)->post('/api/admin/places/import', [
@@ -168,10 +187,12 @@ class AdminPlacesTest extends TestCase
         unlink($zipPath);
 
         config(['places.base_url' => 'https://geonames.example.test/dump']);
+        // A fresh response per request: a shared one's body stream is spent
+        // after the first download.
         Http::fake([
-            'geonames.example.test/dump/countryInfo.txt' => Http::response((string) file_get_contents("{$dir}/countryInfo.txt")),
-            'geonames.example.test/dump/admin1CodesASCII.txt' => Http::response((string) file_get_contents("{$dir}/admin1CodesASCII.txt")),
-            "geonames.example.test/dump/{$dataset}.zip" => Http::response($zipBody),
+            'geonames.example.test/dump/countryInfo.txt' => fn () => Http::response((string) file_get_contents("{$dir}/countryInfo.txt")),
+            'geonames.example.test/dump/admin1CodesASCII.txt' => fn () => Http::response((string) file_get_contents("{$dir}/admin1CodesASCII.txt")),
+            "geonames.example.test/dump/{$dataset}.zip" => fn () => Http::response($zipBody),
         ]);
     }
 }

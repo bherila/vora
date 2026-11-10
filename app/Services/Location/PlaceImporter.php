@@ -69,12 +69,7 @@ class PlaceImporter
             $inUse = DB::table('users')->whereNotNull('place_id')->distinct()->pluck('place_id')->map(fn ($id): int => (int) $id)->flip()->all();
 
             if ($options->dryRun) {
-                $seen = [];
-                foreach ($this->cityRows($citiesPath, $countries, [], 0) as $row) {
-                    $seen[$row['id']] = true;
-                }
-
-                return $this->result($options, $seen, $existing, $inUse, removed: null, rehomed: 0, regionsRemoved: 0, countriesRemoved: 0, pruneSkipped: count($seen) < $options->minimumRows);
+                return $this->preview($options, $citiesPath, $countries, $regionRows, $existing, $inUse);
             }
 
             $this->writeCountries($countries);
@@ -125,6 +120,60 @@ class PlaceImporter
         } finally {
             File::deleteDirectory($workDir);
         }
+    }
+
+    /**
+     * A dry run: reads every file and works out what a real run would add,
+     * update and remove, including the regions and countries Replace mode
+     * would prune, without writing anything.
+     *
+     * @param  array<string, array{code: string, name: string, search_name: string}>  $countries
+     * @param  array<string, array{country_code: string, code: string, name: string, search_name: string}>  $regionRows
+     * @param  array<int, true>  $existing
+     * @param  array<int, true>  $inUse
+     */
+    private function preview(PlaceImportOptions $options, string $citiesPath, array $countries, array $regionRows, array $existing, array $inUse): PlaceImportResult
+    {
+        // Every region a real run would hold after inserting the file's.
+        $regionKeys = DB::table('place_regions')->get(['country_code', 'code'])
+            ->map(fn (object $r): string => $r->country_code.'.'.$r->code)
+            ->merge(array_keys($regionRows))->unique()->values()->all();
+        $regionIndex = array_flip($regionKeys);
+
+        $seen = [];
+        $usedRegions = [];
+        $usedCountries = [];
+        foreach ($this->cityRows($citiesPath, $countries, $regionIndex, 0) as $row) {
+            $seen[$row['id']] = true;
+            if ($row['region_id'] !== null) {
+                $usedRegions[$row['region_id']] = true;
+            }
+            $usedCountries[$row['country_code']] = true;
+        }
+        $pruneSkipped = ! $options->prune || count($seen) < $options->minimumRows;
+
+        $regionsRemoved = 0;
+        $countriesRemoved = 0;
+        if ($options->replaces() && ! $pruneSkipped) {
+            // Cities kept for their owners keep their region and country too,
+            // unless their owners are moved and the cities removed.
+            $survivors = $options->rehome ? [] : array_keys(array_intersect_key(array_diff_key($existing, $seen), $inUse));
+            foreach (array_chunk($survivors, self::ID_CHUNK) as $ids) {
+                foreach (DB::table('places')->leftJoin('place_regions', 'place_regions.id', '=', 'places.region_id')
+                    ->whereIn('places.id', $ids)
+                    ->get(['places.country_code', 'place_regions.country_code as region_country', 'place_regions.code as region_code']) as $place) {
+                    $usedCountries[$place->country_code] = true;
+                    if ($place->region_code !== null) {
+                        $usedRegions[$regionIndex[$place->region_country.'.'.$place->region_code]] = true;
+                    }
+                }
+            }
+            $regionsRemoved = count($regionKeys) - count($usedRegions);
+            $allCountries = DB::table('place_countries')->pluck('code')->merge(array_keys($countries))->unique();
+            $countriesRemoved = $allCountries->reject(fn (string $code): bool => isset($usedCountries[$code]))->count();
+        }
+
+        return $this->result($options, $seen, $existing, $inUse, removed: null, rehomed: 0, regionsRemoved: $regionsRemoved, countriesRemoved: $countriesRemoved, pruneSkipped: $pruneSkipped);
     }
 
     /**

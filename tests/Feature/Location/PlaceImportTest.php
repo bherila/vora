@@ -123,6 +123,29 @@ class PlaceImportTest extends TestCase
         $this->assertSame(1, app(PlaceImportRequests::class)->status()['result']['rehomed']);
     }
 
+    public function test_replace_preview_reports_the_lookups_the_import_removes(): void
+    {
+        $this->importGeoNamesFixture();
+        User::factory()->approved()->create(['place_id' => 5735238]);
+        $cities = $this->citiesWithout(['5735238', '2198148', '9999993']);
+        $requests = app(PlaceImportRequests::class);
+
+        foreach ([false, true] as $rehome) {
+            $options = ['--cities' => $cities, '--mode' => 'replace', '--rehome' => $rehome];
+            $this->importGeoNamesFixture($options + ['--dry-run' => true]);
+            $preview = $requests->status()['result'];
+            $this->assertSame(1, $preview['countries_removed'], 'Fiji');
+            // Fiji's only region; Oregon keeps Portland and Beaverton.
+            $this->assertSame(1, $preview['regions_removed']);
+        }
+
+        $this->importGeoNamesFixture(['--cities' => $cities, '--mode' => 'replace', '--rehome' => true]);
+        $applied = $requests->status()['result'];
+        $this->assertSame([$preview['regions_removed'], $preview['countries_removed'], $preview['removed'], $preview['rehomed']], [
+            $applied['regions_removed'], $applied['countries_removed'], $applied['removed'], $applied['rehomed'],
+        ]);
+    }
+
     public function test_update_mode_never_moves_people_or_prunes_lookups(): void
     {
         $this->importGeoNamesFixture();

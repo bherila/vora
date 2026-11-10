@@ -66,13 +66,17 @@ class AdminPlacesController extends Controller
         }
 
         $replace = $request->validated('mode') === PlaceImportOptions::MODE_REPLACE;
-        $this->requests->request([
+        $options = [
             'mode' => (string) $request->validated('mode'),
             'rehome' => $replace && $request->boolean('rehome'),
             'dry_run' => $request->boolean('dry_run'),
             'upload_dir' => $dir,
             'source' => 'admin',
-        ], $request->user());
+        ];
+        if ($source === 'preview') {
+            $options['dataset'] = (string) ($this->requests->status()['dataset'] ?? '');
+        }
+        $this->requests->request($options, $request->user());
 
         return response()->json([
             'success' => true,

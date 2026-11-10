@@ -53,7 +53,7 @@ class PlaceImportRequests
      * Queues an import for the scheduler. A newer request replaces an older
      * one that has not started.
      *
-     * @param  array{mode: string, rehome: bool, dry_run: bool, upload_dir: string|null, source: string}  $options
+     * @param  array{mode: string, rehome: bool, dry_run: bool, upload_dir: string|null, source: string, dataset?: string}  $options
      * @return array<string, mixed>
      */
     public function request(array $options, ?User $by): array
@@ -65,7 +65,8 @@ class PlaceImportRequests
 
         $request = [
             'id' => (string) Str::uuid(),
-            'dataset' => $this->dataset(),
+            // Applying a preview keeps the dataset that was previewed.
+            'dataset' => in_array($options['dataset'] ?? null, PlaceImportOptions::DATASETS, true) ? $options['dataset'] : $this->dataset(),
             'mode' => $options['mode'],
             'rehome' => $options['rehome'],
             'dry_run' => $options['dry_run'],
