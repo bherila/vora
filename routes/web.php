@@ -43,6 +43,8 @@ use App\Http\Controllers\InviteController;
 use App\Http\Controllers\LibraryBulkController;
 use App\Http\Controllers\LibraryContentController;
 use App\Http\Controllers\LibraryController;
+use App\Http\Controllers\Location\LocationController;
+use App\Http\Controllers\Location\NearbyPeopleController;
 use App\Http\Controllers\MediaAssetController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MuteController;
@@ -349,6 +351,13 @@ Route::middleware(['auth', 'approved'])->group(function () {
     // Abuse reports (polymorphic: media, stories, posts). Throttled — a handful
     // of reports a minute is plenty and this blunts report-spam.
     Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
+
+    // Optional account location (city level, from the local GeoNames copy)
+    // and people near it. Personas carry no location.
+    Route::get('/api/places/search', [LocationController::class, 'search'])->middleware('throttle:120,1');
+    Route::post('/api/places/nearest', [LocationController::class, 'nearest'])->middleware('throttle:20,1');
+    Route::put('/api/account/location', [LocationController::class, 'update'])->middleware('throttle:30,1');
+    Route::get('/api/users/nearby', [NearbyPeopleController::class, 'index'])->middleware('throttle:60,1');
 
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);

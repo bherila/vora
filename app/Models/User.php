@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Enums\Audience;
+use App\Enums\LocationAudience;
 use App\Http\Middleware\EnsureNotBanned;
+use App\Services\Location\LocationVisibility;
 use App\Support\InstanceFeatures;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
@@ -73,6 +75,16 @@ class User extends Authenticatable implements MustVerifyEmail
     ];
 
     /**
+     * Mirrors the column defaults so a freshly created model has them too.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'location_country_audience' => 'nobody',
+        'location_city_audience' => 'nobody',
+    ];
+
+    /**
      * @var list<string>
      */
     protected $hidden = [
@@ -97,6 +109,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'legal_hold_at' => 'datetime',
             'birth_date' => 'date',
             'profile_audience' => Audience::class,
+            'location_country_audience' => LocationAudience::class,
+            'location_city_audience' => LocationAudience::class,
             'preferred_user_types' => 'array',
             'preferred_genders' => 'array',
             'last_media_interest_ids' => 'array',
@@ -363,6 +377,17 @@ class User extends Authenticatable implements MustVerifyEmail
     public function characters(): HasMany
     {
         return $this->hasMany(Character::class);
+    }
+
+    /**
+     * The account's optional city. Account-level only: personas have no
+     * location. Who sees it is decided by {@see LocationVisibility}.
+     *
+     * @return BelongsTo<Place, $this>
+     */
+    public function place(): BelongsTo
+    {
+        return $this->belongsTo(Place::class);
     }
 
     /**

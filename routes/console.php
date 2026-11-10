@@ -44,3 +44,11 @@ Schedule::command('bherila-auth:consume-identity-tombstones')
     ->everyFiveMinutes()
     ->runInBackground()
     ->when(fn (): bool => SignIn::usesProvider());
+
+// Optionally refresh the GeoNames city list monthly. The list is data, not
+// code: `places:import` can also be run by hand at any time.
+Schedule::command('places:import')
+    ->monthlyOn(3, '04:17')
+    ->withoutOverlapping(120)
+    ->runInBackground()
+    ->when(fn (): bool => (bool) config('places.auto_refresh'));

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { type PersonaDiscoveryItem,PersonaGrid } from '@/explore/PersonaGrid';
 import { readInitialData } from '@/initialData';
+import { NearbyPeople } from '@/location/NearbyPeople';
 import { safeInternalUrl } from '@/security/dom-url';
 
 interface DirectoryUser {
@@ -47,6 +48,8 @@ function FollowDirectoryPage() {
         <h1 className="text-2xl font-bold">Browse people</h1>
         <p className="text-sm text-muted-foreground">View profiles, request to follow people, and discover their personas.</p>
       </div>
+      <NearbyPeople />
+      <h2 className="text-lg font-semibold">All people</h2>
       <Input
         type="search"
         value={query}

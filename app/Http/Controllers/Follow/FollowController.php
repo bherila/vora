@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Follow;
 
 use App\Enums\Audience;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Location\LocationController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Models\Block;
 use App\Models\Character;
@@ -15,6 +16,7 @@ use App\Models\User;
 use App\Notifications\FollowRequestAccepted;
 use App\Notifications\FollowRequestReceived;
 use App\Services\Chat\ChatGate;
+use App\Services\Location\LocationVisibility;
 use App\Services\Media\MediaResponseService;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
@@ -44,6 +46,7 @@ class FollowController extends Controller
         private readonly PersonaProfilePayload $personaProfile,
         private readonly ViewAsContext $viewAs,
         private readonly RecentProfileTrail $recentProfiles,
+        private readonly LocationVisibility $locationVisibility,
     ) {}
 
     public function directory(Request $request): View
@@ -228,6 +231,7 @@ class FollowController extends Controller
             'profile_audience' => $user->profile_audience?->value ?? 'everyone',
             'audience_user_ids' => $user->profileAudienceMembers()->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
             'can_manage_interests' => (bool) (! $user->is_disabled && $user->hasVerifiedEmail() && $user->isApproved()),
+            'location' => LocationController::settingsPayload($user),
         ];
     }
 
@@ -382,6 +386,7 @@ class FollowController extends Controller
                 'mutual_interests' => [],
                 'can_follow_back' => false,
                 'characters' => [],
+                'location' => null,
             ];
         }
 
@@ -421,6 +426,11 @@ class FollowController extends Controller
             'can_follow_back' => $incoming && ($followRequest === null || $followRequest->status !== 'accepted'),
             'characters' => $this->charactersStrip($user, $current),
             'viewer_favorited' => $viewerFavorited,
+            // Account location only, at the level its own audiences allow.
+            'location' => LocationVisibility::payload(
+                $user->place_id !== null ? $user->place()->with(['region', 'country'])->first() : null,
+                $this->locationVisibility->levelFor($current, $user),
+            ),
         ];
     }
 

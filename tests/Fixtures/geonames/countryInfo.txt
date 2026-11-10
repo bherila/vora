@@ -1,0 +1,6 @@
+# comment line
+#ISO	ISO3	ISO-Numeric	fips	Country
+ US	USA	840	US	United States
+US	USA	840	US	United States	Washington
+FR	FRA	250	FR	France	Paris
+FJ	FJI	242	FJ	Fiji	Suva

@@ -1,4 +1,4 @@
-import { BookOpen, Images, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { BookOpen, Images, MapPin, MessageSquare, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
@@ -25,6 +25,8 @@ import {
   useIdentityStore,
 } from '@/identity';
 import { readInitialData } from '@/initialData';
+import { LocationEditor } from '@/location/LocationEditor';
+import { normalizeLocationSettings, type VisibleLocation } from '@/location/types';
 import type { CharacterOption } from '@/media/MediaUploadDialog';
 import { OwnerMediaManager } from '@/media/OwnerMediaManager';
 import { OwnerStoriesManager } from '@/stories/OwnerStoriesManager';
@@ -56,6 +58,8 @@ interface ProfileData {
   viewer_favorited?: boolean;
   viewer_muted: boolean;
   viewer_block_id: number | null;
+  /** Account location at the level the viewer may see; personas have none. */
+  location?: VisibleLocation | null;
 }
 interface ProfileResponse { success: boolean; data: ProfileData; }
 
@@ -451,6 +455,12 @@ export function FollowProfilePage() {
                   {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
                 </CardDescription>
               )}
+              {profile.location && (
+                <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground" data-testid="profile-location">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="sr-only">Location: </span>{profile.location.label}
+                </p>
+              )}
             </div>
           </div>
           {profile.is_self ? (
@@ -622,6 +632,24 @@ export function FollowProfilePage() {
                 gender: summary.gender,
               } : current)}
             />
+            {editable.location && (
+              <div className="border-t border-border pt-4">
+                <LocationEditor
+                  initial={normalizeLocationSettings(editable.location)}
+                  onSaved={(settings) => setProfile((current) => current ? {
+                    ...current,
+                    location: settings.place ? {
+                      level: 'city',
+                      label: settings.place.label,
+                      city: settings.place.name,
+                      region: settings.place.region,
+                      country_code: settings.place.country_code,
+                      country_name: settings.place.country_name,
+                    } : null,
+                  } : current)}
+                />
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       )}
