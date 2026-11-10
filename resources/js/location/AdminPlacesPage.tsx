@@ -32,8 +32,7 @@ interface ImportStatus {
   mode?: ImportMode;
   rehome?: boolean;
   dry_run?: boolean;
-  /** A command-line preview of files on the server; it cannot be applied here. */
-  local_files?: boolean;
+  request_id?: string | null;
   started_at?: string;
   finished_at?: string;
   error?: string;
@@ -153,21 +152,25 @@ export function AdminPlacesPage() {
     void run(() => fetchWrapper.put('/api/admin/places/settings', { dataset, auto_refresh: autoRefresh }), 'The settings could not be saved.');
   }
 
-  function queue(dryRun: boolean, fromPreview = false) {
-    // Applying a preview repeats exactly what was previewed.
-    const previewed = fromPreview ? data?.status : null;
-    const runMode = previewed?.mode ?? mode;
-    const runRehome = previewed ? Boolean(previewed.rehome) : rehome;
+  function queue(dryRun: boolean) {
     const body = new FormData();
-    body.append('source', fromPreview ? 'preview' : source);
-    body.append('mode', runMode);
-    body.append('rehome', runMode === 'replace' && runRehome ? '1' : '0');
+    body.append('source', source);
+    body.append('mode', mode);
+    body.append('rehome', mode === 'replace' && rehome ? '1' : '0');
     body.append('dry_run', dryRun ? '1' : '0');
-    if (!fromPreview && source === 'upload') {
+    if (source === 'upload') {
       if (cities) body.append('cities', cities);
       if (admin1) body.append('admin1', admin1);
       if (countries) body.append('countries', countries);
     }
+    void run(() => fetchWrapper.post('/api/admin/places/import', body), 'The import could not be queued.');
+  }
+
+  /** Applies the preview on screen; the server repeats its own options and files. */
+  function applyPreview(previewId: string) {
+    const body = new FormData();
+    body.append('source', 'preview');
+    body.append('preview_id', previewId);
     void run(() => fetchWrapper.post('/api/admin/places/import', body), 'The import could not be queued.');
   }
 
@@ -319,11 +322,11 @@ export function AdminPlacesPage() {
             {status.state === 'failed' && <p role="alert" className="text-sm text-destructive">{status.error}</p>}
             {status.state === 'running' && <p role="status" className="text-sm text-muted-foreground">Importing… this page updates on its own.</p>}
             <ResultSummary status={status} />
-            {status.state === 'succeeded' && status.dry_run && status.local_files && (
-              <p className="text-sm text-muted-foreground">This preview read files on the server from the command line, so it can only be applied there.</p>
+            {status.state === 'succeeded' && status.dry_run && (status.source !== 'admin' || !status.request_id) && (
+              <p className="text-sm text-muted-foreground">This preview was run from the command line; apply it there with the same options.</p>
             )}
-            {status.state === 'succeeded' && status.dry_run && !status.local_files && (
-              <Button type="button" disabled={busy || active} onClick={() => queue(false, true)}>Apply this preview</Button>
+            {status.state === 'succeeded' && status.dry_run && status.source === 'admin' && status.request_id && (
+              <Button type="button" disabled={busy || active} onClick={() => applyPreview(status.request_id as string)}>Apply this preview</Button>
             )}
           </CardContent>
         </Card>

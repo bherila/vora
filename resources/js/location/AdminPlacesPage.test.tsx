@@ -66,9 +66,9 @@ describe('AdminPlacesPage', () => {
     expect(screen.getByRole('button', { name: 'Import now' })).toBeDisabled();
   });
 
-  it('applies a finished preview with the options it was previewed with', async () => {
+  it('applies the finished preview on screen by its id', async () => {
     initial = { adminPlaces: payload({ status: {
-      state: 'succeeded', dry_run: true, mode: 'replace', rehome: true, dataset: 'cities5000',
+      state: 'succeeded', dry_run: true, mode: 'replace', rehome: true, dataset: 'cities5000', source: 'admin', request_id: '5f1c5b7e-7a51-4f5e-9a8e-3b0d2c1e4f60',
       result: { dry_run: true, parsed: 64000, added: 10, updated: 63990, removed: 5, kept_in_use: 0, rehomed: 2, accounts_affected: 2, regions_removed: 0, countries_removed: 0, prune_skipped: false },
     } }) };
     mocked.post.mockResolvedValue({ data: payload() });
@@ -78,7 +78,18 @@ describe('AdminPlacesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply this preview' }));
 
     await waitFor(() => expect(mocked.post).toHaveBeenCalled());
-    expect(sentForm()).toEqual({ source: 'preview', mode: 'replace', rehome: '1', dry_run: '0' });
+    expect(sentForm()).toEqual({ source: 'preview', preview_id: '5f1c5b7e-7a51-4f5e-9a8e-3b0d2c1e4f60' });
+  });
+
+  it('does not offer to apply a command-line preview', () => {
+    initial = { adminPlaces: payload({ status: {
+      state: 'succeeded', dry_run: true, mode: 'update', dataset: 'cities5000', source: 'command',
+      result: { dry_run: true, parsed: 1, added: 0, updated: 1, removed: 0, kept_in_use: 0, rehomed: 0, accounts_affected: 0, regions_removed: 0, countries_removed: 0, prune_skipped: false },
+    } }) };
+    render(<AdminPlacesPage />);
+
+    expect(screen.queryByRole('button', { name: 'Apply this preview' })).toBeNull();
+    expect(screen.getByText(/run from the command line/)).toBeInTheDocument();
   });
 
   it('reports a failed run', () => {

@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AdminPlacesTest extends TestCase
@@ -91,7 +92,7 @@ class AdminPlacesTest extends TestCase
             ->assertJsonPath('data.status.result.added', 9)
             ->assertJsonMissingPath('data.status.upload_dir');
 
-        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'replace'])->assertStatus(202);
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->previewId()])->assertStatus(202);
         $this->artisan('places:run-requested')->assertSuccessful();
 
         $this->assertSame(9, Place::query()->count());
@@ -108,7 +109,7 @@ class AdminPlacesTest extends TestCase
 
         // The admin switches datasets before applying the preview.
         $this->putJson('/api/admin/places/settings', ['dataset' => 'cities500', 'auto_refresh' => false])->assertOk();
-        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'update'])->assertStatus(202);
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->previewId()])->assertStatus(202);
         $this->assertSame('cities15000', app(PlaceImportRequests::class)->pending()['dataset']);
 
         $this->artisan('places:run-requested')->assertSuccessful();
@@ -118,17 +119,38 @@ class AdminPlacesTest extends TestCase
             ->assertJsonPath('data.status.state', 'succeeded');
     }
 
-    public function test_a_command_line_preview_of_server_files_cannot_be_applied_here(): void
+    public function test_a_command_line_preview_cannot_be_applied_here(): void
     {
         $dir = base_path('tests/Fixtures/geonames');
         $this->artisan('places:import', [
             '--cities' => "{$dir}/cities.txt", '--admin1' => "{$dir}/admin1CodesASCII.txt", '--countries' => "{$dir}/countryInfo.txt", '--dry-run' => true,
         ])->assertSuccessful();
 
-        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'update'])
-            ->assertUnprocessable();
+        $this->assertNull(app(PlaceImportRequests::class)->status()['request_id'] ?? null);
+
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => (string) Str::uuid()])
+            ->assertStatus(409);
         $this->assertNull(app(PlaceImportRequests::class)->pending());
-        $this->getJson('/api/admin/places')->assertJsonPath('data.status.local_files', true);
+    }
+
+    public function test_applying_a_preview_another_tab_replaced_is_refused(): void
+    {
+        $this->fakeGeoNames('cities5000');
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'update', 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+        $shown = $this->previewId();
+
+        // Another tab previews Replace with rehoming.
+        $this->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'replace', 'rehome' => true, 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $shown])->assertStatus(409);
+        $this->assertNull(app(PlaceImportRequests::class)->pending());
+
+        // Applying the newer one repeats its own options, whatever is sent.
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->previewId(), 'mode' => 'update', 'rehome' => false])->assertStatus(202);
+        $pending = app(PlaceImportRequests::class)->pending();
+        $this->assertSame(['replace', true, false], [$pending['mode'], $pending['rehome'], $pending['dry_run']]);
     }
 
     public function test_uploads_need_all_three_files_and_known_types(): void
@@ -141,8 +163,9 @@ class AdminPlacesTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['cities', 'admin1', 'countries']);
 
-        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'mode' => 'update'])
-            ->assertUnprocessable();
+        $this->postJson('/api/admin/places/import', ['source' => 'preview'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preview_id');
     }
 
     public function test_admin_cancels_a_queued_import(): void
@@ -186,6 +209,11 @@ class AdminPlacesTest extends TestCase
 
         $this->assertSame('schedule', app(PlaceImportRequests::class)->pending()['source']);
         $this->assertTrue($runner->filtersPass($this->app));
+    }
+
+    private function previewId(): string
+    {
+        return (string) app(PlaceImportRequests::class)->status()['request_id'];
     }
 
     private function fakeGeoNames(string $dataset): void

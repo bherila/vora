@@ -8,8 +8,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * Queue a GeoNames import. "download" fetches the configured dataset;
- * "upload" takes the three GeoNames files; "preview" applies the files from
- * the last dry run without uploading them again.
+ * "upload" takes the three GeoNames files; "preview" applies the dry run
+ * named by preview_id, with its own options and files.
  */
 class AdminPlacesImportRequest extends FormRequest
 {
@@ -25,10 +25,12 @@ class AdminPlacesImportRequest extends FormRequest
     public function rules(): array
     {
         $upload = $this->input('source') === 'upload';
+        $preview = $this->input('source') === 'preview';
 
         return [
             'source' => ['required', Rule::in(['download', 'upload', 'preview'])],
-            'mode' => ['required', Rule::in(PlaceImportOptions::MODES)],
+            'mode' => [Rule::requiredIf(! $preview), 'nullable', Rule::in(PlaceImportOptions::MODES)],
+            'preview_id' => [Rule::requiredIf($preview), 'nullable', 'uuid'],
             'rehome' => ['sometimes', 'boolean'],
             'dry_run' => ['sometimes', 'boolean'],
             'cities' => [Rule::requiredIf($upload), 'nullable', 'file', 'max:'.self::MAX_UPLOAD_KB, 'extensions:zip,txt'],

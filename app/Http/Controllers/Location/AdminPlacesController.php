@@ -53,14 +53,18 @@ class AdminPlacesController extends Controller
             $request->file('admin1')?->move($dir, 'admin1CodesASCII.txt');
             $request->file('countries')?->move($dir, 'countryInfo.txt');
         } elseif ($source === 'preview') {
-            // Apply what the last preview read: its uploaded files, or a fresh
-            // download when the preview downloaded.
+            // Apply exactly the preview the admin is looking at: one this page
+            // queued, identified by its request id, with the dataset, mode,
+            // rehoming and files it read. Anything else (a newer preview from
+            // another tab, or a command-line preview with options this page
+            // cannot repeat) is refused rather than silently substituted.
             $status = $this->requests->status();
-            if (($status['state'] ?? null) !== 'succeeded' || ($status['dry_run'] ?? false) !== true) {
-                return response()->json(['success' => false, 'message' => 'There is no preview to apply.'], 422);
-            }
-            if (($status['local_files'] ?? false) === true) {
-                return response()->json(['success' => false, 'message' => 'That preview read files on the server. Run the import with the same files from the command line, or preview it from this page.'], 422);
+            if (($status['state'] ?? null) !== 'succeeded'
+                || ($status['dry_run'] ?? false) !== true
+                || ($status['source'] ?? null) !== 'admin'
+                || ($status['request_id'] ?? null) === null
+                || $status['request_id'] !== $request->validated('preview_id')) {
+                return response()->json(['success' => false, 'message' => 'That preview is no longer the latest one from this page. Reload and preview again.'], 409);
             }
             $dir = $this->requests->previewUploadDir();
             if ($dir === null && ($status['upload_dir'] ?? null) !== null) {
@@ -68,22 +72,30 @@ class AdminPlacesController extends Controller
             }
         }
 
-        $replace = $request->validated('mode') === PlaceImportOptions::MODE_REPLACE;
-        $options = [
-            'mode' => (string) $request->validated('mode'),
-            'rehome' => $replace && $request->boolean('rehome'),
-            'dry_run' => $request->boolean('dry_run'),
-            'upload_dir' => $dir,
-            'source' => 'admin',
-        ];
         if ($source === 'preview') {
-            $options['dataset'] = (string) ($this->requests->status()['dataset'] ?? '');
+            $options = [
+                'mode' => (string) $status['mode'],
+                'rehome' => $status['mode'] === PlaceImportOptions::MODE_REPLACE && (bool) ($status['rehome'] ?? false),
+                'dry_run' => false,
+                'upload_dir' => $dir,
+                'source' => 'admin',
+                'dataset' => (string) ($status['dataset'] ?? ''),
+            ];
+        } else {
+            $replace = $request->validated('mode') === PlaceImportOptions::MODE_REPLACE;
+            $options = [
+                'mode' => (string) $request->validated('mode'),
+                'rehome' => $replace && $request->boolean('rehome'),
+                'dry_run' => $request->boolean('dry_run'),
+                'upload_dir' => $dir,
+                'source' => 'admin',
+            ];
         }
         $this->requests->request($options, $request->user());
 
         return response()->json([
             'success' => true,
-            'message' => $request->boolean('dry_run')
+            'message' => $options['dry_run']
                 ? 'Preview queued. It starts within a minute.'
                 : 'Import queued. It starts within a minute.',
             'data' => $this->payload(),
