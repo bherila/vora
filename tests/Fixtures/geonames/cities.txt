@@ -1,0 +1,11 @@
+5746545	Portland	Portland		45.52345	-122.67621	P	PPLA2	US		OR				652503			America/Los_Angeles	2024-01-01
+5747882	Beaverton	Beaverton		45.48706	-122.80371	P	PPL	US		OR				97494			America/Los_Angeles	2024-01-01
+5814616	Vancouver	Vancouver		45.63873	-122.66149	P	PPL	US		WA				190915			America/Los_Angeles	2024-01-01
+5735238	Salem	Salem		44.9429	-123.0351	P	PPLA	US		OR				169798			America/Los_Angeles	2024-01-01
+4975802	Portland	Portland		43.66147	-70.25533	P	PPL	US		ME				66881			America/Los_Angeles	2024-01-01
+2988507	Paris	Paris		48.85341	2.3488	P	PPLC	FR		11				2138551			America/Los_Angeles	2024-01-01
+2973385	Saint-Étienne-du-Rouvray	Saint-Etienne-du-Rouvray		49.37794	1.10467	P	PPL	FR		11				28641			America/Los_Angeles	2024-01-01
+9999991	Old Town	Old Town		45.52	-122.67	P	PPLX	US		OR				5000			America/Los_Angeles	2024-01-01
+9999992	Mount Hood	Mount Hood		45.37	-121.69	T	MT	US		OR				0			America/Los_Angeles	2024-01-01
+2198148	Suva	Suva		-18.14161	178.44149	P	PPLC	FJ		C				77366			America/Los_Angeles	2024-01-01
+9999993	Taveuni East	Taveuni East		-16.8	-179.9	P	PPL	FJ		C				6000			America/Los_Angeles	2024-01-01

@@ -15,6 +15,7 @@ import { fetchWrapper } from '@/fetchWrapper';
 import { loadInterests, persistRatings } from '@/interests/api';
 import { InterestRatingList, type RatableInterest } from '@/interests/interest-rating-list';
 import { type Audience } from '@/lib/audience';
+import { type LocationSettings } from '@/location/types';
 import { putToSignedUrl } from '@/media/upload';
 import { GENDER_OPTIONS, normalizeProfileOptionValue, normalizeProfileSelections, USER_TYPE_OPTIONS } from '@/profile-options';
 import { activeRestriction } from '@/restrictions';
@@ -34,6 +35,8 @@ export interface ProfileEditable {
   profile_audience: Audience;
   audience_user_ids: number[];
   can_manage_interests: boolean;
+  /** Account-only location settings, edited separately from this form. */
+  location?: LocationSettings;
 }
 
 export interface ProfileSummary {

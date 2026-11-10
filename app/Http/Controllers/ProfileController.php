@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
+use App\Http\Controllers\Location\LocationController;
 use App\Http\Requests\Profile\BanAppealRequest;
 use App\Http\Requests\Profile\CompleteProfilePictureRequest;
 use App\Http\Requests\Profile\StoreProfilePictureRequest;
@@ -478,6 +479,7 @@ class ProfileController extends Controller
                     'profile_audience_user_ids' => $user->profileAudienceMembers->pluck('user_id')->map(fn ($id): int => (int) $id)->values()->all(),
                     'preferred_user_types' => $user->preferred_user_types,
                     'preferred_genders' => $user->preferred_genders,
+                    'location' => LocationController::settingsPayload($user),
                     'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                     'approved_at' => $user->approved_at?->toIso8601String(),
                     'deactivated_at' => $user->deactivated_at?->toIso8601String(),

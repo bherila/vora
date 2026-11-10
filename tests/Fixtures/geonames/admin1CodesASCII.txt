@@ -1,0 +1,5 @@
+US.OR	Oregon	Oregon	5744337
+US.WA	Washington	Washington	5815135
+US.ME	Maine	Maine	4971068
+FR.11	Île-de-France	Ile-de-France	3012874
+FJ.C	Central	Central	2205218

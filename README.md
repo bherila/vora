@@ -247,6 +247,28 @@ queued job is older than five minutes, or any failed job exists. The deployment
 workflow runs this check after each release; operators can also run it manually
 when diagnosing the cPanel scheduler or database queues.
 
+### City list for locations
+
+Profile locations are city-level and optional. People can search for a city or
+use their browser's location, which is matched to the nearest city on the server;
+the coordinates are never stored. City data comes from a local copy of
+[GeoNames](https://www.geonames.org/) (CC BY 4.0), so no paid or external lookup
+API is used. The data is not shipped with releases. Load it, or refresh it at
+any time, with:
+
+```bash
+php artisan places:import
+```
+
+The command downloads `cities5000` (places with at least 5,000 people) plus the
+country and region lists. Choose another set with `--dataset=cities500`,
+`cities1000` or `cities15000`, or set `PLACES_DATASET`. Re-running only applies
+changes. Cities that GeoNames removes are deleted unless an account uses them.
+Pruning is skipped when fewer than `PLACES_MINIMUM_ROWS` (default 1,000) cities
+were read. `--cities`, `--admin1` and `--countries` take local files in place
+of a download. Set `PLACES_AUTO_REFRESH=true` to re-import monthly from the
+scheduler.
+
 ## License
 
 Private - All rights reserved
