@@ -82,11 +82,18 @@ Set `OAUTH_PROVIDER` explicitly to the same provider namespace used by local
 bindings. Pin the exact configured issuer, endpoint and this application's own
 public key. The key must be dedicated to this integration; never reuse OAuth
 keys, the provider's instance-wide fallback key or another application's key.
-Do not obtain trusted destinations or keys from browser input or OAuth metadata.
+For an embedded provider, use its exact HTTPS issuer including the configured
+mount, such as `https://app.example.test/auth`, on both sides and in the sign-in
+base URL. The adopted provider `0.1.6` and shared PHP `0.28.7` support that exact
+issuer; a different origin or mount is refused. Do not remove the mount to bypass
+a configuration error. Do not obtain trusted destinations or keys from browser
+input or OAuth metadata.
 
 The nonce and receipt migrations are part of the reviewed host schema update.
-Leave them installed during rollback. The scheduled shared prune command clears
-expired replay data and old receipts; every worker must share durable storage.
+Leave them installed during rollback. The host scheduler runs
+`bherila-auth:prune-delegated-nonces` daily, even when the endpoint is later
+disabled, to clear expired nonces and receipts older than 30 days. Every worker
+must share durable storage; provider-context cleanup must not replace host cleanup.
 Do not manually run schema commands against a live instance as a verification
 shortcut.
 
@@ -110,7 +117,7 @@ an uncertain write requires receipt/canonical-state reconciliation rather than
 an automatic second mutation.
 
 Complete the provider's
-[per-application setup and verification](https://github.com/bherila/auth-manager/blob/v0.1.5/docs/connecting-an-application.md)
+[per-application setup and verification](https://github.com/bherila/auth-manager/blob/v0.1.6/docs/connecting-an-application.md)
 separately: its registry, explicit client grant, access-management roles,
 per-application signing key and write switches remain provider-owned. Verify
 reads before enabling writes on either side. A provider-only administrator must
@@ -125,13 +132,21 @@ existing sign-in, account and deletion suites:
 | --- | --- |
 | `EmergencyAccessTest` | Shared password/MFA, explicit designation, fresh local eligibility, no ordinary/remember-cookie bypass, CSRF/throttle, native forms, suspicious-email reporting and outage-independent logout. |
 | `DelegatedApplicationAccessTest` | Shared adapter conformance, actual signed endpoint and durable receipt replay, role/scope/revision safeguards, disclosed removal and transactional audit failures. |
-| `EmbeddedDelegatedApplicationAccessTest` | Host/provider account and context separation at the actual embedded issuer boundary. |
+| `EmbeddedDelegatedApplicationAccessTest` | Host/provider account and context separation with actual mounted-issuer verification. |
+| `EmbeddedDelegationRoundTripTest` | Actual provider login and recent password confirmation, per-application roles/grant/key, signed transport and Vora adapter mutation; independent host authority, replay and wrong-issuer refusal. |
+| `EmbeddedDelegatedPruningTest` | Daily host scheduler registration and actual host receipt cleanup while the endpoint is disabled; provider receipts remain untouched. |
 | `ProviderConsumerLifecycleAcceptanceTest` | Real provider PKCE sign-in, token/identity bootstrap, password change/reset/disable/delete at 299/300 seconds, fresh administrator checks, retryable outages, actual deletion/feed/acknowledgement and committed local cleanup. |
 
 The lifecycle suite runs actual registered provider route middleware and
 controllers through a test-only in-process HTTP transport while Vora requests
 use its HTTP kernel. It does not run a deployed network or browser. The
-emergency fixture captures mail; it does not prove remote mail delivery.
+delegated roundtrip also runs real provider controllers and the shared host
+endpoint, with an in-process network hop that restores each realm. Its nonce
+store is an in-memory test fixture: it tests assertion replay, not durable
+production nonce storage. The pruning fixture exercises actual receipt cleanup
+but skips nonce deletion because the production store correctly refuses SQLite
+`:memory:` as non-durable. The emergency fixture captures mail; it does not prove
+remote mail delivery.
 Provider and shared-package fixtures remain responsible for reusable protocol
 failure cases and synthetic workspace adapters.
 

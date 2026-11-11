@@ -36,10 +36,8 @@ class EmbeddedDelegatedApplicationAccessTest extends EmbeddedAuthTestCase
         $hostBefore = (array) DB::table('users')->find($manager->id);
         $providerBefore = (array) DB::table('auth_manager_users')->find($provider->id);
 
-        // Pinned shared 0.28.6 requires a bare issuer. A real mounted issuer
-        // currently fails closed; never replace /auth with a different issuer.
-        $this->delegatedAccessEndpoint('manager', ['operation' => 'capabilities'])->assertStatus(503)
-            ->assertJsonPath('error', 'invalid_verifier_configuration');
+        $this->delegatedAccessEndpoint('manager', ['operation' => 'capabilities'])->assertOk()
+            ->assertJsonPath('controls.application_admin', true)->assertJsonPath('controls.provisioning', false);
         $this->assertTrue($this->delegatedAccessCall('manager', ['operation' => 'capabilities'])['controls']['application_admin']);
         $this->assertDelegatedActorRefusedEverywhere((string) $provider->id, 'manager');
         $this->postJson('/auth/application-access')->assertNotFound();
