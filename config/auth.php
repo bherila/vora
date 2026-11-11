@@ -129,4 +129,10 @@ return [
 
     'sign_in' => in_array(env('AUTH_SIGN_IN'), ['provider', 'embedded'], true) ? env('AUTH_SIGN_IN') : 'local',
 
+    // Trusted operator designation by immutable local ID; never by email or provider availability.
+    'emergency_access' => [
+        'enabled' => (bool) env('AUTH_EMERGENCY_ACCESS_ENABLED', false),
+        'user_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('AUTH_EMERGENCY_ACCESS_USER_IDS', ''))), static fn (string $id): bool => $id !== '')),
+    ],
+
 ];

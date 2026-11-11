@@ -46,6 +46,10 @@ Schedule::command('bherila-auth:consume-identity-tombstones')
     ->runInBackground()
     ->when(fn (): bool => SignIn::usesProvider());
 
+// Keep replay storage bounded even after delegated access is switched off.
+// This is a host command; it must not enter the embedded provider context.
+Schedule::command('bherila-auth:prune-delegated-nonces')->daily()->withoutOverlapping();
+
 // GeoNames city list: run imports requested from Admin → City list (and the
 // optional monthly refresh, which queues one). The list is data, not code;
 // `places:import` can also be run by hand at any time.

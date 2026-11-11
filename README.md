@@ -161,6 +161,10 @@ name** can be set on the same page for the label under the icon.
 
 ### Sign-in through an identity provider
 
+For the control inventory, designated emergency administrator, delegated
+administrator-role integration and rollout evidence, see
+[provider account-management acceptance](docs/consumer-auth-acceptance.md).
+
 vora has three auth modes: local (the default), external, and opt-in embedded;
 see [docs/auth-modes.md](docs/auth-modes.md) for choosing and switching.
 
