@@ -51,6 +51,22 @@ return [
         'accounts' => ProviderAccounts::class,
     ],
 
+    // Shared contract v3 transport; all trust inputs are operator-pinned. The
+    // application adapter only manages existing bound accounts' admin flags.
+    'delegated_access' => [
+        'enabled' => env('DELEGATED_ACCESS_ENABLED', false),
+        'writes_enabled' => env('DELEGATED_ACCESS_WRITES_ENABLED', false),
+        'issuer' => env('DELEGATED_ACCESS_ISSUER', ''),
+        'endpoint' => env('DELEGATED_ACCESS_ENDPOINT', ''),
+        'application' => env('DELEGATED_ACCESS_APPLICATION', ''),
+        'public_keys' => env('DELEGATED_ACCESS_PUBLIC_KEYS', ''),
+        'oauth_provider' => env('OAUTH_PROVIDER'),
+        'nonce_connection' => env('DELEGATED_ACCESS_NONCE_CONNECTION'),
+        'receipt_connection' => env('DELEGATED_ACCESS_RECEIPT_CONNECTION', env('DELEGATED_ACCESS_NONCE_CONNECTION')),
+        'path' => '/application-access',
+        'per_minute' => 120,
+    ],
+
     // Ends a signed-in session once the provider reports the identity disabled,
     // deleted, reset or no longer granted this application. Enable only after the
     // provider's identity-status endpoint is reachable with this client.
