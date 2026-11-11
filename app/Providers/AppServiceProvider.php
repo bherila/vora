@@ -18,6 +18,7 @@ use App\Observers\StoryAuthorAnnouncementObserver;
 use App\Policies\CharacterPolicy;
 use App\Policies\MediaPolicy;
 use App\Policies\StoryPolicy;
+use App\Services\Auth\DelegatedApplicationAccess;
 use App\Services\Auth\ProviderIdentityDeletion;
 use App\Services\Auth\SignIn;
 use App\Services\Auth\VoraAuthUserPolicy;
@@ -26,6 +27,7 @@ use App\Services\Post\AnnouncementPostService;
 use App\Services\Privacy\ViewAsContext;
 use Aws\Sns\MessageValidator;
 use BWH\Auth\Contracts\AuthUserPolicy;
+use BWH\Auth\OAuth\DelegatedAccess\ApplicationAccessAdapter;
 use BWH\Auth\OAuth\Lifecycle\IdentityTombstoneHandler;
 use BWH\AuthManager\Embedded\EmbeddedContext;
 use Illuminate\Auth\Events\Login;
@@ -57,6 +59,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
         // Deletions at the identity provider (provider sign-in; see routes/console.php).
         $this->app->bind(IdentityTombstoneHandler::class, ProviderIdentityDeletion::class);
+        $this->app->bind(ApplicationAccessAdapter::class, DelegatedApplicationAccess::class);
         $this->app->scoped(ViewAsContext::class);
         $this->app->scoped(RestrictionGate::class);
         // SNS signing certificates for SES delivery reports. The validator checks
