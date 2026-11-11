@@ -309,6 +309,12 @@ keep `OAUTH_PROVIDER` unchanged.
 
 ## Moving between modes
 
+Before retiring local identity controls, follow
+[provider account-management acceptance](consumer-auth-acceptance.md) for the
+explicit emergency administrator, lifecycle/outage evidence and optional
+delegated administrator management. All three auth modes retain their own
+configuration prerequisites; deployment health alone does not approve cutover.
+
 Accounts are keyed differently per mode (local email and password versus
 provider name and subject), so a switch is an account migration, not just a
 config change. For bulk local-to-provider moves, use
