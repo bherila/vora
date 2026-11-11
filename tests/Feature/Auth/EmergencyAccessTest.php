@@ -253,4 +253,40 @@ class EmergencyAccessTest extends TestCase
         $this->assertGuest();
         $this->assertFalse(session()->has(EmergencyAccess::SESSION));
     }
+
+    public function test_signed_in_provider_user_visiting_emergency_entry_keeps_their_session(): void
+    {
+        $this->administrator();
+        $bound = User::factory()->approved()->create(['oauth_provider' => 'identity', 'oauth_subject' => '42']);
+        $this->actingAs($bound)->withSession([RequireProviderAccount::SESSION_KEY => ['identity', '42']]);
+        $this->get('/emergency-login')->assertRedirect();
+        $this->assertAuthenticatedAs($bound);
+        $this->assertFalse(session()->has(EmergencyAccess::SESSION));
+    }
+
+    public function test_guest_redirect_cannot_mint_emergency_proof_for_pre_authenticated_or_remember_restored_user(): void
+    {
+        $user = $this->administrator();
+        $attempt = $this->challenge($user);
+        // Exercise the emergency middleware's own boundary even if another
+        // middleware admitted a pre-existing authentication in this request.
+        $this->withoutMiddleware(RequireProviderAccount::class);
+        $this->actingAs($user);
+        $this->post('/emergency-login/verify', ['attempt_token' => $attempt->token, 'code' => 'wrong'])->assertRedirect();
+        $this->get('/emergency-login/confirm/'.$attempt->token)->assertRedirect();
+        $this->post('/emergency-login/confirm/'.$attempt->token)->assertRedirect();
+        $this->assertFalse(session()->has(EmergencyAccess::SESSION));
+        $this->assertFalse($attempt->fresh()->is_used);
+        $this->assertAuthenticatedAs($user);
+
+        $user->setRememberToken('synthetic-recaller-token');
+        $user->save();
+        $guard = Auth::guard('web');
+        $guard->forgetUser();
+        session()->forget($guard->getName());
+        $this->withCookie($guard->getRecallerName(), implode('|', [$user->id, $user->remember_token, $user->password]))
+            ->post('/emergency-login/confirm/'.$attempt->token)->assertRedirect();
+        $this->assertFalse(session()->has(EmergencyAccess::SESSION));
+        $this->assertFalse($attempt->fresh()->is_used);
+    }
 }

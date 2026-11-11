@@ -21,6 +21,12 @@ final class EmergencySignIn
     {
         $access = $this->access;
         abort_unless($access->enabled(), 404);
+        // guest:web may redirect without running the credential controller. Never
+        // treat an already authenticated (including recaller-restored) request as
+        // MFA completion, or change its existing authentication proof.
+        if (Auth::guard('web')->check()) {
+            return $next($request);
+        }
         $overlay = [
             'bherila-auth.two_factor.route_name_prefix' => 'emergency.two-factor.',
             'bherila-auth.two_factor.login_url' => '/emergency-login',
@@ -49,7 +55,7 @@ final class EmergencySignIn
             }
             $response = $next($request);
             $user = Auth::guard('web')->user();
-            if (! $report && $user instanceof User) {
+            if ($request->routeIs('emergency.verify', 'emergency.two-factor.confirm.submit') && $user instanceof User) {
                 $stored = $access->eligible($user);
                 if ($stored === null || ! isset($pending, $token) || $pending !== [...$access->proof($stored), 'token' => $token]) {
                     Auth::guard('web')->logout();
