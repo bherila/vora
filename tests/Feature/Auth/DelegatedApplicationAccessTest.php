@@ -207,6 +207,38 @@ class DelegatedApplicationAccessTest extends TestCase
         $this->assertDatabaseCount('auth_audit_log', 0);
     }
 
+    public function test_a_silently_cancelled_audit_rolls_back_the_privilege_change(): void
+    {
+        $state = $this->delegatedAccessRead('ManagerCase', 'TargetCase');
+        AuthAuditLog::creating(static fn (): bool => false);
+        try {
+            $this->delegatedAccessCall('ManagerCase', $this->updatePayload($state['revision']));
+            $this->fail('A cancelled audit must abort the mutation.');
+        } catch (RuntimeException $failure) {
+            $this->assertSame('Delegated access audit was not persisted.', $failure->getMessage());
+        } finally {
+            AuthAuditLog::flushEventListeners();
+        }
+        $this->assertFalse($this->target->fresh()->is_admin);
+        $this->assertDatabaseCount('auth_audit_log', 0);
+    }
+
+    public function test_a_silently_cancelled_role_save_cannot_report_or_audit_a_success(): void
+    {
+        $state = $this->delegatedAccessRead('ManagerCase', 'TargetCase');
+        User::updating(static fn (): bool => false);
+        try {
+            $this->delegatedAccessCall('ManagerCase', $this->updatePayload($state['revision']));
+            $this->fail('A cancelled role save must abort the mutation.');
+        } catch (RuntimeException $failure) {
+            $this->assertSame('Delegated access update was not persisted.', $failure->getMessage());
+        } finally {
+            User::flushEventListeners();
+        }
+        $this->assertFalse($this->target->fresh()->is_admin);
+        $this->assertDatabaseCount('auth_audit_log', 0);
+    }
+
     private function staleUpdate(string $revision): void
     {
         $this->assertDelegatedRefusal([DelegatedRefusal::REVISION_CONFLICT], 'ManagerCase', $this->updatePayload($revision), 'stale policy or label');

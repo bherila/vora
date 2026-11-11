@@ -12,6 +12,7 @@ use BWH\Auth\OAuth\DelegatedAccess\DelegatedRequestContext;
 use BWH\AuthManager\Embedded\EmbeddedContext;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /** Manages only the application administrator flag, never identity or domain data. */
 final readonly class DelegatedApplicationAccess implements ApplicationAccessAdapter
@@ -148,13 +149,13 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
                 || ($admin !== $target->isAdmin() && ! $state['allowed_edits']['application_admin'])) {
                 throw DelegatedRefusal::of(DelegatedRefusal::NOT_AUTHORIZED);
             }
-            if ($admin !== $target->isAdmin()) {
-                $target->forceFill(['is_admin' => $admin])->save();
+            if ($admin !== $target->isAdmin() && ! $target->forceFill(['is_admin' => $admin])->save()) {
+                throw new RuntimeException('Delegated access update was not persisted.');
             }
             $result = $this->state($actor, $target, $payload['subject'], $directory);
             // Persist with the mutation even if the optional auth logger is off.
             // Failure rolls back the privilege change, never an unaudited success.
-            AuthAuditLog::create([
+            $audit = AuthAuditLog::create([
                 'user_id' => $target->id, 'acting_user_id' => $actor->id,
                 'event' => 'delegated_application_access_'.$payload['operation'], 'auth_method' => 'delegated_assertion', 'succeeded' => true,
                 'metadata' => ['provider' => $this->settings->bindingIssuer(), 'issuer' => $this->context->issuer,
@@ -163,6 +164,9 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
                     'before_revision' => $state['revision'], 'after_revision' => $result['revision'],
                     'before' => $state['access'], 'after' => $result['access']],
             ]);
+            if (! $audit->exists) {
+                throw new RuntimeException('Delegated access audit was not persisted.');
+            }
 
             return $result;
         });
