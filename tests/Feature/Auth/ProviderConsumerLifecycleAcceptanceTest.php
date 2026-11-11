@@ -64,7 +64,7 @@ class ProviderConsumerLifecycleAcceptanceTest extends ProviderConsumerAcceptance
         $this->assertGuest('web');
         $this->assertSame(1, $this->statusCalls);
         // Ending a login is not itself the application's deletion cascade.
-        $this->assertNull(DB::table('users')->where('id', $this->consumer->id)->value('deleted_at'));
+        $this->assertDatabaseHas('users', ['id' => $this->consumer->id, 'deleted_at' => null]);
     }
 
     public function test_admin_writes_read_current_provider_status_inside_the_ordinary_freshness_window(): void
@@ -126,9 +126,9 @@ class ProviderConsumerLifecycleAcceptanceTest extends ProviderConsumerAcceptance
                 'target_id' => $this->consumer->id, 'visited_at' => now()]);
         }
         $chatVersion = $cascade->chat_sync_version;
-        $cookie = $this->providerAdministrator();
+        $this->providerAdministrator();
         foreach ([$this->provider, $heldProvider, $cascadeProvider] as $provider) {
-            $this->providerRequest('DELETE', '/auth/api/admin/users/'.$provider->id, [], $cookie)->assertAccepted();
+            $this->providerRequest('DELETE', '/auth/api/admin/users/'.$provider->id, [])->assertAccepted();
         }
         $this->artisan('bherila-auth:consume-identity-tombstones')->assertFailed();
         $this->assertNotSoftDeleted($this->consumer); // Primary administrator needs an operator.
