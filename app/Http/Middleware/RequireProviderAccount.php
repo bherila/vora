@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\Auth\EmergencyAccess;
 use App\Services\Auth\SignIn;
 use BWH\Auth\OAuth\Session\ProviderSession;
 use BWH\Auth\OAuth\Session\ProviderSessionExpired;
@@ -35,6 +36,10 @@ class RequireProviderAccount
         $user = Auth::guard('web')->user();
         if (! $user instanceof User || ! SignIn::usesProvider() || $request->routeIs('logout')) {
             return $next($request);
+        }
+
+        if ($request->session()->has(EmergencyAccess::SESSION)) {
+            return ! Auth::guard('web')->viaRemember() && app(EmergencyAccess::class)->hasSession($request, $user) ? $next($request) : $this->end($request);
         }
 
         // Sessions from before the switch, or an account bound elsewhere, end

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\User;
+use App\Services\Auth\EmergencyAccess;
 use App\Services\Auth\SignIn;
 use App\Services\Events\EventJoining;
 use BWH\Auth\Concerns\ThrottlesLoginAttempts;
@@ -75,13 +77,18 @@ class LoginController extends Controller
 
         // Credentials valid — issue the email 2FA challenge. startChallenge() stores the
         // pending-user session keys the package's verify endpoint reads to complete login.
-        $attempt = $this->twoFactor->startChallenge($user, $request, $request->boolean('remember'));
+        $emergency = $request->routeIs('emergency.store');
+        $attempt = $this->twoFactor->startChallenge($user, $request, ! $emergency && $request->boolean('remember'));
+        if ($emergency && $user instanceof User) {
+            $request->session()->forget(EmergencyAccess::SESSION);
+            $request->session()->put(EmergencyAccess::PENDING, [...app(EmergencyAccess::class)->proof($user), 'token' => $attempt->token]);
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['requires_2fa' => true, 'attempt_token' => $attempt->token]);
         }
 
-        return redirect()->route('login.two-factor', ['token' => $attempt->token]);
+        return redirect()->route($emergency ? 'emergency.challenge' : 'login.two-factor', ['token' => $attempt->token]);
     }
 
     public function showTwoFactor(Request $request, string $token): View|RedirectResponse
