@@ -89,6 +89,8 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
 });
 
+require __DIR__.'/emergency.php';
+
 // Local sign-in: registration, invites, password login and recovery. Under
 // provider sign-in the provider owns these and they are not served.
 Route::middleware(['guest', 'sign-in:local'])->group(function () {

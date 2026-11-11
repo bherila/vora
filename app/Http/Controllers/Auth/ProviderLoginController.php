@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Middleware\RequireProviderAccount;
 use App\Models\ProviderInvitation;
 use App\Models\User;
+use App\Services\Auth\EmergencyAccess;
 use App\Services\Auth\ProviderAccounts;
 use App\Services\Auth\SignIn;
 use BWH\Auth\Contracts\AuthUserPolicy;
@@ -60,7 +61,7 @@ class ProviderLoginController extends RelyingPartyLoginController
     /** Under local sign-in there is no provider session to end. */
     protected function signsOutLocallyOnly(Request $request, ?Authenticatable $user): bool
     {
-        return ! SignIn::usesProvider();
+        return ! SignIn::usesProvider() || $request->session()->has(EmergencyAccess::SESSION);
     }
 
     protected function afterSignOutUrl(Request $request): string

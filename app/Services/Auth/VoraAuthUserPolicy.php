@@ -28,6 +28,10 @@ class VoraAuthUserPolicy implements AuthUserPolicy
             return false;
         }
 
+        if ($request->routeIs('emergency.*')) {
+            return app(EmergencyAccess::class)->eligible($user) !== null;
+        }
+
         // A deleted account stays bound to its subject but cannot sign in.
         return ! $user->trashed() && $user->canLogin();
     }
