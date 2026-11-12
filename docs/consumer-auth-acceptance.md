@@ -84,7 +84,7 @@ public key. The key must be dedicated to this integration; never reuse OAuth
 keys, the provider's instance-wide fallback key or another application's key.
 For an embedded provider, use its exact HTTPS issuer including the configured
 mount, such as `https://app.example.test/auth`, on both sides and in the sign-in
-base URL. The adopted provider `0.1.6` and shared PHP `0.28.7` support that exact
+base URL. The adopted provider `0.1.7` and shared PHP `0.28.7` support that exact
 issuer; a different origin or mount is refused. Do not remove the mount to bypass
 a configuration error. Do not obtain trusted destinations or keys from browser
 input or OAuth metadata.
@@ -117,7 +117,7 @@ an uncertain write requires receipt/canonical-state reconciliation rather than
 an automatic second mutation.
 
 Complete the provider's
-[per-application setup and verification](https://github.com/bherila/auth-manager/blob/v0.1.6/docs/connecting-an-application.md)
+[per-application setup and verification](https://github.com/bherila/auth-manager/blob/v0.1.7/docs/connecting-an-application.md)
 separately: its registry, explicit client grant, access-management roles,
 per-application signing key and write switches remain provider-owned. Verify
 reads before enabling writes on either side. A provider-only administrator must

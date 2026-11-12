@@ -32,6 +32,7 @@ do not suppress them without justification.
 CI runs these for PHP changes:
 
 ```bash
+composer audit --locked --no-interaction
 ./vendor/bin/pint --test
 composer test
 ```
@@ -45,6 +46,9 @@ During iteration, targeted tests are acceptable:
 php artisan test tests/Feature/SomeFeatureTest.php
 php artisan test --filter="some_specific_test"
 ```
+
+The locked Composer audit also runs before the normal release workflow's tests.
+Do not ignore advisories to make an unsafe dependency lock pass.
 
 Before merging, wait for the full backend gate in CI on the candidate commit.
 

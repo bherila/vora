@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0ce23e83e4a2f348b96f90917de587f5",
+    "content-hash": "10b9d1ff3eafa965ad10988f79ebf007",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -281,17 +281,17 @@
         },
         {
             "name": "bherila/auth-manager",
-            "version": "0.1.6",
+            "version": "0.1.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-manager.git",
-                "reference": "6e95de4b4aa5298b244b46ec8c2a7d72a2dd176f"
+                "reference": "91a9e2ad926f2a8486cc2b5081baa878c9e92bab"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.6/auth-manager-source-v0.1.6.zip",
-                "reference": "6e95de4b4aa5298b244b46ec8c2a7d72a2dd176f",
-                "shasum": "bdd116c5b68dc7aa920e043884e97c753e77605a"
+                "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.7/auth-manager-source-v0.1.7.zip",
+                "reference": "91a9e2ad926f2a8486cc2b5081baa878c9e92bab",
+                "shasum": "9b1df0466c49d3ced475cba9c352585402f02967"
             },
             "require": {
                 "bherila/auth-laravel": "^0.28.7",
