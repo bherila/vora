@@ -196,6 +196,9 @@ jobs:
         timeout-minutes: 4
         run: composer install --no-interaction --prefer-dist
 
+      - name: Audit locked PHP dependencies
+        run: composer audit --locked --no-interaction
+
       # No `Prepare Laravel environment` step: phpunit.xml supplies what the
       # suite needs, which the `sql` job below has always demonstrated by running
       # `composer test` without one.
@@ -274,6 +277,9 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 4
         run: composer install --no-interaction --prefer-dist
+
+      - name: Audit locked PHP dependencies
+        run: composer audit --locked --no-interaction
 
       # `--parallel` gives each PHPUnit process its own database, which Laravel
       # names `<database>_test_<token>` and creates on the fly (see
