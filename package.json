@@ -52,7 +52,7 @@
         "@hookform/resolvers": "^5.9.2",
         "@noble/hashes": "^2.4.0",
         "blockhash-core": "^0.1.0",
-        "bwh-auth": "0.6.3",
+        "bwh-auth": "0.6.4",
         "class-variance-authority": "^0.7.1",
         "classnames": "^2.5.1",
         "clsx": "^2.1.1",
