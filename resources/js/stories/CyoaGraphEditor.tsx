@@ -1,5 +1,5 @@
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -161,12 +161,16 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const revision = useRef(0);
+  const [savedGraph, setSavedGraph] = useState(() => JSON.stringify(fromStory(story)));
+  const graphDirty = JSON.stringify({ nodes, choices }) !== savedGraph;
 
   const selected = nodes.find((n) => n.key === selectedKey) ?? null;
   const selectedChoices = choices.filter((c) => c.fromKey === selectedKey);
   const warnings = graphWarnings(nodes, choices);
 
   const addNode = (): void => {
+    revision.current += 1;
     const key = randomKey();
     setNodes((prev) => {
       const position = defaultPosition(prev.length);
@@ -176,32 +180,39 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
   };
 
   const updateNode = (key: string, patch: Partial<EditorNode>): void => {
+    revision.current += 1;
     setNodes((prev) => prev.map((n) => (n.key === key ? { ...n, ...patch } : n)));
   };
 
   const setStart = (key: string): void => {
+    revision.current += 1;
     setNodes((prev) => prev.map((n) => ({ ...n, is_start: n.key === key })));
   };
 
   const removeNode = (key: string): void => {
+    revision.current += 1;
     setNodes((prev) => prev.filter((n) => n.key !== key));
     setChoices((prev) => prev.filter((c) => c.fromKey !== key).map((c) => (c.toKey === key ? { ...c, toKey: null } : c)));
     if (selectedKey === key) setSelectedKey(null);
   };
 
   const addChoice = (fromKey: string): void => {
+    revision.current += 1;
     setChoices((prev) => [...prev, { fromKey, toKey: null, label: 'Continue' }]);
   };
 
   const updateChoice = (index: number, patch: Partial<EditorChoice>): void => {
+    revision.current += 1;
     setChoices((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
 
   const removeChoice = (index: number): void => {
+    revision.current += 1;
     setChoices((prev) => prev.filter((_, i) => i !== index));
   };
 
   const save = async (): Promise<void> => {
+    const submittedRevision = revision.current;
     setSaving(true);
     setError('');
     setSaved(false);
@@ -219,11 +230,14 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
         .map((c, i) => ({ from: c.fromKey, to: c.toKey, label: c.label || 'Continue', position: i }));
       const updated = await storiesApi.saveGraph(story.id, nodePayload, choicePayload);
       // Adopt the server-normalized graph (e.g. a promoted start passage, dropped
-      // dangling edges) so the editor reflects exactly what was persisted.
+      // dangling edges) only if no follow-up graph edits need to be retained.
       const next = fromStory(updated);
-      setNodes(next.nodes);
-      setChoices(next.choices);
-      setSelectedKey((cur) => (cur && next.nodes.some((n) => n.key === cur) ? cur : next.nodes.find((n) => n.is_start)?.key ?? next.nodes[0]?.key ?? null));
+      setSavedGraph(JSON.stringify(next));
+      if (revision.current === submittedRevision) {
+        setNodes(next.nodes);
+        setChoices(next.choices);
+        setSelectedKey((cur) => (cur && next.nodes.some((n) => n.key === cur) ? cur : next.nodes.find((n) => n.is_start)?.key ?? next.nodes[0]?.key ?? null));
+      }
       onSaved(updated);
       setSaved(true);
     } catch (e) {
@@ -238,7 +252,7 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Passages &amp; choices</h3>
         <div className="flex items-center gap-2">
-          {saved && <span className="text-sm text-muted-foreground">Saved</span>}
+          {!saving && (graphDirty || saved) && <span className="text-sm text-muted-foreground">{graphDirty ? 'Unsaved graph changes' : 'Saved'}</span>}
           <Button type="button" variant="outline" size="sm" onClick={addNode}>
             <Plus className="mr-1 h-4 w-4" /> Add passage
           </Button>
@@ -299,7 +313,7 @@ export function CyoaGraphEditor({ story, onSaved }: CyoaGraphEditorProps) {
                 >
                   {selected.is_start ? <Check className="mr-1 h-4 w-4" /> : null} Start
                 </Button>
-                <Button type="button" variant="destructive" size="sm" onClick={() => removeNode(selected.key)}>
+                <Button type="button" variant="destructive" size="sm" aria-label="Delete passage" onClick={() => removeNode(selected.key)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
