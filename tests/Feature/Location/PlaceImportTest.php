@@ -5,7 +5,6 @@ namespace Tests\Feature\Location;
 use App\Models\Place;
 use App\Models\User;
 use App\Services\Location\PlaceDirectory;
-use App\Services\Location\PlaceImportRequests;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -85,7 +84,7 @@ class PlaceImportTest extends TestCase
         $this->importGeoNamesFixture(['--cities' => $this->citiesWithout(['5735238', '2198148']), '--dry-run' => true]);
 
         $this->assertSame($before, Place::query()->orderBy('id')->get()->toArray());
-        $status = app(PlaceImportRequests::class)->status();
+        $status = $this->lastRun();
         $this->assertSame('succeeded', $status['state']);
         $this->assertSame(['parsed' => 7, 'added' => 0, 'updated' => 7, 'removed' => 1, 'kept_in_use' => 1, 'accounts_affected' => 1], array_intersect_key(
             $status['result'],
@@ -120,7 +119,7 @@ class PlaceImportTest extends TestCase
         $this->assertSame(5747882, $owner->fresh()->place_id);
         $this->assertSame(0, DB::table('place_regions')->where('country_code', 'FJ')->count());
         $this->assertSame(0, DB::table('place_countries')->where('code', 'FJ')->count());
-        $this->assertSame(1, app(PlaceImportRequests::class)->status()['result']['rehomed']);
+        $this->assertSame(1, $this->lastRun()['result']['rehomed']);
     }
 
     public function test_replace_preview_reports_the_lookups_the_import_removes(): void
@@ -128,19 +127,18 @@ class PlaceImportTest extends TestCase
         $this->importGeoNamesFixture();
         User::factory()->approved()->create(['place_id' => 5735238]);
         $cities = $this->citiesWithout(['5735238', '2198148', '9999993']);
-        $requests = app(PlaceImportRequests::class);
 
         foreach ([false, true] as $rehome) {
             $options = ['--cities' => $cities, '--mode' => 'replace', '--rehome' => $rehome];
             $this->importGeoNamesFixture($options + ['--dry-run' => true]);
-            $preview = $requests->status()['result'];
+            $preview = $this->lastRun()['result'];
             $this->assertSame(1, $preview['countries_removed'], 'Fiji');
             // Fiji's only region; Oregon keeps Portland and Beaverton.
             $this->assertSame(1, $preview['regions_removed']);
         }
 
         $this->importGeoNamesFixture(['--cities' => $cities, '--mode' => 'replace', '--rehome' => true]);
-        $applied = $requests->status()['result'];
+        $applied = $this->lastRun()['result'];
         $this->assertSame([$preview['regions_removed'], $preview['countries_removed'], $preview['removed'], $preview['rehomed']], [
             $applied['regions_removed'], $applied['countries_removed'], $applied['removed'], $applied['rehomed'],
         ]);
@@ -158,7 +156,7 @@ class PlaceImportTest extends TestCase
 
         $this->assertSame(0, DB::table('place_regions')->where('code', 'CA')->count());
         $this->assertSame($maxId, DB::table('place_regions')->max('id'));
-        $this->assertSame(0, app(PlaceImportRequests::class)->status()['result']['regions_removed']);
+        $this->assertSame(0, $this->lastRun()['result']['regions_removed']);
     }
 
     public function test_rehoming_finds_a_city_beyond_the_snap_windows(): void
@@ -168,9 +166,9 @@ class PlaceImportTest extends TestCase
         $options = ['--cities' => $this->citiesWithout(['2198148', '9999993']), '--mode' => 'replace', '--rehome' => true];
 
         $this->importGeoNamesFixture($options + ['--dry-run' => true]);
-        $preview = app(PlaceImportRequests::class)->status()['result'];
+        $preview = $this->lastRun()['result'];
         $this->importGeoNamesFixture($options);
-        $applied = app(PlaceImportRequests::class)->status()['result'];
+        $applied = $this->lastRun()['result'];
 
         $this->assertNotContains($owner->fresh()->place_id, [null, 2198148]);
         $this->assertNull(Place::query()->find(2198148));
@@ -203,15 +201,20 @@ class PlaceImportTest extends TestCase
         $this->assertSame(9, Place::query()->count());
     }
 
-    public function test_small_import_refuses_to_prune(): void
+    public function test_a_short_file_is_refused_before_anything_is_written(): void
     {
         $this->importGeoNamesFixture();
-        $empty = tempnam(sys_get_temp_dir(), 'cities');
+        $before = Place::query()->orderBy('id')->get()->toArray();
+        $short = $this->citiesWithout(['5746545', '5747882', '5814616', '5735238', '4975802', '2988507', '2973385', '2198148']);
+        $dir = base_path('tests/Fixtures/geonames');
 
-        $this->importGeoNamesFixture(['--cities' => $empty, '--min-rows' => 5]);
-        unlink($empty);
+        $this->artisan('places:import', [
+            '--cities' => $short, '--admin1' => "{$dir}/admin1CodesASCII.txt", '--countries' => "{$dir}/countryInfo.txt", '--min-rows' => 5,
+        ])->assertFailed();
 
-        $this->assertSame(9, Place::query()->count());
+        $this->assertSame($before, Place::query()->orderBy('id')->get()->toArray());
+        $this->assertSame('failed', $this->lastRun()['state']);
+        $this->assertStringContainsString('fewer than the 5 minimum', (string) $this->lastRun()['error']);
     }
 
     public function test_downloads_the_configured_dataset(): void

@@ -76,6 +76,15 @@ class PlaceDirectory
     }
 
     /**
+     * Whether a city is offered to people choosing a location: in the latest
+     * complete import, not merely kept because someone already uses it.
+     */
+    public function isOffered(int $id): bool
+    {
+        return $this->current(Place::query())->whereKey($id)->exists();
+    }
+
+    /**
      * The city nearest a coordinate, or null when none is within the widest
      * search window (e.g. open ocean, or an empty gazetteer). With $anywhere,
      * falls back to scanning every current city, so it only returns null for

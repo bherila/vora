@@ -28,4 +28,12 @@ return [
     // Default for the monthly refresh; Admin → City list can turn it on or
     // off. The command can always be run by hand.
     'auto_refresh' => (bool) env('PLACES_AUTO_REFRESH', false),
+
+    // Largest GeoNames file (downloaded, uploaded or extracted from a zip)
+    // the importer reads, in MB. cities500.txt is about 45 MB.
+    'max_file_mb' => (int) env('PLACES_MAX_FILE_MB', 512),
+
+    // Where downloaded and uploaded GeoNames files and import scratch space
+    // live. Private; never served.
+    'storage_path' => env('PLACES_STORAGE_PATH', storage_path('app/private/geonames')),
 ];

@@ -3,7 +3,7 @@
 use App\Console\Commands\QueueHealthCommand;
 use App\Models\MailDelivery;
 use App\Services\Auth\SignIn;
-use App\Services\Location\PlaceImportRequests;
+use App\Services\Location\PlaceImportRuns;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -50,18 +50,19 @@ Schedule::command('bherila-auth:consume-identity-tombstones')
 // This is a host command; it must not enter the embedded provider context.
 Schedule::command('bherila-auth:prune-delegated-nonces')->daily()->withoutOverlapping();
 
-// GeoNames city list: run imports requested from Admin → City list (and the
-// optional monthly refresh, which queues one). The list is data, not code;
-// `places:import` can also be run by hand at any time.
+// GeoNames city list: run imports requested from Admin → City list, and the
+// optional monthly refresh, which queues one only when nothing is pending or
+// running. The list is data, not code; `places:import` can also be run by hand
+// at any time, and waits its turn through the same import lock.
 Schedule::command('places:run-requested')
     ->everyMinute()
-    ->withoutOverlapping(180)
+    ->withoutOverlapping(30)
     ->runInBackground()
-    ->when(fn (): bool => app(PlaceImportRequests::class)->hasPending());
-Schedule::call(fn () => app(PlaceImportRequests::class)->request(
-    ['mode' => 'update', 'rehome' => false, 'dry_run' => false, 'upload_dir' => null, 'source' => 'schedule'],
-    null,
-))
+    ->when(fn (): bool => app(PlaceImportRuns::class)->hasPending());
+Schedule::call(fn () => app(PlaceImportRuns::class)->queueScheduledRefresh())
     ->name('places:monthly-refresh')
     ->monthlyOn(3, '04:17')
-    ->when(fn (): bool => app(PlaceImportRequests::class)->autoRefresh());
+    ->when(fn (): bool => app(PlaceImportRuns::class)->autoRefresh());
+Schedule::call(fn () => app(PlaceImportRuns::class)->cleanup())
+    ->name('places:cleanup')
+    ->hourly();
