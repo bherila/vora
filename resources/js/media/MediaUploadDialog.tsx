@@ -94,6 +94,8 @@ export function MediaUploadDialog({
   const [discarding, setDiscarding] = useState(false);
   const nextIdRef = useRef(0);
   const [pending, setPending] = useState<QueuedUpload[]>([]);
+  const pendingRef = useRef<QueuedUpload[]>([]);
+  const acceptedSharedFilesRef = useRef<File[] | undefined>(undefined);
   const [characterId, setCharacterId] = useState(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
   const [audience, setAudience] = useState<Audience>('everyone');
   const [audienceUserIds, setAudienceUserIds] = useState<number[]>([]);
@@ -104,11 +106,13 @@ export function MediaUploadDialog({
   // Held for the whole dialog: picking (iCloud downloads) and uploading.
   const screenAwake = useScreenWakeLock(open);
   const [progress, setProgress] = useState(0);
-  const [uploadLabel, setUploadLabel] = useState('Uploading…');
   const selectedEvent = eventOptions?.find((option) => option.ulid === selectedEventUlid);
   const hasEvent = eventOptions === undefined ? selectedEventUlid !== '' : selectedEvent !== undefined;
   const locked = uploading || discarding || batchStarted;
   const completed = pending.filter((item) => item.status === 'completed').length;
+  const activeIndex = pending.findIndex((item) => item.status === 'preparing' || item.status === 'uploading');
+  const activeItem = pending[activeIndex];
+  const uploadLabel = activeItem ? `${activeItem.status === 'preparing' ? 'Preparing' : 'Uploading'} ${activeIndex + 1} of ${pending.length}: ${activeItem.file.name}` : 'Uploading…';
   const uploadAbortRef = useRef<AbortController | null>(null);
 
   // Re-scope to the active identity each time the dialog opens.
@@ -131,29 +135,38 @@ export function MediaUploadDialog({
     return () => window.removeEventListener('beforeunload', warn);
   }, [uploading]);
 
+  // Keep the running upload loop in sync with selections made between awaits.
+  const updateQueue = (update: (items: QueuedUpload[]) => QueuedUpload[]): void => {
+    pendingRef.current = update(pendingRef.current);
+    setPending(pendingRef.current);
+  };
+
   const handleFilesChange = (newFiles: File[]): void => {
-    if (locked) return;
-    setPending(newFiles.map((file) => ({
+    if (discarding || newFiles.length === 0) return;
+    const additions: QueuedUpload[] = newFiles.map((file) => ({
       id: nextIdRef.current++, file, title: defaultTitleForFile(file), status: 'queued', progress: 0, error: null, reservation: null,
-    })));
+    }));
+    updateQueue((items) => [...items, ...additions]);
   };
 
   // A share from another app arrives once; queue it unless a batch is running.
   useEffect(() => {
-    if (!sharedFiles?.length || batchStarted) return;
-    setPending(sharedFiles.map((file) => ({
+    if (!sharedFiles?.length || batchStarted || acceptedSharedFilesRef.current === sharedFiles) return;
+    acceptedSharedFilesRef.current = sharedFiles;
+    const additions: QueuedUpload[] = sharedFiles.map((file) => ({
       id: nextIdRef.current++, file, title: defaultTitleForFile(file), status: 'queued', progress: 0, error: null, reservation: null,
-    })));
+    }));
+    updateQueue((items) => [...items, ...additions]);
     setOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new share should reopen the dialog
   }, [sharedFiles]);
 
   const updateItem = (id: number, update: Partial<QueuedUpload>): void => {
-    setPending((items) => items.map((item) => item.id === id ? { ...item, ...update } : item));
+    updateQueue((items) => items.map((item) => item.id === id ? { ...item, ...update } : item));
   };
 
   const resetForm = (): void => {
-    setPending([]);
+    updateQueue(() => []);
     setBatchStarted(false);
     setCharacterId(resolvedDefaultCharacterId === null ? '' : String(resolvedDefaultCharacterId));
     setAudience('everyone');
@@ -185,7 +198,7 @@ export function MediaUploadDialog({
     setDiscarding(true);
     try {
       if (item.reservation !== null) await discardUploadReservation(item.reservation);
-      setPending((items) => items.filter((candidate) => candidate.id !== id));
+      updateQueue((items) => items.filter((candidate) => candidate.id !== id));
       if (pending.length === 1) setBatchStarted(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not clear this unfinished upload. Try again.');
@@ -197,9 +210,14 @@ export function MediaUploadDialog({
 
   const upload = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (uploading || discarding) return;
+    if (uploading || discarding || uploadAbortRef.current !== null) return;
     if (isEvent && !hasEvent) { toast.error('Choose an available event before uploading.'); return; }
     if (pending.length === 0) { toast.error('Choose at least one file to upload.'); return; }
+    if (completed === pending.length) {
+      setOpen(false);
+      resetForm();
+      return;
+    }
 
     const destination: MediaUploadDestination = isEvent ? { kind: 'event', ulid: selectedEventUlid }
       : isLibrary ? { kind: 'library', collectionUlid: libraryCollectionUlid ?? null }
@@ -211,55 +229,47 @@ export function MediaUploadDialog({
     let totalCompleted = completed;
     let lastError = '';
     let canceled = false;
-    const outcomes = new Map(pending.map((item) => [item.id, item]));
-    const updateAttempt = (id: number, update: Partial<QueuedUpload>): void => {
-      const previous = outcomes.get(id);
-      if (previous) outcomes.set(id, { ...previous, ...update });
-      updateItem(id, update);
-    };
     try {
-      for (const [index, item] of pending.entries()) {
+      for (let index = 0; index < pendingRef.current.length; index += 1) {
+        const item = pendingRef.current[index]!;
         if (item.status === 'completed') continue;
         if (controller.signal.aborted) { canceled = true; break; }
-        updateAttempt(item.id, { status: 'preparing', progress: 0, error: null });
+        updateItem(item.id, { status: 'preparing', progress: 0, error: null });
         try {
           await uploadMediaFile({ file: item.file, title: item.title, destination, signal: controller.signal, reservation: item.reservation,
             onProgress: (phase, percent) => {
-              updateAttempt(item.id, { status: phase, progress: percent });
-              setUploadLabel(`${phase === 'preparing' ? 'Preparing' : 'Uploading'} ${index + 1} of ${pending.length}: ${item.file.name}`);
+              updateItem(item.id, { status: phase, progress: percent });
               setProgress(percent);
             },
           });
           totalCompleted += 1;
-          updateAttempt(item.id, { status: 'completed', progress: 100, error: null, reservation: null });
+          updateItem(item.id, { status: 'completed', progress: 100, error: null, reservation: null });
         } catch (error) {
           canceled = error instanceof UploadAttemptError ? error.canceled : error instanceof DOMException && error.name === 'AbortError';
           lastError = error instanceof Error ? error.message : 'Upload failed.';
-          updateAttempt(item.id, { status: canceled ? 'canceled' : 'failed', error: canceled ? null : lastError,
+          updateItem(item.id, { status: canceled ? 'canceled' : 'failed', error: canceled ? null : lastError,
             reservation: error instanceof UploadAttemptError ? error.reservation : null });
           if (canceled || controller.signal.aborted) { canceled = true; break; }
         }
       }
       if (canceled) {
-        for (const item of outcomes.values()) {
+        for (const item of pendingRef.current) {
           if (item.reservation === null) continue;
           try {
             await discardUploadReservation(item.reservation);
-            updateAttempt(item.id, { status: 'canceled', reservation: null });
+            updateItem(item.id, { status: 'canceled', reservation: null });
           } catch {
-            updateAttempt(item.id, { error: 'Could not clear this unfinished upload. Choose different files to retry cleanup.' });
+            updateItem(item.id, { error: 'Could not clear this unfinished upload. Choose different files to retry cleanup.' });
           }
         }
       }
       onUploaded();
       if (canceled) {
         toast.info(totalCompleted > 0 ? `${totalCompleted} upload${totalCompleted === 1 ? '' : 's'} completed before cancellation.` : 'Upload canceled.');
-      } else if (totalCompleted === pending.length) {
-        toast.success(isEvent ? 'Upload complete. Each item shows its sharing and processing status.' : pending.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
-        setOpen(false);
-        resetForm();
+      } else if (totalCompleted === pendingRef.current.length) {
+        toast.success(isEvent ? 'Upload complete. Each item shows its sharing and processing status.' : pendingRef.current.length === 1 ? 'Upload complete. It will be reviewed before others can see it.' : 'Uploads complete. They will be reviewed before others can see them.');
       } else {
-        toast.error(pending.length === 1 ? lastError : `${totalCompleted} of ${pending.length} uploaded. Retry failed files below.`);
+        toast.error(pendingRef.current.length === 1 ? lastError : `${totalCompleted} of ${pendingRef.current.length} uploaded. Retry failed files below.`);
       }
     } finally {
       setUploading(false);
@@ -284,12 +294,14 @@ export function MediaUploadDialog({
           <FileDropzone
             accept="image/*,video/*,.heic,.heif"
             files={pending.map((item) => item.file)}
-            label="Drop photos or videos here"
+            label={pending.length > 0 ? 'Add more photos or videos' : 'Drop photos or videos here'}
             multiple
             onFilesChange={handleFilesChange}
-            disabled={locked}
-            helperText="Choose photos and videos together. HEIC/HEIF originals are kept with JPEG previews."
+            disabled={discarding}
+            browseLabel={pending.length > 0 ? 'Add more files' : 'Browse files'}
+            helperText="Choose photos and videos together. Each selection adds to your queue. HEIC/HEIF originals are kept with JPEG previews."
           />
+          <p className="text-sm text-muted-foreground">If iCloud photo selection is slow, choose 1–2 photos at a time and add more while uploads run. Your device may need to download photos before returning here. Vora keeps the original files your device supplies; previews are separate.</p>
           {isEvent && <div className="grid gap-2 rounded-md border p-3">
             {eventOptions !== undefined ? <label className="grid gap-1 text-sm">Destination event
               <select value={hasEvent ? selectedEventUlid : ''} onChange={(event) => setSelectedEventUlid(event.target.value)} disabled={locked || eventOptions.length === 0}
@@ -366,11 +378,12 @@ export function MediaUploadDialog({
             />
             <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
           </label></>}
-          <p className="text-xs text-muted-foreground">{screenAwake ? 'Your screen stays on while this window is open. Stay on this page until uploads finish.' : 'Keep this page open and your device awake until uploads finish.'} If interrupted, choose the same files and event again: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
+          <p className="text-xs text-muted-foreground">{screenAwake ? 'Your screen stays on while this window is open. Stay on this page until uploads finish.' : 'Keep this page open and your device awake until uploads finish.'} Use Continue unfinished or Retry failed to retry this queue without adding the same files again. After reloading the page, choose the same files and destination: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={uploading || discarding || (isEvent && !hasEvent) || pending.length === 0}>
               {uploading ? 'Uploading…' : batchStarted ? (completed === pending.length ? 'Done' : pending.some((item) => item.status === 'queued' || item.status === 'canceled') ? 'Continue unfinished' : 'Retry failed') : 'Upload'}
             </Button>
+            {!batchStarted && pending.length > 0 && <Button type="button" variant="outline" disabled={discarding} onClick={() => updateQueue(() => [])}>Clear selected files</Button>}
             {batchStarted && !uploading && <Button type="button" variant="outline" disabled={discarding} onClick={() => void discardBatch()}>{discarding ? 'Clearing…' : 'Choose different files'}</Button>}
           </div>
           {uploading && (

@@ -1,4 +1,4 @@
-import { type APIRequestContext, type APIResponse, type BrowserContext, type Download, expect, type Page, type Request, type Response, test } from '@playwright/test';
+import { type APIRequestContext, type APIResponse, type BrowserContext, type Download, expect, type Page, type Request, type Response, type Route, test } from '@playwright/test';
 
 let mailUrl = 'http://127.0.0.1:18025';
 let expectMultipartVideo = false;
@@ -246,7 +246,9 @@ async function upload(page: Page, type: 'photo' | 'video', title: string, collec
       expect(payload.parts[0].part_number).toBe(1);
       expect(payload.parts[0].etag === etag, 'The browser can read the CORS-exposed part ETag and submit it for completion').toBe(true);
     }
-    await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+    await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeEnabled({ timeout: 30_000 });
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
     return result;
   } finally {
     page.off('response', capturePut);
@@ -515,11 +517,31 @@ test('Event profile real media inherits restricted access, visible favorites and
       if (sent.method() === 'POST' && new URL(sent.url()).pathname === `/api/events/${shared.ulid}/uploads`) batchReservations += 1;
     };
     uploader.on('request', countReservation);
+    let releaseFirstCompletion: (() => void) | undefined;
+    const firstCompletionReleased = new Promise<void>((resolve) => { releaseFirstCompletion = resolve; });
+    let firstCompletionWaiting: (() => void) | undefined;
+    const firstCompletionReached = new Promise<void>((resolve) => { firstCompletionWaiting = resolve; });
+    let holdFirstCompletion = true;
+    const holdCompletion = async (route: Route): Promise<void> => {
+      if (holdFirstCompletion && route.request().method() === 'POST') {
+        holdFirstCompletion = false;
+        firstCompletionWaiting?.();
+        await firstCompletionReleased;
+      }
+      await route.continue();
+    };
+    await uploader.route('**/api/media/*/complete', holdCompletion);
     try {
-      await batch.locator('input[type="file"]').setInputFiles(['batch-first.png', 'unsupported.txt', 'batch-last.png']
-        .map((name) => new URL(`./.fixtures/${name}`, import.meta.url).pathname));
+      await batch.locator('input[type="file"]').setInputFiles(new URL('./.fixtures/batch-first.png', import.meta.url).pathname);
       await expect(batch.getByRole('img', { name: 'Preview of batch-first.png', exact: true })).toBeVisible();
       await batch.getByRole('button', { name: 'Upload', exact: true }).click();
+      await firstCompletionReached;
+      await expect(batch.getByRole('button', { name: /Add more photos or videos/ })).toBeEnabled();
+      await expect(batch.getByLabel('Destination event')).toBeDisabled();
+      await batch.locator('input[type="file"]').setInputFiles(['unsupported.txt', 'batch-last.png']
+        .map((name) => new URL(`./.fixtures/${name}`, import.meta.url).pathname));
+      await expect(batch.getByRole('status').filter({ hasText: '0 of 3 uploaded' })).toBeVisible();
+      releaseFirstCompletion?.();
       await expect(batch.getByRole('status').filter({ hasText: '2 of 3 uploaded' })).toBeVisible();
       await expect(batch.getByRole('alert')).toContainText('Only image and video files');
       await batch.getByRole('button', { name: 'Retry failed', exact: true }).click();
@@ -529,6 +551,8 @@ test('Event profile real media inherits restricted access, visible favorites and
       await expect(batch).toHaveCount(0);
       expect(batchReservations, 'Successful batch files are not uploaded again on retry').toBe(2);
     } finally {
+      releaseFirstCompletion?.();
+      await uploader.unroute('**/api/media/*/complete', holdCompletion);
       uploader.off('request', countReservation);
     }
     expect((await success<{ data: { ulid: string }[] }>(outsider, 'GET', '/api/events')).data.map((event) => event.ulid)).not.toContain(restricted.ulid);

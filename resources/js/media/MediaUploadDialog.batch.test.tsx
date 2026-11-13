@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ComponentProps } from 'react';
 
 import { computeFileHash } from '@/media/imageProcessing';
@@ -74,7 +74,7 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     jest.mocked(computeFileHash).mockResolvedValue('fixture-hash');
     put.mockResolvedValue();
     let id = 41;
-    post.mockImplementation(async (url) => /uploads$/.test(url) ? createdUpload(id++) : { success: true });
+    post.mockImplementation(async (url) => url === '/api/media' || /uploads$/.test(url) ? createdUpload(id++) : { success: true });
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: jest.fn(() => `blob:${window.location.origin}/preview-${Math.random()}`) });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: jest.fn() });
   });
@@ -84,6 +84,77 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
     choose([new File(['heic'], 'camera.HEIC', { type: 'image/heic' })]);
     expect(screen.getByRole('img', { name: /HEIC\/HEIF photo camera.HEIC/ })).toHaveTextContent('HEIC/HEIF photo');
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('adds small selections without losing edited titles, canceling the picker or merging distinct files with the same metadata', async () => {
+    const { refresh } = openUpload({ libraryCollectionUlid: null });
+    const first = photos[0]!;
+    const sameMetadata = new File(['photo-X'], first.name, { type: first.type, lastModified: first.lastModified });
+    expect(sameMetadata.size).toBe(first.size);
+    choose([first]);
+    fireEvent.change(screen.getByLabelText('Title for photo-1.jpg'), { target: { value: 'Edited title' } });
+    choose([photos[1]!, sameMetadata]);
+    choose([]);
+    expect(screen.getByText('0 of 3 uploaded')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Edited title')).toBeInTheDocument();
+    submit();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls.map((call) => call[1])).toEqual([first, photos[1], sameMetadata]);
+    expect(put.mock.calls[0]![1]).toBe(first);
+    expect(put.mock.calls[2]![1]).toBe(sameMetadata);
+    expect(post.mock.calls.filter(([url]) => url === '/api/library/uploads').map(([, body]) => (body as { title: string }).title)).toEqual(['Edited title', 'photo-2', 'photo-1']);
+  });
+
+  it('clears selected files before upload without changing the selected Event', () => {
+    openUpload({ eventOptions: events, eventUlid: 'private-event' });
+    choose();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selected files' }));
+    expect(screen.queryByRole('list', { name: 'Selected uploads' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Destination event')).toHaveValue('private-event');
+    expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Event', { eventOptions: events, eventUlid: 'private-event' }, '/api/events/private-event/uploads'],
+    ['Library', { libraryCollectionUlid: null }, '/api/library/uploads'],
+    ['Gallery', {}, '/api/media'],
+  ] as const)('drains files added during a %s upload and retains selections made after the worker finishes', async (_surface, props, endpoint) => {
+    const { refresh } = openUpload(props);
+    choose([photos[0]!]);
+    let finishFirstPut: (() => void) | undefined;
+    put.mockImplementationOnce((_url, _file, _headers, progress) => new Promise<void>((resolve) => {
+      finishFirstPut = resolve;
+      progress(0.5);
+    }));
+    submit();
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText('Choose uploads')).toBeEnabled();
+    if (_surface === 'Event') expect(screen.getByLabelText('Destination event')).toBeDisabled();
+    choose([photos[1]!, photos[2]!]);
+    expect(screen.getByText('Uploading 1 of 3: photo-1.jpg')).toBeInTheDocument();
+    expect(screen.getByText('0 of 3 uploaded')).toBeInTheDocument();
+    expect(post.mock.calls.filter(([url]) => url === endpoint)).toHaveLength(1);
+    await act(async () => finishFirstPut?.());
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('3 of 3 uploaded')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeEnabled();
+    expect(put.mock.calls.map((call) => call[1])).toEqual(photos);
+
+    // The first worker may finish while a native picker is still open.
+    const later = new File(['later-photo'], 'later.jpg', { type: 'image/jpeg' });
+    choose([later]);
+    expect(screen.getByText('3 of 4 uploaded')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue unfinished' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+    expect(put).toHaveBeenCalledTimes(4);
+    expect(put.mock.calls[3]![1]).toBe(later);
+    expect(post.mock.calls.filter(([url]) => url === endpoint)).toHaveLength(4);
+    expect(post).not.toHaveBeenCalledWith('/api/media/41/cancel-upload', {});
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(put).toHaveBeenCalledTimes(4);
   });
 
   it('chooses an Event inside the dialog, shows its audience and never falls back to Gallery', async () => {
@@ -151,13 +222,14 @@ describe('MediaUploadDialog Event selection and recoverable batches', () => {
 
   it('shows current batch position and cancels only unfinished media before continuing the rest', async () => {
     const { refresh } = openUpload({ libraryCollectionUlid: null });
-    choose();
+    choose(photos.slice(0, 2));
     put.mockResolvedValueOnce().mockImplementationOnce((_url, _file, _headers, progress, options) => new Promise<void>((_resolve, reject) => {
       progress(0.5);
       options?.signal?.addEventListener('abort', () => reject(new DOMException('Canceled', 'AbortError')));
     }));
     submit();
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    choose([photos[2]!]);
     expect(screen.getByText('Uploading 2 of 3: photo-2.jpg')).toBeInTheDocument();
     expect(within(screen.getByRole('listitem', { name: 'photo-2.jpg' })).getByRole('progressbar')).toHaveValue(50);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel upload' }));
