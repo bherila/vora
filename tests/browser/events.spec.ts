@@ -43,9 +43,13 @@ test('attendees discover uploads, browse photos and Save privately without an or
   const longFilename = 'a-photo-with-a-long-original-camera-filename-to-check-the-upload-layout-on-small-screens.png';
   await upload.locator('input[type="file"]').setInputFiles(new URL(`./fixtures/${longFilename}`, import.meta.url).pathname);
   await expect.poll(() => upload.getByRole('img').evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await upload.getByLabel(`Title for ${longFilename}`).fill('My edited photo title');
   await expectFitsViewport(page);
-  await upload.locator('input[type="file"]').setInputFiles([longFilename, 'attendee-photo.png'].map((name) => new URL(`./fixtures/${name}`, import.meta.url).pathname));
+  await expect(upload.getByRole('button', { name: /Add more photos or videos/ })).toBeEnabled();
+  await upload.locator('input[type="file"]').setInputFiles(new URL('./fixtures/attendee-photo.png', import.meta.url).pathname);
   await expect(upload.getByRole('img')).toHaveCount(2);
+  await expect(upload.getByLabel(`Title for ${longFilename}`)).toHaveValue('My edited photo title');
+  await expect(upload.getByRole('img', { name: `Preview of ${longFilename}`, exact: true })).toBeVisible();
   await expect(upload.getByRole('status')).toHaveText('0 of 2 uploaded');
   await page.screenshot({ path: testInfo.outputPath('event-upload.png'), fullPage: true });
   await upload.getByRole('button', { name: 'Close', exact: true }).click();
