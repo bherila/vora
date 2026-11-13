@@ -328,6 +328,7 @@ describe('FollowProfilePage (/me)', () => {
       follow_request: { status: 'accepted', can_retry: false },
       viewer_muted: false,
       viewer_block_id: null,
+      location: { level: 'city', label: 'Portland, Oregon, United States', city: 'Portland', region: 'Oregon', country_code: 'US', country_name: 'United States' },
     };
     setInitialData({ ...initial, followProfile: visitorProfile });
     (fetchWrapper.post as jest.Mock).mockResolvedValue({ data: { block_id: 91 } });
@@ -341,6 +342,7 @@ describe('FollowProfilePage (/me)', () => {
     render(<FollowProfilePage />);
     expect(screen.getByRole('button', { name: 'Message' })).toBeInTheDocument();
     expect(screen.getByText('accepted')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-location')).toHaveTextContent('Portland, Oregon, United States');
 
     fireEvent.click(screen.getByRole('button', { name: 'Open block confirmation for Ben' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Block Ben' }));
@@ -350,6 +352,7 @@ describe('FollowProfilePage (/me)', () => {
     expect(screen.queryByText('Hello there.')).toBeNull();
     expect(screen.queryByRole('tablist', { name: 'Profile content' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'You blocked this account' })).toBeInTheDocument();
+    expect(screen.queryByTestId('profile-location')).toBeNull();
     expect(fetchWrapper.get).not.toHaveBeenCalledWith('/api/users/7'); // Blocked profiles return 404.
 
     fireEvent.click(screen.getByRole('button', { name: 'Open unblock confirmation for Ben' }));

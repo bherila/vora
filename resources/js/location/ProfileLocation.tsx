@@ -39,13 +39,14 @@ export function ProfileLocationLine({ location }: ProfileLocationLineProps) {
 interface ProfileLocationSectionProps {
   settings: LocationSettings;
   onSaved: (settings: LocationSettings) => void;
+  onSavingChange?: (saving: boolean) => void;
 }
 
 /** The location section of the Edit profile dialog. */
-export function ProfileLocationSection({ settings, onSaved }: ProfileLocationSectionProps) {
+export function ProfileLocationSection({ settings, onSaved, onSavingChange }: ProfileLocationSectionProps) {
   return (
     <div className="border-t border-border pt-4">
-      <LocationEditor initial={settings} onSaved={onSaved} />
+      <LocationEditor initial={settings} onSaved={onSaved} onSavingChange={onSavingChange} />
     </div>
   );
 }

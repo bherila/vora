@@ -132,6 +132,19 @@ export function AdminPlacesPage() {
     return () => window.clearInterval(timer);
   }, [active]);
 
+  /**
+   * Leaving Upload unmounts the file inputs, which then show nothing; drop the
+   * chosen files too, so what is submitted always matches what is shown.
+   */
+  function chooseSource(next: ImportSource) {
+    if (next !== 'upload') {
+      setCities(null);
+      setAdmin1(null);
+      setCountries(null);
+    }
+    setSource(next);
+  }
+
   async function run(action: () => Promise<PayloadResponse>, fallback: string) {
     setBusy(true);
     setError('');
@@ -256,11 +269,11 @@ export function AdminPlacesPage() {
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Source</legend>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="places-source" value="download" checked={source === 'download'} onChange={() => setSource('download')} disabled={busy} />
+              <input type="radio" name="places-source" value="download" checked={source === 'download'} onChange={() => chooseSource('download')} disabled={busy} />
               Download {data.dataset} from GeoNames
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="places-source" value="upload" checked={source === 'upload'} onChange={() => setSource('upload')} disabled={busy} />
+              <input type="radio" name="places-source" value="upload" checked={source === 'upload'} onChange={() => chooseSource('upload')} disabled={busy} />
               Upload GeoNames files
             </label>
             {source === 'upload' && (

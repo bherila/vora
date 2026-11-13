@@ -318,6 +318,7 @@ export function FollowProfilePage() {
   // Saved location settings outlive the dialog, so reopening it shows what
   // was last saved rather than the page's bootstrap values.
   const [locationSettings, setLocationSettings] = useState<LocationSettings | null>(() => initialLocationSettings(editable?.location));
+  const [locationSaving, setLocationSaving] = useState(false);
   const [counts, setCounts] = useState<Record<TabKey, number> | null>(null);
   const userId = profile?.id ?? null;
   const restricted = profile?.restricted ?? true;
@@ -370,6 +371,8 @@ export function FollowProfilePage() {
       can_follow_back: false,
       follow_request: null,
       restricted: true,
+      // A restricted profile shows no location, even one already on screen.
+      location: null,
     } : current);
     setMessage('');
     if (blockId === null) loadProfile();
@@ -458,7 +461,7 @@ export function FollowProfilePage() {
                   {profile.gender && <Badge variant="outline">{profile.gender}</Badge>}
                 </CardDescription>
               )}
-              <ProfileLocationLine location={profile.location} />
+              <ProfileLocationLine location={profile.restricted ? null : profile.location} />
             </div>
           </div>
           {profile.is_self ? (
@@ -613,7 +616,13 @@ export function FollowProfilePage() {
         </div>
       </SideRailLayout>
       {editable && (
-        <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
+        <Dialog
+          open={editOpen}
+          // While a location save is in flight the dialog stays open: reopening
+          // it would seed a fresh editor from settings the save is about to
+          // replace, and a second save could restore broader audiences.
+          onOpenChange={(open) => { if (!open && !locationSaving) setEditOpen(false); }}
+        >
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Edit profile</DialogTitle>
@@ -633,6 +642,7 @@ export function FollowProfilePage() {
             {locationSettings && (
               <ProfileLocationSection
                 settings={locationSettings}
+                onSavingChange={setLocationSaving}
                 onSaved={(settings) => {
                   setLocationSettings(settings);
                   setProfile((current) => current ? { ...current, location: visibleLocationFromSettings(settings) } : current);
