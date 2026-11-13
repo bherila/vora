@@ -2,104 +2,104 @@
 
 namespace App\Console\Commands;
 
+use App\Models\PlaceImportRun;
 use App\Services\Location\PlaceImporter;
 use App\Services\Location\PlaceImportOptions;
-use App\Services\Location\PlaceImportRequests;
+use App\Services\Location\PlaceImportRuns;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Throwable;
 
 /**
- * Runs the import an admin requested (or the monthly refresh queued). The
- * scheduler starts it in the background; claiming the request makes sure
- * only one process runs it.
+ * Runs the next import an admin requested (or the monthly refresh queued).
+ * The scheduler starts it in the background; it imports only while holding
+ * the import lock and claims the request with a conditional update, so a
+ * request runs at most once and never alongside another import.
  */
 class RunRequestedPlaceImport extends Command
 {
     protected $signature = 'places:run-requested';
 
-    protected $description = 'Run a pending GeoNames import requested from the admin page';
+    protected $description = 'Run the next GeoNames import requested from the admin page';
 
-    public function handle(PlaceImporter $importer, PlaceImportRequests $requests): int
+    public function handle(PlaceImporter $importer, PlaceImportRuns $runs): int
     {
-        $requests->pruneUploads();
-        $request = $requests->claim();
-        if ($request === null) {
+        $runs->cleanup();
+        if (! $runs->hasPending()) {
             return self::SUCCESS;
         }
 
-        $dir = is_string($request['upload_dir'] ?? null) ? $request['upload_dir'] : null;
-        $dryRun = (bool) ($request['dry_run'] ?? false);
-        $dataset = (string) ($request['dataset'] ?? $requests->dataset());
-        // A downloaded preview keeps its files, like an uploaded one, so that
-        // applying it imports exactly what was previewed even if GeoNames
-        // publishes new data in between.
-        $download = $dryRun && $dir === null;
-        if ($download) {
-            $dir = $requests->newUploadDir();
-        } elseif ($dir !== null && ! $this->hasAllFiles($dir)) {
-            $requests->discardUploads($dir);
-            $this->error('The uploaded GeoNames files are missing.');
+        $outcome = $runs->exclusively(function () use ($runs, $importer): int {
+            $run = $runs->claim();
+            if (! $run instanceof PlaceImportRun) {
+                return self::SUCCESS;
+            }
 
-            return self::FAILURE;
+            // A downloaded preview keeps its files, like an uploaded one, so
+            // applying it imports exactly what was previewed.
+            $download = $run->dry_run && $run->files_run_id === null;
+            if ($download) {
+                DB::table('place_import_runs')->where('id', $run->id)->update(['files_run_id' => $run->id]);
+                $run->files_run_id = $run->id;
+                File::ensureDirectoryExists($runs->filesDir($run->id));
+            }
+            $dir = $run->files_run_id !== null ? $runs->filesDir($run->files_run_id) : null;
+            if (! $download && $dir !== null && ! $this->hasAllFiles($dir)) {
+                $runs->fail($run, 'The GeoNames files for this run are missing. Upload them again.');
+                $this->error('The GeoNames files for this run are missing.');
+
+                return self::FAILURE;
+            }
+
+            $log = fn (string $message) => $this->line($message);
+            try {
+                $runs->complete($run, function () use ($importer, $runs, $run, $dir, $download, $log) {
+                    if ($download && $dir !== null) {
+                        $importer->download($run->dataset, $dir, $log);
+                    }
+
+                    return $importer->run(new PlaceImportOptions(
+                        dataset: $run->dataset,
+                        mode: in_array($run->mode, PlaceImportOptions::MODES, true) ? $run->mode : PlaceImportOptions::MODE_UPDATE,
+                        rehome: $run->rehome,
+                        dryRun: $run->dry_run,
+                        minimumRows: (int) config('places.minimum_rows'),
+                        citiesPath: $dir !== null ? $this->file($dir, ['cities.zip', 'cities.txt']) : null,
+                        admin1Path: $dir !== null ? $this->file($dir, ['admin1CodesASCII.txt']) : null,
+                        countriesPath: $dir !== null ? $this->file($dir, ['countryInfo.txt']) : null,
+                    ), $log, fn () => $runs->heartbeat($run));
+                });
+            } catch (Throwable $e) {
+                $this->error($e->getMessage());
+
+                return self::FAILURE;
+            }
+
+            return self::SUCCESS;
+        });
+
+        if ($outcome === false) {
+            $this->line('Another import is running; the request stays queued.');
+
+            return self::SUCCESS;
         }
+        $runs->cleanup();
 
-        $mode = in_array($request['mode'] ?? null, PlaceImportOptions::MODES, true) ? $request['mode'] : PlaceImportOptions::MODE_UPDATE;
-        $rehome = (bool) ($request['rehome'] ?? false);
-        $meta = [
-            'request_id' => $request['id'] ?? null,
-            'source' => $request['source'] ?? 'admin',
-            'dataset' => $dataset,
-            'mode' => $mode,
-            'rehome' => $rehome,
-            'dry_run' => $dryRun,
-            'requested_by' => $request['requested_by'] ?? null,
-            // A preview's files are kept so the admin can apply them next.
-            'upload_dir' => $dryRun ? $dir : null,
-        ];
-        $log = fn (string $message) => $this->line($message);
-
-        try {
-            $requests->track($meta, function () use ($importer, $download, $dataset, $dir, $mode, $rehome, $dryRun, $log) {
-                if ($download && $dir !== null) {
-                    $importer->download($dataset, $dir, $log);
-                }
-
-                return $importer->run(new PlaceImportOptions(
-                    dataset: $dataset,
-                    mode: $mode,
-                    rehome: $rehome,
-                    dryRun: $dryRun,
-                    minimumRows: (int) config('places.minimum_rows'),
-                    citiesPath: $dir !== null ? $this->uploaded($dir, ['cities.zip', 'cities.txt']) : null,
-                    admin1Path: $dir !== null ? $this->uploaded($dir, ['admin1CodesASCII.txt']) : null,
-                    countriesPath: $dir !== null ? $this->uploaded($dir, ['countryInfo.txt']) : null,
-                ), $log);
-            });
-        } catch (Throwable $e) {
-            $this->error($e->getMessage());
-            $requests->discardUploads($dir);
-
-            return self::FAILURE;
-        }
-
-        if (! $dryRun) {
-            $requests->discardUploads($dir);
-        }
-
-        return self::SUCCESS;
+        return $outcome;
     }
 
     private function hasAllFiles(string $dir): bool
     {
-        return $this->uploaded($dir, ['cities.zip', 'cities.txt']) !== null
-            && $this->uploaded($dir, ['admin1CodesASCII.txt']) !== null
-            && $this->uploaded($dir, ['countryInfo.txt']) !== null;
+        return $this->file($dir, ['cities.zip', 'cities.txt']) !== null
+            && $this->file($dir, ['admin1CodesASCII.txt']) !== null
+            && $this->file($dir, ['countryInfo.txt']) !== null;
     }
 
     /**
      * @param  list<string>  $names
      */
-    private function uploaded(string $dir, array $names): ?string
+    private function file(string $dir, array $names): ?string
     {
         foreach ($names as $name) {
             if (is_file($dir.'/'.$name)) {

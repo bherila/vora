@@ -114,28 +114,4 @@ class SettingsService
         Setting::query()->updateOrCreate(['key' => $key], ['value' => $stored]);
         Cache::forget(self::CACHE_PREFIX.$key);
     }
-
-    /**
-     * Removes a setting and returns the value it held, or null when it was
-     * absent or another process took it first. Reads the table directly, so
-     * concurrent workers can use it to claim a one-off value exactly once.
-     */
-    public function pull(string $key): ?string
-    {
-        $value = Setting::query()->where('key', $key)->value('value');
-        if ($value === null) {
-            return null;
-        }
-
-        $taken = Setting::query()->where('key', $key)->where('value', $value)->delete() === 1;
-        Cache::forget(self::CACHE_PREFIX.$key);
-
-        return $taken ? $value : null;
-    }
-
-    public function forget(string $key): void
-    {
-        Setting::query()->where('key', $key)->delete();
-        Cache::forget(self::CACHE_PREFIX.$key);
-    }
 }

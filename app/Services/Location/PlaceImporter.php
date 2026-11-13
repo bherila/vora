@@ -36,20 +36,31 @@ class PlaceImporter
     /** Ids per IN (...) list when counting affected accounts. */
     private const ID_CHUNK = 1000;
 
+    /** Longest line accepted in a GeoNames file. */
+    private const MAX_LINE_BYTES = 64 * 1024;
+
+    /** Largest GeoNames id that fits the unsigned INT key. */
+    private const MAX_ID = 4294967295;
+
     public function __construct(
         private readonly PlaceDirectory $directory,
         private readonly SettingsService $settings,
     ) {}
 
     /**
+     * Callers must hold the import lock ({@see PlaceImportRuns::exclusively()}),
+     * which keeps every entry point from interleaving writes.
+     *
      * @param  (Closure(string): void)|null  $log
+     * @param  (Closure(): void)|null  $heartbeat  called as work progresses
      */
-    public function run(PlaceImportOptions $options, ?Closure $log = null): PlaceImportResult
+    public function run(PlaceImportOptions $options, ?Closure $log = null, ?Closure $heartbeat = null): PlaceImportResult
     {
         if (! in_array($options->dataset, PlaceImportOptions::DATASETS, true)) {
             throw new RuntimeException("Unknown dataset [{$options->dataset}].");
         }
         $log ??= static function (string $message): void {};
+        $heartbeat ??= static function (): void {};
 
         $workDir = storage_path('app/private/geonames/work-'.Str::random(12));
         File::ensureDirectoryExists($workDir);
@@ -65,6 +76,14 @@ class PlaceImporter
             $countries = $this->parseCountries($countriesPath);
             $regionRows = $this->parseRegions($admin1Path, $countries);
 
+            // Read and validate the whole cities file before writing anything,
+            // so a truncated or malformed file never touches the live list.
+            [$count, $usedRegionKeys] = $this->scanCities($citiesPath, $countries);
+            if ($options->prune && $count < $options->minimumRows) {
+                throw new RuntimeException("Only {$count} cities were read, fewer than the {$options->minimumRows} minimum; nothing was imported.");
+            }
+            $heartbeat();
+
             $existing = Place::query()->pluck('id')->map(fn ($id): int => (int) $id)->flip()->all();
             $inUse = DB::table('users')->whereNotNull('place_id')->distinct()->pluck('place_id')->map(fn ($id): int => (int) $id)->flip()->all();
 
@@ -73,19 +92,19 @@ class PlaceImporter
             }
 
             $this->writeCountries($countries);
-            $regions = $this->writeRegions($regionRows, $this->usedRegionKeys($citiesPath, $countries));
+            $regions = $this->writeRegions($regionRows, $usedRegionKeys);
 
-            // Strictly increasing, so a row from any earlier run differs.
+            // Strictly increasing, so a row from any earlier run differs. The
+            // import lock keeps two runs from choosing batches concurrently.
             $batch = max(now()->getTimestamp(), (int) Place::query()->max('import_batch') + 1);
-            $seen = $this->writeCities($citiesPath, $countries, $regions, $batch);
+            $seen = $this->writeCities($citiesPath, $countries, $regions, $batch, $heartbeat);
             $log('Imported '.count($seen)." places from {$options->dataset}.");
 
-            if (! $options->prune || count($seen) < $options->minimumRows) {
-                if ($options->prune) {
-                    $log('Parsed '.count($seen)." places, fewer than the {$options->minimumRows} minimum; skipped pruning.");
-                }
+            // Counted before anything moves, so the result matches the preview.
+            $accountsAffected = $this->accountsOn(array_intersect_key(array_diff_key($existing, $seen), $inUse));
 
-                return $this->result($options, $seen, $existing, $inUse, removed: 0, rehomed: 0, regionsRemoved: 0, countriesRemoved: 0, pruneSkipped: true);
+            if (! $options->prune) {
+                return $this->result($options, $seen, $existing, $inUse, $accountsAffected, removed: 0, rehomed: 0, regionsRemoved: 0, countriesRemoved: 0, pruneSkipped: true);
             }
 
             // A complete import: search now shows only this import's cities.
@@ -102,7 +121,7 @@ class PlaceImporter
             $countriesRemoved = 0;
             if ($options->replaces()) {
                 if ($options->rehome) {
-                    [$rehomed, $rehomedPlaces] = $this->rehome($batch);
+                    [$rehomed, $rehomedPlaces] = $this->rehome($batch, $heartbeat);
                     $removed += $rehomedPlaces;
                     $log("Moved {$rehomed} accounts to the nearest city in the new data.");
                 }
@@ -116,7 +135,7 @@ class PlaceImporter
                 $log("Removed {$regionsRemoved} unused regions and {$countriesRemoved} unused countries.");
             }
 
-            return $this->result($options, $seen, $existing, $inUse, $removed, $rehomed, $regionsRemoved, $countriesRemoved, pruneSkipped: false);
+            return $this->result($options, $seen, $existing, $inUse, $accountsAffected, $removed, $rehomed, $regionsRemoved, $countriesRemoved, pruneSkipped: false);
         } finally {
             File::deleteDirectory($workDir);
         }
@@ -150,7 +169,7 @@ class PlaceImporter
             }
             $usedCountries[$row['country_code']] = true;
         }
-        $pruneSkipped = ! $options->prune || count($seen) < $options->minimumRows;
+        $pruneSkipped = ! $options->prune;
 
         $regionsRemoved = 0;
         $countriesRemoved = 0;
@@ -173,16 +192,22 @@ class PlaceImporter
             $countriesRemoved = $allCountries->reject(fn (string $code): bool => isset($usedCountries[$code]))->count();
         }
 
-        return $this->result($options, $seen, $existing, $inUse, removed: null, rehomed: 0, regionsRemoved: $regionsRemoved, countriesRemoved: $countriesRemoved, pruneSkipped: $pruneSkipped);
+        $accountsAffected = $this->accountsOn(array_intersect_key(array_diff_key($existing, $seen), $inUse));
+
+        return $this->result($options, $seen, $existing, $inUse, $accountsAffected, removed: null, rehomed: 0, regionsRemoved: $regionsRemoved, countriesRemoved: $countriesRemoved, pruneSkipped: $pruneSkipped);
     }
 
     /**
      * Moves accounts off cities this import dropped, to the nearest city it
-     * kept, then deletes the dropped cities. Returns [accounts, places].
+     * kept, then deletes the dropped cities. Each city is moved and deleted in
+     * one transaction, and deleted only if no account points at it any more,
+     * so a location saved concurrently is never cleared by the foreign key.
+     * Returns [accounts, places].
      *
+     * @param  Closure(): void  $heartbeat
      * @return array{int, int}
      */
-    private function rehome(int $batch): array
+    private function rehome(int $batch, Closure $heartbeat): array
     {
         $accounts = 0;
         $places = 0;
@@ -192,11 +217,35 @@ class PlaceImporter
             if (! $target instanceof Place || $target->id === $place->id) {
                 continue;
             }
-            $accounts += DB::table('users')->where('place_id', $place->id)->update(['place_id' => $target->id]);
-            $places += $place->delete() ? 1 : 0;
+            [$moved, $deleted] = DB::transaction(function () use ($place, $target): array {
+                $moved = DB::table('users')->where('place_id', $place->id)->update(['place_id' => $target->id]);
+                $deleted = DB::table('places')->where('id', $place->id)
+                    ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('users')->where('users.place_id', $place->id))
+                    ->delete();
+
+                return [$moved, $deleted];
+            });
+            $accounts += $moved;
+            $places += $deleted;
+            $heartbeat();
         }
 
         return [$accounts, $places];
+    }
+
+    /**
+     * Accounts whose city is one of $placeIds.
+     *
+     * @param  array<int, true>  $placeIds
+     */
+    private function accountsOn(array $placeIds): int
+    {
+        $count = 0;
+        foreach (array_chunk(array_keys($placeIds), self::ID_CHUNK) as $ids) {
+            $count += DB::table('users')->whereIn('place_id', $ids)->count();
+        }
+
+        return $count;
     }
 
     /**
@@ -209,6 +258,7 @@ class PlaceImporter
         array $seen,
         array $existing,
         array $inUse,
+        int $accountsAffected,
         ?int $removed,
         int $rehomed,
         int $regionsRemoved,
@@ -219,11 +269,6 @@ class PlaceImporter
         $droppedInUse = array_intersect_key($dropped, $inUse);
         $added = count(array_diff_key($seen, $existing));
         $rehoming = $options->replaces() && $options->rehome && ! $pruneSkipped;
-
-        $accountsAffected = 0;
-        foreach (array_chunk(array_keys($droppedInUse), self::ID_CHUNK) as $ids) {
-            $accountsAffected += DB::table('users')->whereIn('place_id', $ids)->count();
-        }
 
         return new PlaceImportResult(
             dryRun: $options->dryRun,
@@ -253,6 +298,7 @@ class PlaceImporter
             if (! is_file($local)) {
                 throw new RuntimeException("File not found: {$local}");
             }
+            $this->assertFileSize($local);
 
             return $local;
         }
@@ -289,8 +335,26 @@ class PlaceImporter
         if (! $response->successful()) {
             throw new RuntimeException("Download failed ({$response->status()}): {$url}");
         }
+        $this->assertFileSize($target);
 
         return $target;
+    }
+
+    /**
+     * Largest file, downloaded, uploaded or extracted, the importer reads
+     * (`places.max_file_mb`; cities500.txt is about 45 MB).
+     */
+    private function maxBytes(): int
+    {
+        return max(1, (int) config('places.max_file_mb', 512)) * 1024 * 1024;
+    }
+
+    private function assertFileSize(string $path): void
+    {
+        $size = filesize($path);
+        if ($size === false || $size > $this->maxBytes()) {
+            throw new RuntimeException(basename($path).' is larger than the '.intdiv($this->maxBytes(), 1024 * 1024).' MB limit.');
+        }
     }
 
     /**
@@ -317,14 +381,32 @@ class PlaceImporter
                 }
                 $entry = $texts[0];
             }
-            if (! $zip->extractTo($workDir, $entry)) {
+            // The archive's own size header can lie, so check it and also cap
+            // the bytes actually copied.
+            $stat = $zip->statName($entry);
+            if ($stat === false || $stat['size'] > $this->maxBytes()) {
+                throw new RuntimeException("{$entry} is larger than the ".intdiv($this->maxBytes(), 1024 * 1024).' MB limit.');
+            }
+            $target = $workDir.'/cities.txt';
+            $in = $zip->getStream($entry);
+            $out = fopen($target, 'wb');
+            if ($in === false || $out === false) {
                 throw new RuntimeException("Could not extract {$entry}.");
+            }
+            try {
+                $copied = stream_copy_to_stream($in, $out, $this->maxBytes() + 1);
+            } finally {
+                fclose($in);
+                fclose($out);
+            }
+            if ($copied === false || $copied > $this->maxBytes()) {
+                throw new RuntimeException("{$entry} is larger than the ".intdiv($this->maxBytes(), 1024 * 1024).' MB limit.');
             }
         } finally {
             $zip->close();
         }
 
-        return $workDir.'/'.$entry;
+        return $target;
     }
 
     /**
@@ -427,9 +509,10 @@ class PlaceImporter
      *
      * @param  array<string, mixed>  $countries
      * @param  array<string, int>  $regions
+     * @param  Closure(): void  $heartbeat
      * @return array<int, true>
      */
-    private function writeCities(string $path, array $countries, array $regions, int $batch): array
+    private function writeCities(string $path, array $countries, array $regions, int $batch, Closure $heartbeat): array
     {
         $seen = [];
         $rows = [];
@@ -439,6 +522,7 @@ class PlaceImporter
             if (count($rows) >= self::CHUNK) {
                 $this->upsertCities($rows);
                 $rows = [];
+                $heartbeat();
             }
         }
         $this->upsertCities($rows);
@@ -462,26 +546,35 @@ class PlaceImporter
             && ctype_digit($c[0])
             && $c[6] === 'P'
             && ! in_array($c[7], self::SKIPPED_FEATURE_CODES, true)
+            && strlen($c[0]) <= 10 && (int) $c[0] > 0 && (int) $c[0] <= self::MAX_ID
             && isset($countries[$c[8]])
-            && is_numeric($c[4]) && is_numeric($c[5]);
+            && is_numeric($c[4]) && abs((float) $c[4]) <= 90
+            && is_numeric($c[5]) && abs((float) $c[5]) <= 180;
     }
 
     /**
-     * Region keys ("US.OR") the importable cities in a file refer to.
+     * Reads the whole cities file once before anything is written: the
+     * number of distinct importable cities, and the region keys ("US.OR")
+     * they refer to. Malformed files fail here (see {@see self::lines()}).
      *
      * @param  array<string, mixed>  $countries
-     * @return array<string, true>
+     * @return array{int, array<string, true>}
      */
-    private function usedRegionKeys(string $path, array $countries): array
+    private function scanCities(string $path, array $countries): array
     {
+        $ids = [];
         $used = [];
         foreach ($this->lines($path) as $c) {
-            if ($this->importable($c, $countries) && $c[10] !== '') {
+            if (! $this->importable($c, $countries)) {
+                continue;
+            }
+            $ids[(int) $c[0]] = true;
+            if ($c[10] !== '') {
                 $used[$c[8].'.'.$c[10]] = true;
             }
         }
 
-        return $used;
+        return [count($ids), $used];
     }
 
     /**
@@ -540,7 +633,10 @@ class PlaceImporter
             throw new RuntimeException("Could not read {$path}");
         }
         try {
-            while (($line = fgets($handle)) !== false) {
+            while (($line = fgets($handle, self::MAX_LINE_BYTES + 1)) !== false) {
+                if (strlen($line) >= self::MAX_LINE_BYTES && ! str_ends_with($line, "\n") && ! feof($handle)) {
+                    throw new RuntimeException('A line in '.basename($path).' is longer than '.self::MAX_LINE_BYTES.' bytes; is this a GeoNames file?');
+                }
                 $line = rtrim($line, "\r\n");
                 if ($line === '' || str_starts_with($line, '#')) {
                     continue;

@@ -50,7 +50,7 @@ describe('AdminPlacesPage', () => {
   });
 
   it('queues a replace preview that moves people, and needs all three files to upload', async () => {
-    mocked.post.mockResolvedValue({ message: 'Preview queued. It starts within a minute.', data: payload({ pending: { mode: 'replace', rehome: true, dry_run: true, uploaded: false, source: 'admin', requested_at: '2026-11-10T07:00:00Z' } }) });
+    mocked.post.mockResolvedValue({ message: 'Preview queued. It starts within a minute.', data: payload({ pending: { id: '9b2d7c1e-4f3a-4b5c-8d6e-7f8091a2b3c4', mode: 'replace', rehome: true, dry_run: true, uploaded: false, source: 'admin', requested_at: '2026-11-10T07:00:00Z' } }) });
     render(<AdminPlacesPage />);
 
     fireEvent.click(screen.getByLabelText(/Replace/));
@@ -117,5 +117,22 @@ describe('AdminPlacesPage', () => {
     expect(screen.getByRole('button', { name: 'Import now' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Cities \(/), { target: { files: [file('cities15000.zip')] } });
     expect(screen.getByRole('button', { name: 'Import now' })).toBeDisabled();
+  });
+
+  it('cancels the queued run by its id and shows an interrupted run as finished', async () => {
+    initial = { adminPlaces: payload({
+      pending: { id: '9b2d7c1e-4f3a-4b5c-8d6e-7f8091a2b3c4', mode: 'update', rehome: false, dry_run: false, uploaded: false, source: 'admin', requested_at: '2026-11-10T07:00:00Z' },
+      status: { state: 'interrupted', dataset: 'cities5000', mode: 'update', error: 'The import stopped without finishing (its process ended). Start it again.' },
+    }) };
+    mocked.delete.mockResolvedValue({ message: 'Queued import cancelled.', data: payload() });
+    render(<AdminPlacesPage />);
+
+    expect(screen.getByText('Last run was interrupted')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('stopped without finishing');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(mocked.delete).toHaveBeenCalledWith('/api/admin/places/import', { id: '9b2d7c1e-4f3a-4b5c-8d6e-7f8091a2b3c4' }));
+    expect(await screen.findByText('Queued import cancelled.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Import now' })).toBeEnabled();
   });
 });

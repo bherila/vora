@@ -11,6 +11,7 @@ use App\Models\Place;
 use App\Models\User;
 use App\Services\Location\LocationPresenter;
 use App\Services\Location\PlaceDirectory;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -57,7 +58,21 @@ class LocationController extends Controller
         $user->place_id = $data['place_id'] ?? null;
         $user->location_country_audience = LocationAudience::from($data['country_audience']);
         $user->location_city_audience = LocationAudience::from($data['city_audience']);
-        $user->save();
+        try {
+            $user->save();
+        } catch (QueryException $e) {
+            // The city was removed by an import between validation and save
+            // (the foreign key rejects it). Nothing was saved.
+            if ($user->place_id !== null && ! Place::query()->whereKey($user->place_id)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'That city was just removed from the list. Choose another.',
+                    'errors' => ['place_id' => ['That city was just removed from the list. Choose another.']],
+                ], 422);
+            }
+
+            throw $e;
+        }
 
         return response()->json([
             'success' => true,

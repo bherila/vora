@@ -26,7 +26,7 @@ interface ImportResult {
 }
 
 interface ImportStatus {
-  state: 'running' | 'succeeded' | 'failed';
+  state: 'running' | 'succeeded' | 'failed' | 'interrupted';
   source?: string;
   dataset?: string;
   mode?: ImportMode;
@@ -45,7 +45,7 @@ export interface AdminPlacesData {
   auto_refresh: boolean;
   counts: { places: number; current_places: number; regions: number; countries: number; accounts_with_location: number };
   imported_at: string | null;
-  pending: { mode: ImportMode; rehome: boolean; dry_run: boolean; uploaded: boolean; source: string | null; requested_at: string | null } | null;
+  pending: { id: string; mode: ImportMode; rehome: boolean; dry_run: boolean; uploaded: boolean; source: string | null; requested_at: string | null } | null;
   status: ImportStatus | null;
   max_upload_bytes: number;
 }
@@ -313,7 +313,7 @@ export function AdminPlacesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void run(() => fetchWrapper.delete('/api/admin/places/import'), 'The queued import could not be cancelled.')}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void run(() => fetchWrapper.delete('/api/admin/places/import', { id: data.pending?.id }), 'The queued import could not be cancelled.')}>
               Cancel
             </Button>
           </CardContent>
@@ -324,7 +324,10 @@ export function AdminPlacesPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              {status.state === 'running' ? 'Running' : status.state === 'failed' ? 'Last run failed' : status.dry_run ? 'Preview' : 'Last import'}
+              {status.state === 'running' ? 'Running'
+                : status.state === 'failed' ? 'Last run failed'
+                  : status.state === 'interrupted' ? 'Last run was interrupted'
+                    : status.dry_run ? 'Preview' : 'Last import'}
             </CardTitle>
             <CardDescription>
               {status.dry_run ? 'Preview' : 'Import'} of {status.dataset} ({status.mode}{status.rehome ? ', moving people' : ''}) · started {formatDate(status.started_at)}
@@ -332,7 +335,7 @@ export function AdminPlacesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {status.state === 'failed' && <p role="alert" className="text-sm text-destructive">{status.error}</p>}
+            {(status.state === 'failed' || status.state === 'interrupted') && <p role="alert" className="text-sm text-destructive">{status.error}</p>}
             {status.state === 'running' && <p role="status" className="text-sm text-muted-foreground">Importing… this page updates on its own.</p>}
             <ResultSummary status={status} />
             {status.state === 'succeeded' && status.dry_run && (status.source !== 'admin' || !status.request_id) && (

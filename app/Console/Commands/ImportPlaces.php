@@ -4,12 +4,14 @@ namespace App\Console\Commands;
 
 use App\Services\Location\PlaceImporter;
 use App\Services\Location\PlaceImportOptions;
-use App\Services\Location\PlaceImportRequests;
+use App\Services\Location\PlaceImportRuns;
 use Illuminate\Console\Command;
 use RuntimeException;
 
 /**
  * Loads or refreshes the local GeoNames city list. See {@see PlaceImporter}.
+ * Takes the same import lock as the scheduler's runner, so it never writes
+ * alongside another import.
  */
 class ImportPlaces extends Command
 {
@@ -21,12 +23,12 @@ class ImportPlaces extends Command
         {--cities= : Local path to a cities .txt or .zip instead of downloading}
         {--admin1= : Local path to admin1CodesASCII.txt instead of downloading}
         {--countries= : Local path to countryInfo.txt instead of downloading}
-        {--min-rows= : Refuse to prune when fewer cities were parsed; defaults to config}
-        {--no-prune : Keep rows that the new data no longer contains}';
+        {--min-rows= : Refuse to import when fewer cities were read; defaults to config}
+        {--no-prune : Keep rows that the new data no longer contains (also lifts the minimum)}';
 
     protected $description = 'Import or refresh the local GeoNames city list used by location pickers';
 
-    public function handle(PlaceImporter $importer, PlaceImportRequests $requests): int
+    public function handle(PlaceImporter $importer, PlaceImportRuns $runs): int
     {
         $mode = (string) $this->option('mode');
         if (! in_array($mode, PlaceImportOptions::MODES, true)) {
@@ -34,7 +36,7 @@ class ImportPlaces extends Command
 
             return self::FAILURE;
         }
-        $dataset = (string) ($this->option('dataset') ?: $requests->dataset());
+        $dataset = (string) ($this->option('dataset') ?: $runs->dataset());
         if (! in_array($dataset, PlaceImportOptions::DATASETS, true)) {
             $this->error("Unknown dataset [{$dataset}].");
 
@@ -54,18 +56,22 @@ class ImportPlaces extends Command
         );
 
         try {
-            $result = $requests->track(
-                [
-                    'source' => 'command',
-                    'dataset' => $dataset,
-                    'mode' => $mode,
-                    'rehome' => $options->rehome,
-                    'dry_run' => $options->dryRun,
-                ],
-                fn () => $importer->run($options, fn (string $message) => $this->line($message)),
-            );
+            $result = $runs->exclusively(function () use ($runs, $importer, $options) {
+                $run = $runs->startDirect(['dataset' => $options->dataset, 'mode' => $options->mode, 'rehome' => $options->rehome, 'dry_run' => $options->dryRun]);
+
+                return $runs->complete($run, fn () => $importer->run(
+                    $options,
+                    fn (string $message) => $this->line($message),
+                    fn () => $runs->heartbeat($run),
+                ));
+            });
         } catch (RuntimeException $e) {
             $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+        if ($result === false) {
+            $this->error('Another import is running. Try again when it has finished.');
 
             return self::FAILURE;
         }

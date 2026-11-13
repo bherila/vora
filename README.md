@@ -280,11 +280,20 @@ Two modes:
 - **Replace** also removes regions and countries no city uses and, when
   asked, moves people off dropped cities to the nearest remaining one.
 
-Re-running only applies changes, in multi-row statements. Nothing is pruned
-when fewer than `PLACES_MINIMUM_ROWS` (default 1,000) cities were read, so a
-truncated file cannot empty the list. On the command line, `--mode=replace`,
-`--rehome`, `--dry-run`, `--no-prune`, and `--cities`/`--admin1`/`--countries`
-(local files) mirror the page's options.
+Re-running only applies changes, in multi-row statements. The whole cities
+file is read and checked before anything is written, and an import that reads
+fewer than `PLACES_MINIMUM_ROWS` (default 1,000) cities is refused, so a
+truncated file cannot damage the list. Files larger than `PLACES_MAX_FILE_MB`
+(default 512) are refused, including the text extracted from a zip. On the
+command line, `--mode=replace`, `--rehome`, `--dry-run`, `--no-prune`, and
+`--cities`/`--admin1`/`--countries` (local files) mirror the page's options.
+
+Every import, from the page, the monthly refresh or the command line, holds
+one import lock, so imports never run at the same time; the command reports
+"Another import is running" and the page's request waits its turn. A run whose
+process is killed is shown as interrupted after about ten minutes and can be
+started again. If an import fails part-way through a database write, cities it
+had already written stay searchable until the next complete import.
 
 ## License
 
