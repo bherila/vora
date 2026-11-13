@@ -5,6 +5,8 @@ namespace Tests\Feature\Location;
 use App\Models\Place;
 use App\Models\PlaceImportRun;
 use App\Models\User;
+use App\Services\Location\PlaceImporter;
+use App\Services\Location\PlaceImportOptions;
 use App\Services\Location\PlaceImportRuns;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -137,6 +139,27 @@ class ImportRunsTest extends TestCase
 
         // A dry run changes nothing, so it does not make the preview stale.
         $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $preview])->assertStatus(202);
+    }
+
+    public function test_downloads_and_parsing_renew_the_heartbeat(): void
+    {
+        $this->fakeDownloads();
+        $beats = 0;
+        $dir = $this->runs->filesDir('8f9a0b1c-2d3e-4f4a-9b5c-6d7e8f9a0b1c');
+        File::ensureDirectoryExists($dir);
+        app(PlaceImporter::class)->download('cities5000', $dir, heartbeat: function () use (&$beats): void {
+            $beats++;
+        });
+        $this->assertSame(3, $beats, 'one heartbeat per downloaded file');
+
+        $beats = 0;
+        app(PlaceImporter::class)->run(new PlaceImportOptions(
+            dataset: 'cities5000', dryRun: true, minimumRows: 1,
+            citiesPath: $dir.'/cities.zip', admin1Path: $dir.'/admin1CodesASCII.txt', countriesPath: $dir.'/countryInfo.txt',
+        ), heartbeat: function () use (&$beats): void {
+            $beats++;
+        });
+        $this->assertGreaterThanOrEqual(5, $beats, 'each source, the extraction, parsing and scanning');
     }
 
     public function test_cleanup_decides_from_current_state_and_never_deletes_files_still_needed(): void

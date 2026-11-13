@@ -64,7 +64,7 @@ class RunRequestedPlaceImport extends Command
             try {
                 $runs->complete($run, function () use ($importer, $runs, $run, $dir, $download, $log) {
                     if ($download && $dir !== null) {
-                        $importer->download($run->dataset, $dir, $log);
+                        $importer->download($run->dataset, $dir, $log, fn () => $runs->heartbeat($run));
                     }
 
                     return $importer->run(new PlaceImportOptions(

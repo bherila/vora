@@ -66,15 +66,22 @@ class PlaceImporter
         File::ensureDirectoryExists($workDir);
 
         try {
+            // Each download and parsing step renews the heartbeat, so a slow
+            // but live import is never mistaken for a stopped one.
             $countriesPath = $this->source($options->countriesPath, 'countryInfo.txt', $workDir, $log);
+            $heartbeat();
             $admin1Path = $this->source($options->admin1Path, 'admin1CodesASCII.txt', $workDir, $log);
+            $heartbeat();
             $citiesPath = $this->source($options->citiesPath, "{$options->dataset}.zip", $workDir, $log);
+            $heartbeat();
             if (str_ends_with(strtolower($citiesPath), '.zip')) {
                 $citiesPath = $this->unzip($citiesPath, "{$options->dataset}.txt", $workDir);
+                $heartbeat();
             }
 
             $countries = $this->parseCountries($countriesPath);
             $regionRows = $this->parseRegions($admin1Path, $countries);
+            $heartbeat();
 
             // Read and validate the whole cities file before writing anything,
             // so a truncated or malformed file never touches the live list.
@@ -311,17 +318,22 @@ class PlaceImporter
      * uploaded set uses, so a preview can be applied to exactly these files.
      *
      * @param  (Closure(string): void)|null  $log
+     * @param  (Closure(): void)|null  $heartbeat  called after each file
      */
-    public function download(string $dataset, string $dir, ?Closure $log = null): void
+    public function download(string $dataset, string $dir, ?Closure $log = null, ?Closure $heartbeat = null): void
     {
         if (! in_array($dataset, PlaceImportOptions::DATASETS, true)) {
             throw new RuntimeException("Unknown dataset [{$dataset}].");
         }
         $log ??= static function (string $message): void {};
+        $heartbeat ??= static function (): void {};
 
         $this->fetch('countryInfo.txt', $dir.'/countryInfo.txt', $log);
+        $heartbeat();
         $this->fetch('admin1CodesASCII.txt', $dir.'/admin1CodesASCII.txt', $log);
+        $heartbeat();
         $this->fetch("{$dataset}.zip", $dir.'/cities.zip', $log);
+        $heartbeat();
     }
 
     /**
