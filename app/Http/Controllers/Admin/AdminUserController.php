@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\AdminLegalHoldRequest;
 use App\Http\Requests\Admin\AdminUserUpdateRequest;
 use App\Models\InviteGrant;
 use App\Models\User;
+use App\Services\Auth\ApplicationAdministrators;
 use App\Services\Chat\ChatState;
 use App\Services\InviteService;
 use App\Services\Media\AccountStorageLimit;
@@ -16,7 +17,9 @@ use App\Services\SettingsService;
 use App\Services\UserAccountService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use RuntimeException;
 
 class AdminUserController extends Controller
 {
@@ -26,6 +29,7 @@ class AdminUserController extends Controller
         private readonly ChatState $chatState,
         private readonly SettingsService $settings,
         private readonly AccountStorageLimit $storageLimits,
+        private readonly ApplicationAdministrators $administrators,
     ) {}
 
     /**
@@ -102,8 +106,31 @@ class AdminUserController extends Controller
      */
     public function update(AdminUserUpdateRequest $request, User $user): JsonResponse
     {
-        $data = $request->validated();
         $actor = $request->user();
+        if (! array_key_exists('is_admin', $request->validated())) {
+            return $this->applyUpdate($request, $user, $actor);
+        }
+
+        return DB::transaction(function () use ($request, $actor, $user): JsonResponse {
+            $directory = $this->administrators->lockDirectory($actor->id, $user->id);
+            $actor = $directory->firstWhere('id', $actor->id);
+            $user = $directory->firstWhere('id', $user->id);
+            if ($actor === null || $user === null || $user->trashed() || ! $this->administrators->eligible($actor)) {
+                return $this->forbidden('Administrator authority is no longer available. Reload and try again.');
+            }
+            $previous = $user->isAdmin();
+            $response = $this->applyUpdate($request, $user, $actor, $this->administrators->canChange($actor, $user, $directory));
+            if ($response->isSuccessful() && $previous !== $user->isAdmin()) {
+                $this->administrators->auditLocalChange($request, $actor, $user, $previous);
+            }
+
+            return $response;
+        });
+    }
+
+    private function applyUpdate(AdminUserUpdateRequest $request, User $user, User $actor, bool $roleEditable = false): JsonResponse
+    {
+        $data = $request->validated();
 
         if (array_key_exists('is_disabled', $data)) {
             if ($user->id === $actor->id || $user->id === 1) {
@@ -113,8 +140,8 @@ class AdminUserController extends Controller
         }
 
         if (array_key_exists('is_admin', $data)) {
-            if ($user->id === 1) {
-                return $this->forbidden('The primary admin cannot be modified.');
+            if ($user->id === 1 || ((bool) $data['is_admin'] !== $user->isAdmin() && ! $roleEditable)) {
+                return $this->forbidden('You cannot change this administrator role.');
             }
             $user->is_admin = (bool) $data['is_admin'];
         }
@@ -170,7 +197,9 @@ class AdminUserController extends Controller
         }
 
         $stateChanged = $user->isDirty('is_disabled');
-        $user->save();
+        if (! $user->save()) {
+            throw new RuntimeException('Account update was not persisted.');
+        }
         if ($stateChanged) {
             $this->chatState->touchUserAndPeers($user);
         }

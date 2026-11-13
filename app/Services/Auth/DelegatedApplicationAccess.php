@@ -23,6 +23,7 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
         private DelegatedRequestContext $context,
         private DelegatedAccessSettings $settings,
         private DelegatedCursor $cursors,
+        private ApplicationAdministrators $administrators,
     ) {}
 
     public function handle(string $actorSubject, array $payload): array
@@ -63,8 +64,7 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
 
     private function eligibleAdministrator(User $user): bool
     {
-        return ! $user->trashed() && $user->isAdmin() && $user->canLogin() && $user->isApproved()
-            && $user->hasVerifiedEmail() && ! $user->isBanned() && ! $user->isDeactivated();
+        return $this->administrators->eligible($user);
     }
 
     /** @param array<string, mixed> $payload
@@ -120,9 +120,7 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
             // Every delegated writer locks the same administrative directory in
             // ID order, plus actor/target. Other account updates must also wait
             // on these rows, so authority is checked again at the write boundary.
-            $directory = User::withTrashed()->where(fn ($query) => $query->where('id', 1)->orWhere('is_admin', true)
-                ->orWhereIn('id', array_filter([$actor->id, $target?->id])))
-                ->orderBy('id')->lockForUpdate()->get();
+            $directory = $this->administrators->lockDirectory($actor->id, $target?->id);
             $actor = $directory->firstWhere('id', $actor->id);
             if ($actor === null || ! $this->bindingMatches($actor, $this->context->subject) || ! $this->eligibleAdministrator($actor)) {
                 throw DelegatedRefusal::of(DelegatedRefusal::NOT_AUTHORIZED);
@@ -182,8 +180,7 @@ final readonly class DelegatedApplicationAccess implements ApplicationAccessAdap
                 'allowed_edits' => ['application_admin' => false, 'workspaces' => false, 'provision' => false, 'remove' => false]];
         }
         $eligible = $directory->filter(fn (User $user): bool => $this->eligibleAdministrator($user))->pluck('id')->all();
-        $editable = $target->id !== 1 && $target->id !== $actor->id
-            && ! ($this->eligibleAdministrator($target) && count($eligible) <= 1);
+        $editable = $this->administrators->canChange($actor, $target, $directory);
 
         return ['subject' => $subject, 'provisioned' => true,
             'revision' => hash('sha256', json_encode([$this->fingerprint($actor), $this->fingerprint($target), $eligible], JSON_THROW_ON_ERROR)),
