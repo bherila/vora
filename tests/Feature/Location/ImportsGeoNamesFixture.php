@@ -3,9 +3,21 @@
 namespace Tests\Feature\Location;
 
 use App\Services\Location\PlaceImportRuns;
+use Illuminate\Support\Facades\File;
 
 trait ImportsGeoNamesFixture
 {
+    /**
+     * Gives each test its own GeoNames storage, so tests in parallel
+     * processes never share or delete each other's files.
+     */
+    protected function setUpImportsGeoNamesFixture(): void
+    {
+        $dir = sys_get_temp_dir().'/vora-places-'.bin2hex(random_bytes(6));
+        config(['places.storage_path' => $dir]);
+        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory($dir));
+    }
+
     /**
      * Loads the small GeoNames fixture through the real importer.
      *

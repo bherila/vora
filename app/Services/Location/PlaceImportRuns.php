@@ -40,12 +40,6 @@ class PlaceImportRuns
     /** A running import with no heartbeat for this long has stopped. */
     public const STALE_SECONDS = 600;
 
-    /** Input files, one directory per run that owns files. */
-    private const FILES_ROOT = 'app/private/geonames/runs';
-
-    /** Scratch directories of in-progress imports. */
-    private const WORK_ROOT = 'app/private/geonames';
-
     private ?Lock $lock = null;
 
     public function __construct(private readonly SettingsService $settings) {}
@@ -333,13 +327,22 @@ class PlaceImportRuns
         return $preview;
     }
 
+    /**
+     * Where GeoNames files live: input files under `runs/{id}`, scratch
+     * directories of in-progress imports as `work-*` (`places.storage_path`).
+     */
+    public static function storageRoot(): string
+    {
+        return rtrim((string) (config('places.storage_path') ?: storage_path('app/private/geonames')), '/');
+    }
+
     public function filesDir(string $runId): string
     {
         if (preg_match('/^[0-9a-f-]{36}$/', $runId) !== 1) {
             throw new RuntimeException('Invalid run id.');
         }
 
-        return storage_path(self::FILES_ROOT.'/'.$runId);
+        return self::storageRoot().'/runs/'.$runId;
     }
 
     /**
@@ -365,7 +368,7 @@ class PlaceImportRuns
             $keep[] = $latestPreview->files_run_id;
         }
 
-        $root = storage_path(self::FILES_ROOT);
+        $root = self::storageRoot().'/runs';
         if (is_dir($root)) {
             $dirs = File::directories($root);
             $known = PlaceImportRun::query()->whereIn('id', array_map('basename', $dirs))->pluck('id')->all();
@@ -384,7 +387,7 @@ class PlaceImportRuns
         }
 
         // Scratch directories of killed imports, and pre-run-record uploads.
-        $work = storage_path(self::WORK_ROOT);
+        $work = self::storageRoot();
         $stale = Carbon::now()->subHours(6)->getTimestamp();
         if (is_dir($work)) {
             foreach (File::directories($work) as $dir) {

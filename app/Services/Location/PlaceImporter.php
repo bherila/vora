@@ -62,7 +62,7 @@ class PlaceImporter
         $log ??= static function (string $message): void {};
         $heartbeat ??= static function (): void {};
 
-        $workDir = storage_path('app/private/geonames/work-'.Str::random(12));
+        $workDir = PlaceImportRuns::storageRoot().'/work-'.Str::random(12);
         File::ensureDirectoryExists($workDir);
 
         try {

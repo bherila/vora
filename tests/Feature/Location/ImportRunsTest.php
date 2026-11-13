@@ -31,8 +31,6 @@ class ImportRunsTest extends TestCase
         config(['places.minimum_rows' => 1]);
         $this->admin = User::factory()->admin()->create();
         $this->runs = app(PlaceImportRuns::class);
-        File::deleteDirectory(storage_path('app/private/geonames'));
-        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory(storage_path('app/private/geonames')));
     }
 
     public function test_every_entry_point_waits_for_the_one_import_lock(): void

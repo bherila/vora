@@ -16,6 +16,7 @@ use Tests\TestCase;
 
 class AdminPlacesTest extends TestCase
 {
+    use ImportsGeoNamesFixture;
     use RefreshDatabase;
 
     private User $admin;
@@ -25,9 +26,6 @@ class AdminPlacesTest extends TestCase
         parent::setUp();
         config(['places.minimum_rows' => 1]);
         $this->admin = User::factory()->admin()->create();
-        // Previews keep their files on disk; start and end each test clean.
-        File::deleteDirectory(storage_path('app/private/geonames'));
-        $this->beforeApplicationDestroyed(fn () => File::deleteDirectory(storage_path('app/private/geonames')));
     }
 
     public function test_only_admins_reach_the_city_list(): void
@@ -100,7 +98,7 @@ class AdminPlacesTest extends TestCase
 
         $this->assertSame(9, Place::query()->count());
         Http::assertNothingSent();
-        $this->assertSame([], File::directories(storage_path('app/private/geonames/runs')));
+        $this->assertSame([], File::directories(PlaceImportRuns::storageRoot().'/runs'));
     }
 
     public function test_applying_a_preview_keeps_the_previewed_dataset(): void
