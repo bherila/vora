@@ -441,6 +441,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::post('/api/stories/by-ulid/{ulid}/discussion', [CanonicalDiscussionController::class, 'story'])
         ->name('stories.discussion.start');
 
+    Route::view('/notifications', 'notifications.index')->name('notifications.index');
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
         Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
