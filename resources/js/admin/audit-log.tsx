@@ -45,6 +45,14 @@ const REASONS = new Map([
   ['rate_limited', 'Rate limited'],
 ]);
 
+function initialFilters(): Filters {
+  const userId = new URLSearchParams(window.location.search).get('user_id') ?? '';
+  return {
+    ...EMPTY_FILTERS,
+    userId: /^[1-9]\d*$/.test(userId) && Number.isSafeInteger(Number(userId)) ? userId : '',
+  };
+}
+
 interface LocalUserProps {
   id: number | null;
 }
@@ -87,8 +95,8 @@ function AuditDetails({ entry }: AuditDetailsProps) {
 }
 
 export function AuditLogPage() {
-  const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
-  const [query, setQuery] = useState({ ...EMPTY_FILTERS, page: 1 });
+  const [draft, setDraft] = useState<Filters>(initialFilters);
+  const [query, setQuery] = useState(() => ({ ...initialFilters(), page: 1 }));
   const [response, setResponse] = useState<PaginatedResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
