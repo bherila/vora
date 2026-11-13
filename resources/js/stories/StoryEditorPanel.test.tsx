@@ -4,6 +4,7 @@ import { hydrateIdentityStore, removeIdentityOption, upsertIdentityOption } from
 
 import { storiesApi } from './api';
 import { StoryEditorPanel } from './StoryEditorPanel';
+import type { StoryEditor } from './types';
 
 jest.mock('@/initialData', () => ({
   readInitialData: () => ({
@@ -17,10 +18,10 @@ jest.mock('@/initialData', () => ({
   }),
 }));
 
-jest.mock('@/components/interest-picker', () => ({ InterestPicker: () => null }));
+jest.mock('@/components/interest-picker', () => ({ InterestPicker: ({ value, onChange }: { value: number[]; onChange: (ids: number[]) => void }) => <button onClick={() => onChange(value.length ? [] : [5])}>Toggle interest</button> }));
 jest.mock('@/components/Markdown', () => ({ Markdown: () => null }));
 jest.mock('./CoAuthorPanel', () => ({ CoAuthorPanel: () => null }));
-jest.mock('./CyoaGraphEditor', () => ({ CyoaGraphEditor: () => null }));
+jest.mock('./CyoaGraphDiagram', () => ({ CyoaGraphDiagram: () => null }));
 
 jest.mock('./api', () => ({
   storiesApi: {
@@ -56,8 +57,21 @@ jest.mock('./api', () => ({
       involvable_options: [],
     })),
     updateAuthorIdentity: jest.fn(() => Promise.resolve([])),
+    update: jest.fn(),
+    saveGraph: jest.fn(),
   },
 }));
+
+function deferredStory() {
+  let resolve!: (story: StoryEditor) => void;
+  let reject!: (reason: string) => void;
+  const promise = new Promise<StoryEditor>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+function renderEditor(onChanged = jest.fn()) {
+  return render(<StoryEditorPanel storyId={3} currentUserId={7} onBack={jest.fn()} onChanged={onChanged} onDeleted={jest.fn()} />);
+}
 
 describe('StoryEditorPanel authoring identity', () => {
   beforeEach(() => {
@@ -108,5 +122,92 @@ describe('StoryEditorPanel authoring identity', () => {
     await waitFor(() => expect(screen.queryByRole('option', { name: 'Nova' })).toBeNull());
     expect(select).toHaveValue('17');
     expect(storiesApi.updateAuthorIdentity).not.toHaveBeenCalled();
+  });
+
+  it('preserves every follow-up detail edit while a save is in flight and resubmits the visible draft', async () => {
+    const initial = await storiesApi.get(3);
+    jest.mocked(storiesApi.get).mockResolvedValueOnce({ ...initial, involvable_options: [{ type: 'user', id: 8, name: 'Another author' }] });
+    const pending = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(pending.promise);
+    renderEditor();
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Submitted title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    fireEvent.change(title, { target: { value: 'Follow-up title' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Story (markdown)' }), { target: { value: 'Follow-up body' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'published' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Who can see this?' }), { target: { value: 'followers' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /List in discovery/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Another author' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle interest' }));
+    await act(async () => pending.resolve({ ...initial, title: 'Canonical submitted title' }));
+    expect(title).toHaveValue('Follow-up title');
+    expect(screen.getByRole('textbox', { name: 'Story (markdown)' })).toHaveValue('Follow-up body');
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('published');
+    expect(screen.getByRole('combobox', { name: 'Who can see this?' })).toHaveValue('followers');
+    expect(screen.getByRole('checkbox', { name: /List in discovery/ })).not.toBeChecked();
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+    const next = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(next.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(storiesApi.update).toHaveBeenLastCalledWith(3, expect.objectContaining({ title: 'Follow-up title', body: 'Follow-up body', status: 'published', audience: 'followers', discoverable: false, interest_ids: [5], involvements: [{ type: 'user', id: 8 }] }));
+    await act(async () => next.resolve({ ...initial, title: 'Follow-up title', body: 'Follow-up body', status: 'published', audience: 'followers', discoverable: false, interests: [{ id: 5, name: 'Interest' }], involves: [{ type: 'user', id: 8, name: 'Another author' }] }));
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+    fireEvent.change(title, { target: { value: 'Another unsaved title' } });
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+    expect(screen.queryByText('Saved.')).not.toBeInTheDocument();
+  });
+
+  it('adopts server-canonical unchanged fields without overwriting a newer field', async () => {
+    const initial = await storiesApi.get(3);
+    const pending = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(pending.promise);
+    renderEditor();
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: ' Submitted ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Story (markdown)' }), { target: { value: 'New body' } });
+    await act(async () => pending.resolve({ ...initial, title: 'Submitted' }));
+    expect(title).toHaveValue('Submitted');
+    expect(screen.getByRole('textbox', { name: 'Story (markdown)' })).toHaveValue('New body');
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+  });
+
+  it('preserves dirty details when a real graph save completes, and preserves a dirty graph when details save', async () => {
+    const initial = { ...await storiesApi.get(3), type: 'cyoa' as const, nodes: [{ id: 11, key: 'start', title: 'Start', body: 'Passage', is_start: true, position_x: 24, position_y: 24 }] };
+    jest.mocked(storiesApi.get).mockResolvedValueOnce(initial);
+    const graph = deferredStory();
+    jest.mocked(storiesApi.saveGraph).mockReturnValueOnce(graph.promise);
+    const onChanged = jest.fn();
+    renderEditor(onChanged);
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'Unsaved story title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
+    await act(async () => graph.resolve({ ...initial, nodes: [{ ...initial.nodes[0]!, title: 'Canonical passage' }] }));
+    expect(title).toHaveValue('Unsaved story title');
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Passage title')).toHaveValue('Canonical passage');
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByPlaceholderText('Passage title'), { target: { value: 'Unsaved passage' } });
+    const details = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(details.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await act(async () => details.resolve({ ...initial, title: 'Unsaved story title' }));
+    expect(screen.getByPlaceholderText('Passage title')).toHaveValue('Unsaved passage');
+    expect(screen.getByText('Unsaved graph changes')).toBeInTheDocument();
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+  });
+
+  it('keeps the draft and error feedback after a failed save', async () => {
+    const pending = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(pending.promise);
+    renderEditor();
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    fireEvent.change(title, { target: { value: 'Still here' } });
+    await act(async () => pending.reject('Synthetic save failure'));
+    expect(title).toHaveValue('Still here');
+    expect(screen.getByText('Synthetic save failure')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
   });
 });

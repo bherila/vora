@@ -26,6 +26,14 @@ function involveKey(type: string, id: number): string {
   return `${type}:${id}`;
 }
 
+function storyDetails(story: StoryEditor) {
+  return {
+    title: story.title, status: story.status, audience: story.audience, discoverable: story.discoverable,
+    body: story.body ?? '', interestIds: story.interests.map((interest) => interest.id),
+    involved: story.involves.map((value) => involveKey(value.type, value.id)),
+  };
+}
+
 export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, onDeleted }: StoryEditorPanelProps) {
   const [story, setStory] = useState<StoryEditor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +50,9 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
   const [error, setError] = useState('');
   const { identities } = useIdentityStore();
   const [identitySaving, setIdentitySaving] = useState(false);
+  const [savedDetails, setSavedDetails] = useState<ReturnType<typeof storyDetails> | null>(null);
+  const details = { title, status, audience, discoverable, body, interestIds, involved: [...involved] };
+  const detailsDirty = savedDetails !== null && JSON.stringify(details) !== JSON.stringify(savedDetails);
 
   const hydrate = (data: StoryEditor): void => {
     setStory(data);
@@ -52,6 +63,7 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
     setBody(data.body ?? '');
     setInterestIds(data.interests.map((i) => i.id));
     setInvolved(new Set(data.involves.map((v) => involveKey(v.type, v.id))));
+    setSavedDetails(storyDetails(data));
   };
 
   useEffect(() => {
@@ -80,6 +92,7 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
 
   const saveDetails = async (): Promise<void> => {
     if (story === null) return;
+    const submitted = details;
     setSaving(true);
     setMessage('');
     setError('');
@@ -97,7 +110,17 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
         interest_ids: interestIds,
         involvements,
       });
-      hydrate(updated);
+      // Adopt canonical values only where the author has not edited since submit.
+      const canonical = storyDetails(updated);
+      setStory(updated);
+      setSavedDetails(canonical);
+      setTitle((current) => current === submitted.title ? canonical.title : current);
+      setStatus((current) => current === submitted.status ? canonical.status : current);
+      setAudience((current) => current === submitted.audience ? canonical.audience : current);
+      setDiscoverable((current) => current === submitted.discoverable ? canonical.discoverable : current);
+      setBody((current) => current === submitted.body ? canonical.body : current);
+      setInterestIds((current) => JSON.stringify(current) === JSON.stringify(submitted.interestIds) ? canonical.interestIds : current);
+      setInvolved((current) => JSON.stringify([...current]) === JSON.stringify(submitted.involved) ? new Set(canonical.involved) : current);
       setMessage('Saved.');
       onChanged();
     } catch (e) {
@@ -183,7 +206,7 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
               )}
             </div>
           ) : (
-            <CyoaGraphEditor story={story} onSaved={(updated) => hydrate(updated)} />
+            <CyoaGraphEditor key={story.id} story={story} onSaved={(updated) => { setStory(updated); onChanged(); }} />
           )}
         </div>
 
@@ -274,7 +297,7 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
           <Button type="button" onClick={() => void saveDetails()} disabled={saving}>
             {saving ? 'Saving…' : 'Save details'}
           </Button>
-          {message && <span className="text-sm text-muted-foreground">{message}</span>}
+          {!saving && (detailsDirty || message) && <span className="text-sm text-muted-foreground">{detailsDirty ? 'Unsaved details.' : message}</span>}
           {error && <span className="text-sm text-destructive">{error}</span>}
         </div>
         {isOwner && (
