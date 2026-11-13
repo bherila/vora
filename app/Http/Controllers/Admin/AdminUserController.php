@@ -9,11 +9,14 @@ use App\Http\Requests\Admin\AdminLegalHoldRequest;
 use App\Http\Requests\Admin\AdminUserUpdateRequest;
 use App\Models\InviteGrant;
 use App\Models\User;
+use App\Services\Auth\SignIn;
 use App\Services\Chat\ChatState;
 use App\Services\InviteService;
 use App\Services\Media\AccountStorageLimit;
 use App\Services\SettingsService;
 use App\Services\UserAccountService;
+use BWH\Auth\OAuth\DelegatedAccess\DelegatedAccessException;
+use BWH\Auth\OAuth\DelegatedAccess\TrustedUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -303,8 +306,49 @@ class AdminUserController extends Controller
     }
 
     /**
+     * Identity support context only; never changes a binding or grants provider authority.
+     *
      * @return array<string, mixed>
      */
+    private function identityContext(User $user): array
+    {
+        $provider = $user->oauth_provider;
+        $subject = $user->oauth_subject;
+        $complete = is_string($provider) && $provider !== '' && is_string($subject) && $subject !== '';
+        $binding = match (true) {
+            $provider === null && $subject === null => 'local',
+            ! $complete => 'incomplete',
+            $provider === SignIn::provider() => 'configured_provider',
+            default => 'other_provider',
+        };
+        $url = null;
+        if ($binding === 'configured_provider' && SignIn::usesProvider()) {
+            $candidate = SignIn::accountSettingsUrl();
+            if ($candidate !== null) {
+                try {
+                    TrustedUrl::validate((string) config('bherila-auth.oauth_client.base_url'), issuer: true);
+                    TrustedUrl::validate($candidate);
+                    $url = $candidate;
+                } catch (DelegatedAccessException) {
+                    // A configuration error must not become a credential handoff.
+                }
+            }
+        }
+
+        return [
+            'sign_in_mode' => SignIn::mode(),
+            'configured_provider' => SignIn::usesProvider() ? SignIn::provider() : null,
+            'binding' => $binding,
+            'provider' => $provider,
+            'subject' => $subject,
+            'provider_account_url' => $url,
+            // Match the existing profile update policy: any stored subject keeps
+            // this local flag from governing the provider-owned email address.
+            'local_email_lock_available' => $subject === null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
     private function present(User $user, ?int $defaultStorageLimit, ?int $balance = null): array
     {
         $balance ??= $this->invites->availableBalance($user);
@@ -316,6 +360,7 @@ class AdminUserController extends Controller
             'display_name' => $user->display_name,
             'birth_date' => $user->birth_date?->toDateString(),
             'email' => $user->email,
+            'identity' => $this->identityContext($user),
             'is_admin' => $user->isAdmin(),
             'is_disabled' => (bool) $user->is_disabled,
             'is_deactivated' => $user->isDeactivated(),
