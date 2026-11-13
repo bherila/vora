@@ -86,9 +86,12 @@ class PlaceImportRuns
         ]);
 
         if ($source === 'admin') {
+            // Only strictly older requests: two requests arriving together
+            // can never supersede each other, and the runner takes the newest.
             PlaceImportRun::query()
                 ->where('state', PlaceImportRun::PENDING)
                 ->whereKeyNot($run->id)
+                ->where('requested_at', '<', $run->requested_at?->format('Y-m-d H:i:s.u'))
                 ->update(['state' => PlaceImportRun::SUPERSEDED, 'finished_at' => PlaceImportRun::now()]);
         }
 
@@ -312,12 +315,7 @@ class PlaceImportRuns
             || $preview->source !== 'admin') {
             return 'That preview cannot be applied from this page. Preview again.';
         }
-        $changedSince = PlaceImportRun::query()
-            ->where('state', PlaceImportRun::SUCCEEDED)
-            ->where('dry_run', false)
-            ->where('finished_at', '>', $preview->finished_at?->format('Y-m-d H:i:s.u'))
-            ->exists();
-        if ($changedSince) {
+        if ($this->importedSince($preview)) {
             return 'The city list changed after that preview ran. Preview again.';
         }
         if ($preview->files_run_id === null || ! is_dir($this->filesDir($preview->files_run_id))) {
@@ -336,6 +334,36 @@ class PlaceImportRuns
         return rtrim((string) (config('places.storage_path') ?: storage_path('app/private/geonames')), '/');
     }
 
+    /**
+     * Whether an import completed after $preview ran, making its counts stale.
+     */
+    public function importedSince(PlaceImportRun $preview): bool
+    {
+        return PlaceImportRun::query()
+            ->where('state', PlaceImportRun::SUCCEEDED)
+            ->where('dry_run', false)
+            ->where('finished_at', '>', $preview->finished_at?->format('Y-m-d H:i:s.u'))
+            ->exists();
+    }
+
+    /**
+     * Checks, under the import lock and just before it runs, that an apply
+     * run's preview is still current: a queued apply may have waited behind
+     * another import. Returns why it may not run, or null.
+     */
+    public function staleApplyReason(PlaceImportRun $run): ?string
+    {
+        if ($run->preview_of === null) {
+            return null;
+        }
+        $preview = PlaceImportRun::query()->find($run->preview_of);
+        if (! $preview instanceof PlaceImportRun || $this->importedSince($preview)) {
+            return 'The city list changed after that preview ran. Preview again.';
+        }
+
+        return null;
+    }
+
     public function filesDir(string $runId): string
     {
         if (preg_match('/^[0-9a-f-]{36}$/', $runId) !== 1) {
@@ -343,6 +371,35 @@ class PlaceImportRuns
         }
 
         return self::storageRoot().'/runs/'.$runId;
+    }
+
+    /**
+     * Decides, from the database as it is now, whether one run's files are
+     * still needed: an active run owns or reads them, they belong to a
+     * preview that can still be applied, or no run owns them yet and they are
+     * recent (an upload whose run is being created).
+     */
+    private function filesStillNeeded(string $runId, bool $recent): bool
+    {
+        $owner = PlaceImportRun::query()->find($runId);
+        if (! $owner instanceof PlaceImportRun) {
+            return $recent;
+        }
+        if ($owner->isActive()) {
+            return true;
+        }
+        $readByActive = PlaceImportRun::query()
+            ->where('files_run_id', $runId)
+            ->whereIn('state', [PlaceImportRun::PENDING, PlaceImportRun::RUNNING])
+            ->exists();
+        if ($readByActive) {
+            return true;
+        }
+        $latestPreview = PlaceImportRun::query()
+            ->where('source', 'admin')->where('dry_run', true)->where('state', PlaceImportRun::SUCCEEDED)
+            ->latest('finished_at')->value('id');
+
+        return $latestPreview === $runId && $this->appliablePreview($runId) instanceof PlaceImportRun;
     }
 
     /**
@@ -355,34 +412,15 @@ class PlaceImportRuns
     public function cleanup(): void
     {
         $this->reapInterrupted();
-        $keep = PlaceImportRun::query()
-            ->whereIn('state', [PlaceImportRun::PENDING, PlaceImportRun::RUNNING])
-            ->get(['id', 'files_run_id'])
-            ->flatMap(fn (PlaceImportRun $r): array => array_filter([$r->id, $r->files_run_id]))
-            ->all();
-        $latestPreview = PlaceImportRun::query()
-            ->where('source', 'admin')->where('dry_run', true)->where('state', PlaceImportRun::SUCCEEDED)
-            ->latest('finished_at')->first();
-        if ($latestPreview instanceof PlaceImportRun && $latestPreview->files_run_id !== null
-            && $this->appliablePreview($latestPreview->id) instanceof PlaceImportRun) {
-            $keep[] = $latestPreview->files_run_id;
-        }
 
         $root = self::storageRoot().'/runs';
         if (is_dir($root)) {
-            $dirs = File::directories($root);
-            $known = PlaceImportRun::query()->whereIn('id', array_map('basename', $dirs))->pluck('id')->all();
-            // A directory with no run yet may belong to an upload whose run is
-            // being created right now; give those an hour.
             $cutoff = Carbon::now()->subHour()->getTimestamp();
-            foreach ($dirs as $dir) {
-                $name = basename($dir);
-                if (in_array($name, $keep, true)) {
+            foreach (File::directories($root) as $dir) {
+                if ($this->filesStillNeeded(basename($dir), (int) filemtime($dir) >= $cutoff)) {
                     continue;
                 }
-                if (in_array($name, $known, true) || (int) filemtime($dir) < $cutoff) {
-                    File::deleteDirectory($dir);
-                }
+                File::deleteDirectory($dir);
             }
         }
 

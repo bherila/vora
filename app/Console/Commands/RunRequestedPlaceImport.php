@@ -36,6 +36,14 @@ class RunRequestedPlaceImport extends Command
                 return self::SUCCESS;
             }
 
+            // A queued apply may have waited behind another import.
+            if (($stale = $runs->staleApplyReason($run)) !== null) {
+                $runs->fail($run, $stale);
+                $this->error($stale);
+
+                return self::FAILURE;
+            }
+
             // A downloaded preview keeps its files, like an uploaded one, so
             // applying it imports exactly what was previewed.
             $download = $run->dry_run && $run->files_run_id === null;

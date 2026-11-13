@@ -83,6 +83,62 @@ class ImportRunsTest extends TestCase
         $this->assertFileExists($this->runs->filesDir($id).'/countryInfo.txt');
     }
 
+    public function test_concurrent_admin_requests_never_supersede_each_other(): void
+    {
+        // A request inserted a moment later, but whose own supersede has not
+        // run yet, must survive the earlier request's supersede.
+        $later = PlaceImportRun::query()->create([
+            'id' => '3a4b5c6d-7e8f-4a0b-9c1d-2e3f4a5b6c7d', 'state' => 'pending', 'source' => 'admin', 'dataset' => 'cities5000',
+            'mode' => 'update', 'requested_at' => now()->addSeconds(5),
+        ]);
+        $earlier = $this->runs->queue(['mode' => 'update', 'rehome' => false, 'dry_run' => true], 'admin', $this->admin);
+
+        $this->assertSame(PlaceImportRun::PENDING, $later->refresh()->state);
+        $this->assertSame(PlaceImportRun::PENDING, $earlier->refresh()->state);
+        $this->assertSame($later->id, $this->runs->claim()?->id);
+        $this->assertSame(PlaceImportRun::SUPERSEDED, $earlier->refresh()->state);
+    }
+
+    public function test_a_queued_apply_is_refused_if_an_import_completed_while_it_waited(): void
+    {
+        $this->fakeDownloads();
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'update', 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $this->runs->lastFinished()?->id])->assertStatus(202);
+        $apply = $this->runs->nextPending();
+
+        // Another import finishes before the runner reaches the apply.
+        $this->importGeoNamesFixture();
+        $before = Place::query()->orderBy('id')->get()->toArray();
+        $this->artisan('places:run-requested')->assertFailed();
+
+        $this->assertSame(PlaceImportRun::FAILED, $apply?->refresh()->state);
+        $this->assertSame('The city list changed after that preview ran. Preview again.', $apply?->error);
+        $this->assertSame($before, Place::query()->orderBy('id')->get()->toArray());
+    }
+
+    public function test_cleanup_decides_from_current_state_and_never_deletes_files_still_needed(): void
+    {
+        $dir = fn (string $id): string => $this->runs->filesDir($id);
+        $pending = '4b5c6d7e-8f9a-4b1c-8d2e-3f4a5b6c7d8e';
+        $finished = '5c6d7e8f-9a0b-4c2d-9e3f-4a5b6c7d8e9f';
+        $unknown = '6d7e8f9a-0b1c-4d3e-8f4a-5b6c7d8e9f0a';
+        foreach ([$pending, $finished, $unknown] as $id) {
+            File::ensureDirectoryExists($dir($id));
+        }
+        $this->runs->queue(['mode' => 'update', 'rehome' => false, 'dry_run' => false, 'files_run_id' => $pending], 'admin', $this->admin, $pending);
+        PlaceImportRun::query()->create([
+            'id' => $finished, 'state' => 'succeeded', 'source' => 'admin', 'dataset' => 'cities5000', 'mode' => 'update',
+            'files_run_id' => $finished, 'requested_at' => now(), 'finished_at' => now(),
+        ]);
+
+        $this->runs->cleanup();
+
+        $this->assertDirectoryExists($dir($pending), 'a pending run keeps its files');
+        $this->assertDirectoryExists($dir($unknown), 'a fresh directory whose run is still being created is kept');
+        $this->assertDirectoryDoesNotExist($dir($finished));
+    }
+
     public function test_the_monthly_refresh_never_displaces_an_admin_request(): void
     {
         $admin = $this->runs->queue(['mode' => 'replace', 'rehome' => false, 'dry_run' => true], 'admin', $this->admin);
