@@ -1,5 +1,5 @@
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { InterestPicker } from '@/components/interest-picker';
 import { Markdown } from '@/components/Markdown';
@@ -29,8 +29,8 @@ function involveKey(type: string, id: number): string {
 function storyDetails(story: StoryEditor) {
   return {
     title: story.title, status: story.status, audience: story.audience, discoverable: story.discoverable,
-    body: story.body ?? '', interestIds: story.interests.map((interest) => interest.id),
-    involved: story.involves.map((value) => involveKey(value.type, value.id)),
+    body: story.body ?? '', interestIds: story.interests.map((interest) => interest.id).sort((a, b) => a - b),
+    involved: story.involves.map((value) => involveKey(value.type, value.id)).sort(),
   };
 }
 
@@ -51,7 +51,8 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
   const { identities } = useIdentityStore();
   const [identitySaving, setIdentitySaving] = useState(false);
   const [savedDetails, setSavedDetails] = useState<ReturnType<typeof storyDetails> | null>(null);
-  const details = { title, status, audience, discoverable, body, interestIds, involved: [...involved] };
+  const savedDetailsRef = useRef(savedDetails);
+  const details = { title, status, audience, discoverable, body, interestIds: [...interestIds].sort((a, b) => a - b), involved: [...involved].sort() };
   const detailsDirty = savedDetails !== null && JSON.stringify(details) !== JSON.stringify(savedDetails);
 
   const hydrate = (data: StoryEditor): void => {
@@ -63,7 +64,9 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
     setBody(data.body ?? '');
     setInterestIds(data.interests.map((i) => i.id));
     setInvolved(new Set(data.involves.map((v) => involveKey(v.type, v.id))));
-    setSavedDetails(storyDetails(data));
+    const baseline = storyDetails(data);
+    savedDetailsRef.current = baseline;
+    setSavedDetails(baseline);
   };
 
   useEffect(() => {
@@ -90,6 +93,20 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
     });
   };
 
+  const reconcileDetails = (updated: StoryEditor, submitted: ReturnType<typeof storyDetails>): void => {
+    const canonical = storyDetails(updated);
+    setStory(updated);
+    savedDetailsRef.current = canonical;
+    setSavedDetails(canonical);
+    setTitle((current) => current === submitted.title ? canonical.title : current);
+    setStatus((current) => current === submitted.status ? canonical.status : current);
+    setAudience((current) => current === submitted.audience ? canonical.audience : current);
+    setDiscoverable((current) => current === submitted.discoverable ? canonical.discoverable : current);
+    setBody((current) => current === submitted.body ? canonical.body : current);
+    setInterestIds((current) => JSON.stringify([...current].sort((a, b) => a - b)) === JSON.stringify(submitted.interestIds) ? canonical.interestIds : current);
+    setInvolved((current) => JSON.stringify([...current].sort()) === JSON.stringify(submitted.involved) ? new Set(canonical.involved) : current);
+  };
+
   const saveDetails = async (): Promise<void> => {
     if (story === null) return;
     const submitted = details;
@@ -111,16 +128,7 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
         involvements,
       });
       // Adopt canonical values only where the author has not edited since submit.
-      const canonical = storyDetails(updated);
-      setStory(updated);
-      setSavedDetails(canonical);
-      setTitle((current) => current === submitted.title ? canonical.title : current);
-      setStatus((current) => current === submitted.status ? canonical.status : current);
-      setAudience((current) => current === submitted.audience ? canonical.audience : current);
-      setDiscoverable((current) => current === submitted.discoverable ? canonical.discoverable : current);
-      setBody((current) => current === submitted.body ? canonical.body : current);
-      setInterestIds((current) => JSON.stringify(current) === JSON.stringify(submitted.interestIds) ? canonical.interestIds : current);
-      setInvolved((current) => JSON.stringify([...current]) === JSON.stringify(submitted.involved) ? new Set(canonical.involved) : current);
+      reconcileDetails(updated, submitted);
       setMessage('Saved.');
       onChanged();
     } catch (e) {
@@ -206,7 +214,13 @@ export function StoryEditorPanel({ storyId, currentUserId, onBack, onChanged, on
               )}
             </div>
           ) : (
-            <CyoaGraphEditor key={story.id} story={story} onSaved={(updated) => { setStory(updated); onChanged(); }} />
+            <CyoaGraphEditor key={story.id} story={story} onSaved={(updated) => {
+              // A later completed details save owns its baseline. A graph response
+              // captured before that save must not replace its values or clean state.
+              if (savedDetails !== null && savedDetailsRef.current === savedDetails) reconcileDetails(updated, savedDetails);
+              else setStory((current) => current ? { ...current, nodes: updated.nodes, choices: updated.choices, node_count: updated.node_count } : current);
+              onChanged();
+            }} />
           )}
         </div>
 

@@ -18,7 +18,7 @@ jest.mock('@/initialData', () => ({
   }),
 }));
 
-jest.mock('@/components/interest-picker', () => ({ InterestPicker: ({ value, onChange }: { value: number[]; onChange: (ids: number[]) => void }) => <button onClick={() => onChange(value.length ? [] : [5])}>Toggle interest</button> }));
+jest.mock('@/components/interest-picker', () => ({ InterestPicker: ({ value, onChange }: { value: number[]; onChange: (ids: number[]) => void }) => <button onClick={() => onChange(value.includes(5) ? value.filter((id) => id !== 5) : [...value, 5])}>Toggle interest</button> }));
 jest.mock('@/components/Markdown', () => ({ Markdown: () => null }));
 jest.mock('./CoAuthorPanel', () => ({ CoAuthorPanel: () => null }));
 jest.mock('./CyoaGraphDiagram', () => ({ CyoaGraphDiagram: () => null }));
@@ -209,5 +209,72 @@ describe('StoryEditorPanel authoring identity', () => {
     expect(title).toHaveValue('Still here');
     expect(screen.getByText('Synthetic save failure')).toBeInTheDocument();
     expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+  });
+
+  it('treats interest and involvement selections as unordered before and during a save', async () => {
+    const initial = { ...await storiesApi.get(3), interests: [{ id: 5, name: 'First interest' }, { id: 9, name: 'Second interest' }],
+      involves: [{ type: 'user' as const, id: 8, name: 'First person' }, { type: 'user' as const, id: 10, name: 'Second person' }],
+      involvable_options: [{ type: 'user' as const, id: 8, name: 'First person' }, { type: 'user' as const, id: 10, name: 'Second person' }] };
+    jest.mocked(storiesApi.get).mockResolvedValueOnce(initial);
+    renderEditor();
+    await screen.findByRole('textbox', { name: 'Title' });
+    function reselectFirst(): void {
+      fireEvent.click(screen.getByRole('button', { name: 'Toggle interest' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Toggle interest' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'First person' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'First person' }));
+    }
+    reselectFirst();
+    expect(screen.queryByText('Unsaved details.')).not.toBeInTheDocument();
+    const pending = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    reselectFirst();
+    await act(async () => pending.resolve(initial));
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved details.')).not.toBeInTheDocument();
+  });
+
+  it('refreshes clean details from graph responses while retaining dirty fields and resubmitting canonical values', async () => {
+    const initial = { ...await storiesApi.get(3), type: 'cyoa' as const };
+    jest.mocked(storiesApi.get).mockResolvedValueOnce(initial);
+    renderEditor();
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    fireEvent.change(title, { target: { value: 'My unsaved title' } });
+    const graph = deferredStory();
+    jest.mocked(storiesApi.saveGraph).mockReturnValueOnce(graph.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
+    await act(async () => graph.resolve({ ...initial, title: 'Co-author title', audience: 'followers', discoverable: false }));
+    expect(title).toHaveValue('My unsaved title');
+    expect(screen.getByRole('combobox', { name: 'Who can see this?' })).toHaveValue('followers');
+    expect(screen.getByRole('checkbox', { name: /List in discovery/ })).not.toBeChecked();
+    expect(screen.getByText('Unsaved details.')).toBeInTheDocument();
+    const details = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(details.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(storiesApi.update).toHaveBeenLastCalledWith(3, expect.objectContaining({ title: 'My unsaved title', audience: 'followers', discoverable: false }));
+    await act(async () => details.resolve({ ...initial, title: 'My unsaved title', audience: 'followers', discoverable: false }));
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+  });
+
+  it('keeps a newer completed details save and its clean baseline when an older graph response arrives last', async () => {
+    const initial = { ...await storiesApi.get(3), type: 'cyoa' as const };
+    jest.mocked(storiesApi.get).mockResolvedValueOnce(initial);
+    renderEditor();
+    const title = await screen.findByRole('textbox', { name: 'Title' });
+    const graph = deferredStory();
+    jest.mocked(storiesApi.saveGraph).mockReturnValueOnce(graph.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
+    fireEvent.change(title, { target: { value: 'My newer saved title' } });
+    const details = deferredStory();
+    jest.mocked(storiesApi.update).mockReturnValueOnce(details.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await act(async () => details.resolve({ ...initial, title: 'My newer saved title' }));
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+    await act(async () => graph.resolve({ ...initial, title: 'Older co-author title', audience: 'followers' }));
+    expect(title).toHaveValue('My newer saved title');
+    expect(screen.getByRole('combobox', { name: 'Who can see this?' })).toHaveValue('everyone');
+    expect(screen.getByText('Saved.')).toBeInTheDocument();
+    expect(screen.queryByText('Unsaved details.')).not.toBeInTheDocument();
   });
 });
