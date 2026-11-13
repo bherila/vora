@@ -378,7 +378,7 @@ export function MediaUploadDialog({
             />
             <span>Share this to your followers&apos; feeds. Unchecking keeps the upload private to your profile.</span>
           </label></>}
-          <p className="text-xs text-muted-foreground">{screenAwake ? 'Your screen stays on while this window is open. Stay on this page until uploads finish.' : 'Keep this page open and your device awake until uploads finish.'} If interrupted, choose the same files and event again: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
+          <p className="text-xs text-muted-foreground">{screenAwake ? 'Your screen stays on while this window is open. Stay on this page until uploads finish.' : 'Keep this page open and your device awake until uploads finish.'} Use Continue unfinished or Retry failed to retry this queue without adding the same files again. After reloading the page, choose the same files and destination: videos may resume uploaded parts. Photos and some videos restart. Uploaded files are kept when you retry.</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={uploading || discarding || (isEvent && !hasEvent) || pending.length === 0}>
               {uploading ? 'Uploading…' : batchStarted ? (completed === pending.length ? 'Done' : pending.some((item) => item.status === 'queued' || item.status === 'canceled') ? 'Continue unfinished' : 'Retry failed') : 'Upload'}
