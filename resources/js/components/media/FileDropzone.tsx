@@ -10,6 +10,7 @@ interface FileDropzoneProps {
   multiple?: boolean;
   onFilesChange: (files: File[]) => void;
   helperText?: string;
+  browseLabel?: string;
 }
 
 function formatFileList(files: File[]): string {
@@ -31,7 +32,7 @@ function filesFromList(fileList: FileList | null, multiple: boolean): File[] {
   return multiple ? files : files.slice(0, 1);
 }
 
-export function FileDropzone({ accept, disabled = false, files, label, multiple = false, onFilesChange, helperText }: FileDropzoneProps) {
+export function FileDropzone({ accept, disabled = false, files, label, multiple = false, onFilesChange, helperText, browseLabel = 'Browse files' }: FileDropzoneProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -91,7 +92,7 @@ export function FileDropzone({ accept, disabled = false, files, label, multiple 
         <span className="block font-medium">{label}</span>
         <span className="mt-1 block text-sm text-muted-foreground">{helperText ?? 'Drag and drop here, or click to browse.'}</span>
         <span className="mt-4 inline-flex h-8 items-center justify-center rounded-md border bg-background px-3 text-sm font-medium shadow-xs">
-          Browse files
+          {browseLabel}
         </span>
       </button>
       <p id={`${inputId}-selected`} className="break-words text-sm text-muted-foreground">

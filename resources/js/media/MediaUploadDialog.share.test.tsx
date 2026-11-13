@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import { StrictMode } from 'react';
 
 import { MediaUploadDialog } from './MediaUploadDialog';
 
@@ -11,6 +12,12 @@ jest.mock('@/components/media/FileDropzone', () => ({
 const events = [{ ulid: 'event-one', name: 'Reception', visibility: 'everyone' as const }];
 
 describe('MediaUploadDialog shared files', () => {
+  it('queues each shared selection once when React replays mounting effects', () => {
+    const shared = [new File(['photo'], 'shared.jpg', { type: 'image/jpeg' })];
+    render(<StrictMode><MediaUploadDialog characters={[]} lastInterestIds={[]} onUploaded={jest.fn()} sharedFiles={shared} /></StrictMode>);
+    expect(within(screen.getByRole('list', { name: 'Queued files' })).getAllByRole('listitem')).toHaveLength(1);
+  });
+
   it('opens with files shared from another app queued, and stays closed without them', () => {
     const { rerender } = render(<MediaUploadDialog characters={[]} lastInterestIds={[]} onUploaded={jest.fn()} eventOptions={events} sharedFiles={[]} />);
     expect(screen.queryByRole('dialog')).toBeNull();

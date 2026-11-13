@@ -21,6 +21,15 @@ On an actual iPhone using Safari and an actual Android phone using Chrome:
    joining link in the browser where sign-in is complete.
 2. Choose ten camera-roll photos and a freshly recorded short video. Confirm
    previews, destination Event and audience are clear; titles are optional.
+   For iCloud-backed photos, start with 1–2 photos, press Upload, then use Add
+   more files to select another small group while the upload runs. Each selection
+   adds to the queue without replacing earlier files. Check edited titles and
+   the fixed destination survive. If the earlier files finish before the picker
+   returns, the dialog stays open: press Continue unfinished for the new files,
+   then Done when finished. Record whether the physical phone continues network
+   work while its picker is open; automated selection cannot establish this.
+   Vora retains the original bytes supplied by the device, with previews kept
+   separately; a picker export does not establish byte-identical iCloud originals.
    Confirm the file picker accepts the device's actual formats. Unsupported
    formats should produce a useful error, without losing other successful files.
 3. On normal Wi-Fi, upload the batch. Read the count and per-file states. Interrupt
