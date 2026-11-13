@@ -1,5 +1,5 @@
 import { LocateFixed, X } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useId, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +43,10 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
+  // Bumped by every manual choice, removal and unmount, so a slow location
+  // lookup can never overwrite a city chosen after it started.
+  const lookup = useRef(0);
+  useEffect(() => () => { lookup.current++; }, []);
 
   useEffect(() => {
     const term = query.trim();
@@ -67,6 +71,8 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
   }, [query]);
 
   function choose(place: PlaceOption) {
+    lookup.current++;
+    setLocating(false);
     onChange(place);
     setQuery('');
     setResults([]);
@@ -86,6 +92,9 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
       event.preventDefault();
       choose(results[highlighted]);
     } else if (event.key === 'Escape') {
+      // Close only the results, not the dialog around the picker.
+      event.preventDefault();
+      event.stopPropagation();
       setResults([]);
       setHighlighted(-1);
     }
@@ -98,20 +107,25 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
     }
     setError('');
     setLocating(true);
+    const generation = ++lookup.current;
+    const current = () => generation === lookup.current;
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!current()) return;
         fetchWrapper.post('/api/location/places/nearest', {
           latitude: roundCoordinate(position.coords.latitude),
           longitude: roundCoordinate(position.coords.longitude),
         })
           .then((response: NearestPlaceResponse) => {
+            if (!current()) return;
             if (response.data) choose(response.data);
             else setError('No city was found near you. Search for your city instead.');
           })
-          .catch(() => setError('Your city could not be looked up. Search for it instead.'))
-          .finally(() => setLocating(false));
+          .catch(() => { if (current()) setError('Your city could not be looked up. Search for it instead.'); })
+          .finally(() => { if (current()) setLocating(false); });
       },
       (positionError) => {
+        if (!current()) return;
         setLocating(false);
         setError(geolocationMessage(positionError));
       },
@@ -128,7 +142,7 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
       {value ? (
         <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
           <span data-testid="selected-place">{value.label}</span>
-          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => onChange(null)} aria-label="Remove city">
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => { lookup.current++; setLocating(false); onChange(null); }} aria-label="Remove city">
             <X className="h-4 w-4" aria-hidden="true" /> Remove
           </Button>
         </div>
@@ -160,7 +174,10 @@ export function PlacePicker({ value, onChange, disabled = false }: PlacePickerPr
                 role="option"
                 aria-selected={index === highlighted}
                 className={`cursor-pointer rounded px-2 py-1.5 ${index === highlighted ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'}`}
-                onMouseDown={(event) => { event.preventDefault(); choose(place); }}
+                // Keep focus in the input on press; select on click so any
+                // activation (mouse, touch, assistive technology) works.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choose(place)}
               >
                 {place.label}
               </li>

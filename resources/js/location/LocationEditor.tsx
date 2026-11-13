@@ -17,12 +17,14 @@ import {
 interface LocationEditorProps {
   initial: LocationSettings;
   onSaved?: (settings: LocationSettings) => void;
+  /** Lets the host keep itself open (and this editor mounted) while saving. */
+  onSavingChange?: ((saving: boolean) => void) | undefined;
 }
 
 interface LocationUpdateResponse { success: boolean; message?: string; data?: LocationSettings }
 
 /** The account's optional city and who may see it at each level. */
-export function LocationEditor({ initial, onSaved }: LocationEditorProps) {
+export function LocationEditor({ initial, onSaved, onSavingChange }: LocationEditorProps) {
   const countryId = useId();
   const cityId = useId();
   const [place, setPlace] = useState(initial.place);
@@ -41,6 +43,7 @@ export function LocationEditor({ initial, onSaved }: LocationEditorProps) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
+    onSavingChange?.(true);
     setMessage('');
     setError('');
     try {
@@ -59,6 +62,7 @@ export function LocationEditor({ initial, onSaved }: LocationEditorProps) {
       setError(typeof err === 'string' ? err : 'Your location could not be saved.');
     } finally {
       setSaving(false);
+      onSavingChange?.(false);
     }
   }
 
@@ -105,6 +109,7 @@ export function LocationEditor({ initial, onSaved }: LocationEditorProps) {
         Your city can’t be shown to more people than your country. People who can see your city can find you in Near me, which shows distance only roughly.
       </p>
       <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save location'}</Button>
+      {saving && <p className="text-xs text-muted-foreground" role="status">This dialog stays open until your location is saved.</p>}
     </form>
   );
 }

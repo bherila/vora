@@ -99,4 +99,23 @@ describe('AdminPlacesPage', () => {
     expect(screen.getByText('Last run failed')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Download failed (503)');
   });
+
+  it('drops chosen upload files when switching away from Upload, so hidden files are never sent', async () => {
+    mocked.post.mockResolvedValue({ data: payload() });
+    render(<AdminPlacesPage />);
+    const file = (name: string) => new File(['x'], name, { type: 'text/plain' });
+
+    fireEvent.click(screen.getByLabelText('Upload GeoNames files'));
+    fireEvent.change(screen.getByLabelText(/Cities \(/), { target: { files: [file('cities5000.txt')] } });
+    fireEvent.change(screen.getByLabelText(/Regions \(/), { target: { files: [file('admin1CodesASCII.txt')] } });
+    fireEvent.change(screen.getByLabelText(/Countries \(/), { target: { files: [file('countryInfo.txt')] } });
+    expect(screen.getByRole('button', { name: 'Import now' })).toBeEnabled();
+
+    fireEvent.click(screen.getByLabelText(/Download cities5000/));
+    fireEvent.click(screen.getByLabelText('Upload GeoNames files'));
+
+    expect(screen.getByRole('button', { name: 'Import now' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Cities \(/), { target: { files: [file('cities15000.zip')] } });
+    expect(screen.getByRole('button', { name: 'Import now' })).toBeDisabled();
+  });
 });

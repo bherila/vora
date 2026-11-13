@@ -43,7 +43,8 @@ describe('LocationEditor', () => {
     expect(mocked.get).toHaveBeenCalledWith('/api/location/places?q=portl');
 
     const option = await screen.findByRole('option', { name: 'Portland, Oregon, United States' });
-    fireEvent.mouseDown(option);
+    // Plain click activation (no mouse-down), as touch and assistive technology send.
+    fireEvent.click(option);
     expect(screen.getByTestId('selected-place')).toHaveTextContent('Portland, Oregon, United States');
 
     fireEvent.change(screen.getByLabelText('Who can see your country'), { target: { value: 'everyone' } });
@@ -97,5 +98,28 @@ describe('LocationEditor', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Location permission was denied');
     expect(mocked.post).not.toHaveBeenCalled();
+  });
+
+  it('ignores a slow location lookup once a city was chosen by hand', async () => {
+    let locate: (position: GeolocationPosition) => void = () => undefined;
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: jest.fn((success: PositionCallback) => { locate = success; }) },
+    });
+    const salem: PlaceOption = { ...portland, id: 2, name: 'Salem', label: 'Salem, Oregon, United States' };
+    mocked.get.mockResolvedValue({ data: [salem] });
+    mocked.post.mockResolvedValue({ data: portland });
+    renderEditor();
+
+    fireEvent.click(screen.getByRole('button', { name: /Use my current location/ }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'City' }), { target: { value: 'sal' } });
+    await act(async () => { jest.advanceTimersByTime(300); });
+    fireEvent.click(await screen.findByRole('option', { name: salem.label }));
+
+    await act(async () => { locate({ coords: { latitude: 45.52, longitude: -122.68 } } as GeolocationPosition); });
+
+    expect(mocked.post).not.toHaveBeenCalled();
+    expect(screen.getByTestId('selected-place')).toHaveTextContent('Salem, Oregon, United States');
+    expect(screen.getByRole('button', { name: /Use my current location/ })).toBeEnabled();
   });
 });
