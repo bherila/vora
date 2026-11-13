@@ -15,6 +15,7 @@ use App\Support\BlockGraph;
 use App\Support\MuteGraph;
 use App\Support\UserPresenter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 /**
  * People near the viewer's own city. Someone is listed only when the viewer
@@ -39,6 +40,9 @@ class NearbyPeopleController extends Controller
         private readonly LocationVisibility $visibility,
         private readonly ProfileGate $gate,
         private readonly MediaResponseService $mediaResponder,
+        // Candidates authorized per pass; also bounds each IN (...) list.
+        private readonly int $chunkSize = 500,
+        private readonly int $limit = self::LIMIT,
     ) {}
 
     public function index(NearbyPeopleRequest $request): JsonResponse
@@ -63,37 +67,61 @@ class NearbyPeopleController extends Controller
         BlockGraph::visibleTo($query, $viewer, 'users.id');
         MuteGraph::excludeMutedIdentities($query, $viewer->id, 'users.id');
 
-        $candidates = $query->with(['profilePicture', 'place.region', 'place.country'])->get();
-        $canView = $this->gate->canViewMany($viewer, $candidates);
-        $levels = $this->visibility->levelsFor($viewer, $candidates);
+        // Work through the box in bounded chunks: authorize and measure each
+        // chunk, and keep only the nearest permitted people seen so far. Memory
+        // and query size stay bounded however dense the area is, and the
+        // result is still the true nearest $limit, not the first ones found.
+        $best = [];
+        $query->addSelect(['places.lat_e4 as candidate_lat_e4', 'places.lng_e4 as candidate_lng_e4'])
+            ->chunkById($this->chunkSize, function (Collection $chunk) use ($viewer, $origin, $radius, &$best): void {
+                $canView = $this->gate->canViewMany($viewer, $chunk);
+                $levels = $this->visibility->levelsFor($viewer, $chunk);
+                foreach ($chunk as $user) {
+                    if (! ($canView[$user->id] ?? false) || ($levels[$user->id] ?? null) !== LocationVisibility::CITY) {
+                        continue;
+                    }
+                    $km = $user->place_id === $origin->id ? 0.0 : PlaceDirectory::distanceKm(
+                        $origin->latitude,
+                        $origin->longitude,
+                        $user->candidate_lat_e4 / Place::COORDINATE_SCALE,
+                        $user->candidate_lng_e4 / Place::COORDINATE_SCALE,
+                    );
+                    if ($km <= $radius) {
+                        $best[] = ['id' => $user->id, 'km' => $km, 'name' => $this->name($user)];
+                    }
+                }
+                usort($best, fn (array $a, array $b): int => ($a['km'] <=> $b['km'])
+                    ?: strcasecmp($a['name'], $b['name'])
+                    ?: ($a['id'] <=> $b['id']));
+                $best = array_slice($best, 0, $this->limit);
+            }, 'users.id', 'id');
 
-        $people = $candidates
-            ->filter(fn (User $user): bool => ($canView[$user->id] ?? false) && ($levels[$user->id] ?? null) === LocationVisibility::CITY)
-            ->map(function (User $user) use ($origin): array {
+        // Only the final people are loaded in full.
+        $users = User::query()
+            ->with(['profilePicture', 'place.region', 'place.country'])
+            ->whereIn('id', array_column($best, 'id'))
+            ->get()
+            ->keyBy('id');
+
+        $people = collect($best)
+            ->filter(fn (array $row): bool => $users->has($row['id']) && $users[$row['id']]->place instanceof Place)
+            ->map(function (array $row) use ($users, $viewer, $origin): array {
+                /** @var User $user */
+                $user = $users[$row['id']];
                 /** @var Place $place */
                 $place = $user->place;
-                $km = $place->id === $origin->id
-                    ? 0.0
-                    : PlaceDirectory::distanceKm($origin->latitude, $origin->longitude, $place->latitude, $place->longitude);
 
-                return ['user' => $user, 'place' => $place, 'km' => $km];
+                return [
+                    'id' => $user->id,
+                    'display_name' => $row['name'],
+                    'avatar_url' => UserPresenter::avatarUrl($user, $this->mediaResponder, $viewer),
+                    'user_type' => $user->user_type,
+                    'gender' => $user->gender,
+                    'location' => LocationVisibility::payload($place, LocationVisibility::CITY),
+                    'same_city' => $place->id === $origin->id,
+                    'within_km' => $place->id === $origin->id ? null : self::band($row['km']),
+                ];
             })
-            ->filter(fn (array $row): bool => $row['km'] <= $radius)
-            ->sortBy([
-                fn (array $a, array $b): int => $a['km'] <=> $b['km'],
-                fn (array $a, array $b): int => strcasecmp($this->name($a['user']), $this->name($b['user'])),
-            ])
-            ->take(self::LIMIT)
-            ->map(fn (array $row): array => [
-                'id' => $row['user']->id,
-                'display_name' => $this->name($row['user']),
-                'avatar_url' => UserPresenter::avatarUrl($row['user'], $this->mediaResponder, $viewer),
-                'user_type' => $row['user']->user_type,
-                'gender' => $row['user']->gender,
-                'location' => LocationVisibility::payload($row['place'], LocationVisibility::CITY),
-                'same_city' => $row['place']->id === $origin->id,
-                'within_km' => $row['place']->id === $origin->id ? null : self::band($row['km']),
-            ])
             ->values();
 
         return response()->json(['success' => true, 'data' => [
