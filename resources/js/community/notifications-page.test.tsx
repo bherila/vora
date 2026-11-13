@@ -125,3 +125,22 @@ it('does not let a delayed history response undo a read completed in the bell', 
   await waitFor(() => expect(screen.getAllByText('Recent commented on your post.')).toHaveLength(2));
   expect(screen.queryByRole('button', { name: /Mark as read:/ })).not.toBeInTheDocument();
 });
+
+
+it('refreshes the unread badge when notifications arrive before the bell reopens', async () => {
+  let unread = 0;
+  get.mockImplementation((url: string) => Promise.resolve(url.includes('unread-count')
+    ? { success: true, data: { count: unread } } : page([item('new', 'Recent')])));
+  render(<NotificationBell />);
+  const bell = screen.getByRole('button', { name: 'Notifications' });
+  await waitFor(() => expect(get).toHaveBeenCalledWith('/api/notifications/unread-count'));
+  expect(within(bell).queryByText('2')).not.toBeInTheDocument();
+  unread = 2;
+  fireEvent.click(bell);
+  await waitFor(() => expect(within(bell).getByText('2')).toBeInTheDocument());
+  await screen.findByText('Recent commented on your post.');
+  fireEvent.click(bell);
+  unread = 3;
+  fireEvent.click(bell);
+  await waitFor(() => expect(within(bell).getByText('3')).toBeInTheDocument());
+});
