@@ -42,7 +42,7 @@ export function useNotifications(page: number, enabled = true) {
     void refreshCount();
     window.addEventListener(NOTIFICATIONS_READ, readChanged);
     return () => { active = false; window.removeEventListener(NOTIFICATIONS_READ, readChanged); };
-  }, [revision]);
+  }, [revision, enabled]);
 
   useEffect(() => {
     if (!enabled) return;
