@@ -141,7 +141,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
-    Route::get('/api/account/export', [ProfileController::class, 'export']);
+    Route::get('/api/account/export', [ProfileController::class, 'export'])->name('account.export');
     Route::get('/api/account/storage', [ProfileController::class, 'storageUsage']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);

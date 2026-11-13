@@ -15,6 +15,7 @@ use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
 use App\Services\Chat\ChatState;
+use App\Services\Library\LibraryExport;
 use App\Services\Location\LocationPresenter;
 use App\Services\Media\AccountStorageUsage;
 use App\Services\Media\MediaResponseService;
@@ -423,7 +424,7 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function export(Request $request, RecentProfileTrail $recentProfiles, LocationPresenter $location): JsonResponse
+    public function export(Request $request, RecentProfileTrail $recentProfiles, LocationPresenter $location, LibraryExport $library): JsonResponse
     {
         $user = $request->user();
 
@@ -465,6 +466,7 @@ class ProfileController extends Controller
             'success' => true,
             'data' => [
                 'exported_at' => now()->toIso8601String(),
+                'library' => $library->forUser($user),
                 'account' => [
                     'id' => $user->id,
                     'name' => $user->name,

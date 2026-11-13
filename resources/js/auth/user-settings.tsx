@@ -959,7 +959,7 @@ export function UserSettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Export account data</CardTitle>
-              <CardDescription>Download a copy of your account and content data.</CardDescription>
+              <CardDescription>Download your account and content data, including owned Library notes and collection organization. Original files can be downloaded separately from your Library.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button type="button" variant="outline" onClick={handleExportAccount}>
