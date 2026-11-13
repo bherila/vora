@@ -16,7 +16,29 @@ const page = { data: [entry], current_page: 1, last_page: 3, total: 101 };
 
 describe('AuditLogPage', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/admin/audit-log');
     jest.mocked(fetchWrapper.get).mockReset().mockResolvedValue(page);
+  });
+
+  it('hydrates a local user deep link and retains that filter while paging', async () => {
+    window.history.replaceState(null, '', '/admin/audit-log?user_id=9&subject=88&event=ignored');
+    render(<AuditLogPage />);
+    expect(await screen.findByText('101 events match.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Local user ID')).toHaveValue(9);
+    expect(screen.getByLabelText('Event (exact)')).toHaveValue('');
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/auth/audit-log/all?page=1&per_page=50&user_id=9');
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ ...page, current_page: 2 });
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Page 2 of 3')).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/auth/audit-log/all?page=2&per_page=50&user_id=9');
+  });
+
+  it.each(['0', '-1', '1.5', '1e2', 'provider:9', '9007199254740992', ''])('ignores an invalid local user deep link %s', async (id) => {
+    window.history.replaceState(null, '', `/admin/audit-log?user_id=${encodeURIComponent(id)}`);
+    render(<AuditLogPage />);
+    await screen.findByText('101 events match.');
+    expect(screen.getByLabelText('Local user ID')).toHaveValue(null);
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/auth/audit-log/all?page=1&per_page=50');
   });
 
   it('pages through the host audit API and applies exact filters from the first page', async () => {
