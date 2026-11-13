@@ -117,6 +117,28 @@ class ImportRunsTest extends TestCase
         $this->assertSame($before, Place::query()->orderBy('id')->get()->toArray());
     }
 
+    public function test_a_preview_is_stale_after_an_import_that_failed_part_way(): void
+    {
+        $this->fakeDownloads();
+        $this->actingAs($this->admin)->postJson('/api/admin/places/import', ['source' => 'download', 'mode' => 'update', 'dry_run' => true])->assertStatus(202);
+        $this->artisan('places:run-requested')->assertSuccessful();
+        $preview = $this->runs->lastFinished()?->id;
+
+        // An import that may have written some cities before failing, or
+        // that was killed, still changes what the preview was based on.
+        foreach ([PlaceImportRun::FAILED, PlaceImportRun::INTERRUPTED] as $i => $state) {
+            PlaceImportRun::query()->create([
+                'id' => "7e8f9a0b-1c2d-4e3f-8a4b-5c6d7e8f9a0{$i}", 'state' => $state, 'source' => 'command', 'dataset' => 'cities5000',
+                'mode' => 'update', 'requested_at' => now()->addSecond(), 'started_at' => now()->addSecond(), 'finished_at' => now()->addSeconds(2),
+            ]);
+            $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $preview])->assertStatus(409);
+            PlaceImportRun::query()->whereKey("7e8f9a0b-1c2d-4e3f-8a4b-5c6d7e8f9a0{$i}")->delete();
+        }
+
+        // A dry run changes nothing, so it does not make the preview stale.
+        $this->postJson('/api/admin/places/import', ['source' => 'preview', 'preview_id' => $preview])->assertStatus(202);
+    }
+
     public function test_cleanup_decides_from_current_state_and_never_deletes_files_still_needed(): void
     {
         $dir = fn (string $id): string => $this->runs->filesDir($id);

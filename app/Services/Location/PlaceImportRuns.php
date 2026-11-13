@@ -335,14 +335,18 @@ class PlaceImportRuns
     }
 
     /**
-     * Whether an import completed after $preview ran, making its counts stale.
+     * Whether an import that may have changed the city list started after
+     * $preview ran, making its counts stale. Imports write in chunks, so a run
+     * that failed, was interrupted or is still running counts too, not only
+     * one that succeeded. $except is the apply run doing the asking.
      */
-    public function importedSince(PlaceImportRun $preview): bool
+    public function importedSince(PlaceImportRun $preview, ?string $except = null): bool
     {
         return PlaceImportRun::query()
-            ->where('state', PlaceImportRun::SUCCEEDED)
             ->where('dry_run', false)
-            ->where('finished_at', '>', $preview->finished_at?->format('Y-m-d H:i:s.u'))
+            ->whereIn('state', [PlaceImportRun::RUNNING, PlaceImportRun::SUCCEEDED, PlaceImportRun::FAILED, PlaceImportRun::INTERRUPTED])
+            ->where('started_at', '>', $preview->finished_at?->format('Y-m-d H:i:s.u'))
+            ->when($except !== null, fn ($q) => $q->whereKeyNot($except))
             ->exists();
     }
 
@@ -357,7 +361,7 @@ class PlaceImportRuns
             return null;
         }
         $preview = PlaceImportRun::query()->find($run->preview_of);
-        if (! $preview instanceof PlaceImportRun || $this->importedSince($preview)) {
+        if (! $preview instanceof PlaceImportRun || $this->importedSince($preview, $run->id)) {
             return 'The city list changed after that preview ran. Preview again.';
         }
 
