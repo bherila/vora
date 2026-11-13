@@ -67,6 +67,14 @@ assertions, trusted configuration, nonces, request bounds and durable operation
 receipts. Vora's adapter owns local authorization and changes. A valid provider
 signature proves the actor's identity, not their Vora administrator permission.
 
+The local administrator UI and delegated adapter share Vora's administrator
+eligibility, protected-account rules and ordered directory locks. Role changes
+refuse self-demotion and changes to the primary administrator, and recheck the
+actor inside the mutation transaction. Local role changes record the actor,
+target and previous/new application-administrator flag in the shared host audit
+table; an audit failure rolls back the account update. This does not grant or
+change a provider directory role, client grant or credential.
+
 Keep both consumer switches off until the schema and configured read path pass:
 
 ```dotenv

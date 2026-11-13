@@ -16,6 +16,8 @@
       </button>
     </form>
 
+    <p class="mt-4 text-sm"><a href="{{ route('account.export') }}" class="underline underline-offset-4">Export account data without reactivating</a></p>
+
     <form method="POST" action="{{ route('logout') }}" class="mt-3">
       @csrf
       <button type="submit" class="text-sm text-muted-foreground underline-offset-4 hover:underline">

@@ -30,6 +30,7 @@ interface AdminUser {
   display_name: string | null;
   birth_date: string | null;
   email: string;
+  identity: AdminIdentity;
   is_admin: boolean;
   is_disabled: boolean;
   is_deactivated: boolean;
@@ -62,6 +63,43 @@ interface AdminUser {
   referrer_user_id: number | null;
   referrer_display_name: string | null;
   restrictions: AdminRestriction[];
+}
+
+interface AdminIdentity {
+  sign_in_mode: 'local' | 'provider' | 'embedded';
+  configured_provider: string | null;
+  binding: 'local' | 'configured_provider' | 'other_provider' | 'incomplete';
+  provider: string | null;
+  subject: string | null;
+  provider_account_url: string | null;
+  local_email_lock_available: boolean;
+}
+
+interface IdentityOwnershipProps {
+  identity: AdminIdentity;
+}
+
+function IdentityOwnership({ identity }: IdentityOwnershipProps) {
+  const mode = { local: 'Local sign-in', provider: 'External provider sign-in', embedded: 'Embedded provider sign-in' }[identity.sign_in_mode];
+  const binding = {
+    local: 'Local account — no provider binding',
+    configured_provider: 'Bound to the configured provider',
+    other_provider: 'Bound to a different provider',
+    incomplete: 'Incomplete provider binding',
+  }[identity.binding];
+
+  return <section aria-label="Sign-in ownership" className="space-y-2 rounded-lg border p-3 text-sm">
+    <h3 className="font-medium">Sign-in ownership</h3>
+    <p>{mode}{identity.configured_provider !== null && <> · Configured provider: <code className="break-all">{identity.configured_provider}</code></>}</p>
+    <p>{binding}</p>
+    {identity.provider !== null && <p>Binding provider: <code className="break-all">{identity.provider}</code></p>}
+    {identity.subject !== null && <p>Provider subject: <code className="whitespace-pre-wrap break-all">{identity.subject}</code></p>}
+    {(identity.binding === 'configured_provider' || identity.binding === 'other_provider') && <p className="text-muted-foreground">Email, password and passkeys belong to the identity provider. The local email lock does not govern provider email changes.</p>}
+    {identity.binding === 'other_provider' && <p className="text-muted-foreground">Check this binding before directing the person to the configured provider.</p>}
+    {identity.binding === 'incomplete' && <p className="text-muted-foreground">Check both provider and subject with the identity operator. This page cannot repair bindings.</p>}
+    {identity.provider_account_url !== null && <p><a href={identity.provider_account_url} rel="noopener noreferrer" className="underline underline-offset-4">Provider self-service</a><span className="text-muted-foreground"> uses this browser’s provider session. Ask this person to open it in their own session.</span></p>}
+    {identity.binding === 'configured_provider' && identity.sign_in_mode !== 'local' && identity.provider_account_url === null && <p className="text-muted-foreground">The provider self-service link is unavailable. Check the configured provider connection.</p>}
+  </section>;
 }
 
 type RestrictionCapability = 'media.upload' | 'media.view' | 'comment.create';
@@ -193,7 +231,7 @@ function userFlags(user: AdminUser, eventProfile: boolean): string[] {
   if (user.id_verified) flags.push('ID/Age verified');
   if (moduleEnabled('events') && user.event_uploads_auto_approved) flags.push('Event uploads auto-approved');
   if (user.name_locked) flags.push('Real name locked');
-  if (user.email_locked) flags.push('Email locked');
+  if (user.email_locked && user.identity.local_email_lock_available) flags.push('Email locked');
   if (user.trusted_inviter) flags.push('Trusted inviter');
   if (!user.can_receive_invites) flags.push('No invites');
   if (user.storage_unlimited || user.storage_limit_bytes !== null) flags.push(`Storage: ${storageLabel(user)}`);
@@ -646,6 +684,8 @@ export function AdminUsersPage() {
             <Badge className={status.className}>{status.label}</Badge>
             {userFlags(user, eventProfile).map((flag) => <Badge key={flag} variant="outline">{flag}</Badge>)}
           </div>
+          <IdentityOwnership identity={user.identity} />
+          <a className="text-sm underline underline-offset-4" href={`/admin/audit-log?user_id=${user.id}`}>View Vora audit history</a>
 
           {user.is_deleted && (
             <Callout>
@@ -711,17 +751,18 @@ export function AdminUsersPage() {
           {/* Normal controls 404 for soft-deleted users (routes aren't trashed-aware); only Restore/Purge apply. */}
           {!user.is_deleted && (
             <>
-              <ActionGroup title="Account">
+              <ActionGroup title="Vora application access">
+                <p className="basis-full text-sm text-muted-foreground">These controls govern Vora access. Provider credentials and provider administrator roles are managed separately.</p>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => beginRestriction(user)} data-test="admin-users-restrict">Restrict…</Button>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleDisabled(user)} data-test="admin-users-toggle-disabled">
-                  {user.is_disabled ? 'Enable' : 'Disable'}
+                  {user.is_disabled ? 'Enable Vora account' : 'Disable Vora account'}
                 </Button>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleAdmin(user)} data-test="admin-users-toggle-admin">
-                  {user.is_admin ? 'Remove admin' : 'Make admin'}
+                  {user.is_admin ? 'Remove Vora admin' : 'Make Vora admin'}
                 </Button>
               </ActionGroup>
 
-              <ActionGroup title="Identity & age">
+              <ActionGroup title="Vora profile & age">
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleIdVerification(user)} data-test="admin-users-toggle-id-verified">
                   {user.id_verified ? 'Clear ID/age verification' : 'Verify ID/age'}
                 </Button>
@@ -729,9 +770,9 @@ export function AdminUsersPage() {
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleNameLock(user)} data-test="admin-users-toggle-name-lock">
                   {user.name_locked ? 'Unlock real name' : 'Lock real name'}
                 </Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleEmailLock(user)} data-test="admin-users-toggle-email-lock">
-                  {user.email_locked ? 'Unlock email' : 'Lock email'}
-                </Button>
+                {user.identity.local_email_lock_available && <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggleEmailLock(user)} data-test="admin-users-toggle-email-lock">
+                  {user.email_locked ? 'Unlock local email' : 'Lock local email'}
+                </Button>}
               </ActionGroup>
 
               <ActionGroup title="Storage">

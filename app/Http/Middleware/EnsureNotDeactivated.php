@@ -10,7 +10,8 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Gates self-deactivated accounts to the reactivate page. They remain logged in
  * but cannot use the app (or Settings) until they reactivate. The reactivate
- * page/action and logout are exempt so the user can get back in or sign out, and
+ * page/action, owned-data export and logout are exempt so the user can get back in,
+ * retain a copy of their data or sign out, and
  * the public legal pages are exempt so the footer's Privacy/Terms links stay
  * reachable from the deactivated page.
  */
@@ -19,6 +20,7 @@ class EnsureNotDeactivated
     private const ALLOWED_ROUTES = [
         'account.deactivated',
         'account.reactivate',
+        'account.export',
         'logout',
         'privacy',
         'terms',

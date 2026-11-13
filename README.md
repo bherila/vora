@@ -14,12 +14,17 @@ taxonomy, and user interest ratings.
   email codes and passkeys itself, or sends people to an OAuth identity provider
   (see [Sign-in through an identity provider](#sign-in-through-an-identity-provider)).
 - **Admin users**: admins can view users, approve verified users, toggle admin
-  and disabled flags, and manage lock/verification fields.
+  and disabled flags, and manage lock/verification fields. Support context
+  distinguishes provider-owned identity from Vora access; local and delegated
+  administrator-role changes share safeguards and audited mutations.
 - **Interests**: admins define a hierarchical interest catalog. Users browse the
   hierarchy and rate each predefined interest from `-10` to `+10`.
 - **Interest requests**: users can request new interests for admin review.
   Admins can edit, approve, reject, or delete pending requests.
-- **Audit log**: auth audit data is available through the admin UI.
+- **Audit log**: admins can page and filter host auth/access events, inspect safe
+  actor and outcome details, and open the related local account.
+- **Notifications**: the bell links to paginated history with read controls;
+  existing mute, block and recipient visibility rules apply to both surfaces.
 - **Profiles and personas**: users have self-profiles and optional Linked or
   Separate personas, with independent follow scopes and authoring identities.
 - **Feed and discussions**: users publish posts, comment on discussions, and
@@ -40,6 +45,9 @@ taxonomy, and user interest ratings.
   is visible in Library and Settings; admins enable storage and set optional
   account limits. Pending uploads reserve space, and users see allowance warnings.
   Bulk actions organize or remove selected items without copying stored files.
+  Account JSON exports include owned notes, saved-note snapshots and collection
+  organization. Deactivated accounts can export without reactivating; original
+  files are downloaded separately through Library.
 
 ## Tech Stack
 

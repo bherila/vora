@@ -24,6 +24,15 @@ const user = {
   display_name: 'Alex',
   birth_date: '1990-01-01',
   email: 'alex@example.test',
+  identity: {
+    sign_in_mode: 'local' as const,
+    configured_provider: null,
+    binding: 'local' as const,
+    provider: null,
+    subject: null,
+    provider_account_url: null,
+    local_email_lock_available: true,
+  },
   is_admin: false,
   is_disabled: false,
   is_deactivated: false,
@@ -351,7 +360,7 @@ describe('AdminUsersPage list and detail panel', () => {
   it('groups actions and limits deleted accounts to restore and purge', async () => {
     render(<AdminUsersPage />);
     const panel = await screen.findByRole('complementary', { name: 'User details' });
-    for (const group of ['Account', 'Identity & age', 'Storage', 'Event uploads', 'Invites', 'Danger zone']) {
+    for (const group of ['Vora application access', 'Vora profile & age', 'Storage', 'Event uploads', 'Invites', 'Danger zone']) {
       expect(within(panel).getByRole('heading', { name: group })).toBeInTheDocument();
     }
 
@@ -388,5 +397,70 @@ describe('AdminUsersPage list and detail panel', () => {
     fireEvent(window, new HashChangeEvent('hashchange'));
     await waitFor(() => expect(within(panel).getByRole('heading', { name: 'Daybright' })).toBeInTheDocument());
     window.history.replaceState({}, '', '/admin/users');
+  });
+});
+
+describe('AdminUsersPage sign-in ownership', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    mockProfile = 'vora';
+    mockEventsEnabled = true;
+    jest.clearAllMocks();
+    window.history.replaceState(null, '', '/admin/users');
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: user }) });
+  });
+
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  it('keeps local identity and email locking visibly separate from application role and access', async () => {
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
+    render(<AdminUsersPage />);
+    const panel = await details();
+    expect(within(panel).getByText('Local sign-in')).toBeInTheDocument();
+    expect(within(panel).getByText('Local account — no provider binding')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Lock local email' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('link', { name: 'Provider self-service' })).not.toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'View Vora audit history' })).toHaveAttribute('href', '/admin/audit-log?user_id=8');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Disable Vora account' }));
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith('/api/admin/users/8', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ is_disabled: true }) })));
+  });
+
+  it.each([
+    ['provider', 'External provider sign-in', 'https://identity.example.test/settings'],
+    ['embedded', 'Embedded provider sign-in', 'https://app.example.test/auth/settings'],
+  ] as const)('explains %s ownership and only hands off self-service for the current browser account', async (mode, label, url) => {
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, email_locked: true, identity: {
+      sign_in_mode: mode, configured_provider: 'example', binding: 'configured_provider', provider: 'example',
+      subject: 'Opaque/<Subject>', provider_account_url: url, local_email_lock_available: false,
+    } }], settings: { default_storage_limit_bytes: null } });
+    render(<AdminUsersPage />);
+    const panel = await details();
+    expect(within(panel).getByText(label, { exact: false })).toBeInTheDocument();
+    expect(within(panel).getByText('Opaque/<Subject>')).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Provider self-service' })).toHaveAttribute('href', url);
+    expect(within(panel).getByText(/uses this browser’s provider session/)).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /local email/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Email locked')).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Make Vora admin' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Edit birth date' })).toBeInTheDocument();
+    expect(within(panel).getByText('Vora profile & age')).toBeInTheDocument();
+    expect(within(panel).getByText(/Provider credentials and provider administrator roles are managed separately/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['other_provider', 'Bound to a different provider'],
+    ['incomplete', 'Incomplete provider binding'],
+    ['configured_provider', 'Bound to the configured provider'],
+  ] as const)('provides support context without a provider link for %s or unavailable configuration', async (binding, label) => {
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, identity: {
+      sign_in_mode: 'provider', configured_provider: 'example', binding, provider: binding === 'incomplete' ? null : binding === 'configured_provider' ? 'example' : 'other',
+      subject: 'subject', provider_account_url: null, local_email_lock_available: false,
+    } }], settings: { default_storage_limit_bytes: null } });
+    render(<AdminUsersPage />);
+    const panel = await details();
+    expect(within(panel).getByText(label)).toBeInTheDocument();
+    expect(within(panel).queryByRole('link', { name: 'Provider self-service' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /local email/ })).not.toBeInTheDocument();
   });
 });
