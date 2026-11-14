@@ -142,4 +142,21 @@ class LocationApiTest extends TestCase
             'place_id' => 5746545, 'country_audience' => 'everyone', 'city_audience' => 'everyone',
         ])->assertForbidden();
     }
+
+    public function test_deleting_the_account_clears_its_location(): void
+    {
+        // Another admin keeps the last-admin guard out of the way.
+        User::factory()->approved()->create(['is_admin' => true]);
+        $user = User::factory()->approved()->create([
+            'place_id' => 5746545, 'location_country_audience' => 'everyone', 'location_city_audience' => 'followers',
+        ]);
+
+        $this->actingAs($user)->postJson('/api/account/delete')->assertOk();
+
+        $deleted = User::withTrashed()->findOrFail($user->id);
+        $this->assertTrue($deleted->trashed());
+        $this->assertNull($deleted->place_id);
+        $this->assertSame('nobody', $deleted->location_country_audience->value);
+        $this->assertSame('nobody', $deleted->location_city_audience->value);
+    }
 }

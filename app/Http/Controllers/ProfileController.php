@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Audience;
+use App\Enums\LocationAudience;
 use App\Enums\MediaPurpose;
 use App\Enums\MediaType;
 use App\Http\Requests\Profile\BanAppealRequest;
@@ -219,6 +220,13 @@ class ProfileController extends Controller
 
         $recentProfiles->clear($user);
         $this->chatState->touchUserAndPeers($user);
+        // A deleted account keeps its row until it is purged; its location is
+        // not kept for that period (restoring the account leaves it unset).
+        $user->forceFill([
+            'place_id' => null,
+            'location_country_audience' => LocationAudience::Nobody,
+            'location_city_audience' => LocationAudience::Nobody,
+        ])->save();
         $user->delete();
 
         Auth::logout();
