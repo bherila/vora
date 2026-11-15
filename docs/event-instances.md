@@ -173,9 +173,12 @@ checks.
 
 The primary `prod` deployment continues automatically on `main`. Additional
 instances use **Release instance → Run workflow** with a GitHub environment name
-and the intended branch/tag, or set `source_ref` to a Vora commit, tag, or branch.
-When omitted within the Vora repository, the exact workflow-triggering commit is
-built, preserving the primary production behavior. Create the environment before
+and `source_ref` set to a reviewed main commit (or a tag pointing at one). The
+workflow resolves the ref to a commit and refuses to build or deploy anything
+that is not on `main` ancestry, including branches, pull request refs, and fork
+commits. When omitted within the Vora repository, the exact workflow-triggering
+commit is built (and must itself be on `main`), preserving the primary
+production behavior. Create the environment before
 running a release and configure its own secrets:
 
 - `SSH_HOST`, `SSH_USERNAME`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`.

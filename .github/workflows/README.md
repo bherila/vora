@@ -30,7 +30,8 @@ Once the `prod` environment is created, you need to configure the following secr
 needs the same secrets as `prod` plus the variables `DEPLOY_PROFILE=event` and
 `DEPLOY_ENABLED=true`. Set `DEPLOY_ENABLED=false` to stop following `main`.
 Instance repositories can still call `release-instance.yml` with a pinned
-`source_ref` for reviewed releases.
+`source_ref` for reviewed releases; the workflow rejects any `source_ref` (or
+selected workflow commit) that is not on `main` ancestry.
 
 Every environment, `prod` included, is self-contained: its SSH and target
 secrets plus `DEPLOY_ENABLED` and `DEPLOY_PROFILE` (`vora` or `event`) live on
