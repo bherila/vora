@@ -8,7 +8,9 @@ use App\Models\FollowRequest;
 use App\Models\Post;
 use App\Models\PostComment;
 use App\Models\User;
+use App\Notifications\PostCommentedOn;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class PostCommentTest extends TestCase
@@ -109,6 +111,35 @@ class PostCommentTest extends TestCase
             ->assertJsonPath('data.0.author.display_name', 'Visible Owner')
             ->assertJsonPath('data.1.author.id', $commenter->id)
             ->assertJsonPath('data.1.author.display_name', 'Other Commenter');
+    }
+
+    public function test_a_burst_of_comments_notifies_the_author_once(): void
+    {
+        Notification::fake();
+        $author = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        foreach (range(1, 3) as $n) {
+            $this->actingAs($commenter)->postJson("/api/posts/{$post->id}/comments", ['body' => "Comment {$n}"])->assertCreated();
+        }
+        Notification::assertSentToTimes($author, PostCommentedOn::class, 1);
+
+        $this->travel(16)->minutes();
+        $this->actingAs($commenter)->postJson("/api/posts/{$post->id}/comments", ['body' => 'Later'])->assertCreated();
+        Notification::assertSentToTimes($author, PostCommentedOn::class, 2);
+    }
+
+    public function test_commenting_is_rate_limited(): void
+    {
+        $author = User::factory()->approved()->create();
+        $commenter = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        foreach (range(1, 20) as $n) {
+            $this->actingAs($commenter)->postJson("/api/posts/{$post->id}/comments", ['body' => "Comment {$n}"])->assertCreated();
+        }
+        $this->actingAs($commenter)->postJson("/api/posts/{$post->id}/comments", ['body' => 'One more'])->assertStatus(429);
     }
 
     public function test_cannot_comment_on_a_post_you_cannot_view(): void

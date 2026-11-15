@@ -357,8 +357,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     // Saved favorites (polymorphic). Toggling is on the current user; the listing
     // is per-profile and privacy-intersected in the controller.
-    Route::post('/api/favorites', [FavoriteController::class, 'store']);
-    Route::delete('/api/favorites', [FavoriteController::class, 'destroy']);
+    Route::post('/api/favorites', [FavoriteController::class, 'store'])->middleware('throttle:60,1,favorites');
+    Route::delete('/api/favorites', [FavoriteController::class, 'destroy'])->middleware('throttle:60,1,favorites');
 
     // Abuse reports (polymorphic: media, stories, posts). Throttled — a handful
     // of reports a minute is plenty and this blunts report-spam.
@@ -432,15 +432,16 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     Route::prefix('api/posts')->group(function () {
         Route::get('/', [PostController::class, 'index']);
-        Route::post('/', [PostController::class, 'store']);
+        // Each post fans out to every follower.
+        Route::post('/', [PostController::class, 'store'])->middleware('throttle:10,1,post-create');
         Route::get('/by-ulid/{ulid}', [PostController::class, 'showByUlid']);
         Route::delete('/{post}', [PostController::class, 'destroy']);
-        Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
-        Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
+        Route::post('/{post}/reactions', [PostReactionController::class, 'store'])->middleware('throttle:60,1,reactions');
+        Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy'])->middleware('throttle:60,1,reactions');
         Route::get('/{post}/comments', [PostCommentController::class, 'index'])
             ->middleware('throttle:120,1,post-comments-read')
             ->name('posts.comments.index');
-        Route::post('/{post}/comments', [PostCommentController::class, 'store']);
+        Route::post('/{post}/comments', [PostCommentController::class, 'store'])->middleware('throttle:20,1,comment-create');
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });
 

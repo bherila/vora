@@ -6,7 +6,9 @@ use App\Enums\Audience;
 use App\Models\Post;
 use App\Models\PostReaction;
 use App\Models\User;
+use App\Notifications\PostReactedTo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class PostReactionTest extends TestCase
@@ -31,6 +33,36 @@ class PostReactionTest extends TestCase
             ->assertJsonPath('data.reaction_count', 1);
 
         $this->assertSame(1, PostReaction::query()->count());
+    }
+
+    public function test_unreacting_and_reacting_again_does_not_renotify_the_author(): void
+    {
+        Notification::fake();
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        foreach (range(1, 3) as $ignored) {
+            $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertOk();
+            $this->actingAs($viewer)->deleteJson("/api/posts/{$post->id}/reactions")->assertOk();
+        }
+        Notification::assertSentToTimes($author, PostReactedTo::class, 1);
+
+        $this->travel(25)->hours();
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertOk();
+        Notification::assertSentToTimes($author, PostReactedTo::class, 2);
+    }
+
+    public function test_reacting_is_rate_limited(): void
+    {
+        $author = User::factory()->approved()->create();
+        $viewer = User::factory()->approved()->create();
+        $post = Post::factory()->for($author)->approved()->create();
+
+        foreach (range(1, 60) as $ignored) {
+            $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertOk();
+        }
+        $this->actingAs($viewer)->postJson("/api/posts/{$post->id}/reactions")->assertStatus(429);
     }
 
     public function test_a_reaction_can_be_removed(): void

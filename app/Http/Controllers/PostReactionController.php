@@ -6,6 +6,8 @@ use App\Http\Requests\Post\ReactionRequest;
 use App\Models\Post;
 use App\Models\User;
 use App\Notifications\PostReactedTo;
+use App\Support\NotificationDedupe;
+use DateInterval;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -29,8 +31,9 @@ class PostReactionController extends Controller
         ]);
 
         // Notify the author once, only on a genuinely new reaction and never for
-        // their own.
-        if ($reaction->wasRecentlyCreated && $post->user_id !== $user->id && $post->user?->notify_post_reaction) {
+        // their own; un-reacting and reacting again within a day stays quiet.
+        if ($reaction->wasRecentlyCreated && $post->user_id !== $user->id && $post->user?->notify_post_reaction
+            && NotificationDedupe::firstWithin('post-reaction', (string) $post->id, $user->id, new DateInterval('P1D'))) {
             $post->user->notify(new PostReactedTo($post, $user));
         }
 
