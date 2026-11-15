@@ -66,7 +66,7 @@ class AuthRateLimitTest extends TestCase
     #[Test]
     public function verify_is_rate_limited_per_ip(): void
     {
-        foreach (range(1, 10) as $ignored) {
+        foreach (range(1, 20) as $ignored) {
             $this->postJson('/api/auth/two-factor/verify', ['attempt_token' => 'missing', 'code' => '123456'])->assertStatus(422);
         }
 

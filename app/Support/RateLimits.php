@@ -32,7 +32,7 @@ final class RateLimits
 
         // Emailed sign-in codes. LimitTwoFactorGuesses also spends a challenge
         // after five wrong codes; these bound how fast challenges are tried.
-        RateLimiter::for('two-factor-verify', fn (Request $request): Limit => Limit::perMinute(10)->by('ip:'.$request->ip()));
+        RateLimiter::for('two-factor-verify', fn (Request $request): Limit => Limit::perMinute(20)->by('ip:'.$request->ip()));
 
         // Each resend emails a new code, so bound it per account as well as per IP.
         RateLimiter::for('two-factor-resend', function (Request $request): array {
