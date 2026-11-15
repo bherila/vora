@@ -30,9 +30,21 @@ final class RateLimits
             return Limit::perHour(6)->by('email-change:'.$user->getKey());
         });
 
-        // Emailed sign-in codes. LimitTwoFactorGuesses also spends a challenge
-        // after five wrong codes; these bound how fast challenges are tried.
-        RateLimiter::for('two-factor-verify', fn (Request $request): Limit => Limit::perMinute(20)->by('ip:'.$request->ip()));
+        // Emailed sign-in codes. LimitTwoFactorGuesses spends a challenge after
+        // five wrong codes, so guessing is bounded per challenge; these bound how
+        // fast one challenge is tried and how fast one address tries challenges.
+        // The per-IP ceiling stays above a shared NAT (or the browser suite) signing
+        // many people in, since new challenges are already bounded by the login
+        // throttle.
+        RateLimiter::for('two-factor-verify', function (Request $request): array {
+            $limits = [Limit::perMinute(60)->by('ip:'.$request->ip())];
+            $token = $request->input('attempt_token');
+            if (is_string($token) && $token !== '') {
+                $limits[] = Limit::perMinute(10)->by('attempt:'.hash('sha256', $token));
+            }
+
+            return $limits;
+        });
 
         // Each resend emails a new code, so bound it per account as well as per IP.
         RateLimiter::for('two-factor-resend', function (Request $request): array {
