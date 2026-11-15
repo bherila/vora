@@ -52,6 +52,10 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureNotBanned::class,
             EnsureNotDeactivated::class,
             EnsureAgeEligible::class,
+            // A backstop limit on writes across the web app, in its own bucket
+            // (App\Support\RateLimits). Routes that send mail, notify others or
+            // are expensive keep a tighter limiter of their own.
+            'throttle:web-writes',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
