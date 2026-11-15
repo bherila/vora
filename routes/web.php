@@ -152,7 +152,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
-    Route::get('/api/account/export', [ProfileController::class, 'export'])->name('account.export');
+    // Rebuilds the whole account export on every request.
+    Route::get('/api/account/export', [ProfileController::class, 'export'])->middleware('throttle:3,10,export')->name('account.export');
     Route::get('/api/account/storage', [ProfileController::class, 'storageUsage']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
@@ -408,7 +409,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     Route::prefix('api/media')->group(function () {
         Route::get('/', [MediaController::class, 'index']);
-        Route::post('/', [MediaController::class, 'store']);
+        // Each upload compares its hash with the owner's recent photos.
+        Route::post('/', [MediaController::class, 'store'])->middleware('throttle:120,1,media-upload');
         Route::patch('/bulk', [MediaController::class, 'bulkUpdate']);
         Route::delete('/bulk', [MediaController::class, 'bulkDestroy']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);

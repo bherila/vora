@@ -36,6 +36,10 @@ return [
     // The service also hard-caps this at 1,000 and reports truncation to admins.
     'pdq_global_scan_limit' => (int) env('MEDIA_PDQ_GLOBAL_SCAN_LIMIT', 500),
 
+    // Per-owner duplicate checks on upload compare against this many of the
+    // owner's most recent photos (the whole library when it is smaller).
+    'duplicate_candidate_limit' => (int) env('MEDIA_DUPLICATE_CANDIDATE_LIMIT', 5000),
+
     // Disk for client-generated thumbnails/posters. Defaults to the photo disk
     // because the video transcoder never scans it and it already accepts image
     // objects. Video posters live here too, never on the video (source) disk.

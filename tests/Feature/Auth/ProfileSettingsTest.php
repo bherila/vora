@@ -413,6 +413,18 @@ class ProfileSettingsTest extends TestCase
     }
 
     #[Test]
+    public function account_exports_are_rate_limited(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        foreach (range(1, 3) as $ignored) {
+            $this->actingAs($user)->getJson('/api/account/export')->assertOk();
+        }
+
+        $this->actingAs($user)->getJson('/api/account/export')->assertStatus(429);
+    }
+
+    #[Test]
     public function authenticated_users_can_export_their_account_data(): void
     {
         $user = User::factory()->approved()->create([

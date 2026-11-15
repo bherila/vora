@@ -66,7 +66,11 @@ class MediaDuplicateService
             ->where('upload_status', 'ready')
             ->whereNotNull('perceptual_hash')
             ->whereKeyNot($media->id)
-            ->get(['id', 'perceptual_hash']);
+            ->orderByDesc('id')
+            ->limit(self::candidateLimit())
+            ->get(['id', 'perceptual_hash'])
+            // Oldest first, so an equally close match resolves as it did unbounded.
+            ->sortBy('id');
 
         $bestId = null;
         $bestDistance = null;
@@ -107,7 +111,10 @@ class MediaDuplicateService
             ->where('upload_status', 'ready')
             ->whereNotNull('pdq_hash')
             ->whereKeyNot($media->id)
-            ->get(['id', 'pdq_hash', 'duplicate_of_media_id']);
+            ->orderByDesc('id')
+            ->limit(self::candidateLimit())
+            ->get(['id', 'pdq_hash', 'duplicate_of_media_id'])
+            ->sortBy('id');
 
         $best = null;
         $bestDistance = null;
@@ -159,5 +166,16 @@ class MediaDuplicateService
         if ($match !== null) {
             $video->forceFill(['duplicate_of_media_id' => $match->id])->save();
         }
+    }
+
+    /**
+     * Photos compared per duplicate check: the owner's most recent ones. A
+     * library this size or smaller is compared in full, as before; beyond it a
+     * re-upload of a much older photo is no longer flagged, which bounds the
+     * work one upload request can cause.
+     */
+    private static function candidateLimit(): int
+    {
+        return max(1, (int) config('media.duplicate_candidate_limit', 5000));
     }
 }
