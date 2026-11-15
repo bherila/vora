@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Profile;
 
 use App\Enums\Audience;
+use App\Models\User;
+use App\Services\Auth\SignIn;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -53,7 +55,31 @@ class UpdateProfileRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($userId),
             ],
+            // Changing the address that receives password resets is a credential
+            // change: a hijacked session alone must not be able to make it.
+            'current_password' => [
+                Rule::requiredIf(fn (): bool => $this->changesEmail()),
+                'nullable',
+                'string',
+                'current_password:web',
+            ],
         ];
+    }
+
+    /** Whether this request asks to change the local account's email address. */
+    public function changesEmail(): bool
+    {
+        $email = $this->input('email');
+        $user = $this->user();
+
+        // Locked and provider-bound addresses are refused by the controller with
+        // their own message; asking for a password first would hide it.
+        return SignIn::mode() === SignIn::LOCAL
+            && is_string($email)
+            && $user instanceof User
+            && $email !== $user->email
+            && ! $user->email_locked
+            && $user->oauth_subject === null;
     }
 
     /**

@@ -36,6 +36,7 @@ export function VerifyEmailPage() {
   const [verification, setVerification] = useState<VerificationStatus | null>(null);
   const [pollRound, setPollRound] = useState(0);
   const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [changing, setChanging] = useState(false);
   const [changeError, setChangeError] = useState('');
   const attempts = useRef(0);
@@ -75,8 +76,9 @@ export function VerifyEmailPage() {
     setChanging(true);
     setChangeError('');
     try {
-      await fetchWrapper.patch('/api/account', { email: newEmail.trim() });
+      await fetchWrapper.patch('/api/account', { email: newEmail.trim(), current_password: currentPassword });
       setNewEmail('');
+      setCurrentPassword('');
       setStatus(`Verification link sent to ${newEmail.trim()}.`);
       setPollRound((round) => round + 1);
     } catch (failure) {
@@ -141,8 +143,10 @@ export function VerifyEmailPage() {
             <form onSubmit={(e) => void handleChangeEmail(e)} className="space-y-2">
               <Label htmlFor="replacement-email">Use a different email address</Label>
               <Input id="replacement-email" type="email" required autoComplete="email" maxLength={255} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
+              <Label htmlFor="replacement-email-password">Current password</Label>
+              <Input id="replacement-email-password" type="password" required autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
               {changeError && <p role="alert" className="text-sm text-destructive">{changeError}</p>}
-              <Button type="submit" className="w-full" disabled={changing || newEmail.trim() === ''}>{changing ? 'Saving…' : 'Save and resend'}</Button>
+              <Button type="submit" className="w-full" disabled={changing || newEmail.trim() === '' || currentPassword === ''}>{changing ? 'Saving…' : 'Save and resend'}</Button>
             </form>
           )}
           {status && (

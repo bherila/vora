@@ -20,6 +20,8 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminUserRestrictionController;
 use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\AgeEligibilityController;
+use App\Http\Controllers\Auth\ConfirmPasswordController;
+use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PendingApprovalController;
@@ -61,6 +63,7 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
+use App\Services\Account\EmailChangeService;
 use App\Services\Auth\SignIn;
 use App\Services\Branding\AppIcon;
 use App\Services\Media\AccountStorageUsage;
@@ -137,7 +140,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/email/verification-status', [EmailVerificationController::class, 'status'])
         ->middleware('throttle:60,1')->name('verification.status');
 
-    Route::patch('/api/account', [ProfileController::class, 'update']);
+    // Fresh password confirmation before passkey enrollment (local sign-in only;
+    // see RequireConfirmedPassword and PackageRouteHardening).
+    Route::post('/api/auth/confirm-password', [ConfirmPasswordController::class, 'store'])
+        ->middleware(['sign-in:local', 'throttle:6,1,confirm-password'])->name('password.confirm.store');
+
+    // Only requests that change the email address count (see RateLimits).
+    Route::patch('/api/account', [ProfileController::class, 'update'])->middleware('throttle:email-change');
+    Route::get('/account/email/confirm/{id}/{hash}', [EmailChangeController::class, 'confirm'])
+        ->middleware(['signed', 'throttle:6,1,email-change-confirm'])->name('account.email.confirm');
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
@@ -168,6 +179,7 @@ Route::middleware('auth')->group(function () {
             'display_name' => $user->display_name,
             'birth_date' => $user->birth_date?->toDateString(),
             'email' => $user->email,
+            'pending_email' => app(EmailChangeService::class)->pendingEmail($user),
             'gender' => $user->gender,
             'gender_other' => $user->gender_other,
             'user_type' => $user->user_type,

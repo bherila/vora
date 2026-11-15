@@ -90,6 +90,8 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        'pending_email',
+        'pending_email_requested_at',
     ];
 
     /**
@@ -105,6 +107,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'deactivated_at' => 'datetime',
             'id_verified_at' => 'datetime',
             'banned_at' => 'datetime',
+            'pending_email_requested_at' => 'datetime',
             'ban_appeal_at' => 'datetime',
             'legal_hold_at' => 'datetime',
             'birth_date' => 'date',

@@ -25,6 +25,8 @@ use App\Services\Auth\VoraAuthUserPolicy;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Post\AnnouncementPostService;
 use App\Services\Privacy\ViewAsContext;
+use App\Support\PackageRouteHardening;
+use App\Support\RateLimits;
 use Aws\Sns\MessageValidator;
 use BWH\Auth\Contracts\AuthUserPolicy;
 use BWH\Auth\OAuth\DelegatedAccess\ApplicationAccessAdapter;
@@ -80,6 +82,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimits::register();
+        // The auth package registers its routes during boot; harden them after.
+        $this->app->booted(fn () => PackageRouteHardening::apply($this->app->make('router')));
+
         // Keep last_login_at fresh on each login.
         Event::listen(Login::class, UpdateLastLoginDate::class);
         Event::listen(ContentPrivacySynced::class, function (ContentPrivacySynced $event): void {

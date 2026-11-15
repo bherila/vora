@@ -38,10 +38,12 @@ describe('VerifyEmailPage delivery status', () => {
     expect(fetchWrapper.get).toHaveBeenCalledTimes(2);
 
     fireEvent.change(screen.getByLabelText('Use a different email address'), { target: { value: ' guest@example.test ' } });
+    expect(screen.getByRole('button', { name: 'Save and resend' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'secret-password' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save and resend' }));
     await flush();
     await flush();
-    expect(fetchWrapper.patch).toHaveBeenCalledWith('/api/account', { email: 'guest@example.test' });
+    expect(fetchWrapper.patch).toHaveBeenCalledWith('/api/account', { email: 'guest@example.test', current_password: 'secret-password' });
     expect(screen.getByText('Verification link sent to guest@example.test.')).toBeInTheDocument();
     expect(screen.getByText('guest@example.test')).toBeInTheDocument();
     expect(screen.queryByLabelText('Use a different email address')).toBeNull();

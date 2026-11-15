@@ -32,6 +32,7 @@ import {
   unsubscribeBrowserFromWebPush,
 } from '@/push';
 
+import { PasskeyPasswordConfirm } from './passkey-password-confirm';
 import { getAuthComponents } from './shared-components';
 
 interface UserSettingsInitialPayload {
@@ -40,6 +41,7 @@ interface UserSettingsInitialPayload {
   display_name?: string | null;
   birth_date?: string | null;
   email?: string | null;
+  pending_email?: string | null;
   gender?: string | null;
   gender_other?: string | null;
   user_type?: string | null;
@@ -72,6 +74,8 @@ interface UserSettingsInitialData {
   display_name: string;
   birth_date: string;
   email: string;
+  /** A requested new address waiting for its confirmation link to be opened. */
+  pending_email: string | null;
   gender: string;
   gender_other: string;
   user_type: string;
@@ -106,6 +110,7 @@ interface UserSettingsResponse {
     name: string;
     display_name: string;
     email: string;
+    pending_email?: string | null;
     gender: string | null;
     gender_other: string | null;
     user_type: string | null;
@@ -129,6 +134,8 @@ interface UserSettingsResponse {
 interface AccountPayload {
   name: string;
   email: string;
+  /** Required by the server whenever `email` differs from the current address. */
+  current_password?: string;
 }
 
 interface NotificationPayload {
@@ -175,6 +182,16 @@ function tabEnabled(tab: SettingsTab): boolean {
   return tab === 'notifications' ? notificationSettingsEnabled() : tab !== 'privacy' || socialSettingsEnabled();
 }
 
+/** Set by the redirect after an emailed email-change confirmation link is opened. */
+function emailChangeOutcome(): 'confirmed' | 'failed' | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const outcome = new URL(window.location.href).searchParams.get('email_change');
+
+  return outcome === 'confirmed' || outcome === 'failed' ? outcome : null;
+}
+
 function tabFromUrl(): SettingsTab {
   const tab = new URLSearchParams(window.location.search).get('tab');
   return SETTINGS_TABS.includes(tab as SettingsTab) && tabEnabled(tab as SettingsTab) ? tab as SettingsTab : 'account';
@@ -186,6 +203,7 @@ function emptyInitialData(): UserSettingsInitialData {
     display_name: '',
     birth_date: '',
     email: '',
+    pending_email: null,
     gender: '',
     gender_other: '',
     user_type: '',
@@ -220,6 +238,7 @@ function normalizeInitialData(payload: UserSettingsInitialPayload): UserSettings
     display_name: payload.display_name ?? '',
     birth_date: payload.birth_date ?? '',
     email: payload.email ?? '',
+    pending_email: payload.pending_email ?? null,
     gender: normalizeProfileOptionValue(GENDER_OPTIONS, payload.gender),
     gender_other: payload.gender_other ?? '',
     user_type: normalizeProfileOptionValue(USER_TYPE_OPTIONS, payload.user_type),
@@ -284,6 +303,9 @@ export function UserSettingsPage() {
   const [accountName, setAccountName] = useState(initialData.name);
   const [accountBirthDate] = useState(initialData.birth_date);
   const [accountEmail, setAccountEmail] = useState(initialData.email);
+  const [savedEmail, setSavedEmail] = useState(initialData.email);
+  const [pendingEmail, setPendingEmail] = useState(initialData.pending_email);
+  const [accountCurrentPassword, setAccountCurrentPassword] = useState('');
   const [accountVerificationDate] = useState(initialData.id_verified_at);
   const [nameLocked] = useState(initialData.name_locked);
   const providerAccountUrl = initialData.provider_account_url;
@@ -312,8 +334,10 @@ export function UserSettingsPage() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [notificationSaving, setNotificationSaving] = useState(false);
   const [passkeyMessage, setPasskeyMessage] = useState('');
-  const [accountMessage, setAccountMessage] = useState('');
-  const [accountError, setAccountError] = useState('');
+  const [accountMessage, setAccountMessage] = useState(() => emailChangeOutcome() === 'confirmed' ? 'Your email address has been changed.' : '');
+  const [accountError, setAccountError] = useState(() => emailChangeOutcome() === 'failed'
+    ? 'That email change link is no longer valid. Request the change again from this page.'
+    : '');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationError, setNotificationError] = useState('');
   const [dataError, setDataError] = useState('');
@@ -423,6 +447,8 @@ export function UserSettingsPage() {
 
     setAccountName(data.name);
     setAccountEmail(data.email);
+    setSavedEmail(data.email);
+    setPendingEmail(data.pending_email ?? null);
   };
 
   const applyNotificationResponseData = (data: UserSettingsResponse['data']) => {
@@ -565,12 +591,14 @@ export function UserSettingsPage() {
     setAccountMessage('');
 
     try {
-      const response = await fetchWrapper.patch('/api/account', {
-        name,
-        email,
-      } satisfies AccountPayload) as UserSettingsResponse;
+      const payload: AccountPayload = { name, email };
+      if (email !== savedEmail) {
+        payload.current_password = accountCurrentPassword;
+      }
+      const response = await fetchWrapper.patch('/api/account', payload) as UserSettingsResponse;
 
       setAccountMessage(response.message ?? 'Account updated.');
+      setAccountCurrentPassword('');
       applyAccountResponseData(response.data);
     } catch (err) {
       setAccountError(typeof err === 'string' ? err : 'Failed to update account.');
@@ -674,7 +702,28 @@ export function UserSettingsPage() {
                     autoComplete="email"
                     required
                   />
+                  {pendingEmail !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      Waiting for confirmation from <strong className="break-all">{pendingEmail}</strong>. Your current address stays in use until you open the link we sent there.
+                    </p>
+                  )}
                 </div>
+                {!emailLocked && accountEmail.trim() !== savedEmail && (
+                  <div className="space-y-1">
+                    <Label htmlFor="account-current-password">Current password</Label>
+                    <Input
+                      id="account-current-password"
+                      type="password"
+                      value={accountCurrentPassword}
+                      onChange={(event) => setAccountCurrentPassword(event.target.value)}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Required to change your email. We&apos;ll email a confirmation link to the new address and let your current address know.
+                    </p>
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground">
                   {nameLocked ? 'Real name is locked by an administrator.' : 'You can edit your real name.'}
                 </p>
@@ -893,6 +942,7 @@ export function UserSettingsPage() {
             </CardContent>
           </Card> : <>
           {passkeyMessage && <Alert><AlertDescription>{passkeyMessage}</AlertDescription></Alert>}
+          <PasskeyPasswordConfirm />
           <PasskeySection
             components={getAuthComponents()}
             onSuccess={(message) => setPasskeyMessage(message)}
