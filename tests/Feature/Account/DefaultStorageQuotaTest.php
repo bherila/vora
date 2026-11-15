@@ -260,6 +260,9 @@ class DefaultStorageQuotaTest extends TestCase
         $this->assertNull($registered->storage_limit_bytes);
         $this->assertSame(10, $this->usage($registered)['limit_bytes']);
         $ordinary = $this->account();
+        // Registration signed a different account into this session; switching
+        // accounts without a login must not inherit its session password hash.
+        $this->flushSession();
         $this->actingAs($ordinary)->patchJson('/api/account', ['storage_unlimited' => true, 'storage_limit_bytes' => 999])->assertOk();
         $this->assertFalse($ordinary->fresh()->storage_unlimited);
         $this->assertNull($ordinary->fresh()->storage_limit_bytes);

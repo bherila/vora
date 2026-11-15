@@ -38,6 +38,16 @@ class User extends Authenticatable implements MustVerifyEmail
         static::creating(function (User $user): void {
             $user->public_ulid ??= (string) Str::ulid();
         });
+
+        // A new password also retires every remember-me cookie issued under the
+        // old one, wherever it was changed (settings, reset, admin, console). An
+        // account with no token has no cookie to retire, so none is minted.
+        static::updating(function (User $user): void {
+            if ($user->isDirty('password') && ! $user->isDirty('remember_token')
+                && $user->getOriginal('remember_token') !== null) {
+                $user->remember_token = Str::random(60);
+            }
+        });
     }
 
     /**
