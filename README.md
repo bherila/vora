@@ -103,6 +103,21 @@ pnpm run test
 pnpm run build
 ```
 
+The frontend uses TypeScript 7 and Oxlint's native React Compiler/type-aware checks.
+Oxlint hosts the retained `config`/`gating` and import/export sorting rules without
+the ESLint engine.
+`pnpm run lint:test` exercises invalid/valid rule fixtures, severities, fixes and
+the installed/locked compiler inventory. Existing dependency-security tests and
+the root, browser and staging typechecks remain separate gates.
+
+Biome 2.6.7 checks only unused imports; its formatter, assist and other lint rules
+are disabled. `pnpm run lint:imports` is read-only. Deliberate import removal uses
+`pnpm run lint:imports:fix -- path/to/file.tsx`, restricted to that rule and explicit
+paths. Removing a value import can affect module initialization, so review the
+result and retain a bare import when its binding is unnecessary but initialization
+must remain. The automatic JSX runtime does not use an otherwise unreferenced
+React binding; the checker reports it rather than globally exempting React imports.
+
 Backend:
 
 ```bash

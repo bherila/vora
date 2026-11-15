@@ -10,11 +10,16 @@
         "test:dependencies": "node --test tests/dependencies/*.test.cjs",
         "test:browser": "pnpm run build && playwright test",
         "type-check": "tsc --noEmit && tsc -p tests/browser/tsconfig.json && tsc -p tests/staging/tsconfig.json",
-        "lint": "oxlint --type-aware",
-        "lint:fix": "oxlint --type-aware --fix",
-        "postinstall": "node scripts/spotlight-noindex.mjs"
+        "lint": "pnpm run lint:toolchain && oxlint --type-aware && pnpm run lint:imports",
+        "lint:fix": "pnpm run lint:toolchain && oxlint --type-aware --fix && pnpm run lint:imports",
+        "postinstall": "node scripts/spotlight-noindex.mjs",
+        "lint:toolchain": "node scripts/check-lint-toolchain.mjs",
+        "lint:imports": "node scripts/lint-unused-imports.mjs",
+        "lint:imports:fix": "node scripts/lint-unused-imports.mjs --fix",
+        "lint:test": "node --test tools/oxlint/*.test.mjs"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.6.7",
         "@jest/types": "^30.5.1",
         "@playwright/test": "1.64.0",
         "@swc/core": "^1.16.22",
@@ -34,7 +39,6 @@
         "concurrently": "^10.0.7",
         "eslint-plugin-react-hooks": "^7.1.1",
         "eslint-plugin-simple-import-sort": "^14.0.0",
-        "eslint-plugin-unused-imports": "^4.4.1",
         "jest": "^30.5.2",
         "jest-environment-jsdom": "^30.5.2",
         "laravel-vite-plugin": "^3.2.1",
