@@ -43,4 +43,26 @@ return [
      */
     'automatic_padding' => env('WEBPUSH_AUTOMATIC_PADDING', true),
 
+    /**
+     * Push services a subscription endpoint may point at. Browsers only hand
+     * out endpoints on their vendor's service, so anything else would only make
+     * the app send requests to a host of the subscriber's choosing. An entry
+     * starting with a dot matches that domain's subdomains. Add hosts with a
+     * comma-separated WEBPUSH_EXTRA_ENDPOINT_HOSTS.
+     */
+    'endpoint_hosts' => array_values(array_filter(array_merge([
+        'fcm.googleapis.com',               // Chrome, Edge on Android, Opera, Samsung Internet
+        'android.googleapis.com',           // older Chrome endpoints
+        'updates.push.services.mozilla.com', // Firefox (autopush)
+        'push.services.mozilla.com',
+        'web.push.apple.com',               // Safari and iOS home-screen apps
+        '.push.apple.com',
+        '.notify.windows.com',              // Edge on Windows (WNS)
+    ], array_map('trim', explode(',', (string) env('WEBPUSH_EXTRA_ENDPOINT_HOSTS', '')))))),
+
+    /**
+     * Subscriptions kept per account; registering another drops the oldest.
+     */
+    'max_subscriptions_per_user' => (int) env('WEBPUSH_MAX_SUBSCRIPTIONS_PER_USER', 10),
+
 ];

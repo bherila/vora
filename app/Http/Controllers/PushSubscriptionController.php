@@ -39,6 +39,7 @@ class PushSubscriptionController extends Controller
             $data['keys']['auth'],
             $data['content_encoding'] ?? 'aes128gcm',
         );
+        $this->dropOldestBeyondLimit($user, $data['endpoint']);
 
         return response()->json([
             'success' => true,
@@ -61,6 +62,27 @@ class PushSubscriptionController extends Controller
             'success' => true,
             'data' => ['subscription_count' => $user->pushSubscriptions()->count()],
         ]);
+    }
+
+    /**
+     * Keep a bounded number of devices per account: each subscription is a
+     * delivery request for every notification. The one just registered stays.
+     */
+    private function dropOldestBeyondLimit(User $user, string $keepEndpoint): void
+    {
+        $limit = max(1, (int) config('webpush.max_subscriptions_per_user', 10));
+        $excess = $user->pushSubscriptions()->count() - $limit;
+        if ($excess <= 0) {
+            return;
+        }
+
+        $user->pushSubscriptions()
+            ->where('endpoint', '!=', $keepEndpoint)
+            ->orderBy('updated_at')
+            ->orderBy('id')
+            ->limit($excess)
+            ->get()
+            ->each->delete();
     }
 
     private function endpointRegistered(Request $request): bool

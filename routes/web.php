@@ -158,7 +158,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
     Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'status']);
-    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->middleware('throttle:10,1,push-subscribe');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
 
     // Viewer-side identity mutes. Settings is available before approval, so its
