@@ -31,7 +31,7 @@ class WebPushSubscriptionTest extends TestCase
     public function test_authenticated_user_can_manage_push_subscriptions(): void
     {
         $user = User::factory()->approved()->create();
-        $endpoint = 'https://1.1.1.1/subscription/one';
+        $endpoint = 'https://fcm.googleapis.com/fcm/send/one';
 
         $this->actingAs($user)->postJson('/api/push-subscriptions', [
             'endpoint' => $endpoint,
@@ -86,7 +86,7 @@ class WebPushSubscriptionTest extends TestCase
     {
         config(['webpush.vapid.public_key' => 'test-public-key']);
         $user = User::factory()->approved()->create();
-        $endpoint = 'https://1.1.1.1/subscription/one';
+        $endpoint = 'https://fcm.googleapis.com/fcm/send/one';
         $user->updatePushSubscription($endpoint, self::P256DH, self::AUTH, 'aes128gcm');
 
         $this->actingAs($user)->getJson('/api/push-subscriptions?endpoint='.urlencode($endpoint))
@@ -95,7 +95,7 @@ class WebPushSubscriptionTest extends TestCase
             ->assertJsonPath('data.subscription_count', 1)
             ->assertJsonPath('data.endpoint_registered', true);
 
-        $this->actingAs($user)->getJson('/api/push-subscriptions?endpoint='.urlencode('https://1.0.0.1/subscription/other'))
+        $this->actingAs($user)->getJson('/api/push-subscriptions?endpoint='.urlencode('https://updates.push.services.mozilla.com/wpush/v2/other'))
             ->assertOk()
             ->assertJsonPath('data.subscription_count', 1)
             ->assertJsonPath('data.endpoint_registered', false);
@@ -118,16 +118,79 @@ class WebPushSubscriptionTest extends TestCase
             ->assertJsonValidationErrorFor('endpoint');
 
         $this->actingAs($user)->postJson('/api/push-subscriptions', [
-            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/one',
             'keys' => ['p256dh' => 'not-a-real-key', 'auth' => self::AUTH],
         ])->assertStatus(422)
             ->assertJsonValidationErrorFor('keys.p256dh');
 
         $this->actingAs($user)->postJson('/api/push-subscriptions', [
-            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/one',
             'keys' => ['p256dh' => self::P256DH, 'auth' => 'bad'],
         ])->assertStatus(422)
             ->assertJsonValidationErrorFor('keys.auth');
+    }
+
+    public function test_only_known_push_services_are_accepted(): void
+    {
+        $user = User::factory()->approved()->create();
+        $store = fn (string $endpoint) => $this->actingAs($user)->postJson('/api/push-subscriptions', [
+            'endpoint' => $endpoint,
+            'keys' => ['p256dh' => self::P256DH, 'auth' => self::AUTH],
+        ]);
+
+        foreach ([
+            'https://1.1.1.1/subscription/one',
+            'https://push.example.com/subscription/one',
+            'https://notify.windows.com.example.com/w/?token=one',
+            'https://evilnotify.windows.com/w/?token=one',
+            'https://fcm.googleapis.com:8443/fcm/send/one',
+        ] as $endpoint) {
+            $store($endpoint)->assertStatus(422)->assertJsonValidationErrorFor('endpoint');
+        }
+
+        foreach ([
+            'https://fcm.googleapis.com/fcm/send/two',
+            'https://updates.push.services.mozilla.com/wpush/v2/three',
+            'https://web.push.apple.com/QGuQyavXutnMH0',
+            'https://wns2-by3p.notify.windows.com/w/?token=four',
+        ] as $endpoint) {
+            $store($endpoint)->assertOk();
+        }
+    }
+
+    public function test_each_account_keeps_a_bounded_number_of_subscriptions(): void
+    {
+        config(['webpush.max_subscriptions_per_user' => 3]);
+        $user = User::factory()->approved()->create();
+        foreach (range(1, 3) as $device) {
+            $user->updatePushSubscription("https://fcm.googleapis.com/fcm/send/device-{$device}", self::P256DH, self::AUTH, 'aes128gcm');
+            $this->travel(1)->minutes();
+        }
+
+        $this->actingAs($user)->postJson('/api/push-subscriptions', [
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/device-4',
+            'keys' => ['p256dh' => self::P256DH, 'auth' => self::AUTH],
+        ])->assertOk()->assertJsonPath('data.subscription_count', 3);
+
+        $this->assertDatabaseMissing('push_subscriptions', ['endpoint' => 'https://fcm.googleapis.com/fcm/send/device-1']);
+        $this->assertDatabaseHas('push_subscriptions', ['endpoint' => 'https://fcm.googleapis.com/fcm/send/device-4']);
+    }
+
+    public function test_registering_subscriptions_is_rate_limited(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        foreach (range(1, 10) as $device) {
+            $this->actingAs($user)->postJson('/api/push-subscriptions', [
+                'endpoint' => "https://fcm.googleapis.com/fcm/send/device-{$device}",
+                'keys' => ['p256dh' => self::P256DH, 'auth' => self::AUTH],
+            ])->assertOk();
+        }
+
+        $this->actingAs($user)->postJson('/api/push-subscriptions', [
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/device-11',
+            'keys' => ['p256dh' => self::P256DH, 'auth' => self::AUTH],
+        ])->assertStatus(429);
     }
 
     public function test_overlong_key_payloads_are_rejected_before_decoding(): void
@@ -137,13 +200,13 @@ class WebPushSubscriptionTest extends TestCase
         // A request-sized base64url-looking key must be rejected on length, before
         // the validator base64-decodes the whole string.
         $this->actingAs($user)->postJson('/api/push-subscriptions', [
-            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/one',
             'keys' => ['p256dh' => str_repeat('A', 5000), 'auth' => self::AUTH],
         ])->assertStatus(422)
             ->assertJsonValidationErrorFor('keys.p256dh');
 
         $this->actingAs($user)->postJson('/api/push-subscriptions', [
-            'endpoint' => 'https://1.1.1.1/subscription/one',
+            'endpoint' => 'https://fcm.googleapis.com/fcm/send/one',
             'keys' => ['p256dh' => self::P256DH, 'auth' => str_repeat('A', 5000)],
         ])->assertStatus(422)
             ->assertJsonValidationErrorFor('keys.auth');
@@ -152,7 +215,7 @@ class WebPushSubscriptionTest extends TestCase
     public function test_account_purge_removes_push_subscriptions(): void
     {
         $user = User::factory()->approved()->create();
-        $user->updatePushSubscription('https://1.1.1.1/subscription/one', self::P256DH, self::AUTH, 'aes128gcm');
+        $user->updatePushSubscription('https://fcm.googleapis.com/fcm/send/one', self::P256DH, self::AUTH, 'aes128gcm');
 
         app(UserAccountService::class)->purge($user);
 

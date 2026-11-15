@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       source_ref:
-        description: Vora commit, tag, or branch; required for cross-repository callers
+        description: Vora commit or tag on main ancestry; required for cross-repository callers
         type: string
         default: ''
   workflow_dispatch:
@@ -20,7 +20,7 @@ on:
         required: true
         type: environment
       source_ref:
-        description: Vora commit, tag, or branch (defaults to the selected workflow commit)
+        description: Vora commit or tag on main ancestry (defaults to the selected workflow commit)
         type: string
         required: false
 
@@ -47,15 +47,41 @@ jobs:
         shell: bash
         run: |
           if [ "$CALLER_REPOSITORY" != bherila/vora ] && [ -z "$SOURCE_REF" ]; then
-            echo "::error::Cross-repository callers must set source_ref to a Vora commit, tag, or branch."
+            echo "::error::Cross-repository callers must set source_ref to a Vora commit or tag on main."
             exit 1
           fi
+          case "$SOURCE_REF" in
+            refs/pull/*|pull/*|*refs/pull/*)
+              echo "::error::Pull request refs cannot be released; release a reviewed main commit."
+              exit 1
+              ;;
+          esac
 
       - uses: actions/checkout@v6
         with:
           # A reusable workflow otherwise checks out its caller's repository.
           repository: bherila/vora
           ref: ${{ inputs.source_ref || github.sha }}
+          # Full history and origin/main are needed for the ancestry check below.
+          fetch-depth: 0
+
+      - name: Require a reviewed main commit
+        # Only commits already merged to main (or tags pointing at them) may
+        # reach an environment's SSH key and run `migrate --force`. Branches,
+        # pull request heads and fork commits are rejected even when selected
+        # through workflow_dispatch or passed by a calling repository.
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse --verify 'HEAD^{commit}')
+          if ! git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' >/dev/null; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          fi
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/main; then
+            echo "::error::Release source $sha is not on main; release a reviewed main commit or a tag pointing at one."
+            exit 1
+          fi
+          echo "Release source $sha is on main."
 
       - name: Record release source
         run: |

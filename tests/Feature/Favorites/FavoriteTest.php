@@ -109,6 +109,23 @@ class FavoriteTest extends TestCase
         Notification::assertSentToTimes($owner, ContentFavorited::class, 1);
     }
 
+    public function test_removing_and_resaving_does_not_renotify_the_owner(): void
+    {
+        Notification::fake();
+        $this->fakeStorage();
+        User::factory()->create();
+        $owner = User::factory()->approved()->create();
+        $alice = User::factory()->approved()->create();
+        $media = Media::factory()->for($owner)->approved()->create(['title' => 'Pic']);
+
+        foreach (range(1, 3) as $ignored) {
+            $this->actingAs($alice)->postJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertCreated();
+            $this->actingAs($alice)->deleteJson('/api/favorites', ['type' => 'media', 'id' => $media->id])->assertOk();
+        }
+
+        Notification::assertSentToTimes($owner, ContentFavorited::class, 1);
+    }
+
     public function test_owner_can_silence_favorite_notifications(): void
     {
         Notification::fake();

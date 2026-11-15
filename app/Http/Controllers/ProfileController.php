@@ -15,6 +15,7 @@ use App\Models\Mute;
 use App\Models\PostComment;
 use App\Models\PostReaction;
 use App\Models\User;
+use App\Services\Account\EmailChangeService;
 use App\Services\Chat\ChatState;
 use App\Services\Library\LibraryExport;
 use App\Services\Location\LocationPresenter;
@@ -301,7 +302,7 @@ class ProfileController extends Controller
         return response()->json(['success' => true, 'message' => 'Your appeal has been submitted.']);
     }
 
-    public function update(UpdateProfileRequest $request): JsonResponse
+    public function update(UpdateProfileRequest $request, EmailChangeService $emailChanges): JsonResponse
     {
         $user = $request->user();
 
@@ -310,6 +311,7 @@ class ProfileController extends Controller
         }
 
         $data = $request->validated();
+        unset($data['current_password']);
         $emailChanged = array_key_exists('email', $data) && $user->email !== $data['email'];
         $nameChanged = array_key_exists('name', $data) && $user->name !== $data['name'];
         $displayNameChanged = array_key_exists('display_name', $data) && $user->display_name !== $data['display_name'];
@@ -341,9 +343,6 @@ class ProfileController extends Controller
         }
         if ($displayNameChanged) {
             $user->display_name = $data['display_name'];
-        }
-        if ($emailChanged) {
-            $user->email = $data['email'];
         }
         if (array_key_exists('bio', $data)) {
             $user->bio = $data['bio'];
@@ -393,22 +392,22 @@ class ProfileController extends Controller
                 $user->{$pref} = (bool) $data[$pref];
             }
         }
-        if ($emailChanged) {
-            $user->email_verified_at = null;
-        }
         $user->save();
 
-        if ($emailChanged) {
-            $user->sendEmailVerificationNotification();
-        }
+        $emailChange = $emailChanged ? $emailChanges->request($user, $data['email']) : null;
 
         return response()->json([
             'success' => true,
-            'message' => $emailChanged ? 'Account updated. Please verify your new email address.' : 'Account updated.',
+            'message' => match ($emailChange) {
+                EmailChangeService::PENDING => 'Account updated. Open the link we sent to '.$data['email'].' to finish changing your email; until then your current address stays in use.',
+                EmailChangeService::REPLACED => 'Account updated. Please verify your new email address.',
+                default => 'Account updated.',
+            },
             'data' => [
                 'name' => $user->name,
                 'display_name' => $user->display_name,
                 'email' => $user->email,
+                'pending_email' => $emailChanges->pendingEmail($user),
                 'bio' => $user->bio,
                 'pronouns' => $user->pronouns,
                 'gender' => $user->gender,

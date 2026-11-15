@@ -29,19 +29,43 @@ class WaitlistService
 
     /**
      * Record (or refresh) a waitlist request for the given email and send the
-     * verification email. Re-submitting for an email that still has a pending
-     * (not-yet-admitted) request updates that row and re-issues its secrets
-     * rather than creating a duplicate.
+     * verification email. Re-submitting for an email that still has an
+     * unverified pending (not-yet-admitted) request updates that row and
+     * re-issues its secrets rather than creating a duplicate.
+     *
+     * A request whose email is already verified is never touched or re-mailed:
+     * anyone can submit any address, so a resubmission must not reset another
+     * person's verification or replace their details. The caller gets an
+     * unsaved stand-in with a fresh uuid, so the response does not reveal
+     * whether a verified request exists.
      *
      * @param  array{email: string, birth_date: string, interests: string}  $data
      * @param  array{ip: ?string, geo: array<string, string>}  $cf
      */
     public function submit(array $data, array $cf): WaitlistRequest
     {
+        $request = WaitlistRequest::query()
+            ->where('email', $data['email'])
+            ->whereNull('admitted_at')
+            ->latest('id')
+            ->first();
+
+        if ($request !== null && $request->isVerified()) {
+            $standIn = new WaitlistRequest;
+            $standIn->uuid = (string) Str::uuid();
+
+            return $standIn;
+        }
+
+        if ($request === null) {
+            $request = new WaitlistRequest;
+            $request->uuid = (string) Str::uuid();
+        }
+
         $code = $this->randomCode();
         $token = Str::random(40);
 
-        $attributes = [
+        $request->forceFill([
             'email' => $data['email'],
             'birth_date' => $data['birth_date'],
             'interests' => $data['interests'],
@@ -49,21 +73,7 @@ class WaitlistService
             'geo' => $cf['geo'] ?? [],
             'verification_code_hash' => Hash::make($code),
             'verification_token_hash' => Hash::make($token),
-            'verified_at' => null,
-        ];
-
-        $request = WaitlistRequest::query()
-            ->where('email', $data['email'])
-            ->whereNull('admitted_at')
-            ->latest('id')
-            ->first();
-
-        if ($request === null) {
-            $request = new WaitlistRequest;
-            $request->uuid = (string) Str::uuid();
-        }
-
-        $request->forceFill($attributes)->save();
+        ])->save();
 
         Mail::to($request->email)->send(new WaitlistVerificationMail($request, $token, $code));
 

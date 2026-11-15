@@ -10,6 +10,8 @@ use App\Services\Favorites\FavoriteService;
 use App\Services\Privacy\ProfileGate;
 use App\Services\Privacy\ViewAsContext;
 use App\Support\BlockGraph;
+use App\Support\NotificationDedupe;
+use DateInterval;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -54,7 +56,9 @@ class FavoriteController extends Controller
         // repeat firstOrCreate, never a self-save). Visibility is already checked
         // above, so this never reveals an item the actor could not reach.
         $owner = $this->favorites->ownerOf($item);
-        if ($favorite->wasRecentlyCreated && $owner instanceof User && $owner->id !== $user->id && $owner->notify_favorite) {
+        // Removing and re-saving within a day does not notify again.
+        if ($favorite->wasRecentlyCreated && $owner instanceof User && $owner->id !== $user->id && $owner->notify_favorite
+            && NotificationDedupe::firstWithin('favorite', $item->getMorphClass().':'.$item->getKey(), $user->id, new DateInterval('P1D'))) {
             $owner->notify(new ContentFavorited($user, (string) $card['type'], (string) $card['label'], (string) $card['href']));
         }
 

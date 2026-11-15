@@ -20,6 +20,8 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminUserRestrictionController;
 use App\Http\Controllers\Admin\AdminWaitlistController;
 use App\Http\Controllers\Auth\AgeEligibilityController;
+use App\Http\Controllers\Auth\ConfirmPasswordController;
+use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PendingApprovalController;
@@ -61,6 +63,7 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\WaitlistController;
+use App\Services\Account\EmailChangeService;
 use App\Services\Auth\SignIn;
 use App\Services\Branding\AppIcon;
 use App\Services\Media\AccountStorageUsage;
@@ -95,16 +98,16 @@ require __DIR__.'/emergency.php';
 // provider sign-in the provider owns these and they are not served.
 Route::middleware(['guest', 'sign-in:local'])->group(function () {
     Route::get('/register', [RegisterController::class, 'show'])->name('register');
-    Route::post('/register', [RegisterController::class, 'store']);
-    Route::post('/api/auth/register', [RegisterController::class, 'store']);
+    Route::post('/register', [RegisterController::class, 'store'])->middleware('throttle:register');
+    Route::post('/api/auth/register', [RegisterController::class, 'store'])->middleware('throttle:register');
     Route::get('/i/{uuid}', [RegisterController::class, 'landing'])->name('invite.landing');
 
     // Public waitlist ("request an invitation"). Active only while public signups
     // are closed — the controller redirects to /register otherwise.
     Route::get('/request-invitation', [WaitlistController::class, 'show'])->name('waitlist.request');
-    Route::post('/api/waitlist', [WaitlistController::class, 'store'])->middleware('throttle:5,1');
+    Route::post('/api/waitlist', [WaitlistController::class, 'store'])->middleware('throttle:waitlist');
     Route::get('/waitlist/verify/{uuid}/{token}', [WaitlistController::class, 'verifyLink'])->name('waitlist.verify');
-    Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1');
+    Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1,waitlist-verify');
 
     Route::post('/login', [LoginController::class, 'store']);
     Route::post('/api/auth/login', [LoginController::class, 'store']);
@@ -117,7 +120,7 @@ Route::middleware(['guest', 'sign-in:local'])->group(function () {
 // The identity provider returns here. Not guest-only: the package refuses a
 // response for a flow this session did not start.
 Route::get('/oauth/callback', [ProviderLoginController::class, 'callback'])
-    ->middleware(['sign-in:provider', 'throttle:30,1'])->name('oauth.callback');
+    ->middleware(['sign-in:provider', 'throttle:30,1,oauth-callback'])->name('oauth.callback');
 
 // Outside `auth`: a page left open past its session must still end the
 // provider's session, or the next sign-in returns without a prompt.
@@ -131,23 +134,32 @@ Route::post('/logout', [ProviderLoginController::class, 'logout'])->name('logout
 Route::middleware('auth')->group(function () {
     Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
     Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
-        ->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
+        ->middleware(['signed', 'throttle:6,1,verification-verify'])->name('verification.verify');
     Route::post('/email/verification-notification', [EmailVerificationController::class, 'resend'])
-        ->middleware('throttle:6,1')->name('verification.send');
+        ->middleware('throttle:6,1,verification-send')->name('verification.send');
     Route::get('/email/verification-status', [EmailVerificationController::class, 'status'])
-        ->middleware('throttle:60,1')->name('verification.status');
+        ->middleware('throttle:60,1,verification-status')->name('verification.status');
 
-    Route::patch('/api/account', [ProfileController::class, 'update']);
+    // Fresh password confirmation before passkey enrollment (local sign-in only;
+    // see RequireConfirmedPassword and PackageRouteHardening).
+    Route::post('/api/auth/confirm-password', [ConfirmPasswordController::class, 'store'])
+        ->middleware(['sign-in:local', 'throttle:6,1,confirm-password'])->name('password.confirm.store');
+
+    // Only requests that change the email address count (see RateLimits).
+    Route::patch('/api/account', [ProfileController::class, 'update'])->middleware('throttle:email-change');
+    Route::get('/account/email/confirm/{id}/{hash}', [EmailChangeController::class, 'confirm'])
+        ->middleware(['signed', 'throttle:6,1,email-change-confirm'])->name('account.email.confirm');
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);
     Route::post('/api/account/profile-picture/{media}/complete', [ProfileController::class, 'completeProfilePicture']);
     Route::delete('/api/account/profile-picture', [ProfileController::class, 'removeProfilePicture']);
-    Route::get('/api/account/export', [ProfileController::class, 'export'])->name('account.export');
+    // Rebuilds the whole account export on every request.
+    Route::get('/api/account/export', [ProfileController::class, 'export'])->middleware('throttle:3,10,export')->name('account.export');
     Route::get('/api/account/storage', [ProfileController::class, 'storageUsage']);
     Route::post('/api/account/deactivate', [ProfileController::class, 'deactivate']);
     Route::post('/api/account/delete', [ProfileController::class, 'destroy']);
 
     Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'status']);
-    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->middleware('throttle:10,1,push-subscribe');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy']);
 
     // Viewer-side identity mutes. Settings is available before approval, so its
@@ -158,7 +170,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/age-eligibility', AgeEligibilityController::class)->name('age.eligibility');
     Route::post('/age-eligibility/birth-date', [AgeEligibilityController::class, 'storeBirthDate'])
-        ->middleware('throttle:10,1')->name('age.birth-date');
+        ->middleware('throttle:10,1,age-birth-date')->name('age.birth-date');
     Route::get('/pending-approval', PendingApprovalController::class)->name('approval.pending');
     Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();
@@ -168,6 +180,7 @@ Route::middleware('auth')->group(function () {
             'display_name' => $user->display_name,
             'birth_date' => $user->birth_date?->toDateString(),
             'email' => $user->email,
+            'pending_email' => app(EmailChangeService::class)->pendingEmail($user),
             'gender' => $user->gender,
             'gender_other' => $user->gender_other,
             'user_type' => $user->user_type,
@@ -236,11 +249,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/sync', [ChatController::class, 'sync']);
         Route::get('/unread-count', [ChatController::class, 'unreadCount']);
         Route::get('/conversations', [ChatController::class, 'index']);
-        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1');
+        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1,chat-start');
         Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
         Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
         Route::post('/conversations/{conversation}/messages', [ChatController::class, 'send'])
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chat-send');
         Route::post('/conversations/{conversation}/read', [ChatController::class, 'markRead']);
     });
     // Keep the retired characters index pointed at the profile for old bookmarks;
@@ -260,7 +273,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::middleware('sign-in:provider')->group(function () {
         Route::get('/invitations', [ProviderInvitationController::class, 'page'])->name('invitations');
         Route::get('/api/invitations', [ProviderInvitationController::class, 'index']);
-        Route::middleware('throttle:20,1')->group(function () {
+        Route::middleware('throttle:20,1,provider-invitations')->group(function () {
             Route::post('/api/invitations', [ProviderInvitationController::class, 'store']);
             Route::post('/api/invitations/{providerInvitation}/resend', [ProviderInvitationController::class, 'resend']);
             Route::post('/api/invitations/{providerInvitation}/revoke', [ProviderInvitationController::class, 'revoke']);
@@ -273,15 +286,15 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
 
     Route::get('/library', [LibraryController::class, 'page'])->name('library');
-    Route::get('/api/bulk-downloads/{token}', [BulkTransferController::class, 'download'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:10,1')->name('bulk-transfer.download');
+    Route::get('/api/bulk-downloads/{token}', [BulkTransferController::class, 'download'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:10,1,bulk-download')->name('bulk-transfer.download');
     Route::prefix('api/library')->group(function () {
         Route::get('/items', [LibraryController::class, 'index']);
         Route::post('/notes', [LibraryController::class, 'storeNote']);
         Route::post('/uploads', [LibraryController::class, 'upload']);
         Route::post('/save', [LibraryController::class, 'save']);
         Route::post('/items/bulk', LibraryBulkController::class);
-        Route::post('/items/bulk-save', [BulkTransferController::class, 'save'])->middleware('throttle:10,1')->name('bulk-transfer.library.save');
-        Route::post('/items/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1')->name('bulk-transfer.library.prepare');
+        Route::post('/items/bulk-save', [BulkTransferController::class, 'save'])->middleware('throttle:10,1,bulk-save')->name('bulk-transfer.library.save');
+        Route::post('/items/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1,bulk-prepare')->name('bulk-transfer.library.prepare');
         Route::get('/personas', [LibraryController::class, 'personas']);
         Route::get('/collections', [LibraryController::class, 'collections']);
         Route::post('/collections', [LibraryController::class, 'storeCollection']);
@@ -295,7 +308,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/items/{ulid}/collections', [LibraryController::class, 'addMembership']);
         Route::delete('/items/{ulid}/collections/{collectionUlid}', [LibraryController::class, 'removeMembership']);
         Route::get('/items/{ulid}/assets/{variant}', [LibraryContentController::class, 'asset'])->name('library.asset');
-        Route::get('/items/{ulid}/download', [BulkTransferController::class, 'downloadItem'])->middleware('throttle:20,1')->name('library.download');
+        Route::get('/items/{ulid}/download', [BulkTransferController::class, 'downloadItem'])->middleware('throttle:20,1,library-download')->name('library.download');
         Route::get('/items/{ulid}/hls/{path?}', [LibraryContentController::class, 'hls'])
             ->where('path', '.*')->name('library.hls');
     });
@@ -345,12 +358,12 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     // Saved favorites (polymorphic). Toggling is on the current user; the listing
     // is per-profile and privacy-intersected in the controller.
-    Route::post('/api/favorites', [FavoriteController::class, 'store']);
-    Route::delete('/api/favorites', [FavoriteController::class, 'destroy']);
+    Route::post('/api/favorites', [FavoriteController::class, 'store'])->middleware('throttle:60,1,favorites');
+    Route::delete('/api/favorites', [FavoriteController::class, 'destroy'])->middleware('throttle:60,1,favorites');
 
     // Abuse reports (polymorphic: media, stories, posts). Throttled — a handful
     // of reports a minute is plenty and this blunts report-spam.
-    Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1,reports');
 
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);
@@ -396,7 +409,8 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     Route::prefix('api/media')->group(function () {
         Route::get('/', [MediaController::class, 'index']);
-        Route::post('/', [MediaController::class, 'store']);
+        // Each upload compares its hash with the owner's recent photos.
+        Route::post('/', [MediaController::class, 'store'])->middleware('throttle:120,1,media-upload');
         Route::patch('/bulk', [MediaController::class, 'bulkUpdate']);
         Route::delete('/bulk', [MediaController::class, 'bulkDestroy']);
         Route::get('/by-ulid/{ulid}', [MediaController::class, 'showByUlid']);
@@ -420,15 +434,16 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     Route::prefix('api/posts')->group(function () {
         Route::get('/', [PostController::class, 'index']);
-        Route::post('/', [PostController::class, 'store']);
+        // Each post fans out to every follower.
+        Route::post('/', [PostController::class, 'store'])->middleware('throttle:10,1,post-create');
         Route::get('/by-ulid/{ulid}', [PostController::class, 'showByUlid']);
         Route::delete('/{post}', [PostController::class, 'destroy']);
-        Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
-        Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
+        Route::post('/{post}/reactions', [PostReactionController::class, 'store'])->middleware('throttle:60,1,reactions');
+        Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy'])->middleware('throttle:60,1,reactions');
         Route::get('/{post}/comments', [PostCommentController::class, 'index'])
-            ->middleware('throttle:120,1')
+            ->middleware('throttle:120,1,post-comments-read')
             ->name('posts.comments.index');
-        Route::post('/{post}/comments', [PostCommentController::class, 'store']);
+        Route::post('/{post}/comments', [PostCommentController::class, 'store'])->middleware('throttle:20,1,comment-create');
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);
     });
 

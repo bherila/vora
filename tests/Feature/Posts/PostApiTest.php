@@ -54,6 +54,18 @@ class PostApiTest extends TestCase
             ->assertJsonValidationErrorFor('body');
     }
 
+    public function test_posting_is_rate_limited_because_each_post_notifies_followers(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        foreach (range(1, 10) as $n) {
+            $this->actingAs($user)->postJson('/api/posts', ['body' => "Post {$n}", 'audience' => Audience::Everyone->value])->assertCreated();
+        }
+
+        $this->actingAs($user)->postJson('/api/posts', ['body' => 'One too many', 'audience' => Audience::Everyone->value])
+            ->assertStatus(429);
+    }
+
     public function test_non_follower_cannot_view_a_followers_only_post(): void
     {
         $owner = User::factory()->approved()->create();

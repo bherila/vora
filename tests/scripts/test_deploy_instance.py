@@ -30,11 +30,70 @@ class ReleaseWorkflowSourceTest(unittest.TestCase):
     def test_primary_release_can_keep_the_triggering_commit_default(self):
         self.assertEqual(self.source_guard('bherila/vora', '').returncode, 0)
 
+    def test_pull_request_refs_are_rejected_before_checkout(self):
+        for ref in ('refs/pull/12/head', 'refs/pull/12/merge', 'pull/12/head'):
+            result = self.source_guard('example/event-instance', ref)
+            self.assertNotEqual(result.returncode, 0, ref)
+            self.assertIn('Pull request refs cannot be released', result.stdout)
+
     def test_checkout_uses_vora_instead_of_the_callers_repository(self):
         workflow = RELEASE_WORKFLOW.read_text()
         checkout = workflow.split('      - uses: actions/checkout@v6\n', 1)[1].split('\n      - ', 1)[0]
         self.assertIn('repository: bherila/vora', checkout)
         self.assertIn('ref: ${{ inputs.source_ref || github.sha }}', checkout)
+        self.assertIn('fetch-depth: 0', checkout)
+
+    def test_ancestry_check_runs_before_anything_is_built(self):
+        workflow = RELEASE_WORKFLOW.read_text()
+        self.assertLess(workflow.index('- uses: actions/checkout@v6'),
+                        workflow.index('- name: Require a reviewed main commit'))
+        self.assertLess(workflow.index('- name: Require a reviewed main commit'),
+                        workflow.index('- name: Install Composer (with dev)'))
+
+
+class ReleaseWorkflowAncestryTest(unittest.TestCase):
+    """Run the main-ancestry step against a throwaway repository."""
+
+    def setUp(self):
+        self.workspace = tempfile.TemporaryDirectory(prefix='vora-ancestry-test-')
+        self.repo = Path(self.workspace.name)
+        self.git('init', '-q', '-b', 'main')
+        self.git('config', 'user.email', 'ci@example.com')
+        self.git('config', 'user.name', 'CI')
+        self.git('commit', '-q', '--allow-empty', '-m', 'one')
+        self.reviewed = self.git('rev-parse', 'HEAD')
+        self.git('commit', '-q', '--allow-empty', '-m', 'two')
+        self.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        self.git('tag', 'v1', self.reviewed)
+        self.git('checkout', '-q', '-b', 'feature', self.reviewed)
+        self.git('commit', '-q', '--allow-empty', '-m', 'unreviewed')
+        self.unreviewed = self.git('rev-parse', 'HEAD')
+        self.git('tag', 'v-unreviewed', self.unreviewed)
+
+    def tearDown(self):
+        self.workspace.cleanup()
+
+    def git(self, *args):
+        return subprocess.run(['git', *args], cwd=self.repo, text=True,
+                              capture_output=True, check=True).stdout.strip()
+
+    def ancestry_check(self, ref):
+        self.git('checkout', '-q', '--detach', ref)
+        workflow = RELEASE_WORKFLOW.read_text()
+        step = workflow.split('      - name: Require a reviewed main commit\n', 1)[1].split('\n      - ', 1)[0]
+        script = textwrap.dedent(step.split('        run: |\n', 1)[1])
+        return subprocess.run(['bash', '-c', script], cwd=self.repo, text=True,
+                              capture_output=True, check=False)
+
+    def test_main_commits_and_tags_on_main_are_accepted(self):
+        for ref in (self.reviewed, 'main', 'v1'):
+            self.assertEqual(self.ancestry_check(ref).returncode, 0, ref)
+
+    def test_branches_and_tags_off_main_are_rejected(self):
+        for ref in ('feature', self.unreviewed, 'v-unreviewed'):
+            result = self.ancestry_check(ref)
+            self.assertNotEqual(result.returncode, 0, ref)
+            self.assertIn('is not on main', result.stdout)
 
 
 class InstanceDeploymentTest(unittest.TestCase):

@@ -181,6 +181,56 @@ describe('UserSettingsPage', () => {
     expect(patch.mock.calls[0]?.[1]).not.toHaveProperty('email');
   });
 
+  it('asks for the current password only when the email changes and shows the pending address', async () => {
+    patch.mockResolvedValue({
+      success: true,
+      message: 'Account updated. Open the link we sent to new@example.com to finish changing your email; until then your current address stays in use.',
+      data: { ...notificationResponse().data, email: 'account@example.com', pending_email: 'new@example.com' },
+    });
+    render(<UserSettingsPage />);
+
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } });
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'secret-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save account information' }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/api/account', {
+      name: 'Account Name',
+      email: 'new@example.com',
+      current_password: 'secret-password',
+    }));
+    expect(await screen.findByText(/Waiting for confirmation from/)).toHaveTextContent('new@example.com');
+    expect(screen.getByLabelText('Email')).toHaveValue('account@example.com');
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+  });
+
+  it('reports the outcome of an opened email-change link', () => {
+    window.history.replaceState({}, '', '/user/settings?email_change=confirmed');
+    const { unmount } = render(<UserSettingsPage />);
+    expect(screen.getByText('Your email address has been changed.')).toBeInTheDocument();
+    unmount();
+
+    window.history.replaceState({}, '', '/user/settings?email_change=failed');
+    render(<UserSettingsPage />);
+    expect(screen.getByText(/That email change link is no longer valid/)).toBeInTheDocument();
+  });
+
+  it('confirms the password before passkeys can be added', async () => {
+    const post = jest.mocked(fetchWrapper.post);
+    post.mockReset();
+    post.mockResolvedValue({ success: true });
+    window.history.replaceState({}, '', '/user/settings?tab=security');
+    render(<UserSettingsPage />);
+
+    expect(screen.getByRole('button', { name: 'Confirm password' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'secret-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/auth/confirm-password', { password: 'secret-password' }));
+    expect(await screen.findByText('Password confirmed. You can add a passkey now.')).toBeInTheDocument();
+    expect(screen.getByText('Passkey settings')).toBeInTheDocument();
+  });
+
   it('responds to browser history and supports arrow-key tab navigation', async () => {
     render(<UserSettingsPage />);
 

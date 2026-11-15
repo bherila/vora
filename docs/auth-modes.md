@@ -45,6 +45,15 @@ Nothing else is required. `OAUTH_*` keys are ignored.
 **Security notes**
 - Login is throttled (`BHERILA_AUTH_THROTTLE_*`) and password sign-in is
   followed by an email 2FA challenge.
+- An emailed sign-in code is spent after five wrong entries; verify, resend,
+  registration and password-reset requests are rate limited per IP and, where
+  they send mail, per account or address.
+- Changing the email address needs the current password. A verified address
+  stays in use until the link mailed to the new address is opened, and the old
+  address is told about the request.
+- Adding a passkey needs a fresh password confirmation in that session.
+- A password change or reset ends every other session and remember-me cookie;
+  an administrator disabling an account ends its session on the next request.
 - `/oauth/callback` is not served in this mode (404).
 
 ## External

@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureApproved;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsureNotBanned;
 use App\Http\Middleware\EnsureNotDeactivated;
+use App\Http\Middleware\EnsureNotDisabled;
 use App\Http\Middleware\EnsureSignInMode;
 use App\Http\Middleware\RequireProviderAccount;
 use Illuminate\Foundation\Application;
@@ -33,6 +34,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // gate ahead of it.
         $middleware->prependToPriorityList(EnsureAgeEligible::class, RequireProviderAccount::class);
 
+        // A password change or reset ends every other session and remember-me
+        // cookie for the account: each session stores the password hash it was
+        // signed in with. The session making the change keeps the new hash.
+        $middleware->authenticateSessions();
+
         // Gate self-deactivated accounts to the reactivate page across the whole
         // web surface — including the package auth endpoints (password/passkeys)
         // and the public home page a fresh login would otherwise land them on.
@@ -40,6 +46,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // First: a session the identity provider no longer vouches for ends
             // before any account gate or page sees it.
             RequireProviderAccount::class,
+            // An admin-disabled account loses its session on any page, not
+            // only on the `approved` app area.
+            EnsureNotDisabled::class,
             EnsureNotBanned::class,
             EnsureNotDeactivated::class,
             EnsureAgeEligible::class,

@@ -9,7 +9,9 @@ use App\Models\PostComment;
 use App\Models\User;
 use App\Notifications\PostCommentedOn;
 use App\Services\Media\MediaResponseService;
+use App\Support\NotificationDedupe;
 use App\Support\PostCommentPresenter;
+use DateInterval;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -134,8 +136,10 @@ class PostCommentController extends Controller
         $comment->moderation_status = ModerationStatus::Approved;
         $comment->save();
 
-        // Notify the post's author of the new comment, never for their own.
-        if ($post->user_id !== $user->id && $post->user?->notify_post_comment) {
+        // Notify the post's author of the new comment, never for their own, and
+        // at most once per commenter per post every 15 minutes.
+        if ($post->user_id !== $user->id && $post->user?->notify_post_comment
+            && NotificationDedupe::firstWithin('post-comment', (string) $post->id, $user->id, new DateInterval('PT15M'))) {
             $post->user->notify(new PostCommentedOn($post, $user));
         }
 

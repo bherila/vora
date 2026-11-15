@@ -4,6 +4,8 @@ namespace Tests\Feature\Auth;
 
 use App\Enums\Audience;
 use App\Enums\MediaPurpose;
+use App\Mail\ConfirmEmailChangeMail;
+use App\Mail\EmailChangeRequestedMail;
 use App\Models\Media;
 use App\Models\Post;
 use App\Models\PostComment;
@@ -12,6 +14,7 @@ use App\Models\User;
 use App\Services\FileStorageService;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\Test;
@@ -114,8 +117,9 @@ class ProfileSettingsTest extends TestCase
     }
 
     #[Test]
-    public function authenticated_users_can_update_name_and_email(): void
+    public function authenticated_users_can_update_name_and_request_an_email_change(): void
     {
+        Mail::fake();
         Notification::fake();
 
         $user = User::factory()->approved()->create([
@@ -130,16 +134,23 @@ class ProfileSettingsTest extends TestCase
             'name' => 'Updated Name',
             'display_name' => 'Updated Display',
             'email' => 'updated@example.com',
+            'current_password' => 'password',
         ]))->assertOk()
-            ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.email', 'original@example.com')
+            ->assertJsonPath('data.pending_email', 'updated@example.com');
 
         $user->refresh();
         $this->assertSame('Updated Name', $user->name);
         $this->assertSame('Updated Display', $user->display_name);
         $this->assertSame('1990-01-15', $user->birth_date?->toDateString());
-        $this->assertSame('updated@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
-        Notification::assertSentTo($user, VerifyEmail::class);
+        // The verified address stays in use until the new one is confirmed.
+        $this->assertSame('original@example.com', $user->email);
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertSame('updated@example.com', $user->pending_email);
+        Mail::assertSent(ConfirmEmailChangeMail::class, fn (ConfirmEmailChangeMail $mail): bool => $mail->hasTo('updated@example.com'));
+        Mail::assertSent(EmailChangeRequestedMail::class, fn (EmailChangeRequestedMail $mail): bool => $mail->hasTo('original@example.com'));
+        Notification::assertNotSentTo($user, VerifyEmail::class);
     }
 
     #[Test]
@@ -295,9 +306,12 @@ class ProfileSettingsTest extends TestCase
             'preferred_genders' => null,
         ]);
 
+        Mail::fake();
+
         $this->actingAs($user)->patchJson('/api/account', $this->profilePayload($user, [
             'name' => 'Blank Profile Updated',
             'email' => 'blank-profile-updated@example.com',
+            'current_password' => 'password',
         ]))->assertOk()
             ->assertJsonPath('data.gender', null)
             ->assertJsonPath('data.user_type', null)
@@ -306,7 +320,8 @@ class ProfileSettingsTest extends TestCase
 
         $user->refresh();
         $this->assertSame('Blank Profile Updated', $user->name);
-        $this->assertSame('blank-profile-updated@example.com', $user->email);
+        $this->assertSame('blank-profile@example.com', $user->email);
+        $this->assertSame('blank-profile-updated@example.com', $user->pending_email);
         $this->assertNull($user->gender);
         $this->assertNull($user->user_type);
         $this->assertNull($user->preferred_user_types);
@@ -395,6 +410,18 @@ class ProfileSettingsTest extends TestCase
         $this->assertNull($settings['user_type']);
         $this->assertSame([], $settings['preferred_user_types']);
         $this->assertSame([], $settings['preferred_genders']);
+    }
+
+    #[Test]
+    public function account_exports_are_rate_limited(): void
+    {
+        $user = User::factory()->approved()->create();
+
+        foreach (range(1, 3) as $ignored) {
+            $this->actingAs($user)->getJson('/api/account/export')->assertOk();
+        }
+
+        $this->actingAs($user)->getJson('/api/account/export')->assertStatus(429);
     }
 
     #[Test]

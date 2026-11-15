@@ -162,6 +162,62 @@ class WaitlistRequestTest extends TestCase
     }
 
     #[Test]
+    public function test_resubmitting_never_resets_a_verified_request(): void
+    {
+        Mail::fake();
+        $this->closeSignups();
+        $this->postJson('/api/waitlist', $this->payload())->assertOk();
+        $request = WaitlistRequest::firstWhere('email', 'hopeful@example.com');
+        $request->forceFill(['verified_at' => now()])->save();
+        $original = $request->fresh();
+
+        $response = $this->postJson('/api/waitlist', $this->payload([
+            'interests' => 'Someone else typed this address and wants to replace the request details.',
+        ]))->assertOk();
+
+        $request->refresh();
+        $this->assertNotNull($request->verified_at);
+        $this->assertSame($original->interests, $request->interests);
+        $this->assertSame($original->verification_code_hash, $request->verification_code_hash);
+        // No mail, and a uuid that does not reveal the verified request.
+        Mail::assertSentCount(1);
+        $this->assertNotSame($request->uuid, $response->json('data.uuid'));
+        $this->assertSame(1, WaitlistRequest::where('email', 'hopeful@example.com')->count());
+    }
+
+    #[Test]
+    public function test_resubmitting_an_unverified_request_reissues_its_secrets(): void
+    {
+        Mail::fake();
+        $this->closeSignups();
+        $this->postJson('/api/waitlist', $this->payload())->assertOk();
+        $first = WaitlistRequest::firstWhere('email', 'hopeful@example.com');
+
+        $this->postJson('/api/waitlist', $this->payload())->assertOk()->assertJsonPath('data.uuid', $first->uuid);
+
+        $this->assertNotSame($first->verification_code_hash, $first->fresh()->verification_code_hash);
+        Mail::assertSentCount(2);
+    }
+
+    #[Test]
+    public function test_one_address_cannot_be_mailed_repeatedly(): void
+    {
+        Mail::fake();
+        $this->closeSignups();
+
+        foreach (range(1, 3) as $attempt) {
+            $this->withServerVariables(['REMOTE_ADDR' => "203.0.113.{$attempt}"])
+                ->postJson('/api/waitlist', $this->payload())->assertOk();
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->postJson('/api/waitlist', $this->payload())->assertStatus(429);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->postJson('/api/waitlist', $this->payload(['email' => 'someone-else@example.com']))->assertOk();
+        Mail::assertSentCount(4);
+    }
+
+    #[Test]
     public function test_non_admin_cannot_view_waitlist(): void
     {
         User::factory()->admin()->create(); // occupy id 1 (always-admin)

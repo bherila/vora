@@ -103,6 +103,27 @@ class MediaDedupTest extends TestCase
         $this->assertSame($existing->id, $fresh->fresh()->duplicate_of_media_id);
     }
 
+    public function test_perceptual_scan_compares_only_the_most_recent_photos_and_keeps_tie_order(): void
+    {
+        config(['media.duplicate_candidate_limit' => 2]);
+        $user = User::factory()->approved()->create();
+        $service = app(MediaDuplicateService::class);
+        $hash = $this->base64Hash(str_repeat("\x00", 32));
+        $near = $this->base64Hash(str_repeat("\x00", 31)."\x01");
+
+        $oldest = Media::factory()->for($user)->approved()->create(['perceptual_hash' => $hash, 'upload_status' => 'ready']);
+        $middle = Media::factory()->for($user)->approved()->create(['perceptual_hash' => $hash, 'upload_status' => 'ready']);
+        Media::factory()->for($user)->approved()->create(['perceptual_hash' => $hash, 'upload_status' => 'ready']);
+        $fresh = Media::factory()->for($user)->create(['type' => MediaType::Photo, 'perceptual_hash' => $near, 'upload_status' => 'pending']);
+
+        $service->flagPerceptualDuplicate($fresh);
+
+        // The oldest photo is beyond the two most recent; among equally close
+        // recent matches the older one still wins, as in an unbounded scan.
+        $this->assertNotSame($oldest->id, $fresh->fresh()->duplicate_of_media_id);
+        $this->assertSame($middle->id, $fresh->fresh()->duplicate_of_media_id);
+    }
+
     public function test_distant_photo_is_not_flagged(): void
     {
         $user = User::factory()->approved()->create();
