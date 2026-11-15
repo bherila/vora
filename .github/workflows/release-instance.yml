@@ -38,6 +38,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04-arm
+    outputs:
+      # The commit this job proved is on main, tested and packaged.
+      sha: ${{ steps.source.outputs.sha }}
 
     steps:
       - name: Validate release source
@@ -84,8 +87,11 @@ jobs:
           echo "Release source $sha is on main."
 
       - name: Record release source
+        id: source
         run: |
-          printf 'Vora source commit: `%s`\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          sha=$(git rev-parse --verify 'HEAD^{commit}')
+          printf 'Vora source commit: `%s`\n' "$sha" >> "$GITHUB_STEP_SUMMARY"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -144,15 +150,40 @@ jobs:
     runs-on: ubuntu-24.04-arm
     needs: test
     environment: ${{ inputs.environment }}
+    # Deployment secrets are given only to the steps that use them, all after
+    # the ancestry check below; a job-level env would hand them to every step.
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
-      DEPLOY_HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
       DEPLOY_PROFILE: ${{ vars.DEPLOY_PROFILE || (inputs.primary && 'vora') || '' }}
 
     steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: bherila/vora
+          ref: ${{ needs.test.outputs.sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the tested commit to be on main
+        # The credential-holding job proves this itself, before any step that
+        # can read a deployment secret, rather than relying on `needs: test`.
+        working-directory: source
+        env:
+          RELEASE_SHA: ${{ needs.test.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          sha=$(git rev-parse --verify 'HEAD^{commit}')
+          [[ "$sha" == "$RELEASE_SHA" ]]
+          if ! git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}' >/dev/null; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          fi
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/main; then
+            echo "::error::Release source $sha is not on main; release a reviewed main commit or a tag pointing at one."
+            exit 1
+          fi
+
       - name: Check instance deployment switch
         id: target
         env:
@@ -173,6 +204,11 @@ jobs:
       - name: Validate target and configure SSH
         if: steps.target.outputs.enabled == 'true'
         env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
+          DEPLOY_HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         shell: bash
@@ -202,6 +238,10 @@ jobs:
 
       - name: Transfer tested release
         if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           rsync -a --delete --exclude='.env' --exclude='storage' \
             -e "ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4" \
@@ -209,6 +249,11 @@ jobs:
 
       - name: Verify PHP 8.5 on server (CLI and web handler)
         if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
         run: |
           ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             "$SSH_USERNAME@$SSH_HOST" \
@@ -242,6 +287,11 @@ jobs:
 
       - name: Configure, verify profile, migrate and refresh web roots
         if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_WEB_ROOTS: ${{ secrets.DEPLOY_WEB_ROOTS }}
         run: |
           ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
             "$SSH_USERNAME@$SSH_HOST" \
@@ -249,6 +299,8 @@ jobs:
 
       - name: Verify instance health
         if: steps.target.outputs.enabled == 'true'
+        env:
+          DEPLOY_HEALTH_URL: ${{ secrets.DEPLOY_HEALTH_URL }}
         run: |
           for path in /up / /login; do
             url="${DEPLOY_HEALTH_URL%/}${path}"
@@ -262,6 +314,10 @@ jobs:
 
       - name: Verify scheduler and queue health
         if: steps.target.outputs.enabled == 'true'
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           for attempt in 1 2 3 4; do
             if ssh -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \

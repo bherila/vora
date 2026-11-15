@@ -31,7 +31,10 @@ needs the same secrets as `prod` plus the variables `DEPLOY_PROFILE=event` and
 `DEPLOY_ENABLED=true`. Set `DEPLOY_ENABLED=false` to stop following `main`.
 Instance repositories can still call `release-instance.yml` with a pinned
 `source_ref` for reviewed releases; the workflow rejects any `source_ref` (or
-selected workflow commit) that is not on `main` ancestry.
+selected workflow commit) that is not on `main` ancestry. The `deploy` job
+repeats that check on the commit the `test` job packaged before any step sees a
+deployment secret, and passes each secret only to the steps that use it;
+`tests/Unit/Security/WorkflowCredentialCensusTest.php` keeps it that way.
 
 Every environment, `prod` included, is self-contained: its SSH and target
 secrets plus `DEPLOY_ENABLED` and `DEPLOY_PROFILE` (`vora` or `event`) live on
