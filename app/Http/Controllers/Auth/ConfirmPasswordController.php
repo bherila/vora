@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * Records a fresh password confirmation for the session, which
- * RequireConfirmedPassword checks before passkey enrollment.
+ * the shared auth package checks before passkey enrollment.
  */
 class ConfirmPasswordController extends Controller
 {

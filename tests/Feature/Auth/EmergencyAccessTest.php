@@ -47,6 +47,18 @@ class EmergencyAccessTest extends TestCase
         return TwoFactorAttempt::latest('id')->firstOrFail();
     }
 
+    private function mailedLink(TwoFactorAttempt $attempt, string $property): string
+    {
+        $mail = Mail::sent(TwoFactorLoginMail::class, fn (TwoFactorLoginMail $mail): bool => $mail->attempt->token === $attempt->token)->last();
+        $this->assertInstanceOf(TwoFactorLoginMail::class, $mail);
+        $url = $mail->{$property};
+        $this->assertIsString($url);
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{64}$/', $query['secret'] ?? '');
+
+        return $url;
+    }
+
     private function finish(TwoFactorAttempt $attempt): void
     {
         $this->postJson('/emergency-login/verify', ['attempt_token' => $attempt->token, 'code' => $attempt->code])
@@ -196,10 +208,29 @@ class EmergencyAccessTest extends TestCase
         $this->assertGuest();
         $resend = $this->postJson('/emergency-login/resend', ['attempt_token' => $attempt->token])->assertOk();
         $new = TwoFactorAttempt::where('token', $resend->json('attempt_token'))->firstOrFail();
-        $this->get('/emergency-login/confirm/'.$new->token)->assertOk();
+        $confirmUrl = $this->mailedLink($new, 'confirmUrl');
+        $this->get($confirmUrl)->assertOk();
         $this->assertGuest();
-        $this->post('/emergency-login/confirm/'.$new->token)->assertRedirect();
+        $this->post($confirmUrl)->assertRedirect();
         $this->getJson('/api/admin/invites')->assertOk();
+    }
+
+    public function test_browser_attempt_token_cannot_replace_the_mailed_confirm_or_report_secret(): void
+    {
+        $user = $this->administrator();
+        foreach (['confirm', 'report'] as $action) {
+            $attempt = $this->challenge($user);
+            $response = $this->postJson('/emergency-login/'.$action.'/'.$attempt->token);
+            if ($action === 'confirm') {
+                $response->assertUnprocessable();
+            } else {
+                $response->assertOk();
+            }
+            $this->assertGuest();
+            $this->assertSame($action === 'report', $attempt->fresh()->is_used);
+            $this->assertFalse($attempt->fresh()->is_suspicious);
+            $this->assertFalse(session()->has(EmergencyAccess::SESSION));
+        }
     }
 
     public function test_emergency_password_post_requires_csrf_and_uses_existing_audit_lockout(): void
@@ -244,13 +275,14 @@ class EmergencyAccessTest extends TestCase
     {
         $user = $this->administrator();
         $attempt = $this->challenge($user);
+        $reportUrl = $this->mailedLink($attempt, 'reportUrl');
         session()->invalidate();
         $this->assertFalse(session()->has(EmergencyAccess::PENDING));
-        $this->get('/emergency-login/report/'.$attempt->token)->assertOk();
+        $this->get($reportUrl)->assertOk();
         $this->assertFalse($attempt->fresh()->is_used);
         $this->assertFalse($attempt->fresh()->is_suspicious);
         $this->assertGuest();
-        $this->post('/emergency-login/report/'.$attempt->token)->assertOk()->assertDontSee('/forgot-password');
+        $this->post($reportUrl)->assertOk()->assertDontSee('/forgot-password');
         $this->assertTrue($attempt->fresh()->is_used);
         $this->assertTrue($attempt->fresh()->is_suspicious);
         $this->assertGuest();

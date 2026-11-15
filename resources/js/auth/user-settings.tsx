@@ -32,7 +32,6 @@ import {
   unsubscribeBrowserFromWebPush,
 } from '@/push';
 
-import { PasskeyPasswordConfirm } from './passkey-password-confirm';
 import { getAuthComponents } from './shared-components';
 
 interface UserSettingsInitialPayload {
@@ -942,7 +941,6 @@ export function UserSettingsPage() {
             </CardContent>
           </Card> : <>
           {passkeyMessage && <Alert><AlertDescription>{passkeyMessage}</AlertDescription></Alert>}
-          <PasskeyPasswordConfirm />
           <PasskeySection
             components={getAuthComponents()}
             onSuccess={(message) => setPasskeyMessage(message)}

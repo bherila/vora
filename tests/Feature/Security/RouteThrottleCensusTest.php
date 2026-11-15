@@ -38,9 +38,8 @@ use Tests\TestCase;
  * generous per-account backstop on every write; routes that send mail, notify
  * others or are expensive still need a tighter limiter of their own.
  *
- * The census runs on the booted application, so it sees the middleware
- * App\Support\PackageRouteHardening adds to bherila/auth-laravel's routes after
- * boot, not only what the package registered.
+ * The census runs on the booted application, including the shared auth
+ * package routes and their named rate limits.
  *
  * The census sees only middleware. It cannot tell which routes send mail, call an
  * AI service, fan out notifications or export data under another name: those need

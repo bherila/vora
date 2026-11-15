@@ -43,24 +43,30 @@ class EmbeddedTwoFactorRoutesTest extends EmbeddedAuthTestCase
             return true;
         });
         $base = '/auth/api/auth/two-factor';
-        $this->assertSame(self::ORIGIN.$base.'/confirm/'.$providerAttempt->token, $links[$providerAttempt->token][0]);
-        $this->assertSame(self::ORIGIN.$base.'/report/'.$providerAttempt->token, $links[$providerAttempt->token][1]);
-        foreach (['confirm', 'report'] as $action) {
+        foreach (['confirm', 'report'] as $index => $action) {
+            $url = $links[$providerAttempt->token][$index];
+            $this->assertStringStartsWith(self::ORIGIN.$base.'/'.$action.'/'.$providerAttempt->token.'?secret=', $url);
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{64}$/', $query['secret'] ?? '');
+        }
+        foreach (['confirm', 'report'] as $index => $action) {
             $this->assertNull(Route::getRoutes()->getByName('bherila-auth.two-factor.'.$action));
             $this->assertNull(Route::getRoutes()->getByName('bherila-auth.two-factor.'.$action.'.submit'));
             $this->assertSame(ltrim($base, '/').'/'.$action.'/{token}', Route::getRoutes()->getByName('auth-manager.two-factor.'.$action)?->uri());
             $this->assertSame(ltrim($base, '/').'/'.$action.'/{token}', Route::getRoutes()->getByName('auth-manager.two-factor.'.$action.'.submit')?->uri());
-            $this->freshRequest()->get($base.'/'.$action.'/'.$providerAttempt->token)->assertOk()
-                ->assertSee('action="'.self::ORIGIN.$base.'/'.$action.'/'.$providerAttempt->token.'"', false);
+            $this->freshRequest()->get($links[$providerAttempt->token][$index])->assertOk()
+                ->assertSee('action="'.$links[$providerAttempt->token][$index].'"', false);
             $this->assertGuest('web');
             $this->assertGuest('auth-manager');
         }
 
         $this->freshRequest()->getJson('/api/auth/two-factor/confirm/'.$providerAttempt->token)->assertNotFound();
-        $this->freshRequest()->postJson('/auth/api/auth/two-factor/confirm/'.$providerAttempt->token)->assertUnprocessable();
+        $tokenOnlyAttempt = app(EmbeddedContext::class)->run(fn () => TwoFactorAttempt::createForUser($provider));
+        $this->freshRequest()->postJson($base.'/confirm/'.$tokenOnlyAttempt->token)->assertUnprocessable();
+        $this->assertFalse(app(EmbeddedContext::class)->run(fn () => $tokenOnlyAttempt->fresh()->is_used));
         $this->assertGuest('web');
         $this->assertGuest('auth-manager');
-        $this->freshRequest()->postJson('/auth/api/auth/two-factor/verify', ['attempt_token' => $providerAttempt->token, 'code' => $providerAttempt->code])->assertOk();
+        $this->freshRequest()->postJson($links[$providerAttempt->token][0])->assertOk();
         $this->assertAuthenticatedAs($provider, 'auth-manager');
         $this->assertGuest('web');
         $this->assertDatabaseCount('auth_two_factor_attempts', 0);

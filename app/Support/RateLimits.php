@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\User;
 use App\Services\Account\EmailChangeService;
-use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -67,43 +66,6 @@ final class RateLimits
                 ? 'user:'.$user->getAuthIdentifier()
                 : 'ip:'.$request->ip());
         });
-
-        // Emailed sign-in codes. LimitTwoFactorGuesses spends a challenge after
-        // five wrong codes, so guessing is bounded per challenge; these bound how
-        // fast one challenge is tried and how fast one address tries challenges.
-        // The per-IP ceiling stays above a shared NAT (or the browser suite) signing
-        // many people in, since new challenges are already bounded by the login
-        // throttle.
-        RateLimiter::for('two-factor-verify', function (Request $request): array {
-            $limits = [Limit::perMinute(60)->by('ip:'.$request->ip())];
-            $token = $request->input('attempt_token');
-            if (is_string($token) && $token !== '') {
-                $limits[] = Limit::perMinute(10)->by('attempt:'.hash('sha256', $token));
-            }
-
-            return $limits;
-        });
-
-        // Each resend emails a new code, so bound it per account as well as per IP.
-        RateLimiter::for('two-factor-resend', function (Request $request): array {
-            $limits = [Limit::perMinute(6)->by('ip:'.$request->ip())];
-            $token = $request->input('attempt_token');
-            $userId = is_string($token) && $token !== ''
-                ? TwoFactorAttempt::query()->where('token', $token)->value('user_id')
-                : null;
-            if ($userId !== null) {
-                $limits[] = Limit::perMinutes(15, 3)->by('user:'.$userId);
-            }
-
-            return $limits;
-        });
-
-        // Each request can email a reset link: per IP, and per address so one
-        // mailbox cannot be flooded from many addresses.
-        RateLimiter::for('forgot-password', fn (Request $request): array => [
-            Limit::perMinute(5)->by('ip:'.$request->ip()),
-            Limit::perHour(5)->by('email:'.self::emailKey($request)),
-        ]);
 
         // Each submission emails the address it names.
         RateLimiter::for('waitlist', fn (Request $request): array => [

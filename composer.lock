@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "10b9d1ff3eafa965ad10988f79ebf007",
+    "content-hash": "56b20978cd74e06e897cc96f25706c31",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -218,16 +218,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.28.7",
+            "version": "v0.30.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-laravel.git",
-                "reference": "03867ef9c8acd4d80400f420763815e5ef4fadd4"
+                "reference": "18ebb2002409c881dc2a032a4fd4ac2d678ae3d4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/03867ef9c8acd4d80400f420763815e5ef4fadd4",
-                "reference": "03867ef9c8acd4d80400f420763815e5ef4fadd4",
+                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/18ebb2002409c881dc2a032a4fd4ac2d678ae3d4",
+                "reference": "18ebb2002409c881dc2a032a4fd4ac2d678ae3d4",
                 "shasum": ""
             },
             "require": {
@@ -277,24 +277,24 @@
                 "issues": "https://github.com/bherila/auth-laravel/issues",
                 "source": "https://github.com/bherila/auth-laravel"
             },
-            "time": "2026-11-11T18:33:43+00:00"
+            "time": "2026-11-15T07:11:49+00:00"
         },
         {
             "name": "bherila/auth-manager",
-            "version": "0.1.7",
+            "version": "0.1.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-manager.git",
-                "reference": "91a9e2ad926f2a8486cc2b5081baa878c9e92bab"
+                "reference": "82bec97869a14367250ceaade4cdae6ab1953664"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.7/auth-manager-source-v0.1.7.zip",
-                "reference": "91a9e2ad926f2a8486cc2b5081baa878c9e92bab",
-                "shasum": "9b1df0466c49d3ced475cba9c352585402f02967"
+                "url": "https://github.com/bherila/auth-manager/releases/download/v0.1.8/auth-manager-source-v0.1.8.zip",
+                "reference": "82bec97869a14367250ceaade4cdae6ab1953664",
+                "shasum": "e224bf4d338d4948960c91f67648bcae3c7f8327"
             },
             "require": {
-                "bherila/auth-laravel": "^0.28.7",
+                "bherila/auth-laravel": "^0.30",
                 "laravel/framework": "^13.17",
                 "laravel/passport": "^13.4",
                 "laravel/tinker": "^3.0",

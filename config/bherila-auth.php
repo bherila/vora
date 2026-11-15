@@ -18,6 +18,8 @@ return [
         'passkeys' => $localCredentials,
         'password_resets' => $localCredentials,
         'change_password' => $localCredentials,
+        // Keep the application's shared password-guess budget with email changes.
+        'confirm_password' => false,
         'two_factor' => $localCredentials,
     ],
 
@@ -137,6 +139,7 @@ return [
     'two_factor' => [
         'table' => 'auth_two_factor_attempts',
         'expires_minutes' => 15,
+        'max_wrong_codes' => 5,
         'allow_test_code' => env('BHERILA_AUTH_ALLOW_TEST_2FA_CODE', false),
         'test_code_environments' => ['local', 'testing'],
         'test_code' => '999999',
@@ -148,6 +151,7 @@ return [
 
     'passkeys' => [
         'table' => 'auth_passkeys',
+        'require_password_confirmation' => true,
         'rp_name' => env('WEBAUTHN_RP_NAME', env('APP_NAME', 'App')),
         'allowed_origins' => array_filter(array_map('trim', explode(',', env('WEBAUTHN_ALLOWED_ORIGINS', '')))),
         'timeout' => 60000,
