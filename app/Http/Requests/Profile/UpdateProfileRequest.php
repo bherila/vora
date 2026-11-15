@@ -3,13 +3,18 @@
 namespace App\Http\Requests\Profile;
 
 use App\Enums\Audience;
+use App\Http\Requests\Concerns\CapsArrayInput;
 use App\Models\User;
+use App\Rules\AllExist;
 use App\Services\Auth\SignIn;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateProfileRequest extends FormRequest
 {
+    use CapsArrayInput;
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -36,8 +41,8 @@ class UpdateProfileRequest extends FormRequest
             'preferred_genders' => ['nullable', 'array'],
             'preferred_genders.*' => ['required', 'string', 'distinct', Rule::in(['male', 'female', 'other'])],
             'profile_audience' => ['sometimes', Rule::in(Audience::values())],
-            'audience_user_ids' => ['nullable', 'array'],
-            'audience_user_ids.*' => ['integer', 'distinct', Rule::exists('users', 'id')->whereNot('id', $userId)],
+            'audience_user_ids' => ['nullable', 'array', 'max:100', new AllExist('users', scope: fn (Builder $query) => $query->where('id', '!=', $userId))],
+            'audience_user_ids.*' => ['integer', 'distinct'],
             'notify_new_post' => ['sometimes', 'boolean'],
             'notify_post_reaction' => ['sometimes', 'boolean'],
             'notify_post_comment' => ['sometimes', 'boolean'],

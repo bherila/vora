@@ -4,6 +4,7 @@ namespace App\Http\Requests\Story;
 
 use App\Enums\StoryStatus;
 use App\Http\Requests\Concerns\ValidatesAudience;
+use App\Rules\AllExist;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,8 +38,8 @@ class UpdateStoryRequest extends FormRequest
             'status' => ['sometimes', 'required', Rule::in(StoryStatus::values())],
             ...$this->audienceRules(['sometimes', 'required']),
             'body' => ['nullable', 'string'],
-            'interest_ids' => ['nullable', 'array'],
-            'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
+            'interest_ids' => ['nullable', 'array', 'max:100', new AllExist('interests')],
+            'interest_ids.*' => ['integer', 'distinct'],
             'involvements' => ['nullable', 'array'],
             'involvements.*.type' => ['required', Rule::in(['user', 'character'])],
             'involvements.*.id' => ['required', 'integer'],

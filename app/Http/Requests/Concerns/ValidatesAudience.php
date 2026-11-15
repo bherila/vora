@@ -4,6 +4,7 @@ namespace App\Http\Requests\Concerns;
 
 use App\Enums\Audience;
 use App\Models\User;
+use App\Rules\AllExist;
 use App\Support\FollowGraph;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,11 @@ use Illuminate\Validation\Rule;
  */
 trait ValidatesAudience
 {
+    use CapsArrayInput;
+
+    /** People one item can be shared with individually (matches Library sharing). */
+    public const MAX_AUDIENCE_USERS = 100;
+
     /**
      * Validation rules for the privacy fields. $audiencePresence is the leading
      * presence rule(s) for the audience field, e.g. ['required'] on create or
@@ -29,8 +35,8 @@ trait ValidatesAudience
         return [
             'audience' => [...$audiencePresence, Rule::in(Audience::values())],
             'discoverable' => ['nullable', 'boolean'],
-            'audience_user_ids' => ['nullable', 'array'],
-            'audience_user_ids.*' => ['integer', 'distinct', Rule::exists('users', 'id')],
+            'audience_user_ids' => ['nullable', 'array', 'max:'.self::MAX_AUDIENCE_USERS, new AllExist('users')],
+            'audience_user_ids.*' => ['integer', 'distinct'],
         ];
     }
 

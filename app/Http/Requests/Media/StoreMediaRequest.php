@@ -6,6 +6,7 @@ use App\Enums\MediaType;
 use App\Enums\RestrictionCapability;
 use App\Http\Requests\Concerns\ValidatesAudience;
 use App\Models\Character;
+use App\Rules\AllExist;
 use App\Services\Moderation\RestrictionGate;
 use App\Support\HeifPhoto;
 use Illuminate\Contracts\Validation\Validator;
@@ -44,8 +45,8 @@ class StoreMediaRequest extends FormRequest
                 Rule::exists('characters', 'id')->where('user_id', $this->user()?->id),
             ],
             ...$this->audienceRules(['required_without:character_id']),
-            'interest_ids' => ['nullable', 'array'],
-            'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
+            'interest_ids' => ['nullable', 'array', 'max:100', new AllExist('interests')],
+            'interest_ids.*' => ['integer', 'distinct'],
             // The client generates the thumbnail/poster itself; ask for a second
             // presigned URL when it has one to upload.
             'has_thumbnail' => ['nullable', 'boolean'],

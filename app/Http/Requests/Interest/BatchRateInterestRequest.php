@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Interest;
 
+use App\Http\Requests\Concerns\CapsArrayInput;
+use App\Rules\AllExist;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,6 +12,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BatchRateInterestRequest extends FormRequest
 {
+    use CapsArrayInput;
+
     /**
      * Ratings are set for (user, character). character_id is optional — null
      * targets the user's own profile.
@@ -44,8 +48,9 @@ class BatchRateInterestRequest extends FormRequest
                         ->whereNull('deleted_at'),
                 ),
             ],
-            'ratings' => ['required', 'array', 'min:1'],
-            'ratings.*.interest_id' => ['required', 'integer', 'exists:interests,id'],
+            // The editor restores at most one character's whole rating set at once.
+            'ratings' => ['required', 'array', 'min:1', 'max:500', new AllExist('interests', key: 'interest_id')],
+            'ratings.*.interest_id' => ['required', 'integer'],
             // A null level removes the rating; any other value upserts it.
             'ratings.*.level' => ['present', 'nullable', 'integer', 'between:-10,10'],
         ];

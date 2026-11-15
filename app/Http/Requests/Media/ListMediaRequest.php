@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Media;
 
 use App\Enums\MediaType;
+use App\Http\Requests\Concerns\CapsArrayInput;
+use App\Rules\AllExist;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,6 +16,8 @@ use Illuminate\Validation\Rule;
  */
 class ListMediaRequest extends FormRequest
 {
+    use CapsArrayInput;
+
     public function authorize(): bool
     {
         $user = $this->user();
@@ -28,8 +32,8 @@ class ListMediaRequest extends FormRequest
     {
         return [
             'type' => ['nullable', Rule::in(MediaType::values())],
-            'interest_ids' => ['nullable', 'array'],
-            'interest_ids.*' => ['integer', 'distinct', Rule::exists('interests', 'id')],
+            'interest_ids' => ['nullable', 'array', 'max:100', new AllExist('interests')],
+            'interest_ids.*' => ['integer', 'distinct'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
     }

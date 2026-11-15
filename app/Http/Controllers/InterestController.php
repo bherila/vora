@@ -107,23 +107,46 @@ class InterestController extends Controller
                 $this->seedSpecificInterests($character);
             }
 
+            // Last entry wins for a repeated interest, as the per-row writes did.
+            $levels = [];
             foreach ($validated['ratings'] as $rating) {
-                $interestId = (int) $rating['interest_id'];
+                $levels[(int) $rating['interest_id']] = $rating['level'] === null ? null : (int) $rating['level'];
+            }
+            $scope = fn () => InterestRating::query()
+                ->where('user_id', $user->id)
+                ->where('character_id', $characterId);
 
-                if ($rating['level'] === null) {
-                    InterestRating::query()
-                        ->where('user_id', $user->id)
-                        ->where('character_id', $characterId)
-                        ->where('interest_id', $interestId)
-                        ->delete();
+            $removed = array_keys(array_filter($levels, fn (?int $level): bool => $level === null));
+            if ($removed !== []) {
+                $scope()->whereIn('interest_id', $removed)->delete();
+            }
 
-                    continue;
+            $kept = array_filter($levels, fn (?int $level): bool => $level !== null);
+            if ($kept !== []) {
+                $existing = $scope()->whereIn('interest_id', array_keys($kept))->get()->keyBy('interest_id');
+                $now = now();
+                $inserts = [];
+                foreach ($kept as $interestId => $level) {
+                    $row = $existing->get($interestId);
+                    if ($row instanceof InterestRating) {
+                        if ($row->level !== $level) {
+                            $row->update(['level' => $level]);
+                        }
+
+                        continue;
+                    }
+                    $inserts[] = [
+                        'user_id' => $user->id,
+                        'character_id' => $characterId,
+                        'interest_id' => $interestId,
+                        'level' => $level,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
-
-                InterestRating::query()->updateOrCreate(
-                    ['user_id' => $user->id, 'character_id' => $characterId, 'interest_id' => $interestId],
-                    ['level' => (int) $rating['level']],
-                );
+                if ($inserts !== []) {
+                    InterestRating::query()->insert($inserts);
+                }
             }
 
             // Persisting an explicit rating means the character is overriding,

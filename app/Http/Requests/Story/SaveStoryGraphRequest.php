@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Story;
 
+use App\Http\Requests\Concerns\CapsArrayInput;
 use Illuminate\Foundation\Http\FormRequest;
 
 class SaveStoryGraphRequest extends FormRequest
 {
+    use CapsArrayInput;
+
     public function authorize(): bool
     {
         $user = $this->user();
@@ -27,16 +30,16 @@ class SaveStoryGraphRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nodes' => ['present', 'array'],
+            'nodes' => ['present', 'array', 'max:500'],
             // Distinct keys so two passages can't reconcile into one row (which
             // could, e.g., clobber the start passage).
             'nodes.*.key' => ['nullable', 'string', 'max:64', 'distinct'],
             'nodes.*.title' => ['nullable', 'string', 'max:255'],
-            'nodes.*.body' => ['nullable', 'string'],
+            'nodes.*.body' => ['nullable', 'string', 'max:100000'],
             'nodes.*.is_start' => ['nullable', 'boolean'],
             'nodes.*.position_x' => ['nullable', 'numeric'],
             'nodes.*.position_y' => ['nullable', 'numeric'],
-            'choices' => ['present', 'array'],
+            'choices' => ['present', 'array', 'max:2000'],
             'choices.*.from' => ['required', 'string', 'max:64'],
             'choices.*.to' => ['nullable', 'string', 'max:64'],
             'choices.*.label' => ['required', 'string', 'max:255'],
