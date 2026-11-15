@@ -6,7 +6,7 @@ import { getAuthComponents } from './shared-components';
 describe('published passkey confirmation with Vora components', () => {
   it('reacts to 423 through the existing shared-budget password endpoint and retries enrollment', async () => {
     let confirmed = false;
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
     const response = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body }) as Response;
     const originalFetch = globalThis.fetch;
     const originalCredential = Object.getOwnPropertyDescriptor(globalThis, 'PublicKeyCredential');
