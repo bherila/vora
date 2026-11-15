@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Mail\ConfirmEmailChangeMail;
+use App\Mail\EmailChangeRequestedMail;
 use App\Models\User;
 use App\Services\Auth\EmergencyAccess;
 use BWH\Auth\Mail\TwoFactorLoginMail;
@@ -45,6 +47,32 @@ class EmbeddedEmergencyAccessTest extends EmbeddedAuthTestCase
             $this->assertSame(1, TwoFactorAttempt::count());
         });
         $this->postJson('/logout')->assertOk();
+        Http::assertNothingSent();
+    }
+
+    public function test_embedded_emergency_session_cannot_change_the_account_email_with_or_without_the_password(): void
+    {
+        Http::preventStrayRequests();
+        Mail::fake();
+        config(['auth.emergency_access.enabled' => true, 'auth.emergency_access.user_ids' => ['27']]);
+        $host = User::factory()->admin()->create(['id' => 27, 'email' => 'recovery@example.test', 'password' => self::PASSWORD]);
+        $this->get('/emergency-login')->assertOk();
+        $this->post('/emergency-login', ['email' => $host->email, 'password' => self::PASSWORD])->assertRedirect();
+        $attempt = TwoFactorAttempt::sole();
+        $this->postJson('/emergency-login/verify', ['attempt_token' => $attempt->token, 'code' => $attempt->code])->assertOk();
+        $this->assertAuthenticatedAs($host, 'web');
+        $this->getJson('/api/admin/invites')->assertOk();
+
+        foreach ([[], ['current_password' => 'wrong'], ['current_password' => self::PASSWORD]] as $password) {
+            $this->patchJson('/api/account', ['email' => 'elsewhere@example.test'] + $password)
+                ->assertForbidden()->assertJsonPath('message', 'Your email cannot be changed while signed in with emergency access.');
+        }
+        $this->assertSame('recovery@example.test', $host->fresh()->email);
+        $this->assertNull($host->fresh()->pending_email);
+        Mail::assertNotSent(ConfirmEmailChangeMail::class);
+        Mail::assertNotSent(EmailChangeRequestedMail::class);
+        $this->patchJson('/api/account', ['display_name' => 'Recovery'])->assertOk();
+        $this->assertAuthenticatedAs($host, 'web');
         Http::assertNothingSent();
     }
 }

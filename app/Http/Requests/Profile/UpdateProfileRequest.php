@@ -4,9 +4,8 @@ namespace App\Http\Requests\Profile;
 
 use App\Enums\Audience;
 use App\Http\Requests\Concerns\CapsArrayInput;
-use App\Models\User;
 use App\Rules\AllExist;
-use App\Services\Auth\SignIn;
+use App\Services\Account\EmailChangeService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -61,30 +60,22 @@ class UpdateProfileRequest extends FormRequest
                 Rule::unique('users', 'email')->ignore($userId),
             ],
             // Changing the address that receives password resets is a credential
-            // change: a hijacked session alone must not be able to make it.
-            'current_password' => [
-                Rule::requiredIf(fn (): bool => $this->changesEmail()),
-                'nullable',
-                'string',
-                'current_password:web',
-            ],
+            // change: a hijacked session alone must not be able to make it. Any
+            // other save drops the field unchecked, so it is no password oracle;
+            // every check that does run spends the `password-check` budget.
+            'current_password' => $this->changesEmail()
+                ? ['required', 'string', 'current_password:web']
+                : ['exclude'],
         ];
     }
 
-    /** Whether this request asks to change the local account's email address. */
+    /** Whether this request asks to change the account's own email address. */
     public function changesEmail(): bool
     {
-        $email = $this->input('email');
-        $user = $this->user();
-
-        // Locked and provider-bound addresses are refused by the controller with
-        // their own message; asking for a password first would hide it.
-        return SignIn::mode() === SignIn::LOCAL
-            && is_string($email)
-            && $user instanceof User
-            && $email !== $user->email
-            && ! $user->email_locked
-            && $user->oauth_subject === null;
+        // Refused changes (bound, locked, provider sign-in) are answered by the
+        // controller with their own message; asking for a password first would
+        // hide it, and checking one would only help someone guess it.
+        return EmailChangeService::changes($this->user(), $this->input('email'));
     }
 
     /**

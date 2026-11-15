@@ -5,6 +5,8 @@ namespace App\Services\Account;
 use App\Mail\ConfirmEmailChangeMail;
 use App\Mail\EmailChangeRequestedMail;
 use App\Models\User;
+use App\Services\Auth\SignIn;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -20,6 +22,43 @@ class EmailChangeService
     public const PENDING = 'pending';
 
     public const REPLACED = 'replaced';
+
+    /**
+     * Why this account's address cannot be changed here, or null when it can.
+     * Only an unbound, unlocked local account under local sign-in owns its
+     * address; that is also the account whose password guards the change.
+     */
+    public static function refusal(User $user): ?string
+    {
+        // The identity provider owns a bound account's address and sends it
+        // again at every sign-in.
+        if ($user->oauth_subject !== null) {
+            return 'Your email is managed by your sign-in provider.';
+        }
+
+        if ($user->email_locked) {
+            return 'Your email is locked and cannot be changed.';
+        }
+
+        // Under provider sign-in the only unbound session is a designated
+        // emergency administrator's (RequireProviderAccount ends every other).
+        // An operator provisions that account and the mailbox its sign-in code
+        // goes to; like its password, the address is not changed from a session.
+        if (SignIn::usesProvider()) {
+            return 'Your email cannot be changed while signed in with emergency access.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a request naming $email would change this account's address, and
+     * so must prove the current password. A refused change checks nothing.
+     */
+    public static function changes(?Authenticatable $user, mixed $email): bool
+    {
+        return $user instanceof User && is_string($email) && $email !== $user->email && self::refusal($user) === null;
+    }
 
     /** @return self::PENDING|self::REPLACED */
     public function request(User $user, string $newEmail): string
@@ -70,8 +109,8 @@ class EmailChangeService
 
     /**
      * Apply the pending address if the link names it and nothing has since made
-     * the change invalid (a newer request, a lock, a provider binding, or the
-     * address being taken by another account).
+     * the change invalid (a newer request, a lock, a provider binding, provider
+     * sign-in, or the address being taken by another account).
      */
     public function confirm(User $user, string $hash): bool
     {
@@ -85,7 +124,7 @@ class EmailChangeService
             }
 
             $taken = User::query()->where('email', $pending)->whereKeyNot($locked->getKey())->exists();
-            if ($taken || $locked->email_locked || $locked->oauth_subject !== null) {
+            if ($taken || self::refusal($locked) !== null) {
                 $locked->forceFill(['pending_email' => null, 'pending_email_requested_at' => null])->save();
 
                 return false;

@@ -54,6 +54,9 @@ provider binding columns must be null. Recheck designation and eligibility
 during the password step, pending second factor and subsequent requests. Removing
 the designation, disabling the feature, demoting or binding the account ends
 the exception. Emergency sign-out must not depend on a provider response.
+An emergency session cannot change the account's email address, even with the
+password: it is the mailbox the second factor goes to, so the operator
+provisions it like the password.
 Ordinary local accounts and provider-owned accounts never gain this path.
 
 Rehearse with isolated accounts while the provider transport is unavailable.

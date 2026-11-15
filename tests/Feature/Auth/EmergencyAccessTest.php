@@ -3,7 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Http\Middleware\RequireProviderAccount;
+use App\Mail\ConfirmEmailChangeMail;
+use App\Mail\EmailChangeRequestedMail;
 use App\Models\User;
+use App\Services\Account\EmailChangeService;
 use App\Services\Auth\EmergencyAccess;
 use BWH\Auth\Mail\TwoFactorLoginMail;
 use BWH\Auth\Models\TwoFactorAttempt;
@@ -288,5 +291,34 @@ class EmergencyAccessTest extends TestCase
             ->post('/emergency-login/confirm/'.$attempt->token)->assertRedirect();
         $this->assertFalse(session()->has(EmergencyAccess::SESSION));
         $this->assertFalse($attempt->fresh()->is_used);
+    }
+
+    public function test_emergency_session_cannot_change_the_account_email_with_or_without_the_password(): void
+    {
+        $user = $this->administrator();
+        $this->finish($this->challenge($user));
+        $this->assertAuthenticatedAs($user);
+
+        // The address receives the emergency sign-in code; an operator provisions it.
+        foreach ([[], ['current_password' => 'wrong'], ['current_password' => 'synthetic-password']] as $password) {
+            $this->patchJson('/api/account', ['email' => 'elsewhere@example.test'] + $password)
+                ->assertForbidden()->assertJsonPath('message', 'Your email cannot be changed while signed in with emergency access.');
+        }
+        $this->assertSame('recovery@example.test', $user->fresh()->email);
+        $this->assertNull($user->fresh()->pending_email);
+        Mail::assertNotSent(ConfirmEmailChangeMail::class);
+        Mail::assertNotSent(EmailChangeRequestedMail::class);
+
+        // A change requested before provider sign-in cannot be confirmed in one either.
+        $user->forceFill(['pending_email' => 'elsewhere@example.test', 'pending_email_requested_at' => now()])->save();
+        $this->get(app(EmailChangeService::class)->confirmationUrl($user, 'elsewhere@example.test'))
+            ->assertRedirect(route('user.settings', ['email_change' => 'failed']));
+        $this->assertSame('recovery@example.test', $user->fresh()->email);
+        $this->assertNull($user->fresh()->pending_email);
+
+        // Other settings still save, and the password is never checked for them.
+        $this->patchJson('/api/account', ['display_name' => 'Recovery', 'current_password' => 'wrong'])->assertOk();
+        $this->assertSame('Recovery', $user->fresh()->display_name);
+        $this->assertAuthenticatedAs($user);
     }
 }
