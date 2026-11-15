@@ -47,7 +47,7 @@ final class PackageRouteHardening
                     continue;
                 }
 
-                $missing = array_values(array_diff($extra, $route->middleware()));
+                $missing = array_values(array_diff($extra, (array) ($route->getAction('middleware') ?? [])));
                 if ($missing !== []) {
                     $route->middleware($missing);
                 }
