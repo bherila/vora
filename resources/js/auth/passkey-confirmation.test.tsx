@@ -17,7 +17,7 @@ describe('published passkey confirmation with Vora components', () => {
     Object.defineProperty(navigator, 'credentials', { configurable: true, value: { create } });
     document.head.innerHTML = '<meta name="csrf-token" content="synthetic-csrf">';
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       requests.push({ url, init });
       if (url === '/api/passkeys') return response([]);
       if (url === '/api/auth/confirm-password') { confirmed = true; return response({ success: true }); }
@@ -40,7 +40,10 @@ describe('published passkey confirmation with Vora components', () => {
       await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(requests.some(({ url }) => url === '/api/passkeys/register')).toBe(true));
       const confirmation = requests.find(({ url }) => url === '/api/auth/confirm-password');
-      expect(JSON.parse(String(confirmation?.init?.body))).toEqual({ password: 'synthetic-password' });
+      const body = confirmation?.init?.body;
+      expect(typeof body).toBe('string');
+      if (typeof body !== 'string') throw new Error('Expected JSON request body');
+      expect(JSON.parse(body)).toEqual({ password: 'synthetic-password' });
       expect(confirmation?.init?.credentials ?? 'same-origin').toBe('same-origin');
       expect(confirmation?.init?.headers).toEqual(expect.objectContaining({ 'X-CSRF-TOKEN': 'synthetic-csrf' }));
       expect(requests.filter(({ url }) => url === '/api/passkeys/register/options')).toHaveLength(2);
