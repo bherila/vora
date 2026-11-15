@@ -36,6 +36,8 @@ jobs:
               - '**/*.tsx'
               - '**/*.js'
               - '**/*.jsx'
+              - '**/*.mjs'
+              - '**/*.cjs'
               - '**/*.css'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -47,6 +49,8 @@ jobs:
               - 'jest.config.*'
               - 'scripts/build-embedded-auth-assets.sh'
               - '.oxlintrc.json'
+              - 'biome.unused-imports.json'
+              - 'tools/oxlint/**'
               - 'resources/**'
               - 'tests-ts/**'
               - '.github/workflows/**'
@@ -147,6 +151,10 @@ jobs:
 
       - name: Dependency security regressions
         run: pnpm run test:dependencies
+
+      - name: Lint toolchain contracts
+        if: needs.changes.outputs.frontend == 'true'
+        run: pnpm run lint:test
 
       - name: Build frontend assets
         run: pnpm run build

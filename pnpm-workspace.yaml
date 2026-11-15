@@ -27,3 +27,14 @@ minimumReleaseAgeExclude:
 # visible to audits while patching all published merge implementations.
 patchedDependencies:
   deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
+
+# Oxlint hosts these audited pure rules; their ESLint engine peers are optional.
+packageExtensions:
+  eslint-plugin-react-hooks@7.1.1:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
+  eslint-plugin-simple-import-sort@14.0.0:
+    peerDependenciesMeta:
+      eslint:
+        optional: true
