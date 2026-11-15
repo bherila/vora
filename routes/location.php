@@ -18,10 +18,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::middleware(['auth', 'approved', 'module:profiles'])->prefix('api/location')->group(function (): void {
-    Route::put('/', [LocationController::class, 'update'])->middleware('throttle:30,1');
-    Route::get('/places', [LocationController::class, 'search'])->middleware('throttle:120,1');
-    Route::post('/places/nearest', [LocationController::class, 'nearest'])->middleware('throttle:20,1');
-    Route::get('/nearby', [NearbyPeopleController::class, 'index'])->middleware('throttle:60,1');
+    Route::put('/', [LocationController::class, 'update'])->middleware('throttle:30,1,location-update');
+    Route::get('/places', [LocationController::class, 'search'])->middleware('throttle:120,1,place-search');
+    Route::post('/places/nearest', [LocationController::class, 'nearest'])->middleware('throttle:20,1,place-nearest');
+    Route::get('/nearby', [NearbyPeopleController::class, 'index'])->middleware('throttle:60,1,nearby-people');
 });
 
 // Admin → City list: GeoNames dataset, imports (run by the scheduler) and status.
@@ -30,7 +30,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only', 'module:profiles'])->gr
     Route::prefix('api/admin/places')->group(function (): void {
         Route::get('/', [AdminPlacesController::class, 'show']);
         Route::put('/settings', [AdminPlacesController::class, 'updateSettings']);
-        Route::post('/import', [AdminPlacesController::class, 'import'])->middleware('throttle:10,1');
+        Route::post('/import', [AdminPlacesController::class, 'import'])->middleware('throttle:10,1,admin-place-import');
         Route::delete('/import', [AdminPlacesController::class, 'cancel']);
     });
 });

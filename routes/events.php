@@ -34,8 +34,8 @@ Route::middleware(['auth', 'approved', 'module:events'])->group(function (): voi
     Route::get('/api/events/attendees', [EventController::class, 'attendees']);
     Route::get('/api/events/settings', [EventController::class, 'settings']);
     Route::get('/api/events/media', [EventMediaController::class, 'index']);
-    Route::post('/api/events/media/bulk-save', [BulkTransferController::class, 'save'])->middleware(['module:library', 'throttle:10,1'])->name('bulk-transfer.events.save');
-    Route::post('/api/events/media/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1')->name('bulk-transfer.events.prepare');
+    Route::post('/api/events/media/bulk-save', [BulkTransferController::class, 'save'])->middleware(['module:library', 'throttle:10,1,bulk-save'])->name('bulk-transfer.events.save');
+    Route::post('/api/events/media/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1,bulk-prepare')->name('bulk-transfer.events.prepare');
     Route::get('/api/events/media/{ulid}/download', [EventMediaController::class, 'download'])->name('events.media.download');
     Route::get('/api/events/media/{ulid}/variants', [EventMediaController::class, 'variants']);
     Route::get('/api/events/media/{ulid}', [EventMediaController::class, 'show']);

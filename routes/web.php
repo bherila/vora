@@ -120,7 +120,7 @@ Route::middleware(['guest', 'sign-in:local'])->group(function () {
 // The identity provider returns here. Not guest-only: the package refuses a
 // response for a flow this session did not start.
 Route::get('/oauth/callback', [ProviderLoginController::class, 'callback'])
-    ->middleware(['sign-in:provider', 'throttle:30,1'])->name('oauth.callback');
+    ->middleware(['sign-in:provider', 'throttle:30,1,oauth-callback'])->name('oauth.callback');
 
 // Outside `auth`: a page left open past its session must still end the
 // provider's session, or the next sign-in returns without a prompt.
@@ -134,11 +134,11 @@ Route::post('/logout', [ProviderLoginController::class, 'logout'])->name('logout
 Route::middleware('auth')->group(function () {
     Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
     Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
-        ->middleware(['signed', 'throttle:6,1'])->name('verification.verify');
+        ->middleware(['signed', 'throttle:6,1,verification-verify'])->name('verification.verify');
     Route::post('/email/verification-notification', [EmailVerificationController::class, 'resend'])
-        ->middleware('throttle:6,1')->name('verification.send');
+        ->middleware('throttle:6,1,verification-send')->name('verification.send');
     Route::get('/email/verification-status', [EmailVerificationController::class, 'status'])
-        ->middleware('throttle:60,1')->name('verification.status');
+        ->middleware('throttle:60,1,verification-status')->name('verification.status');
 
     // Fresh password confirmation before passkey enrollment (local sign-in only;
     // see RequireConfirmedPassword and PackageRouteHardening).
@@ -169,7 +169,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/age-eligibility', AgeEligibilityController::class)->name('age.eligibility');
     Route::post('/age-eligibility/birth-date', [AgeEligibilityController::class, 'storeBirthDate'])
-        ->middleware('throttle:10,1')->name('age.birth-date');
+        ->middleware('throttle:10,1,age-birth-date')->name('age.birth-date');
     Route::get('/pending-approval', PendingApprovalController::class)->name('approval.pending');
     Route::get('/user/settings', function (AccountStorageUsage $storageUsage) {
         $user = auth()->user();
@@ -248,11 +248,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/sync', [ChatController::class, 'sync']);
         Route::get('/unread-count', [ChatController::class, 'unreadCount']);
         Route::get('/conversations', [ChatController::class, 'index']);
-        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1');
+        Route::post('/conversations', [ChatController::class, 'store'])->middleware('throttle:30,1,chat-start');
         Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
         Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
         Route::post('/conversations/{conversation}/messages', [ChatController::class, 'send'])
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chat-send');
         Route::post('/conversations/{conversation}/read', [ChatController::class, 'markRead']);
     });
     // Keep the retired characters index pointed at the profile for old bookmarks;
@@ -272,7 +272,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::middleware('sign-in:provider')->group(function () {
         Route::get('/invitations', [ProviderInvitationController::class, 'page'])->name('invitations');
         Route::get('/api/invitations', [ProviderInvitationController::class, 'index']);
-        Route::middleware('throttle:20,1')->group(function () {
+        Route::middleware('throttle:20,1,provider-invitations')->group(function () {
             Route::post('/api/invitations', [ProviderInvitationController::class, 'store']);
             Route::post('/api/invitations/{providerInvitation}/resend', [ProviderInvitationController::class, 'resend']);
             Route::post('/api/invitations/{providerInvitation}/revoke', [ProviderInvitationController::class, 'revoke']);
@@ -285,15 +285,15 @@ Route::middleware(['auth', 'approved'])->group(function () {
     Route::get('/m/{ulid}', [MediaController::class, 'viewPage'])->name('media.view');
 
     Route::get('/library', [LibraryController::class, 'page'])->name('library');
-    Route::get('/api/bulk-downloads/{token}', [BulkTransferController::class, 'download'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:10,1')->name('bulk-transfer.download');
+    Route::get('/api/bulk-downloads/{token}', [BulkTransferController::class, 'download'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:10,1,bulk-download')->name('bulk-transfer.download');
     Route::prefix('api/library')->group(function () {
         Route::get('/items', [LibraryController::class, 'index']);
         Route::post('/notes', [LibraryController::class, 'storeNote']);
         Route::post('/uploads', [LibraryController::class, 'upload']);
         Route::post('/save', [LibraryController::class, 'save']);
         Route::post('/items/bulk', LibraryBulkController::class);
-        Route::post('/items/bulk-save', [BulkTransferController::class, 'save'])->middleware('throttle:10,1')->name('bulk-transfer.library.save');
-        Route::post('/items/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1')->name('bulk-transfer.library.prepare');
+        Route::post('/items/bulk-save', [BulkTransferController::class, 'save'])->middleware('throttle:10,1,bulk-save')->name('bulk-transfer.library.save');
+        Route::post('/items/bulk-downloads', [BulkTransferController::class, 'prepare'])->middleware('throttle:5,1,bulk-prepare')->name('bulk-transfer.library.prepare');
         Route::get('/personas', [LibraryController::class, 'personas']);
         Route::get('/collections', [LibraryController::class, 'collections']);
         Route::post('/collections', [LibraryController::class, 'storeCollection']);
@@ -307,7 +307,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/items/{ulid}/collections', [LibraryController::class, 'addMembership']);
         Route::delete('/items/{ulid}/collections/{collectionUlid}', [LibraryController::class, 'removeMembership']);
         Route::get('/items/{ulid}/assets/{variant}', [LibraryContentController::class, 'asset'])->name('library.asset');
-        Route::get('/items/{ulid}/download', [BulkTransferController::class, 'downloadItem'])->middleware('throttle:20,1')->name('library.download');
+        Route::get('/items/{ulid}/download', [BulkTransferController::class, 'downloadItem'])->middleware('throttle:20,1,library-download')->name('library.download');
         Route::get('/items/{ulid}/hls/{path?}', [LibraryContentController::class, 'hls'])
             ->where('path', '.*')->name('library.hls');
     });
@@ -362,7 +362,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
 
     // Abuse reports (polymorphic: media, stories, posts). Throttled — a handful
     // of reports a minute is plenty and this blunts report-spam.
-    Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/api/reports', [ReportController::class, 'store'])->middleware('throttle:10,1,reports');
 
     Route::prefix('api/users')->group(function () {
         Route::get('/', [FollowController::class, 'users']);
@@ -438,7 +438,7 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::post('/{post}/reactions', [PostReactionController::class, 'store']);
         Route::delete('/{post}/reactions', [PostReactionController::class, 'destroy']);
         Route::get('/{post}/comments', [PostCommentController::class, 'index'])
-            ->middleware('throttle:120,1')
+            ->middleware('throttle:120,1,post-comments-read')
             ->name('posts.comments.index');
         Route::post('/{post}/comments', [PostCommentController::class, 'store']);
         Route::delete('/{post}/comments/{comment}', [PostCommentController::class, 'destroy']);

@@ -310,7 +310,7 @@ class PostCommentTest extends TestCase
         $this->assertSame("/api/posts/{$post->id}/comments", route('posts.comments.index', ['post' => $post], false));
         $route = app('router')->getRoutes()->getByName('posts.comments.index');
         $this->assertNotNull($route);
-        $this->assertContains('throttle:120,1', $route->gatherMiddleware());
+        $this->assertContains('throttle:120,1,post-comments-read', $route->gatherMiddleware());
     }
 
     public function test_lost_parent_access_returns_forbidden_before_a_matching_etag(): void
