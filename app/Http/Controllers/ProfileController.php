@@ -322,19 +322,12 @@ class ProfileController extends Controller
             ], 403);
         }
 
-        // The identity provider owns a bound account's address and sends it
-        // again at every sign-in.
-        if ($emailChanged && $user->oauth_subject !== null) {
+        // Bound, locked and emergency-access accounts do not own their address.
+        $emailRefusal = $emailChanged ? EmailChangeService::refusal($user) : null;
+        if ($emailRefusal !== null) {
             return response()->json([
                 'success' => false,
-                'message' => 'Your email is managed by your sign-in provider.',
-            ], 403);
-        }
-
-        if ($emailChanged && $user->email_locked) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Your email is locked and cannot be changed.',
+                'message' => $emailRefusal,
             ], 403);
         }
 

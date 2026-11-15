@@ -143,10 +143,12 @@ Route::middleware('auth')->group(function () {
     // Fresh password confirmation before passkey enrollment (local sign-in only;
     // see RequireConfirmedPassword and PackageRouteHardening).
     Route::post('/api/auth/confirm-password', [ConfirmPasswordController::class, 'store'])
-        ->middleware(['sign-in:local', 'throttle:6,1,confirm-password'])->name('password.confirm.store');
+        ->middleware(['sign-in:local', 'throttle:password-check'])->name('password.confirm.store');
 
-    // Only requests that change the email address count (see RateLimits).
-    Route::patch('/api/account', [ProfileController::class, 'update'])->middleware('throttle:email-change');
+    // Only requests that change the email address count, and only they check
+    // the password (see RateLimits).
+    Route::patch('/api/account', [ProfileController::class, 'update'])
+        ->middleware(['throttle:email-change', 'throttle:password-check'])->name('account.update');
     Route::get('/account/email/confirm/{id}/{hash}', [EmailChangeController::class, 'confirm'])
         ->middleware(['signed', 'throttle:6,1,email-change-confirm'])->name('account.email.confirm');
     Route::post('/api/account/profile-picture', [ProfileController::class, 'storeProfilePicture']);

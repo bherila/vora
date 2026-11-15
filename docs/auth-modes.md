@@ -50,8 +50,11 @@ Nothing else is required. `OAUTH_*` keys are ignored.
   they send mail, per account or address.
 - Changing the email address needs the current password. A verified address
   stays in use until the link mailed to the new address is opened, and the old
-  address is told about the request.
-- Adding a passkey needs a fresh password confirmation in that session.
+  address is told about the request. Other profile saves never check the
+  password.
+- Adding a passkey needs a fresh password confirmation in that session. Every
+  password check (that confirmation, or an email change) spends one per-account
+  budget of six a minute.
 - A password change or reset ends every other session and remember-me cookie;
   an administrator disabling an account ends its session on the next request.
 - `/oauth/callback` is not served in this mode (404).

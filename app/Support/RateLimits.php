@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use App\Services\Account\EmailChangeService;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -17,6 +18,9 @@ final class RateLimits
 {
     /** Writes one account (or, for a guest, one IP) may make across the web app per minute. */
     public const WEB_WRITES_PER_MINUTE = 300;
+
+    /** Checks of one account's current password, across every endpoint that makes one, per minute. */
+    public const PASSWORD_CHECKS_PER_MINUTE = 6;
 
     public static function register(): void
     {
@@ -47,6 +51,21 @@ final class RateLimits
             }
 
             return Limit::perHour(6)->by('email-change:'.$user->getKey());
+        });
+
+        // Every request that checks the signed-in account's password shares one
+        // bucket per account: confirming the password, and a PATCH /api/account
+        // that changes the address (no other profile save checks it, so none
+        // counts). A stolen session cannot guess faster by switching endpoints.
+        RateLimiter::for('password-check', function (Request $request): Limit {
+            $user = $request->user();
+            if ($request->routeIs('account.update') && ! EmailChangeService::changes($user, $request->input('email'))) {
+                return Limit::none();
+            }
+
+            return Limit::perMinute(self::PASSWORD_CHECKS_PER_MINUTE)->by($user !== null
+                ? 'user:'.$user->getAuthIdentifier()
+                : 'ip:'.$request->ip());
         });
 
         // Emailed sign-in codes. LimitTwoFactorGuesses spends a challenge after
