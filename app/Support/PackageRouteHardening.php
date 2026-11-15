@@ -2,14 +2,16 @@
 
 namespace App\Support;
 
+use App\Http\Middleware\LimitTwoFactorGuesses;
 use App\Http\Middleware\RequireConfirmedPassword;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
 
 /**
  * Adds application middleware to credential routes the bherila/auth-laravel
- * package registers without it: password confirmation before a new passkey is
- * enrolled.
+ * package registers without it: rate limits on the email-code and password
+ * reset endpoints, a wrong-code limit per sign-in challenge, and password
+ * confirmation before a new passkey is enrolled.
  *
  * Applied once the application has booted, when the package's routes exist.
  * These belong in the package itself; this keeps the app safe until it ships
@@ -24,6 +26,10 @@ final class PackageRouteHardening
         $uri = fn (string $path): string => ltrim($prefix.'/'.$path, '/');
 
         return [
+            'POST '.$uri('auth/two-factor/verify') => ['throttle:two-factor-verify', LimitTwoFactorGuesses::class],
+            'POST '.$uri('auth/two-factor/resend') => ['throttle:two-factor-resend'],
+            'POST '.$uri('auth/forgot-password') => ['throttle:forgot-password'],
+            'POST '.$uri('auth/reset-password') => ['throttle:10,1,reset-password'],
             'POST '.$uri('passkeys/register/options') => [RequireConfirmedPassword::class],
             'POST '.$uri('passkeys/register') => [RequireConfirmedPassword::class],
         ];

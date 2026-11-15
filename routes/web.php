@@ -98,16 +98,16 @@ require __DIR__.'/emergency.php';
 // provider sign-in the provider owns these and they are not served.
 Route::middleware(['guest', 'sign-in:local'])->group(function () {
     Route::get('/register', [RegisterController::class, 'show'])->name('register');
-    Route::post('/register', [RegisterController::class, 'store']);
-    Route::post('/api/auth/register', [RegisterController::class, 'store']);
+    Route::post('/register', [RegisterController::class, 'store'])->middleware('throttle:register');
+    Route::post('/api/auth/register', [RegisterController::class, 'store'])->middleware('throttle:register');
     Route::get('/i/{uuid}', [RegisterController::class, 'landing'])->name('invite.landing');
 
     // Public waitlist ("request an invitation"). Active only while public signups
     // are closed — the controller redirects to /register otherwise.
     Route::get('/request-invitation', [WaitlistController::class, 'show'])->name('waitlist.request');
-    Route::post('/api/waitlist', [WaitlistController::class, 'store'])->middleware('throttle:5,1');
+    Route::post('/api/waitlist', [WaitlistController::class, 'store'])->middleware('throttle:waitlist');
     Route::get('/waitlist/verify/{uuid}/{token}', [WaitlistController::class, 'verifyLink'])->name('waitlist.verify');
-    Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1');
+    Route::post('/api/waitlist/verify', [WaitlistController::class, 'verifyCode'])->middleware('throttle:6,1,waitlist-verify');
 
     Route::post('/login', [LoginController::class, 'store']);
     Route::post('/api/auth/login', [LoginController::class, 'store']);
