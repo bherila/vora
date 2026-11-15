@@ -39,7 +39,8 @@ Never run `npm`, `npm ci`, or `npx` in this repo.
   container matching production.
 - **Dependency management**: Composer (PHP) + pnpm (JS). Do not mix.
 - **Docs**: README.md is the human-facing project overview; AGENTS.md is the
-  agent contract; TESTING.AGENTS.md owns validation details; there is no CLAUDE.md
+  agent contract; TESTING.AGENTS.md owns validation details; SECURITY.md records the
+  trust assumptions the code relies on; there is no CLAUDE.md
   (Claude Code reads AGENTS.md directly).
 
 ## Commands
@@ -90,6 +91,18 @@ composer test
 - Use Form Requests for validation; do not inline `$request->validate()` in controllers.
 - Eager-load relationships; avoid N+1 queries.
 - Follow PSR-4 autoloading; keep class files in the directory matching their namespace.
+
+## Security invariants
+
+CI enforces these. Each census prints the fix in its failure message, and every allowlist or baseline entry needs a reason.
+
+- **Every write is throttled, in its own bucket.** No `throttle:N,M` without a prefix, which shares one per-user bucket across routes; use a named limiter (`App\Support\RateLimits`) or `throttle:N,M,<prefix>`. Every non-GET/HEAD/OPTIONS route, and every export route, carries a throttle. The web group's `throttle:web-writes` backstop satisfies the census for web routes, so the census cannot tell you a route needs more: routes that send mail, notify other people, fan out work or export data need a tighter limiter of their own, and reviewers must check this. The census boots the app, so it sees what `App\Support\PackageRouteHardening` adds to `bherila/auth-laravel`'s routes. Enforced by `tests/Feature/Security/RouteThrottleCensusTest.php`.
+- **Input is bounded.** Every `array`/`list` rule has `max:` (or `size:`/`between:`, or `array:<keys>`), every date has `after`/`before`, and every year or month key has a range. Cap the span of a from/to window in code. Known debt is frozen in `tests/Unit/Security/ValidationBoundsCensusBaseline.json`: fix entries rather than adding them, and remove an entry when its finding is gone (a stale entry fails). Enforced by `tests/Unit/Security/ValidationBoundsCensusTest.php`.
+- **Only `main` ancestry reaches deploy credentials.** A job with an `environment:`, deploy-class secrets or write-class token permissions must do one of three things: run only on push to `main`, gate on `github.ref == 'refs/heads/main'`, or fail closed on `git merge-base --is-ancestor` before any other step except `actions/checkout`. Give deploy secrets to the steps that use them, never through job- or workflow-level `env:`. `release-instance.yml`'s `deploy` job takes the third form. Enforced by `tests/Unit/Security/WorkflowCredentialCensusTest.php` and `tests/scripts/test_deploy_instance.py`. Also restrict each Environment's deployment branches to `main`.
+- **Authorize on the relationship, not a role flag.** Policies and visibility scopes check how the viewer is linked to the record (author, co-author, follower, audience member, attendee), never a bare role check, except for admin-only surfaces. There is no census for this yet, so it is a review rule.
+- **An MCP server caps JSON-RPC batch size** (svc's `LimitMcpBatchSize`, vetvet's `RefuseMcpBatches`). vora has no MCP server; add the cap and a test together with one.
+- **When you fix a security bug class**, check the sibling repos (2025-website, svc, vetvet) and x-template for the same class, and file or fix it there. Port the census when one exists, and port a new census here when a sibling adds one.
+- **Trust assumptions** the code relies on but does not verify (for example "the identity provider's subject is immutable") belong in [SECURITY.md](SECURITY.md).
 
 ## React / TypeScript conventions
 
