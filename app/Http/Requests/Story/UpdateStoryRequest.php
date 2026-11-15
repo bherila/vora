@@ -40,7 +40,9 @@ class UpdateStoryRequest extends FormRequest
             'body' => ['nullable', 'string'],
             'interest_ids' => ['nullable', 'array', 'max:100', new AllExist('interests')],
             'interest_ids.*' => ['integer', 'distinct'],
-            'involvements' => ['nullable', 'array'],
+            // Only the story's authors and their characters are kept; far more
+            // than any story has, and bounded before the service walks the list.
+            'involvements' => ['nullable', 'array', 'max:200'],
             'involvements.*.type' => ['required', Rule::in(['user', 'character'])],
             'involvements.*.id' => ['required', 'integer'],
         ];

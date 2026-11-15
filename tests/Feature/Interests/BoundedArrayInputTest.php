@@ -103,4 +103,34 @@ class BoundedArrayInputTest extends TestCase
             'choices' => [],
         ])->assertStatus(422)->assertJsonValidationErrors('nodes.0.body');
     }
+
+    #[Test]
+    public function involvement_preference_page_variable_and_push_key_lists_are_bounded(): void
+    {
+        $user = User::factory()->approved()->create();
+        $story = Story::factory()->for($user)->create();
+        $this->actingAs($user);
+
+        $involvements = array_map(fn (int $id): array => ['type' => 'user', 'id' => $id], range(1, 201));
+        $this->postJson('/api/stories', ['title' => 'Bounded', 'type' => 'long_form', 'body' => 'Text', 'involvements' => $involvements])
+            ->assertStatus(422)->assertJsonValidationErrors('involvements');
+        $this->patchJson("/api/stories/{$story->id}", ['involvements' => $involvements])
+            ->assertStatus(422)->assertJsonValidationErrors('involvements');
+
+        $this->patchJson('/api/account', [
+            'preferred_user_types' => ['human', 'furry', 'other', 'human'],
+            'preferred_genders' => ['male', 'female', 'other', 'male'],
+        ])->assertStatus(422)->assertJsonValidationErrors(['preferred_user_types', 'preferred_genders']);
+
+        $keys = ['p256dh' => 'x', 'auth' => 'y', ...array_fill_keys(array_map(fn (int $n): string => "k{$n}", range(1, 7)), 'z')];
+        $this->postJson('/api/push-subscriptions', ['endpoint' => 'https://fcm.googleapis.com/fcm/send/abc', 'keys' => $keys])
+            ->assertStatus(422)->assertJsonValidationErrors('keys');
+
+        $admin = User::factory()->admin()->create();
+        $variables = array_fill_keys(array_map(fn (int $n): string => "v{$n}", range(1, 101)), 'value');
+        $this->actingAs($admin)->postJson('/api/admin/pages', [
+            'slug' => 'bounded', 'title' => 'Bounded', 'body_markdown' => 'Text', 'variables' => $variables,
+            'is_published' => false, 'show_in_footer' => false, 'sort_order' => 0,
+        ])->assertStatus(422)->assertJsonValidationErrors('variables');
+    }
 }

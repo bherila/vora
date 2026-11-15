@@ -35,7 +35,9 @@ class StorePushSubscriptionRequest extends FormRequest
                     }
                 },
             ],
-            'keys' => ['required', 'array'],
+            // The Web Push spec defines two keys (p256dh, auth). The browser's
+            // toJSON() is sent as is, so tolerate a few more rather than naming them.
+            'keys' => ['required', 'array', 'max:8'],
             // p256dh is a 65-byte EC point (~88 base64url chars) and auth is 16
             // bytes (~24 chars). Cap length and `bail` so an oversized payload is
             // rejected before the closure base64-decodes the whole string.

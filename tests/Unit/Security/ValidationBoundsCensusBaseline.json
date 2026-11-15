@@ -1,0 +1,7 @@
+{
+    "array": {},
+    "date": {
+        "app/Http/Requests/Events/EventUpdateRequest.php::starts_at": "Admin-only (EventUpdateRequest::authorize requires an admin). Nullable, stored as given and used only to order and display events; nothing loops over or queries a window derived from it, and after() already requires ends_at >= starts_at. Bound it to the range events can really take when the event admin form is next changed.",
+        "app/Http/Requests/Events/EventUpdateRequest.php::ends_at": "Admin-only, as starts_at: stored as given, ordered after starts_at by after(), and only displayed. Bound it with starts_at."
+    }
+}
