@@ -15,8 +15,27 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 final class RateLimits
 {
+    /** Writes one account (or, for a guest, one IP) may make across the web app per minute. */
+    public const WEB_WRITES_PER_MINUTE = 300;
+
     public static function register(): void
     {
+        // The backstop on every web route (bootstrap/app.php): a write with no
+        // limiter of its own still cannot be repeated without bound. Its bucket
+        // is separate from every route's own limiter, and it is generous so no
+        // ordinary session reaches it; uploads retry a 429. Reads are not counted.
+        RateLimiter::for('web-writes', function (Request $request): Limit {
+            if (in_array($request->method(), ['GET', 'HEAD', 'OPTIONS'], true)) {
+                return Limit::none();
+            }
+
+            $user = $request->user();
+
+            return Limit::perMinute(self::WEB_WRITES_PER_MINUTE)->by($user !== null
+                ? 'user:'.$user->getAuthIdentifier()
+                : 'ip:'.$request->ip());
+        });
+
         // Counts only PATCH /api/account requests that actually change the
         // address: each sends mail to two addresses.
         RateLimiter::for('email-change', function (Request $request): Limit {

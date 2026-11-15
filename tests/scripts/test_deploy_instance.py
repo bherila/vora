@@ -95,6 +95,37 @@ class ReleaseWorkflowAncestryTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, ref)
             self.assertIn('is not on main', result.stdout)
 
+    def deploy_check(self, ref, release_sha):
+        self.git('checkout', '-q', '--detach', ref)
+        workflow = RELEASE_WORKFLOW.read_text()
+        step = workflow.split('      - name: Require the tested commit to be on main\n', 1)[1].split('\n      - ', 1)[0]
+        script = textwrap.dedent(step.split('        run: |\n', 1)[1])
+        return subprocess.run(['bash', '-c', script], cwd=self.repo, text=True, capture_output=True,
+                              check=False, env={**os.environ, 'RELEASE_SHA': release_sha})
+
+    def test_deploy_job_accepts_the_tested_main_commit(self):
+        self.assertEqual(self.deploy_check(self.reviewed, self.reviewed).returncode, 0)
+
+    def test_deploy_job_rejects_a_commit_off_main(self):
+        result = self.deploy_check(self.unreviewed, self.unreviewed)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('is not on main', result.stdout)
+
+    def test_deploy_job_rejects_a_missing_or_different_tested_commit(self):
+        for release_sha in ('', 'main', self.unreviewed):
+            self.assertNotEqual(self.deploy_check(self.reviewed, release_sha).returncode, 0, release_sha)
+
+
+class ReleaseWorkflowSecretScopeTest(unittest.TestCase):
+    def test_deploy_secrets_reach_no_step_before_the_ancestry_check(self):
+        workflow = RELEASE_WORKFLOW.read_text()
+        deploy = workflow.split('\n  deploy:\n', 1)[1]
+        header, steps = deploy.split('\n    steps:\n', 1)
+        self.assertNotIn('secrets.', header)
+        before = steps.split('      - name: Require the tested commit to be on main\n', 1)[0]
+        self.assertNotIn('secrets.', before)
+        self.assertIn('secrets.SSH_PRIVATE_KEY', steps)
+
 
 class InstanceDeploymentTest(unittest.TestCase):
     def setUp(self):

@@ -30,7 +30,7 @@ class StaticPageRequest extends FormRequest
             ],
             'title' => ['required', 'string', 'max:255'],
             'body_markdown' => ['required', 'string'],
-            'variables' => ['nullable', 'array'],
+            'variables' => ['nullable', 'array', 'max:100'],
             'variables.*' => ['nullable', 'string', 'max:2000'],
             'is_published' => ['required', 'boolean'],
             'show_in_footer' => ['required', 'boolean'],
