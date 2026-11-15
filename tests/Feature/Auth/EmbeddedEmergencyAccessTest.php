@@ -32,7 +32,13 @@ class EmbeddedEmergencyAccessTest extends EmbeddedAuthTestCase
         $hostAttempt = TwoFactorAttempt::sole();
         $this->assertGuest('web');
         $this->assertGuest('auth-manager');
-        Mail::assertSent(TwoFactorLoginMail::class, fn (TwoFactorLoginMail $mail): bool => $mail->confirmUrl === self::ORIGIN.'/emergency-login/confirm/'.$hostAttempt->token);
+        Mail::assertSent(TwoFactorLoginMail::class, function (TwoFactorLoginMail $mail) use ($hostAttempt): bool {
+            $this->assertStringStartsWith(self::ORIGIN.'/emergency-login/confirm/'.$hostAttempt->token.'?secret=', $mail->confirmUrl);
+            parse_str((string) parse_url($mail->confirmUrl, PHP_URL_QUERY), $query);
+            $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{64}$/', $query['secret'] ?? '');
+
+            return true;
+        });
         // The mounted provider's attempt with the same numeric user ID is never a host proof.
         $pending = session()->get(EmergencyAccess::PENDING);
         $this->postJson('/emergency-login/verify', ['attempt_token' => $providerAttempt->token, 'code' => $providerAttempt->code])->assertUnprocessable();

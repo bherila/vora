@@ -232,8 +232,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0
       bwh-auth:
-        specifier: 0.6.4
-        version: 0.6.4(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        specifier: 0.6.5
+        version: 0.6.5(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2013,8 +2013,8 @@ packages:
   bser@2.1.2:
     resolution: {integrity: sha512-V2o8YS2EhrKMO9AumnkK0ynynfFlsajpYupwq7S46H5mhcanwxDkNTw3K67wPIcKTH1ffkA4vhMOtAc7gRmPZw==}
 
-  bwh-auth@0.6.4:
-    resolution: {integrity: sha512-SxqAThIexpRr9wHQV3AigFUTSv38mNxzDaAQLXStk4c+F5Y1ALae2L5i0J6Epi1eJMkhhFplY2G1pcOTT0mCSQ==}
+  bwh-auth@0.6.5:
+    resolution: {integrity: sha512-O0s94G8bGmbvq79z3ERtkNquvMmN+Jun41rocgpVahiThS92iPbkExhx1YzWTDNr8tDw2FtMFb3Iwm21H2rXLA==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     peerDependencies:
       lucide-react: '>=0.468.0 <2.0.0'
@@ -5088,7 +5088,7 @@ snapshots:
     dependencies:
       node-int64: 0.4.0
 
-  bwh-auth@0.6.4(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  bwh-auth@0.6.5(lucide-react@1.72.0(@types/react@19.3.0)(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       lucide-react: 1.72.0(@types/react@19.3.0)(react@19.3.1)
       react: 19.3.1

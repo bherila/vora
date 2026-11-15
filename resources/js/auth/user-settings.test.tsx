@@ -215,20 +215,13 @@ describe('UserSettingsPage', () => {
     expect(screen.getByText(/That email change link is no longer valid/)).toBeInTheDocument();
   });
 
-  it('confirms the password before passkeys can be added', async () => {
-    const post = jest.mocked(fetchWrapper.post);
-    post.mockReset();
-    post.mockResolvedValue({ success: true });
+  it('leaves reactive credential confirmation to the shared passkey settings', () => {
     window.history.replaceState({}, '', '/user/settings?tab=security');
     render(<UserSettingsPage />);
 
-    expect(screen.getByRole('button', { name: 'Confirm password' })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'secret-password' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm password' }));
-
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/auth/confirm-password', { password: 'secret-password' }));
-    expect(await screen.findByText('Password confirmed. You can add a passkey now.')).toBeInTheDocument();
     expect(screen.getByText('Passkey settings')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirm password' })).toBeNull();
+    expect(screen.queryByText('Enter your current password before adding a passkey.')).toBeNull();
   });
 
   it('responds to browser history and supports arrow-key tab navigation', async () => {

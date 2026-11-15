@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Http\Middleware\LimitTwoFactorGuesses;
 use App\Models\User;
 use BWH\Auth\Models\TwoFactorAttempt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,8 +34,8 @@ class AuthRateLimitTest extends TestCase
         $user = User::factory()->approved()->create();
         $attempt = $this->challenge($user);
 
-        foreach (range(1, LimitTwoFactorGuesses::MAX_WRONG_CODES) as $ignored) {
-            $this->postJson('/api/auth/two-factor/verify', ['attempt_token' => $attempt->token, 'code' => $this->wrongCode($attempt)])
+        foreach (range(1, (int) config('bherila-auth.two_factor.max_wrong_codes')) as $number) {
+            $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.'.$number])->postJson('/api/auth/two-factor/verify', ['attempt_token' => $attempt->token, 'code' => $this->wrongCode($attempt)])
                 ->assertStatus(422);
         }
 
@@ -53,7 +52,7 @@ class AuthRateLimitTest extends TestCase
         $user = User::factory()->approved()->create();
         $attempt = $this->challenge($user);
 
-        foreach (range(1, LimitTwoFactorGuesses::MAX_WRONG_CODES - 1) as $ignored) {
+        foreach (range(1, (int) config('bherila-auth.two_factor.max_wrong_codes') - 1) as $ignored) {
             $this->postJson('/api/auth/two-factor/verify', ['attempt_token' => $attempt->token, 'code' => $this->wrongCode($attempt)])
                 ->assertStatus(422);
         }

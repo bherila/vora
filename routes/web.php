@@ -141,7 +141,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:60,1,verification-status')->name('verification.status');
 
     // Fresh password confirmation before passkey enrollment (local sign-in only;
-    // see RequireConfirmedPassword and PackageRouteHardening).
+    // enforced by the shared auth package).
     Route::post('/api/auth/confirm-password', [ConfirmPasswordController::class, 'store'])
         ->middleware(['sign-in:local', 'throttle:password-check'])->name('password.confirm.store');
 
