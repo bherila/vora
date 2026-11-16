@@ -6,6 +6,7 @@ use App\Models\PlaceImportRun;
 use App\Models\User;
 use App\Services\SettingsService;
 use Closure;
+use Illuminate\Cache\Lock as CacheLock;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -222,9 +223,16 @@ class PlaceImportRuns
      */
     public function heartbeat(?PlaceImportRun $run): void
     {
-        if ($this->lock instanceof Lock && method_exists($this->lock, 'refresh')) {
+        $lock = $this->lock;
+        if ($lock instanceof CacheLock && method_exists($lock, 'refresh')) {
             try {
-                if (! $this->lock->refresh(self::LEASE_SECONDS)) {
+                // MySQL/MariaDB report changed rows, not matched rows: a refresh
+                // in the same second as the acquire (or a previous refresh)
+                // writes the same expiration, updates nothing and returns false.
+                // refresh() updates exactly the rows isOwnedByCurrentProcess()
+                // looks for (our owner, not expired), so only a lease that is
+                // really gone fails the import.
+                if (! $lock->refresh(self::LEASE_SECONDS) && ! $lock->isOwnedByCurrentProcess()) {
                     throw new RuntimeException('The import lost its lock (it took too long between steps); start it again.');
                 }
             } catch (RuntimeException $e) {
