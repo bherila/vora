@@ -10,6 +10,7 @@ use App\Services\Location\PlaceImportOptions;
 use App\Services\Location\PlaceImportRuns;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -364,5 +365,26 @@ class ImportRunsTest extends TestCase
             'geonames.example.test/dump/admin1CodesASCII.txt' => fn () => Http::response((string) file_get_contents("{$dir}/admin1CodesASCII.txt")),
             'geonames.example.test/dump/cities5000.zip' => fn () => Http::response($zipBody),
         ]);
+    }
+
+    public function test_the_database_lock_survives_heartbeats_in_the_same_second_and_fails_once_lost(): void
+    {
+        // Production holds the import lock in the database cache store. On the
+        // MariaDB CI job this exercises the changed-rows refresh result.
+        config(['cache.default' => 'database']);
+        $runs = app(PlaceImportRuns::class);
+
+        $this->assertTrue($runs->exclusively(function () use ($runs): bool {
+            $runs->heartbeat(null);
+            $runs->heartbeat(null);
+
+            return true;
+        }));
+
+        $this->expectExceptionMessage('The import lost its lock');
+        $runs->exclusively(function () use ($runs): void {
+            DB::table('cache_locks')->where('key', 'like', '%places:import')->delete();
+            $runs->heartbeat(null);
+        });
     }
 }
