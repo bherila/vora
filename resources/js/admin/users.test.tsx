@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 import { AdminUsersPage } from '@/admin/users';
 import { fetchWrapper } from '@/fetchWrapper';
@@ -76,12 +76,56 @@ const user = {
   }],
 };
 
+interface DirectoryFixtureUser {
+  id: number;
+  name: string;
+  display_name: string | null;
+  email: string;
+  is_deleted: boolean;
+  is_approved: boolean;
+  is_admin: boolean;
+  is_banned: boolean;
+  restrictions: Array<{ active: boolean }>;
+}
+
+function directoryResponse<T extends { data: DirectoryFixtureUser[] }>(response: T) {
+  return {
+    meta: { current_page: 1, last_page: 1, per_page: 30, total: response.data.length, has_more: false },
+    counts: {
+      all: response.data.length,
+      pending: response.data.filter((account) => !account.is_deleted && !account.is_approved).length,
+      restricted: response.data.filter((account) => !account.is_deleted && account.restrictions.some((restriction) => restriction.active)).length,
+      banned: response.data.filter((account) => !account.is_deleted && account.is_banned).length,
+      admins: response.data.filter((account) => !account.is_deleted && account.is_admin).length,
+      deleted: response.data.filter((account) => account.is_deleted).length,
+    },
+    ...response,
+  };
+}
+
+function filteredResponse<T extends { data: DirectoryFixtureUser[] }>(response: T, url: string) {
+  const params = new URL(url, 'https://app.example.test').searchParams;
+  const status = params.get('status');
+  const search = (params.get('search') ?? '').toLowerCase();
+  const complete = directoryResponse(response);
+  const data = response.data.filter((account) => {
+    const match = status === 'pending' ? !account.is_deleted && !account.is_approved
+      : status === 'deleted' ? account.is_deleted
+        : status === 'admins' ? !account.is_deleted && account.is_admin
+          : status === 'banned' ? !account.is_deleted && account.is_banned : true;
+    return match && [account.name, account.display_name ?? '', account.email].some((value) => value.toLowerCase().includes(search));
+  });
+  return { ...complete, data, meta: { ...complete.meta, total: data.length } };
+}
+
+beforeEach(() => { window.history.replaceState({}, '', '/admin/users'); });
+
 describe('AdminUsersPage restrictions', () => {
   beforeEach(() => {
     mockProfile = 'vora';
     mockEventsEnabled = true;
     jest.clearAllMocks();
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [user], settings: { default_storage_limit_bytes: null } }));
     jest.mocked(fetchWrapper.delete).mockResolvedValue({ success: true });
   });
 
@@ -109,21 +153,21 @@ describe('AdminUsersPage storage defaults', () => {
     mockProfile = 'vora';
     mockEventsEnabled = true;
     jest.clearAllMocks();
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [user], settings: { default_storage_limit_bytes: null } }));
     globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: user }) });
   });
 
   afterEach(() => { globalThis.fetch = originalFetch; });
 
   it('distinguishes inherited, custom zero and explicit unlimited allowances', async () => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({
       success: true, settings: { default_storage_limit_bytes: 2 * GIB },
       data: [
         { ...user, effective_storage_limit_bytes: 2 * GIB },
         { ...user, id: 9, email: 'custom@example.test', storage_limit_bytes: 0, effective_storage_limit_bytes: 0 },
         { ...user, id: 10, email: 'unlimited@example.test', storage_unlimited: true },
       ],
-    });
+    }));
     render(<AdminUsersPage />);
     // Inherited storage is the default and earns no row badge; overrides do.
     expect(within(await details()).getByText('Site default (2 GiB)')).toBeInTheDocument();
@@ -135,7 +179,7 @@ describe('AdminUsersPage storage defaults', () => {
 
   it('updates only the global setting and reloads effective inherited limits', async () => {
     let siteDefault: number | null = null;
-    jest.mocked(fetchWrapper.get).mockImplementation(async () => ({
+    jest.mocked(fetchWrapper.get).mockImplementation(async () => directoryResponse({
       success: true, settings: { default_storage_limit_bytes: siteDefault },
       data: [
         { ...user, effective_storage_limit_bytes: siteDefault },
@@ -182,7 +226,7 @@ describe('AdminUsersPage storage defaults', () => {
   });
 
   it('can explicitly remove the global cap without changing individual accounts', async () => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: GIB } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [user], settings: { default_storage_limit_bytes: GIB } }));
     jest.mocked(fetchWrapper.put).mockResolvedValue({ success: true, data: { default_storage_limit_bytes: null } });
     render(<AdminUsersPage />);
     await screen.findByText('Site default storage: 1 GiB');
@@ -228,7 +272,7 @@ describe('AdminUsersPage storage defaults', () => {
   });
   it('shows automatic Event Library access without exposing the ineffective premium toggle', async () => {
     mockProfile = 'event';
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, library_enabled: false }], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [{ ...user, library_enabled: false }], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     expect(within(await details()).getByText('Library available to all attendees')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^(Enable|Disable) Library storage$/ })).toBeNull();
@@ -239,7 +283,7 @@ describe('AdminUsersPage storage defaults', () => {
   it('grants and removes Event-only upload review exemptions', async () => {
     mockProfile = 'event';
     let exempt = false;
-    jest.mocked(fetchWrapper.get).mockImplementation(async () => ({ success: true, data: [{ ...user, event_uploads_auto_approved: exempt }], settings: { default_storage_limit_bytes: null } }));
+    jest.mocked(fetchWrapper.get).mockImplementation(async () => directoryResponse({ success: true, data: [{ ...user, event_uploads_auto_approved: exempt }], settings: { default_storage_limit_bytes: null } }));
     jest.mocked(globalThis.fetch).mockImplementation(async (_url, options) => {
       exempt = (JSON.parse(options?.body as string) as { event_uploads_auto_approved: boolean }).event_uploads_auto_approved;
       return { ok: true, json: async () => ({ success: true }) } as Response;
@@ -265,7 +309,7 @@ describe('AdminUsersPage storage defaults', () => {
 
   it('hides Event approval controls when the Event module is disabled', async () => {
     mockEventsEnabled = false;
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, event_uploads_auto_approved: true }], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [{ ...user, event_uploads_auto_approved: true }], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     await screen.findByRole('button', { name: 'Set storage limit' });
     expect(screen.queryByRole('button', { name: /Event upload review/ })).not.toBeInTheDocument();
@@ -286,7 +330,7 @@ describe('AdminUsersPage list and detail panel', () => {
     mockProfile = 'vora';
     mockEventsEnabled = true;
     jest.clearAllMocks();
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [active, pending, unverified, admin, banned, deleted], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => filteredResponse({ success: true, data: [active, pending, unverified, admin, banned, deleted], settings: { default_storage_limit_bytes: null } }, url));
     jest.mocked(fetchWrapper.post).mockResolvedValue({ success: true });
   });
 
@@ -315,20 +359,23 @@ describe('AdminUsersPage list and detail panel', () => {
     expect(pendingFilter).toHaveAttribute('aria-pressed', 'true');
     expect(rowFor('daybright@example.test')).toBeDefined();
     expect(rowFor('quinn@example.test')).toBeDefined();
-    expect(rowFor('ada@example.test')).toBeUndefined();
+    await waitFor(() => expect(rowFor('ada@example.test')).toBeUndefined());
 
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    await waitFor(() => expect(rowFor('ada@example.test')).toBeDefined());
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search users' }), { target: { value: 'ADA ad' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await waitFor(() => expect(rowFor('daybright@example.test')).toBeUndefined());
     expect(rowFor('ada@example.test')).toBeDefined();
-    expect(rowFor('daybright@example.test')).toBeUndefined();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search users' }), { target: { value: 'nobody' } });
-    expect(screen.getByText('No users match.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await screen.findByText('No users match.');
     expect(screen.getByText('Select a user to see details and actions.')).toBeInTheDocument();
   });
 
   it('only offers the Deleted filter when deleted accounts exist', async () => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [active], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [active], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     await screen.findByRole('button', { name: /^All/ });
     expect(screen.queryByRole('button', { name: /^Deleted/ })).not.toBeInTheDocument();
@@ -365,7 +412,7 @@ describe('AdminUsersPage list and detail panel', () => {
     }
 
     fireEvent.click(screen.getByRole('button', { name: /^Deleted/ }));
-    expect(within(panel).getByRole('heading', { name: 'Gone' })).toBeInTheDocument();
+    await within(panel).findByRole('heading', { name: 'Gone' });
     expect(within(panel).getByRole('button', { name: 'Restore' })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Purge…' })).toBeInTheDocument();
     expect(within(panel).queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument();
@@ -414,7 +461,7 @@ describe('AdminUsersPage sign-in ownership', () => {
   afterEach(() => { globalThis.fetch = originalFetch; });
 
   it('keeps local identity and email locking visibly separate from application role and access', async () => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [user], settings: { default_storage_limit_bytes: null } });
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [user], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     const panel = await details();
     expect(within(panel).getByText('Local sign-in')).toBeInTheDocument();
@@ -430,10 +477,10 @@ describe('AdminUsersPage sign-in ownership', () => {
     ['provider', 'External provider sign-in', 'https://identity.example.test/settings'],
     ['embedded', 'Embedded provider sign-in', 'https://app.example.test/auth/settings'],
   ] as const)('explains %s ownership and only hands off self-service for the current browser account', async (mode, label, url) => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, email_locked: true, identity: {
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [{ ...user, email_locked: true, identity: {
       sign_in_mode: mode, configured_provider: 'example', binding: 'configured_provider', provider: 'example',
       subject: 'Opaque/<Subject>', provider_account_url: url, local_email_lock_available: false,
-    } }], settings: { default_storage_limit_bytes: null } });
+    } }], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     const panel = await details();
     expect(within(panel).getByText(label, { exact: false })).toBeInTheDocument();
@@ -453,14 +500,192 @@ describe('AdminUsersPage sign-in ownership', () => {
     ['incomplete', 'Incomplete provider binding'],
     ['configured_provider', 'Bound to the configured provider'],
   ] as const)('provides support context without a provider link for %s or unavailable configuration', async (binding, label) => {
-    jest.mocked(fetchWrapper.get).mockResolvedValue({ success: true, data: [{ ...user, identity: {
+    jest.mocked(fetchWrapper.get).mockResolvedValue(directoryResponse({ success: true, data: [{ ...user, identity: {
       sign_in_mode: 'provider', configured_provider: 'example', binding, provider: binding === 'incomplete' ? null : binding === 'configured_provider' ? 'example' : 'other',
       subject: 'subject', provider_account_url: null, local_email_lock_available: false,
-    } }], settings: { default_storage_limit_bytes: null } });
+    } }], settings: { default_storage_limit_bytes: null } }));
     render(<AdminUsersPage />);
     const panel = await details();
     expect(within(panel).getByText(label)).toBeInTheDocument();
     expect(within(panel).queryByRole('link', { name: 'Provider self-service' })).not.toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: /local email/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('AdminUsersPage server directory', () => {
+  const newer = { ...user, id: 100, name: 'Newer Example', display_name: 'Newer', email: 'newer@example.test', restrictions: [] };
+  const pending = { ...user, is_approved: false, approved_at: null, restrictions: [] };
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockProfile = 'vora';
+    mockEventsEnabled = true;
+  });
+
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  it('loads another page and submits search to the server while retaining global counts', async () => {
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      const params = new URL(url, 'https://app.example.test').searchParams;
+      return directoryResponse({ success: true, settings: { default_storage_limit_bytes: null },
+        data: params.get('search') === 'outside' ? [] : params.get('page') === '2' ? [user] : [newer],
+        counts: { all: 31, pending: 4, restricted: 1, banned: 0, admins: 1, deleted: 0 },
+        meta: { current_page: Number(params.get('page')), last_page: params.has('search') ? 1 : 2, per_page: 30, total: params.has('search') ? 0 : 31, has_more: params.get('page') === '1' && !params.has('search') },
+      });
+    });
+    render(<AdminUsersPage />);
+    await screen.findByText('Page 1 of 2');
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    await screen.findByText('Page 2 of 2');
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=2&status=all');
+    expect(screen.getByRole('button', { name: 'Previous', exact: true })).toBeEnabled();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'outside' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    await screen.findByText('No users match.');
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=1&status=all&search=outside');
+    expect(screen.getByRole('button', { name: /^Needs approval/ })).toHaveTextContent('4');
+    expect(screen.queryByRole('navigation', { name: 'User pages' })).not.toBeInTheDocument();
+  });
+
+  it('opens and refreshes a linked off-page account after approving it', async () => {
+    let approved = false;
+    window.history.replaceState({}, '', '/admin/users#user-8');
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => url === '/api/admin/users/8'
+      ? { success: true, data: { ...pending, is_approved: approved } }
+      : directoryResponse({ success: true, data: [newer], settings: { default_storage_limit_bytes: null } }));
+    jest.mocked(fetchWrapper.post).mockImplementation(async () => { approved = true; return { success: true }; });
+    render(<AdminUsersPage />);
+    const panel = await screen.findByRole('complementary', { name: 'User details' });
+    await within(panel).findByRole('heading', { name: 'Alex' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
+    await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Approve', exact: true })).not.toBeInTheDocument());
+    expect(within(panel).getByRole('heading', { name: 'Alex' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#user-8');
+    expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/admin/users/8')).toHaveLength(2);
+  });
+
+  it('clamps an emptied last page after an action without losing the acted-on account', async () => {
+    let approved = false;
+    const remaining = { ...newer, is_approved: false };
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/admin/users/8') return { success: true, data: { ...pending, is_approved: approved } };
+      const params = new URL(url, 'https://app.example.test').searchParams;
+      const page = Number(params.get('page'));
+      return directoryResponse({ success: true, settings: { default_storage_limit_bytes: null },
+        data: page === 2 ? approved ? [] : [pending] : [remaining],
+        meta: { current_page: page, last_page: approved ? 1 : 2, per_page: 30, total: approved ? 1 : 31, has_more: !approved && page === 1 },
+      });
+    });
+    jest.mocked(fetchWrapper.post).mockImplementation(async () => { approved = true; return { success: true }; });
+    render(<AdminUsersPage />);
+    await screen.findByText('Page 1 of 2');
+    fireEvent.click(screen.getByRole('button', { name: /^Needs approval/ }));
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=1&status=pending'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next', exact: true })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    await screen.findByText('Page 2 of 2');
+    const panel = screen.getByRole('complementary', { name: 'User details' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'User pages' })).not.toBeInTheDocument());
+    await within(panel).findByRole('heading', { name: 'Alex' });
+    expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
+    expect(within(panel).queryByRole('button', { name: 'Approve', exact: true })).not.toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/admin/users?page=1&status=pending');
+  });
+
+  it('refreshes the current filter when an earlier action finishes after the filter changes', async () => {
+    let finish: () => void = () => undefined;
+    jest.mocked(fetchWrapper.post).mockImplementation(() => new Promise((resolve) => { finish = () => resolve({ success: true }); }));
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => directoryResponse({ success: true,
+      data: url.includes('status=banned') ? [{ ...newer, is_banned: true }] : [pending], settings: { default_storage_limit_bytes: null },
+    }));
+    render(<AdminUsersPage />);
+    const panel = await screen.findByRole('complementary', { name: 'User details' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: /^Banned/ }));
+    await screen.findByRole('heading', { name: 'Newer' });
+    await act(async () => { finish(); });
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledTimes(3));
+    expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=1&status=banned');
+    expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
+    expect(screen.getByRole('button', { name: /^Banned/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('retries directory and selected-account failures separately', async () => {
+    let directoryAttempts = 0;
+    let accountAttempts = 0;
+    window.history.replaceState({}, '', '/admin/users#user-8');
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/admin/users/8') {
+        if (++accountAttempts === 1) throw new Error('Selected account unavailable.');
+        return { success: true, data: user };
+      }
+      if (++directoryAttempts === 1) throw new Error('Directory unavailable.');
+      return directoryResponse({ success: true, data: [newer], settings: { default_storage_limit_bytes: null } });
+    });
+    render(<AdminUsersPage />);
+    await screen.findByText('Directory unavailable.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }));
+    await screen.findByRole('heading', { name: 'Alex' });
+    // Loading the refreshed list also retried the previously failed selection.
+    expect(directoryAttempts).toBe(2);
+    expect(accountAttempts).toBe(2);
+  });
+
+  it('ignores an earlier search response that arrives after the newer search', async () => {
+    let resolveFirst: (value: unknown) => void = () => undefined;
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url.includes('search=first')) return new Promise((resolve) => { resolveFirst = resolve; });
+      return directoryResponse({ success: true, data: url.includes('search=second') ? [newer] : [user], settings: { default_storage_limit_bytes: null } });
+    });
+    render(<AdminUsersPage />);
+    await screen.findByRole('heading', { name: 'Alex' });
+    const search = screen.getByRole('searchbox');
+    fireEvent.change(search, { target: { value: 'first' } });
+    fireEvent.submit(search.closest('form')!);
+    fireEvent.change(search, { target: { value: 'second' } });
+    fireEvent.submit(search.closest('form')!);
+    await screen.findByRole('heading', { name: 'Newer' });
+    await act(async () => { resolveFirst(directoryResponse({ success: true, data: [user], settings: { default_storage_limit_bytes: null } })); });
+    expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
+    expect(screen.getByRole('table')).not.toHaveTextContent('alex@example.test');
+  });
+
+  it('retries an off-page lookup without replacing the directory or losing its link', async () => {
+    let attempts = 0;
+    window.history.replaceState({}, '', '/admin/users#user-8');
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/admin/users/8') {
+        if (++attempts === 1) throw new Error('Account lookup failed.');
+        return { success: true, data: user };
+      }
+      return directoryResponse({ success: true, data: [newer], settings: { default_storage_limit_bytes: null } });
+    });
+    render(<AdminUsersPage />);
+    await screen.findByText('Account lookup failed.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry account', exact: true }));
+    await screen.findByRole('heading', { name: 'Alex' });
+    expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
+    expect(window.location.hash).toBe('#user-8');
+    expect(fetchWrapper.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignores an old account lookup after a newer hash link is selected', async () => {
+    let resolveOld: (value: unknown) => void = () => undefined;
+    window.history.replaceState({}, '', '/admin/users#user-8');
+    jest.mocked(fetchWrapper.get).mockImplementation(async (url) => {
+      if (url === '/api/admin/users/8') return new Promise((resolve) => { resolveOld = resolve; });
+      if (url === '/api/admin/users/9') return { success: true, data: { ...user, id: 9, display_name: 'Second link' } };
+      return directoryResponse({ success: true, data: [newer], settings: { default_storage_limit_bytes: null } });
+    });
+    render(<AdminUsersPage />);
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/admin/users/8'));
+    window.history.replaceState({}, '', '/admin/users#user-9');
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    await screen.findByRole('heading', { name: 'Second link' });
+    await act(async () => { resolveOld({ success: true, data: user }); });
+    expect(screen.getByRole('heading', { name: 'Second link' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Alex' })).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\AdminBanUserRequest;
 use App\Http\Requests\Admin\AdminIssueInvitesRequest;
 use App\Http\Requests\Admin\AdminLegalHoldRequest;
+use App\Http\Requests\Admin\AdminUserIndexRequest;
 use App\Http\Requests\Admin\AdminUserUpdateRequest;
 use App\Models\InviteGrant;
 use App\Models\User;
@@ -16,8 +17,10 @@ use App\Services\InviteService;
 use App\Services\Media\AccountStorageLimit;
 use App\Services\SettingsService;
 use App\Services\UserAccountService;
+use App\Support\PaginationMeta;
 use BWH\Auth\OAuth\DelegatedAccess\DelegatedAccessException;
 use BWH\Auth\OAuth\DelegatedAccess\TrustedUrl;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,33 +50,83 @@ class AdminUserController extends Controller
      * JSON list of users for the admin UI. Includes soft-deleted accounts so an
      * admin can restore or permanently purge them.
      */
-    public function apiIndex(): JsonResponse
+    public function apiIndex(AdminUserIndexRequest $request): JsonResponse
     {
-        $balances = $this->inviteBalances();
+        $query = $this->usersForStatus($request->validated('status', 'all'));
+        $search = trim((string) $request->validated('search', ''));
+        if ($search !== '') {
+            // Search has the same literal substring meaning as the directory's
+            // old browser filter; '%' and '_' are not wildcard controls.
+            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+            // MySQL's default collation also folds accents; browser substring
+            // search did not. Compare the case-folded text with a binary collation.
+            $collation = in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
+                ? ' COLLATE utf8mb4_bin' : '';
+            $query->where(fn (Builder $users) => $users->whereRaw("LOWER(name){$collation} LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("LOWER(display_name){$collation} LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("LOWER(email){$collation} LIKE ? ESCAPE '!'", [$pattern]));
+        }
+        $page = $query->with(['referredByInvite.inviter:id,display_name', 'restrictions'])
+            ->orderByDesc('id')->paginate(30);
+        $balances = $this->inviteBalances($page->getCollection()->modelKeys());
         $defaultStorageLimit = $this->settings->defaultStorageLimitBytes();
 
-        $users = User::query()
-            ->withTrashed()
-            ->with(['referredByInvite.inviter:id,display_name', 'restrictions'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (User $u): array => $this->present($u, $defaultStorageLimit, $balances[$u->id] ?? 0));
+        // Counts describe the whole directory, independent of the active
+        // search, status and page, as the original filter buttons did.
+        $counts = [];
+        foreach (AdminUserIndexRequest::STATUSES as $status) {
+            $counts[$status] = $this->usersForStatus($status)->count();
+        }
 
         return response()->json([
-            'success' => true, 'data' => $users,
+            'success' => true,
+            'data' => $page->getCollection()->map(fn (User $u): array => $this->present($u, $defaultStorageLimit, $balances[$u->id] ?? 0)),
+            'meta' => PaginationMeta::from($page),
+            'counts' => $counts,
             'settings' => ['default_storage_limit_bytes' => $defaultStorageLimit],
         ]);
+    }
+
+    /** A deep link can name a deleted account or one outside the current page. */
+    public function show(User $user): JsonResponse
+    {
+        $user->load(['referredByInvite.inviter:id,display_name', 'restrictions']);
+
+        return response()->json(['success' => true, 'data' => $this->present($user, $this->settings->defaultStorageLimitBytes())]);
+    }
+
+    /** @return Builder<User> */
+    private function usersForStatus(string $status): Builder
+    {
+        $query = User::withTrashed();
+        if ($status === 'deleted') {
+            return $query->whereNotNull('deleted_at');
+        }
+        if ($status !== 'all') {
+            $query->whereNull('deleted_at');
+        }
+
+        return match ($status) {
+            'pending' => $query->whereNull('approved_at'),
+            'restricted' => $query->whereHas('restrictions', fn (Builder $restrictions) => $restrictions->active()),
+            'banned' => $query->whereNotNull('banned_at'),
+            // User::isAdmin() also recognizes the primary account without a flag.
+            'admins' => $query->where(fn (Builder $users) => $users->where('id', 1)->orWhere('is_admin', true)),
+            default => $query,
+        };
     }
 
     /**
      * Available invite balance per user (sum of remaining over non-expired
      * grants), computed in a single query to avoid an N+1 over the user list.
      *
+     * @param  list<int>  $userIds
      * @return array<int, int>
      */
-    private function inviteBalances(): array
+    private function inviteBalances(array $userIds): array
     {
         return InviteGrant::query()
+            ->whereIn('user_id', $userIds)
             ->where('remaining', '>', 0)
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->selectRaw('user_id, SUM(remaining) as balance')

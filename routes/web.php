@@ -494,6 +494,7 @@ Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('admin')->name
 // not disabled) and returns a clean 403 for JSON callers.
 Route::middleware(['auth', 'approved', 'can:admin-only'])->prefix('api/admin')->group(function () {
     Route::get('/users', [AdminUserController::class, 'apiIndex']);
+    Route::get('/users/{user}', [AdminUserController::class, 'show'])->withTrashed();
     Route::put('/storage-settings', AdminStorageSettingsController::class);
     Route::post('/users/{user}/approve', [AdminUserController::class, 'approve']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
