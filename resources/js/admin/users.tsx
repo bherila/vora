@@ -378,6 +378,7 @@ export function AdminUsersPage() {
   useEffect(() => {
     const onHashChange = (): void => {
       const id = userIdFromHash(window.location.hash);
+      linkedScrollDone.current = false;
       if (id !== null) setSelectedId(id);
     };
     window.addEventListener('hashchange', onHashChange);
@@ -388,10 +389,15 @@ export function AdminUsersPage() {
   // jump, so bring a linked account's row into view once it exists.
   useEffect(() => {
     if (linkedScrollDone.current || users.length === 0) return;
-    linkedScrollDone.current = true;
     const id = userIdFromHash(window.location.hash);
-    if (id !== null) document.getElementById(`user-${id}`)?.scrollIntoView?.({ block: 'center' });
-  }, [users]);
+    if (id === null) return;
+    const row = document.getElementById(`user-${id}`);
+    const target = row ?? (selectedUser?.id === id ? detailRef.current : null);
+    if (target !== null) {
+      target.scrollIntoView?.({ block: row ? 'center' : 'start' });
+      linkedScrollDone.current = true;
+    }
+  }, [users, selectedUser]);
 
   const approveUser = async (user: AdminUser) => {
     setSelectedId(user.id);
@@ -969,12 +975,12 @@ export function AdminUsersPage() {
 
           {loading && <p role="status" className="mb-3 text-sm text-muted-foreground">Loading users...</p>}
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
-            <div className="min-w-0 overflow-x-auto rounded-xl border">
+            <div className="relative min-w-0 overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">
                 <caption className="sr-only">Users</caption>
                 <thead className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th scope="col" className="px-4 py-2.5 font-medium">User</th>
+                    <th scope="col" className="min-w-52 px-4 py-2.5 font-medium">User</th>
                     <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
                     <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
                     <th scope="col" className="px-4 py-2.5"><span className="sr-only">Quick actions</span></th>
