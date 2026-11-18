@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { formatStorageLimit, StorageLimitDialog } from '@/admin/StorageLimitDialog';
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchWrapper } from '@/fetchWrapper';
 import { instanceProfile, moduleEnabled } from '@/instance';
+import type { PageMeta } from '@/media/types';
 
 interface AdminUser {
   id: number;
@@ -165,30 +166,6 @@ function activeRestrictions(user: AdminUser): AdminRestriction[] {
   return user.restrictions.filter((restriction) => restriction.active);
 }
 
-function matchesFilter(user: AdminUser, filter: UserFilter): boolean {
-  switch (filter) {
-    case 'pending':
-      return !user.is_deleted && !user.is_approved;
-    case 'restricted':
-      return !user.is_deleted && activeRestrictions(user).length > 0;
-    case 'banned':
-      return !user.is_deleted && user.is_banned;
-    case 'admins':
-      return !user.is_deleted && user.is_admin;
-    case 'deleted':
-      return user.is_deleted;
-    default:
-      return true;
-  }
-}
-
-function matchesQuery(user: AdminUser, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return true;
-
-  return [user.name, user.display_name ?? '', user.email].some((value) => value.toLowerCase().includes(needle));
-}
-
 function displayName(user: AdminUser): string {
   return user.display_name ?? user.name;
 }
@@ -243,7 +220,8 @@ function userFlags(user: AdminUser, eventProfile: boolean): string[] {
 /** `#user-<id>` links (e.g. from duplicate review) name the account to open. */
 function userIdFromHash(hash: string): number | null {
   const match = /^#user-(\d+)$/.exec(hash);
-  return match ? Number(match[1]) : null;
+  const id = match ? Number(match[1]) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 function formatDate(value: string | null): string {
@@ -251,6 +229,16 @@ function formatDate(value: string | null): string {
 }
 
 const ROW_FLAG_LIMIT = 2;
+
+interface DirectoryResponse {
+  success: boolean;
+  data: AdminUser[];
+  settings: { default_storage_limit_bytes: number | null };
+  meta: PageMeta;
+  counts: Record<UserFilter, number>;
+}
+
+const EMPTY_COUNTS: Record<UserFilter, number> = { all: 0, pending: 0, restricted: 0, banned: 0, admins: 0, deleted: 0 };
 
 interface ActionGroupProps {
   title: string;
@@ -309,38 +297,88 @@ export function AdminUsersPage() {
   // List filtering and the detail panel's selection.
   const [filter, setFilter] = useState<UserFilter>('all');
   const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
+  const [counts, setCounts] = useState(EMPTY_COUNTS);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [selectionError, setSelectionError] = useState('');
+  const [selectionLoading, setSelectionLoading] = useState(false);
+  const criteria = useRef({ page: 1, search: '', filter: 'all' as UserFilter });
+  const requestVersion = useRef(0);
+  const selectionVersion = useRef(0);
   const [selectedId, setSelectedId] = useState<number | null>(() => userIdFromHash(window.location.hash));
   const detailRef = useRef<HTMLElement | null>(null);
   const linkedScrollDone = useRef(false);
 
-  const loadUsers = async (): Promise<boolean> => {
+  const loadUsers = useCallback(async (): Promise<boolean> => {
+    const version = ++requestVersion.current;
+    const { page, search, filter } = criteria.current;
     setLoading(true);
     setError('');
     try {
-      const response = await fetchWrapper.get('/api/admin/users') as {
-        success: boolean; data: AdminUser[]; settings: { default_storage_limit_bytes: number | null };
-      };
-      if (!response.success || !response.settings) throw new Error('Failed to load users and storage settings.');
+      const params = new URLSearchParams({ page: String(page), status: filter });
+      if (search) params.set('search', search);
+      const response = await fetchWrapper.get(`/api/admin/users?${params}`) as DirectoryResponse;
+      if (version !== requestVersion.current) return false;
+      if (!response.success || !response.settings || !response.meta || !response.counts) throw new Error('Failed to load users and storage settings.');
+      setMeta(response.meta);
+      setCounts(response.counts);
+      if (page > response.meta.last_page) {
+        setUsers([]);
+        setPage(Math.max(1, response.meta.last_page));
+        return true;
+      }
       setUsers(response.data);
       setDefaultStorageLimit(response.settings.default_storage_limit_bytes);
       setStorageSettingsLoaded(true);
       return true;
     } catch (err) {
+      if (version !== requestVersion.current) return false;
       setError(err instanceof Error ? err.message : typeof err === 'string' ? err : 'Failed to load users.');
       return false;
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    criteria.current = { page, search, filter };
     void loadUsers();
+    return () => { requestVersion.current += 1; };
+  }, [loadUsers, page, search, filter]);
+
+  const loadSelectedUser = useCallback(async (id: number): Promise<void> => {
+    const version = ++selectionVersion.current;
+    setSelectionLoading(true);
+    setSelectionError('');
+    setSelectedUser(null);
+    try {
+      const response = await fetchWrapper.get(`/api/admin/users/${id}`) as { success: boolean; data: AdminUser };
+      if (!response.success || !response.data) throw new Error('This account is no longer available.');
+      if (version === selectionVersion.current) setSelectedUser(response.data);
+    } catch (failure) {
+      if (version === selectionVersion.current) setSelectionError(failure instanceof Error ? failure.message : typeof failure === 'string' ? failure : 'The selected account could not be loaded.');
+    } finally {
+      if (version === selectionVersion.current) setSelectionLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    selectionVersion.current += 1;
+    setSelectionError('');
+    setSelectionLoading(false);
+    if (selectedId !== null && !users.some((user) => user.id === selectedId) && !loading) {
+      void loadSelectedUser(selectedId);
+    }
+    return () => { selectionVersion.current += 1; };
+  }, [selectedId, users, loading, loadSelectedUser]);
 
   // Follow in-page account links after load as well as on arrival.
   useEffect(() => {
     const onHashChange = (): void => {
       const id = userIdFromHash(window.location.hash);
+      linkedScrollDone.current = false;
       if (id !== null) setSelectedId(id);
     };
     window.addEventListener('hashchange', onHashChange);
@@ -351,12 +389,18 @@ export function AdminUsersPage() {
   // jump, so bring a linked account's row into view once it exists.
   useEffect(() => {
     if (linkedScrollDone.current || users.length === 0) return;
-    linkedScrollDone.current = true;
     const id = userIdFromHash(window.location.hash);
-    if (id !== null) document.getElementById(`user-${id}`)?.scrollIntoView?.({ block: 'center' });
-  }, [users]);
+    if (id === null) return;
+    const row = document.getElementById(`user-${id}`);
+    const target = row ?? (selectedUser?.id === id ? detailRef.current : null);
+    if (target !== null) {
+      target.scrollIntoView?.({ block: row ? 'center' : 'start' });
+      linkedScrollDone.current = true;
+    }
+  }, [users, selectedUser]);
 
   const approveUser = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${user.id}/approve`, {});
@@ -369,6 +413,7 @@ export function AdminUsersPage() {
   };
 
   const toggleAdmin = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { is_admin: !user.is_admin });
@@ -381,6 +426,7 @@ export function AdminUsersPage() {
   };
 
   const toggleDisabled = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { is_disabled: !user.is_disabled });
@@ -393,6 +439,7 @@ export function AdminUsersPage() {
   };
 
   const toggleNameLock = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { name_locked: !user.name_locked });
@@ -405,6 +452,7 @@ export function AdminUsersPage() {
   };
 
   const toggleLibrary = async (user: AdminUser): Promise<void> => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { library_enabled: !user.library_enabled });
@@ -417,6 +465,7 @@ export function AdminUsersPage() {
   };
 
   const toggleEventUploadApproval = async (user: AdminUser): Promise<void> => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     setError('');
     try {
@@ -430,6 +479,7 @@ export function AdminUsersPage() {
   };
 
   const toggleEmailLock = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { email_locked: !user.email_locked });
@@ -442,6 +492,7 @@ export function AdminUsersPage() {
   };
 
   const toggleIdVerification = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { id_verified: !user.id_verified });
@@ -463,6 +514,7 @@ export function AdminUsersPage() {
       return;
     }
 
+    setSelectedId(birthDateTarget.id);
     setActionLoading(birthDateTarget.id);
     try {
       await patchUser(birthDateTarget.id, { birth_date: birthDateValue });
@@ -477,6 +529,7 @@ export function AdminUsersPage() {
   };
 
   const deleteUser = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     setDeleteTarget(null);
     try {
@@ -490,6 +543,7 @@ export function AdminUsersPage() {
   };
 
   const restoreUser = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${user.id}/restore`, {});
@@ -502,6 +556,7 @@ export function AdminUsersPage() {
   };
 
   const toggleTrustedInviter = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { trusted_inviter: !user.trusted_inviter });
@@ -514,6 +569,7 @@ export function AdminUsersPage() {
   };
 
   const toggleCanReceiveInvites = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await patchUser(user.id, { can_receive_invites: !user.can_receive_invites });
@@ -535,6 +591,7 @@ export function AdminUsersPage() {
     if (!banTarget) {
       return;
     }
+    setSelectedId(banTarget.id);
     setActionLoading(banTarget.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${banTarget.id}/ban`, {
@@ -551,6 +608,7 @@ export function AdminUsersPage() {
   };
 
   const unbanUser = async (user: AdminUser) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${user.id}/unban`, {});
@@ -568,6 +626,7 @@ export function AdminUsersPage() {
   };
 
   const setLegalHold = async (user: AdminUser, onHold: boolean) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${user.id}/legal-hold`, {
@@ -593,6 +652,7 @@ export function AdminUsersPage() {
     if (!issueTarget) {
       return;
     }
+    setSelectedId(issueTarget.id);
     setActionLoading(issueTarget.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${issueTarget.id}/invites`, {
@@ -618,6 +678,7 @@ export function AdminUsersPage() {
   const submitRestriction = async () => {
     if (!restrictionTarget) return;
 
+    setSelectedId(restrictionTarget.id);
     setActionLoading(restrictionTarget.id);
     try {
       await fetchWrapper.post(`/api/admin/users/${restrictionTarget.id}/restrictions`, {
@@ -635,6 +696,7 @@ export function AdminUsersPage() {
   };
 
   const liftRestriction = async (user: AdminUser, restriction: AdminRestriction) => {
+    setSelectedId(user.id);
     setActionLoading(user.id);
     try {
       await fetchWrapper.delete(`/api/admin/users/${user.id}/restrictions/${restriction.id}`, {});
@@ -646,11 +708,16 @@ export function AdminUsersPage() {
     }
   };
 
-  const counts = Object.fromEntries(
-    FILTERS.map((item) => [item.value, users.filter((user) => matchesFilter(user, item.value)).length]),
-  ) as Record<UserFilter, number>;
-  const visibleUsers = users.filter((user) => matchesFilter(user, filter) && matchesQuery(user, query));
-  const selected = visibleUsers.find((user) => user.id === selectedId) ?? visibleUsers[0] ?? null;
+  const selected = selectedId === null
+    ? users[0] ?? null
+    : users.find((user) => user.id === selectedId) ?? (selectedUser?.id === selectedId ? selectedUser : null);
+
+  const resetSelection = (): void => {
+    setSelectedId(null);
+    setSelectedUser(null);
+    setSelectionError('');
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+  };
 
   const selectUser = (id: number): void => {
     setSelectedId(id);
@@ -665,7 +732,7 @@ export function AdminUsersPage() {
   const renderDetail = (user: AdminUser) => {
     const status = primaryStatus(user);
     const restrictions = activeRestrictions(user);
-    const busy = actionLoading === user.id;
+    const busy = actionLoading !== null || loading || selectionLoading;
 
     return (
       <>
@@ -858,6 +925,7 @@ export function AdminUsersPage() {
       {error && (
         <div role="alert" className="mb-4 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
+          <Button variant="outline" size="sm" className="ml-3" disabled={loading} onClick={() => void loadUsers()}>Retry</Button>
         </div>
       )}
 
@@ -867,7 +935,7 @@ export function AdminUsersPage() {
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <div role="group" aria-label="Filter users" className="flex flex-wrap gap-1 rounded-lg border bg-muted/40 p-1">
-              {FILTERS.filter((item) => item.value !== 'deleted' || counts.deleted > 0).map((item) => {
+              {FILTERS.filter((item) => item.value !== 'deleted' || counts.deleted > 0 || filter === 'deleted').map((item) => {
                 const active = filter === item.value;
                 const highlight = item.value === 'pending' && counts.pending > 0;
 
@@ -876,7 +944,8 @@ export function AdminUsersPage() {
                     key={item.value}
                     type="button"
                     aria-pressed={active}
-                    onClick={() => setFilter(item.value)}
+                    disabled={loading}
+                    onClick={() => { setFilter(item.value); setPage(1); resetSelection(); }}
                     className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm ${active ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   >
                     {item.label}
@@ -887,10 +956,12 @@ export function AdminUsersPage() {
                 );
               })}
             </div>
-            <div className="relative min-w-56 flex-1">
+            <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()); setPage(1); resetSelection(); }}>
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 type="search"
+                maxLength={100}
                 aria-label="Search users"
                 placeholder="Search name, display name or email"
                 className="pl-9"
@@ -898,27 +969,30 @@ export function AdminUsersPage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
+            <Button type="submit" variant="outline" disabled={loading}>Search</Button>
+            </form>
           </div>
 
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
-            <div className="min-w-0 overflow-x-auto rounded-xl border">
+          {loading && <p role="status" className="mb-3 text-sm text-muted-foreground">Loading users...</p>}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
+            <div className="relative min-w-0 overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">
                 <caption className="sr-only">Users</caption>
                 <thead className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th scope="col" className="px-4 py-2.5 font-medium">User</th>
+                    <th scope="col" className="min-w-52 px-4 py-2.5 font-medium">User</th>
                     <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
                     <th scope="col" className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
                     <th scope="col" className="px-4 py-2.5"><span className="sr-only">Quick actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleUsers.length === 0 && (
+                  {users.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No users match.</td>
                     </tr>
                   )}
-                  {visibleUsers.map((user) => {
+                  {users.map((user) => {
                     const status = primaryStatus(user);
                     const flags = userFlags(user, eventProfile);
                     const isSelected = selected?.id === user.id;
@@ -964,7 +1038,7 @@ export function AdminUsersPage() {
                           {!user.is_deleted && !user.is_approved && (
                             <Button
                               size="sm"
-                              disabled={actionLoading === user.id || !user.email_verified}
+                              disabled={loading || actionLoading !== null || !user.email_verified}
                               title={!user.email_verified ? 'User must verify their email before approval.' : 'Approve user'}
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -984,9 +1058,16 @@ export function AdminUsersPage() {
             </div>
 
             <aside ref={detailRef} aria-label="User details" className="min-w-0 rounded-xl border lg:sticky lg:top-4">
-              {selected ? renderDetail(selected) : <p className="p-4 text-sm text-muted-foreground">Select a user to see details and actions.</p>}
+              {selectionLoading ? <p role="status" className="p-4 text-sm">Loading selected account...</p>
+                : selectionError ? <div role="alert" className="space-y-2 p-4 text-sm"><p>{selectionError}</p><Button variant="outline" size="sm" onClick={() => { if (selectedId !== null) void loadSelectedUser(selectedId); }}>Retry account</Button></div>
+                  : selected ? renderDetail(selected) : <p className="p-4 text-sm text-muted-foreground">Select a user to see details and actions.</p>}
             </aside>
           </div>
+          {meta && meta.last_page > 1 && <nav aria-label="User pages" className="mt-4 flex items-center justify-between gap-3">
+            <Button variant="outline" disabled={loading || page <= 1} onClick={() => { setPage((value) => value - 1); resetSelection(); }}>Previous</Button>
+            <span className="text-sm">Page {meta.current_page} of {meta.last_page}</span>
+            <Button variant="outline" disabled={loading || !meta.has_more} onClick={() => { setPage((value) => value + 1); resetSelection(); }}>Next</Button>
+          </nav>}
         </>
       )}
 
@@ -998,6 +1079,7 @@ export function AdminUsersPage() {
         defaultLimitBytes={defaultStorageLimit}
         onClose={() => setStorageTarget(null)}
         onSave={async (value) => {
+          setSelectedId(storageTarget.id);
           const response = await patchUser(storageTarget.id, { ...value });
           setUsers((current) => current.map((user) => user.id === storageTarget.id ? response.data : user));
           if (!await loadUsers()) throw new Error('The account limit was saved, but users could not be refreshed. Try again to refresh the list.');

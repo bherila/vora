@@ -88,6 +88,13 @@ async function success<T>(page: Page, method: string, path: string, body?: unkno
   return response.body;
 }
 
+async function accountByEmail(admin: Page, email: string): Promise<Account> {
+  const accounts = (await success<{ data: Account[] }>(admin, 'GET', `/api/admin/users?search=${encodeURIComponent(email)}`)).data;
+  const account = accounts.find((entry) => entry.email === email);
+  if (!account) throw new Error('Expected a disposable staging account in the server search results.');
+  return account;
+}
+
 async function mailIds(request: APIRequestContext): Promise<MailSummary[]> {
   const response = await request.get(`${mailUrl}/api/v1/messages?limit=100`);
   expect(response.ok(), 'Mailpit must be reachable').toBeTruthy();
@@ -138,8 +145,7 @@ async function registerUploader(page: Page, admin: Page, request: APIRequestCont
   }, { timeout: 30_000, message: 'Real SMTP registration verification link' }).toBeTruthy();
   expect(new URL(verification).origin).toBe(new URL(page.url()).origin);
   await page.goto(verification);
-  const accounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
-  const uploader = accounts.find((entry) => entry.email === email);
+  const uploader = await accountByEmail(admin, email);
   expect(uploader).toBeTruthy();
   if (organizerApproval) {
     await organizerSearch(admin, email);
@@ -313,7 +319,7 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     const [admin, recipient, outsider] = pages;
     adminPage = admin;
     const adminUsers = await success<{ data: Account[]; settings: { default_storage_limit_bytes: number | null } }>(admin, 'GET', '/api/admin/users');
-    const accounts = adminUsers.data;
+    const accounts = await Promise.all(EMAILS.map((email) => accountByEmail(admin, email)));
     const account = (email: string): Account => {
       const result = accounts.find((entry) => entry.email === email);
       if (!result || result.is_deleted || !EMAILS.includes(result.email)) throw new Error('Expected active seeded staging accounts; inspect the disposable Docker staging setup.');
@@ -387,8 +393,7 @@ test('real private upload, reviewed HLS, quotas, bulk organization and durable S
     await success(uploader, 'PUT', `/api/library/collections/${collection.ulid}/sharing`, { user_ids: [] });
     expect((await api(recipient, 'GET', `/api/library/items/${photoItem.ulid}`)).status).toBe(404);
     // Destructive lifecycle step is bound to the exact disposable seeded identity.
-    const freshAccounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
-    const disposable = freshAccounts.find((entry) => entry.id === uploaderAccount.id);
+    const disposable = (await success<{ data: Account }>(admin, 'GET', `/api/admin/users/${uploaderAccount.id}`)).data;
     expect(disposable?.email).toBe(`library-run-${suffix}@staging.invalid`);
     expect(disposable?.email).toMatch(/^library-run-[0-9]+@staging\.invalid$/);
     expect(disposable?.is_admin).toBe(false);
@@ -488,7 +493,7 @@ test('Event profile real media inherits restricted access, visible favorites and
       pages.push(page);
     }
     const [admin, recipient, outsider] = pages;
-    const accounts = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data;
+    const accounts = await Promise.all(EMAILS.map((email) => accountByEmail(admin, email)));
     const adminId = accounts.find((account) => account.email === 'admin@staging.invalid')!.id;
     const recipientId = accounts.find((account) => account.email === 'recipient@staging.invalid')!.id;
     const suffix = String(Date.now());
@@ -624,7 +629,7 @@ test('Event profile real media inherits restricted access, visible favorites and
     expect(await visibleIds(recipient, 'featured=1')).not.toContain(video.data.ulid);
     await playable(recipient, savedVideo.ulid);
     expect((await api(outsider, 'GET', `/api/library/items/${savedPhoto.ulid}`)).status).toBe(404);
-    const disposable = (await success<{ data: Account[] }>(admin, 'GET', '/api/admin/users')).data.find((entry) => entry.id === account.id);
+    const disposable = (await success<{ data: Account }>(admin, 'GET', `/api/admin/users/${account.id}`)).data;
     expect(disposable?.email).toBe(`library-run-${suffix}@staging.invalid`);
     expect(disposable?.is_admin).toBe(false);
     await success(admin, 'DELETE', `/api/admin/users/${account.id}`);
