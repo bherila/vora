@@ -57,14 +57,17 @@ class AdminUserController extends Controller
         if ($search !== '') {
             // Search has the same literal substring meaning as the directory's
             // old browser filter; '%' and '_' are not wildcard controls.
-            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)).'%';
+            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search, 'UTF-8')).'%';
+            // SQLite's built-in LOWER only handles ASCII. Our connector adds a
+            // separate Unicode-aware function without changing other SQL users.
+            $lower = $query->getConnection()->getDriverName() === 'sqlite' ? 'vora_unicode_lower' : 'LOWER';
             // MySQL's default collation also folds accents; browser substring
             // search did not. Compare the case-folded text with a binary collation.
             $collation = in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
                 ? ' COLLATE utf8mb4_bin' : '';
-            $query->where(fn (Builder $users) => $users->whereRaw("LOWER(name){$collation} LIKE ? ESCAPE '!'", [$pattern])
-                ->orWhereRaw("LOWER(display_name){$collation} LIKE ? ESCAPE '!'", [$pattern])
-                ->orWhereRaw("LOWER(email){$collation} LIKE ? ESCAPE '!'", [$pattern]));
+            $query->where(fn (Builder $users) => $users->whereRaw("{$lower}(name){$collation} LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("{$lower}(display_name){$collation} LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("{$lower}(email){$collation} LIKE ? ESCAPE '!'", [$pattern]));
         }
         $page = $query->with(['referredByInvite.inviter:id,display_name', 'restrictions'])
             ->orderByDesc('id')->paginate(30);
