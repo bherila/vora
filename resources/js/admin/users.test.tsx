@@ -364,12 +364,12 @@ describe('AdminUsersPage list and detail panel', () => {
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
     await waitFor(() => expect(rowFor('ada@example.test')).toBeDefined());
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search users' }), { target: { value: 'ADA ad' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(rowFor('daybright@example.test')).toBeUndefined());
     expect(rowFor('ada@example.test')).toBeDefined();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search users' }), { target: { value: 'nobody' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByText('No users match.');
     expect(screen.getByText('Select a user to see details and actions.')).toBeInTheDocument();
   });
@@ -536,12 +536,12 @@ describe('AdminUsersPage server directory', () => {
     });
     render(<AdminUsersPage />);
     await screen.findByText('Page 1 of 2');
-    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByText('Page 2 of 2');
     expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=2&status=all');
-    expect(screen.getByRole('button', { name: 'Previous', exact: true })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'outside' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByText('No users match.');
     expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=1&status=all&search=outside');
     expect(screen.getByRole('button', { name: /^Needs approval/ })).toHaveTextContent('4');
@@ -558,8 +558,8 @@ describe('AdminUsersPage server directory', () => {
     render(<AdminUsersPage />);
     const panel = await screen.findByRole('complementary', { name: 'User details' });
     await within(panel).findByRole('heading', { name: 'Alex' });
-    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
-    await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Approve', exact: true })).not.toBeInTheDocument());
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument());
     expect(within(panel).getByRole('heading', { name: 'Alex' })).toBeInTheDocument();
     expect(window.location.hash).toBe('#user-8');
     expect(jest.mocked(fetchWrapper.get).mock.calls.filter(([url]) => url === '/api/admin/users/8')).toHaveLength(2);
@@ -582,15 +582,15 @@ describe('AdminUsersPage server directory', () => {
     await screen.findByText('Page 1 of 2');
     fireEvent.click(screen.getByRole('button', { name: /^Needs approval/ }));
     await waitFor(() => expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/admin/users?page=1&status=pending'));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Next', exact: true })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Next', exact: true }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByText('Page 2 of 2');
     const panel = screen.getByRole('complementary', { name: 'User details' });
-    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.queryByRole('navigation', { name: 'User pages' })).not.toBeInTheDocument());
     await within(panel).findByRole('heading', { name: 'Alex' });
     expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
-    expect(within(panel).queryByRole('button', { name: 'Approve', exact: true })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     expect(fetchWrapper.get).toHaveBeenCalledWith('/api/admin/users?page=1&status=pending');
   });
 
@@ -602,7 +602,7 @@ describe('AdminUsersPage server directory', () => {
     }));
     render(<AdminUsersPage />);
     const panel = await screen.findByRole('complementary', { name: 'User details' });
-    fireEvent.click(within(panel).getByRole('button', { name: 'Approve', exact: true }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Approve' }));
     fireEvent.click(screen.getByRole('button', { name: /^Banned/ }));
     await screen.findByRole('heading', { name: 'Newer' });
     await act(async () => { finish(); });
@@ -626,7 +626,7 @@ describe('AdminUsersPage server directory', () => {
     });
     render(<AdminUsersPage />);
     await screen.findByText('Directory unavailable.');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByRole('heading', { name: 'Alex' });
     // Loading the refreshed list also retried the previously failed selection.
     expect(directoryAttempts).toBe(2);
@@ -664,7 +664,7 @@ describe('AdminUsersPage server directory', () => {
     });
     render(<AdminUsersPage />);
     await screen.findByText('Account lookup failed.');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry account', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry account' }));
     await screen.findByRole('heading', { name: 'Alex' });
     expect(screen.getByRole('table')).toHaveTextContent('newer@example.test');
     expect(window.location.hash).toBe('#user-8');
