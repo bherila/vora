@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Database\Connectors\UnicodeSQLiteConnector;
 use App\Events\ContentPrivacySynced;
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\Character;
@@ -56,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind('db.connector.sqlite', UnicodeSQLiteConnector::class);
         // App-specific auth policy consumed by the bherila/auth-laravel package.
         $this->app->bind(AuthUserPolicy::class, VoraAuthUserPolicy::class);
         // Deletions at the identity provider (provider sign-in; see routes/console.php).
