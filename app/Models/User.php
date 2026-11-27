@@ -7,6 +7,7 @@ use App\Enums\LocationAudience;
 use App\Http\Middleware\EnsureNotBanned;
 use App\Services\Location\LocationVisibility;
 use App\Support\InstanceFeatures;
+use BWH\Auth\OAuth\Session\RememberedProviderLogins;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -35,6 +36,8 @@ class User extends Authenticatable implements MustVerifyEmail
 
     protected static function booted(): void
     {
+        static::deleting(fn (User $user) => app(RememberedProviderLogins::class)->forgetUser((string) $user->getAuthIdentifier()));
+
         static::creating(function (User $user): void {
             $user->public_ulid ??= (string) Str::ulid();
         });
