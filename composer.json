@@ -11,7 +11,7 @@
     "require": {
         "php": "^8.5",
         "aws/aws-php-sns-message-validator": "^1.10",
-        "bherila/auth-laravel": "^0.30",
+        "bherila/auth-laravel": "^0.32.0",
         "bherila/auth-manager": "0.1.8",
         "erusev/parsedown": "^1.8.0",
         "laravel-notification-channels/webpush": "^13.0.1",
@@ -117,7 +117,7 @@
                 "type": "project",
                 "require": {
                     "php": "^8.4",
-                    "bherila/auth-laravel": "^0.30",
+                    "bherila/auth-laravel": "^0.30 || ^0.32",
                     "laravel/framework": "^13.17",
                     "laravel/passport": "^13.4",
                     "laravel/tinker": "^3.0",
