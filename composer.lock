@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "56b20978cd74e06e897cc96f25706c31",
+    "content-hash": "3f5140fabc512bd6313e891fbee7dc06",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -218,16 +218,16 @@
         },
         {
             "name": "bherila/auth-laravel",
-            "version": "v0.30.0",
+            "version": "v0.32.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bherila/auth-laravel.git",
-                "reference": "18ebb2002409c881dc2a032a4fd4ac2d678ae3d4"
+                "reference": "6295d990457f65d185a1436856a7a19f5c728cea"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/18ebb2002409c881dc2a032a4fd4ac2d678ae3d4",
-                "reference": "18ebb2002409c881dc2a032a4fd4ac2d678ae3d4",
+                "url": "https://api.github.com/repos/bherila/auth-laravel/zipball/6295d990457f65d185a1436856a7a19f5c728cea",
+                "reference": "6295d990457f65d185a1436856a7a19f5c728cea",
                 "shasum": ""
             },
             "require": {
@@ -242,7 +242,7 @@
                 "illuminate/support": "^13.0",
                 "illuminate/validation": "^13.0",
                 "lcobucci/jwt": "^5.6",
-                "php": "^8.4",
+                "php": "^8.5",
                 "symfony/uid": "^7.4 || ^8.0",
                 "web-auth/webauthn-lib": "^5.3.5"
             },
@@ -277,7 +277,7 @@
                 "issues": "https://github.com/bherila/auth-laravel/issues",
                 "source": "https://github.com/bherila/auth-laravel"
             },
-            "time": "2026-11-15T07:11:49+00:00"
+            "time": "2026-11-27T04:48:54+00:00"
         },
         {
             "name": "bherila/auth-manager",
@@ -294,7 +294,7 @@
                 "shasum": "e224bf4d338d4948960c91f67648bcae3c7f8327"
             },
             "require": {
-                "bherila/auth-laravel": "^0.30",
+                "bherila/auth-laravel": "^0.30 || ^0.32",
                 "laravel/framework": "^13.17",
                 "laravel/passport": "^13.4",
                 "laravel/tinker": "^3.0",
