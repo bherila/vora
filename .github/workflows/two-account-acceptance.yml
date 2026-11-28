@@ -2,6 +2,11 @@ name: Two-account acceptance
 
 on:
   pull_request:
+    # Skip pull requests that only change documentation. This workflow is not
+    # a required check ("CI result" is), so a skipped run never blocks merge.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   workflow_dispatch:
 
 concurrency:
