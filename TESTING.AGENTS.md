@@ -65,8 +65,9 @@ sequential command for explicitly requested full local runs.
 
 ## Two-account acceptance
 
-The **Two-account acceptance** workflow runs on pull requests and can also be
-run manually against the branch under review. It checks password/two-factor
+The **Two-account acceptance** workflow runs on pull requests (except those
+that only change `docs/**` or root-level Markdown files) and can also be run
+manually against the branch under review. It checks password/two-factor
 auth and approval gates, authoring identity
 switching, account and persona follows, Separate-persona privacy, blocking,
 discussion contribution ownership, and chat eligibility/history. Its Jest step
