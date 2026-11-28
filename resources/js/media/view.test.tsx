@@ -16,9 +16,24 @@ jest.mock('@/fetchWrapper', () => ({
     delete: jest.fn(),
   },
 }));
-jest.mock('@/media/MediaPlayer', () => ({
-  MediaPlayer: ({ item }: { item: MediaItem }) => <div>Player for {item.title}</div>,
-}));
+jest.mock('@/media/MediaPlayer', () => {
+  const { useEffect } = jest.requireActual<typeof import('react')>('react');
+  const { VideoPlayback } = jest.requireActual<typeof import('@/media/videoPlayback')>('@/media/videoPlayback');
+  const { createFakeVideo } = jest.requireActual<typeof import('@/media/videoPlaybackTestUtils')>('@/media/videoPlaybackTestUtils');
+
+  function MockMediaPlayer({ item, onPlayback }: { item: MediaItem; onPlayback?: ((playback: InstanceType<typeof VideoPlayback> | null) => void) | undefined }) {
+    useEffect(() => {
+      if (onPlayback === undefined) {
+        return undefined;
+      }
+      onPlayback(new VideoPlayback(createFakeVideo().video));
+      return () => onPlayback(null);
+    }, [onPlayback]);
+    return <div>Player for {item.title}</div>;
+  }
+
+  return { MediaPlayer: MockMediaPlayer };
+});
 jest.mock('@/components/favorite-button', () => ({ FavoriteButton: () => null }));
 jest.mock('@/components/report-button', () => ({ ReportButton: () => null }));
 jest.mock('sonner', () => ({
@@ -141,4 +156,19 @@ it('uses an alert dialog with the existing recovery wording before deleting', as
   await waitFor(() => expect(fetchWrapper.delete).toHaveBeenCalledWith('/api/media/7'));
   expect(await screen.findByText('Media deleted.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Return to your profile' })).toHaveAttribute('href', '/me');
+});
+
+it('shows the video toolbar once a video stream is attached, and not for photos', async () => {
+  mockReadInitialData.mockReturnValue({
+    mediaView: { ...mediaItem(false), type: 'video', video: { status: 'ready', master_url: '/api/media/7/hls/master.m3u8' } },
+  });
+  const { unmount } = render(<MediaViewPage />);
+
+  expect(await screen.findByRole('toolbar', { name: 'Video controls' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Next frame' })).toBeInTheDocument();
+  unmount();
+
+  mockReadInitialData.mockReturnValue({ mediaView: mediaItem(false) });
+  render(<MediaViewPage />);
+  expect(screen.queryByRole('toolbar', { name: 'Video controls' })).toBeNull();
 });
