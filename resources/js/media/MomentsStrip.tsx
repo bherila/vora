@@ -147,7 +147,8 @@ export function MomentsStrip({ mediaUlid, playback, moments, localPreviews, onCh
               <Button type="button" size="sm" onClick={() => { playback.seek(momentSeconds(open)); setOpenUlid(null); }}>Play from here</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => void run(async () => {
                 const url = new URL(window.location.href);
-                url.hash = `t=${formatTimeFragment(momentSeconds(open))}`;
+                // Keep the millisecond, so the link opens on the moment's own frame.
+                url.hash = `t=${formatTimeFragment(momentSeconds(open), { milliseconds: true })}`;
                 await navigator.clipboard.writeText(url.toString());
                 toast.success('Link copied.');
               })}>Copy link</Button>

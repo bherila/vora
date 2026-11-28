@@ -275,10 +275,38 @@ class VideoMomentTest extends TestCase
 
         $video->refresh();
         $this->assertStringStartsWith('posters/', (string) $video->thumbnail_key);
-        $this->assertSame($video->thumbnail_key, $video->reviewed_thumbnail_key);
+        $this->assertNotSame($video->thumbnail_key, $video->reviewed_thumbnail_key, 'the source poster and its reviewed copy are separate objects');
         $this->assertSame('full-frame-bytes', Storage::disk('photos')->get((string) $video->thumbnail_key));
+        $this->assertSame('full-frame-bytes', Storage::disk('photos')->get((string) $video->reviewed_thumbnail_key));
         Storage::disk('photos')->assertMissing('thumbs/old.jpg');
         Storage::disk('photos')->assertMissing('thumbs/old-reviewed.jpg');
+
+        // Rejection deletes only the reviewed copy, so a later approval can
+        // copy the source poster again.
+        Storage::disk('s3')->put($video->object_key, 'video-bytes');
+        $moderation = app(MediaModerationService::class);
+        $moderation->reject($video, $this->admin, 'Check');
+        Storage::disk('photos')->assertExists((string) $video->refresh()->thumbnail_key);
+        $this->assertTrue($moderation->approve($video->refresh(), $this->admin));
+        $this->assertSame('full-frame-bytes', Storage::disk('photos')->get((string) $video->refresh()->reviewed_thumbnail_key));
+    }
+
+    public function test_a_failed_cover_write_keeps_the_current_poster(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $video = $this->video($owner, ['thumbnail_key' => 'thumbs/old.jpg', 'reviewed_thumbnail_key' => 'thumbs/old-reviewed.jpg']);
+        Storage::disk('photos')->put('thumbs/old.jpg', 'old');
+        Storage::disk('photos')->put('thumbs/old-reviewed.jpg', 'old');
+        $this->publishFrame(12_345);
+        $this->save($owner, $video)->assertCreated();
+        $moment = VideoMoment::query()->sole();
+        $this->mock(FileStorageService::class)->makePartial()->shouldReceive('putString')->andReturnFalse();
+
+        $this->actingAs($owner)->postJson("/api/media/by-ulid/{$video->ulid}/cover", ['moment' => $moment->ulid])
+            ->assertUnprocessable()->assertJsonValidationErrors('moment');
+        $this->assertSame('thumbs/old.jpg', $video->refresh()->thumbnail_key);
+        Storage::disk('photos')->assertExists('thumbs/old.jpg');
+        Storage::disk('photos')->assertExists('thumbs/old-reviewed.jpg');
     }
 
     public function test_the_uploaders_moments_on_a_separate_persona_video_show_the_persona(): void

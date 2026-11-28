@@ -96,18 +96,24 @@ function parseTimeValue(value: string): number | null {
   return null;
 }
 
-/** Format whole seconds as a compact fragment value: `1h02m30s`, `2m05s`, `45s`. */
-export function formatTimeFragment(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
+/**
+ * Format seconds as a compact fragment value: `1h02m30s`, `2m05s`, `45s`.
+ * Whole seconds by default; with `milliseconds`, a fraction such as
+ * `2m05.346s` is kept.
+ */
+export function formatTimeFragment(seconds: number, options: { milliseconds?: boolean } = {}): string {
+  const totalMs = Math.max(0, options.milliseconds === true ? Math.round(seconds * 1000) : Math.floor(seconds) * 1000);
+  const total = Math.floor(totalMs / 1000);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
+  const fraction = totalMs % 1000;
+  const secs = `${total % 60}${fraction === 0 ? '' : `.${String(fraction).padStart(3, '0')}`}`;
 
   if (hours > 0) {
-    return `${hours}h${pad(minutes)}m${pad(secs)}s`;
+    return `${hours}h${pad(minutes)}m${secs.padStart(fraction === 0 ? 2 : 6, '0')}s`;
   }
   if (minutes > 0) {
-    return `${minutes}m${pad(secs)}s`;
+    return `${minutes}m${secs.padStart(fraction === 0 ? 2 : 6, '0')}s`;
   }
   return `${secs}s`;
 }

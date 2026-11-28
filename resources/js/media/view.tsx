@@ -96,9 +96,10 @@ export function MediaViewPage() {
     };
   }, [momentsUlid]);
 
-  // While the viewer's own frames are being prepared, check back every 10 s
-  // for up to 5 minutes.
-  const waitingForFrames = moments.some((moment) => moment.is_mine && moment.frame_status === 'pending');
+  // While any visible frame is being prepared, check back every 10 s for up
+  // to 5 minutes. Other viewers need this most: until the server's frame
+  // exists they see only a placeholder.
+  const waitingForFrames = moments.some((moment) => moment.frame_status === 'pending');
   useEffect(() => {
     if (momentsUlid === null || !waitingForFrames || pendingPolls.current >= 30) {
       return undefined;

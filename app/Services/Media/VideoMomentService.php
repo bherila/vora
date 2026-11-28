@@ -103,8 +103,11 @@ class VideoMomentService
 
             return ['moment' => $moment, 'provisional_upload' => null];
         }
-        $this->frames->request($video, $moment->content_id, $moment->time_ms);
+        // Record the attempt before dispatching it, so an error the worker
+        // writes while the wake call is still in flight is not mistaken for
+        // an earlier attempt's.
         $moment->forceFill(['frame_requested_at' => now()])->save();
+        $this->frames->request($video, $moment->content_id, $moment->time_ms);
 
         $upload = null;
         if ($captureBytes !== null) {
@@ -260,8 +263,8 @@ class VideoMomentService
         if ($moment->frame_status !== VideoMoment::FRAME_FAILED) {
             return;
         }
-        $this->frames->request($video, $moment->content_id, $moment->time_ms);
         $moment->forceFill(['frame_status' => VideoMoment::FRAME_PENDING, 'frame_requested_at' => now(), 'frame_checked_at' => null])->save();
+        $this->frames->request($video, $moment->content_id, $moment->time_ms);
     }
 
     /**
@@ -275,15 +278,25 @@ class VideoMomentService
             throw ValidationException::withMessages(['moment' => 'That frame is not ready yet.']);
         }
         $disk = (string) config('media.thumbnail_disk');
-        $key = 'posters/'.$video->user_id.'/'.$video->ulid.'-'.Str::lower((string) Str::ulid()).'.jpg';
-        $this->storage->putString($disk, $key, $bytes, 'image/jpeg');
+        $stem = 'posters/'.$video->user_id.'/'.$video->ulid.'-'.Str::lower((string) Str::ulid());
+        // The source poster and its reviewed copy are separate objects, as
+        // moderation expects: rejection deletes the reviewed copy, and a later
+        // approval copies the source again.
+        $key = $stem.'.jpg';
+        $reviewedKey = $stem.'-reviewed.jpg';
+        if (! $this->storage->putString($disk, $key, $bytes, 'image/jpeg')) {
+            throw ValidationException::withMessages(['moment' => 'The cover could not be saved. Try again.']);
+        }
+        if (! $this->storage->putString($disk, $reviewedKey, $bytes, 'image/jpeg')) {
+            $this->storage->deleteFile($disk, $key);
+
+            throw ValidationException::withMessages(['moment' => 'The cover could not be saved. Try again.']);
+        }
 
         $old = array_unique(array_filter([$video->thumbnail_key, $video->reviewed_thumbnail_key]));
-        $video->forceFill(['thumbnail_key' => $key, 'reviewed_thumbnail_key' => $key])->save();
+        $video->forceFill(['thumbnail_key' => $key, 'reviewed_thumbnail_key' => $reviewedKey])->save();
         foreach ($old as $previous) {
-            if ($previous !== $key) {
-                $this->storage->deleteFile($disk, $previous);
-            }
+            $this->storage->deleteFile($disk, $previous);
         }
     }
 
@@ -296,7 +309,7 @@ class VideoMomentService
     /** Remove every moment of a video and its captures (permanent removal). */
     public function purgeForMedia(Media $video): void
     {
-        VideoMoment::query()->where('media_id', $video->id)->each(function (VideoMoment $moment) use ($video): void {
+        VideoMoment::query()->where('media_id', $video->id)->eachById(function (VideoMoment $moment) use ($video): void {
             $this->deleteProvisional($moment);
             if ($moment->frame_status === VideoMoment::FRAME_PENDING) {
                 $this->frames->clearRequest($video, $moment->content_id, $moment->time_ms);
@@ -313,13 +326,13 @@ class VideoMomentService
     public function deleteProvisionalsForMedia(Media $video): void
     {
         VideoMoment::query()->where('media_id', $video->id)->whereNotNull('provisional_key')
-            ->each(fn (VideoMoment $moment) => $this->deleteProvisional($moment));
+            ->eachById(fn (VideoMoment $moment) => $this->deleteProvisional($moment));
     }
 
     /** Remove an account's own moments and captures (account deletion). */
     public function purgeForUser(User $user): void
     {
-        VideoMoment::query()->where('user_id', $user->id)->each(fn (VideoMoment $moment) => $this->delete($moment));
+        VideoMoment::query()->where('user_id', $user->id)->eachById(fn (VideoMoment $moment) => $this->delete($moment));
     }
 
     /**
@@ -329,7 +342,7 @@ class VideoMomentService
     {
         $count = 0;
         VideoMoment::query()->where('provisional_status', VideoMoment::PROVISIONAL_AWAITING)->where('created_at', '<', $before)
-            ->each(function (VideoMoment $moment) use (&$count): void {
+            ->eachById(function (VideoMoment $moment) use (&$count): void {
                 $this->deleteProvisional($moment);
                 $count++;
             });

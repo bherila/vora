@@ -40,6 +40,16 @@ describe('formatTimeFragment', () => {
     expect(formatTimeFragment(seconds)).toBe(expected);
   });
 
+  it.each([
+    [12.346, '12.346s'],
+    [12, '12s'],
+    [125.001, '2m05.001s'],
+    [3750.25, '1h02m30.250s'],
+  ])('keeps milliseconds on request: %s as %s', (seconds, expected) => {
+    expect(formatTimeFragment(seconds, { milliseconds: true })).toBe(expected);
+    expect(parseTimeFragment(`#t=${expected}`)).toBeCloseTo(seconds, 6);
+  });
+
   it('round-trips through parseTimeFragment', () => {
     for (const seconds of [0, 59, 61, 3599, 3600, 3750, 86_399]) {
       expect(parseTimeFragment(`#t=${formatTimeFragment(seconds)}`)).toBe(seconds);

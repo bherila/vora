@@ -14,9 +14,23 @@ interface CreateResponse extends MomentResponse {
   provisional_upload: { url: string; headers: Record<string, string> } | null;
 }
 
-export function listMoments(mediaUlid: string): Promise<VideoMoment[]> {
-  return fetchWrapper.get(`/api/media/by-ulid/${encodeURIComponent(mediaUlid)}/moments`)
-    .then((response: { data: VideoMoment[] }) => response.data);
+/** Pages to follow at most: the server caps a video at 2,000 moments, 100 a page. */
+const MAX_MOMENT_PAGES = 25;
+
+/** Every moment of a video the viewer can see, following the server's cursor. */
+export async function listMoments(mediaUlid: string): Promise<VideoMoment[]> {
+  const base = `/api/media/by-ulid/${encodeURIComponent(mediaUlid)}/moments`;
+  const moments: VideoMoment[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_MOMENT_PAGES; page++) {
+    const response = await fetchWrapper.get(cursor === null ? base : `${base}?cursor=${encodeURIComponent(cursor)}`) as { data: VideoMoment[]; next_cursor?: string | null };
+    moments.push(...response.data);
+    cursor = response.next_cursor ?? null;
+    if (cursor === null) {
+      break;
+    }
+  }
+  return moments;
 }
 
 /**

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { fetchWrapper } from '@/fetchWrapper';
 import { MomentCapture } from '@/media/MomentCapture';
-import { captureFrame, saveMoment } from '@/media/moments';
+import { captureFrame, listMoments, saveMoment } from '@/media/moments';
 import { MomentsStrip } from '@/media/MomentsStrip';
 import type { VideoMoment } from '@/media/types';
 import { VideoPlayback } from '@/media/videoPlayback';
@@ -28,6 +28,18 @@ const fetchMock = jest.fn();
 beforeEach(() => {
   jest.clearAllMocks();
   global.fetch = fetchMock as unknown as typeof fetch;
+});
+
+describe('listMoments', () => {
+  it('follows the cursor to the last page', async () => {
+    jest.mocked(fetchWrapper.get)
+      .mockResolvedValueOnce({ data: [moment({ ulid: 'A' })], next_cursor: 'page 2' })
+      .mockResolvedValueOnce({ data: [moment({ ulid: 'B' })], next_cursor: null });
+
+    await expect(listMoments('01VIDEO')).resolves.toMatchObject([{ ulid: 'A' }, { ulid: 'B' }]);
+    expect(fetchWrapper.get).toHaveBeenNthCalledWith(1, '/api/media/by-ulid/01VIDEO/moments');
+    expect(fetchWrapper.get).toHaveBeenNthCalledWith(2, '/api/media/by-ulid/01VIDEO/moments?cursor=page%202');
+  });
 });
 
 describe('saveMoment', () => {
@@ -165,6 +177,16 @@ describe('MomentsStrip', () => {
     const { fake } = renderStrip([moment()]);
     fireEvent.click(screen.getByRole('button', { name: 'Play from 1:01' }));
     expect(fake.seeks.at(-1)).toBeCloseTo(61.069);
+  });
+
+  it('copies a link to the moment\'s own millisecond', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderStrip([moment({ time_ms: 12_345 })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open the moment at 0:12' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Copy link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/#t=12\.346s$/)));
   });
 
   it('lets the author caption, share, and remove a moment', async () => {
