@@ -6,6 +6,8 @@ import { useSyncExternalStore } from 'react';
  */
 export interface PlaybackLevelSource {
   readonly levels?: ReadonlyArray<{ readonly frameRate?: number; readonly height?: number }> | undefined;
+  /** hls.js: the playing level index; -1 lets it choose automatically. */
+  currentLevel?: number;
 }
 
 export interface PlaybackState {
@@ -114,6 +116,34 @@ export class VideoPlayback {
       return snapFrameRate(best.frameRate);
     }
     return this.measuredFrameRate;
+  }
+
+  /**
+   * Lock playback to the highest-resolution level while a frame is being
+   * captured, so the frame tuned in the browser is the one the server will
+   * extract (from that same rendition). Native HLS has no levels to pin.
+   */
+  pinTopQuality(): void {
+    const source = this.levelSource;
+    const levels = source?.levels ?? [];
+    if (source === null || levels.length === 0 || !('currentLevel' in source)) {
+      return;
+    }
+    let top = 0;
+    levels.forEach((level, index) => {
+      if ((level.height ?? 0) > (levels[top]?.height ?? 0)) {
+        top = index;
+      }
+    });
+    source.currentLevel = top;
+  }
+
+  /** Return quality selection to hls.js. */
+  releaseQuality(): void {
+    const source = this.levelSource;
+    if (source !== null && 'currentLevel' in source) {
+      source.currentLevel = -1;
+    }
   }
 
   /** Seek to `seconds`, clamped to the video's duration. */

@@ -186,3 +186,19 @@ it('saves the position after watching, but never just for opening the page', () 
   });
   expect(JSON.parse(window.localStorage.getItem(KEY) ?? 'null')).toMatchObject({ t: 600 });
 });
+
+it('opens the moment tray from its button and the S key, but not while typing', () => {
+  const { playback } = setup();
+  const onSaveMoment = jest.fn();
+  render(
+    <>
+      <VideoToolbar playback={playback} mediaUlid="01VIDEO" onSaveMoment={onSaveMoment} />
+      <input aria-label="Comment" />
+    </>,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /Save moment/ }));
+  fireEvent.keyDown(document.body, { key: 's' });
+  fireEvent.keyDown(screen.getByLabelText('Comment'), { key: 's' });
+  expect(onSaveMoment).toHaveBeenCalledTimes(2);
+});

@@ -156,6 +156,16 @@ class Media extends Model
     }
 
     /**
+     * Saved frames, in playback order.
+     *
+     * @return HasMany<VideoMoment, $this>
+     */
+    public function moments(): HasMany
+    {
+        return $this->hasMany(VideoMoment::class)->orderBy('time_ms');
+    }
+
+    /**
      * Chapters in playback order.
      *
      * @return HasMany<VideoChapter, $this>

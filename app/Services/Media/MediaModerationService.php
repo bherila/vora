@@ -56,6 +56,9 @@ class MediaModerationService
     public function reject(Media $media, User $admin, ?string $notes = null): void
     {
         $this->deleteReviewedCopies($media);
+        // Browser captures of the video live outside its HLS output; delete
+        // them now rather than leave copies of rejected content behind.
+        app(VideoMomentService::class)->deleteProvisionalsForMedia($media);
 
         $media->reviewed_object_key = null;
         $media->reviewed_thumbnail_key = null;

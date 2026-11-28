@@ -157,6 +157,19 @@ describe('VideoPlayback', () => {
     expect(fake.seeks.slice(-2).map((t) => Math.floor(t * 25 + 1e-6))).toEqual([5, 4]);
   });
 
+  it('pins hls.js to its highest level and releases it', () => {
+    const levels = { levels: [{ height: 720 }, { height: 1080 }, { height: 360 }], currentLevel: -1 };
+    const playback = new VideoPlayback(createFakeVideo().video, levels);
+
+    playback.pinTopQuality();
+    expect(levels.currentLevel).toBe(1);
+    playback.releaseQuality();
+    expect(levels.currentLevel).toBe(-1);
+
+    // Native HLS has no levels to pin.
+    expect(() => new VideoPlayback(createFakeVideo().video).pinTopQuality()).not.toThrow();
+  });
+
   it('works without requestVideoFrameCallback', () => {
     const fake = createFakeVideo();
     Object.defineProperty(fake.video, 'requestVideoFrameCallback', { configurable: true, value: undefined });

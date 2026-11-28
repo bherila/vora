@@ -144,4 +144,30 @@ return [
 
     'page_size' => (int) env('MEDIA_PAGE_SIZE', 24),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Video moments
+    |--------------------------------------------------------------------------
+    |
+    | Saved frames of videos (docs/media/video-annotations.md). The shared
+    | image comes from the transcoder's frame worker (cmd/framegrabber), which
+    | reads requests written to the video source disk under the request prefix.
+    | The optional wake URL and token let new requests be answered in seconds
+    | instead of at the worker's next poll; without them, the worker's own
+    | schedule applies.
+    |
+    */
+
+    'moments' => [
+        'provisional_max_bytes' => (int) env('MEDIA_MOMENT_PROVISIONAL_MAX_BYTES', 1_572_864),
+        'provisional_max_dimension' => 4096,
+        'max_per_user_per_video' => 100,
+        'max_per_video' => 2000,
+        'frame_request_prefix' => env('MEDIA_FRAME_REQUEST_PREFIX', 'frame-requests/'),
+        'framegrabber_wake_url' => env('MEDIA_FRAMEGRABBER_WAKE_URL'),
+        'framegrabber_wake_token' => env('MEDIA_FRAMEGRABBER_WAKE_TOKEN'),
+        // Stop checking for a frame this long after the moment was saved.
+        'frame_wait_days' => 7,
+    ],
+
 ];

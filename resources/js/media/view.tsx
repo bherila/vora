@@ -1,5 +1,5 @@
 import { ArrowLeft, ListOrdered } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
 
@@ -36,9 +36,14 @@ import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
 import { ChapterBar } from '@/media/ChapterBar';
 import { ChapterEditor } from '@/media/ChapterEditor';
 import { ChapterList } from '@/media/ChapterList';
+import { chapterListProblems } from '@/media/chapters';
 import { MediaPlayer } from '@/media/MediaPlayer';
-import { formatBytes, type MediaItem, type VideoChapter } from '@/media/types';
+import { MomentCapture } from '@/media/MomentCapture';
+import { listMoments } from '@/media/moments';
+import { MomentsStrip } from '@/media/MomentsStrip';
+import { formatBytes, type MediaItem, type VideoChapter, type VideoMoment } from '@/media/types';
 import type { VideoPlayback } from '@/media/videoPlayback';
+import { formatClock } from '@/media/videoTime';
 import { VideoToolbar } from '@/media/VideoToolbar';
 import { safeInternalUrl } from '@/security/dom-url';
 
@@ -67,6 +72,47 @@ export function MediaViewPage() {
   const [editingChapters, setEditingChapters] = useState(false);
   // Bumped after each save so the player re-fetches its WebVTT chapters track.
   const [chaptersVersion, setChaptersVersion] = useState(0);
+  const [moments, setMoments] = useState<VideoMoment[]>([]);
+  const [capturing, setCapturing] = useState(false);
+  const [localPreviews, setLocalPreviews] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const previewUrls = useRef(new Set<string>());
+  const pendingPolls = useRef(0);
+
+  const momentsUlid = item?.type === 'video' ? item.ulid : null;
+  useEffect(() => {
+    if (momentsUlid === null) {
+      return undefined;
+    }
+    let cancelled = false;
+    listMoments(momentsUlid).then((loaded) => {
+      if (!cancelled) {
+        setMoments(loaded);
+      }
+    }).catch(() => {
+      // Moments are an addition to the page; it works without them.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [momentsUlid]);
+
+  // While the viewer's own frames are being prepared, check back every 10 s
+  // for up to 5 minutes.
+  const waitingForFrames = moments.some((moment) => moment.is_mine && moment.frame_status === 'pending');
+  useEffect(() => {
+    if (momentsUlid === null || !waitingForFrames || pendingPolls.current >= 30) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      pendingPolls.current += 1;
+      listMoments(momentsUlid).then(setMoments).catch(() => undefined);
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [momentsUlid, waitingForFrames, moments]);
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   if (deleted) {
     return (
@@ -84,6 +130,36 @@ export function MediaViewPage() {
   }
 
   const isVideo = item.type === 'video';
+
+  const replaceMoment = (moment: VideoMoment): void => {
+    setMoments((current) => current.map((candidate) => (candidate.ulid === moment.ulid ? moment : candidate)));
+  };
+
+  const makeChapterFromMoment = async (moment: VideoMoment): Promise<void> => {
+    const start = moment.time_ms + 1;
+    if (chapters.some((chapter) => Math.abs(chapter.start_ms - start) < 1000)) {
+      toast.error('A chapter already starts there.');
+      return;
+    }
+    const next = [
+      ...(chapters.length === 0 && start > 0 ? [{ start_ms: 0, title: 'Beginning' }] : []),
+      ...chapters,
+      { start_ms: start, title: moment.caption ?? `Moment at ${formatClock(start / 1000)}` },
+    ].sort((a, b) => a.start_ms - b.start_ms);
+    const problems = chapterListProblems(next, item.video_duration_ms ?? null);
+    if (problems.length > 0) {
+      toast.error(problems[0] ?? 'Could not add the chapter.');
+      return;
+    }
+    try {
+      const response = await fetchWrapper.put(`/api/media/by-ulid/${encodeURIComponent(item.ulid)}/chapters`, { chapters: next }) as { data: VideoChapter[] };
+      setChapters(response.data);
+      setChaptersVersion((version) => version + 1);
+      toast.success('Chapter added.');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
   const showChapterRail = isVideo && chapters.length > 0;
   const chaptersTrackSrc = isVideo && chapters.length > 0 && item.chapters_vtt_url !== undefined
     ? `${item.chapters_vtt_url}?v=${chaptersVersion}`
@@ -247,13 +323,39 @@ export function MediaViewPage() {
         <>
           <ChapterBar chapters={chapters} playback={playback} durationMs={item.video_duration_ms ?? null} />
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <VideoToolbar playback={playback} mediaUlid={item.ulid} chapters={chapters} />
+            <VideoToolbar playback={playback} mediaUlid={item.ulid} chapters={chapters} onSaveMoment={() => setCapturing(true)} />
             {item.can_edit_chapters && !editingChapters && (
               <Button type="button" size="sm" variant="outline" onClick={() => setEditingChapters(true)}>
                 <ListOrdered aria-hidden="true" /> {chapters.length > 0 ? 'Edit chapters' : 'Add chapters'}
               </Button>
             )}
           </div>
+          {capturing && (
+            <MomentCapture
+              mediaUlid={item.ulid}
+              playback={playback}
+              onClose={() => setCapturing(false)}
+              onSaved={(moment, preview) => {
+                setMoments((current) => [...current, moment].sort((a, b) => a.time_ms - b.time_ms));
+                if (preview !== null) {
+                  previewUrls.current.add(preview);
+                  setLocalPreviews((current) => new Map(current).set(moment.ulid, preview));
+                }
+                pendingPolls.current = 0;
+                setCapturing(false);
+                toast.success('Moment saved.');
+              }}
+            />
+          )}
+          <MomentsStrip
+            mediaUlid={item.ulid}
+            playback={playback}
+            moments={moments}
+            localPreviews={localPreviews}
+            onChange={replaceMoment}
+            onRemove={(ulid) => setMoments((current) => current.filter((moment) => moment.ulid !== ulid))}
+            onMakeChapter={item.can_edit_chapters ? (moment) => void makeChapterFromMoment(moment) : undefined}
+          />
           {item.can_edit_chapters && editingChapters && (
             <ChapterEditor
               mediaUlid={item.ulid}

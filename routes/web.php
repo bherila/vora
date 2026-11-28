@@ -63,6 +63,7 @@ use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
 use App\Http\Controllers\VideoChapterController;
+use App\Http\Controllers\VideoMomentController;
 use App\Http\Controllers\WaitlistController;
 use App\Services\Account\EmailChangeService;
 use App\Services\Auth\SignIn;
@@ -423,6 +424,12 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/by-ulid/{ulid}/chapters.vtt', [VideoChapterController::class, 'vtt'])->name('media.chapters.vtt');
         Route::put('/by-ulid/{ulid}/chapters', [VideoChapterController::class, 'update'])
             ->middleware('throttle:30,1,video-chapters');
+        Route::get('/by-ulid/{ulid}/moments', [VideoMomentController::class, 'index']);
+        // Each new moment can write a frame request and wake the frame worker.
+        Route::post('/by-ulid/{ulid}/moments', [VideoMomentController::class, 'store'])
+            ->middleware('throttle:30,1,video-moments');
+        Route::post('/by-ulid/{ulid}/cover', [VideoMomentController::class, 'useAsCover'])
+            ->middleware('throttle:10,1,video-cover');
         Route::get('/by-ulid/{ulid}/scene-suggestions', [VideoChapterController::class, 'sceneSuggestions'])
             ->name('media.scene-suggestions');
         Route::get('/by-ulid/{ulid}/scene-suggestions/{ms}/thumbnail', [VideoChapterController::class, 'sceneThumbnail'])
@@ -441,6 +448,18 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/{media}', [MediaController::class, 'show']);
         Route::patch('/{media}', [MediaController::class, 'update']);
         Route::delete('/{media}', [MediaController::class, 'destroy']);
+    });
+
+    Route::prefix('api/moments')->group(function () {
+        Route::post('/{moment}/provisional/complete', [VideoMomentController::class, 'completeProvisional'])
+            ->middleware('throttle:30,1,video-moments');
+        Route::post('/{moment}/retry', [VideoMomentController::class, 'retry'])
+            ->middleware('throttle:30,1,video-moments');
+        Route::patch('/{moment}', [VideoMomentController::class, 'update'])->middleware('throttle:60,1,video-moment-edits');
+        Route::delete('/{moment}', [VideoMomentController::class, 'destroy'])->middleware('throttle:60,1,video-moment-edits');
+        Route::get('/{moment}/image/{variant}', [VideoMomentController::class, 'image'])
+            ->where('variant', 'full|thumb')
+            ->name('moments.image');
     });
 
     Route::prefix('api/posts')->group(function () {

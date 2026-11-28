@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Chat\ChatState;
 use App\Services\Library\LibraryService;
 use App\Services\Media\MediaService;
+use App\Services\Media\VideoMomentService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -27,6 +28,7 @@ class UserAccountService
         private readonly MediaService $media,
         private readonly ChatState $chatState,
         private readonly LibraryService $library,
+        private readonly VideoMomentService $moments,
     ) {}
 
     /**
@@ -42,6 +44,9 @@ class UserAccountService
         foreach ($user->libraryItems()->get() as $item) {
             $this->library->remove($user, $item);
         }
+
+        // The account's own moments on anyone's videos, with their captures.
+        $this->moments->purgeForUser($user);
 
         foreach ($user->media()->withTrashed()->get() as $media) {
             if ($media instanceof Media) {

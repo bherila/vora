@@ -16,6 +16,8 @@ Artisan::command('inspire', function () {
 
 // Sweep abandoned (never-completed) uploads hourly.
 Schedule::command('media:prune-orphans')->hourly();
+// Publish frames the transcoder's frame worker has written for new moments.
+Schedule::command('media:sync-moment-frames')->everyMinute()->withoutOverlapping();
 
 // When enabled, copy videos awaiting review for transcoding before approval.
 Schedule::command('media:prepare-videos-for-review')

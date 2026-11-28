@@ -1,6 +1,7 @@
 # Media: video chapters, moments, and scene suggestions
 
-> **Status: Phases 1–3 implemented; Phase 4 designed.** This document records
+> **Status: implemented (Phases 1–4).** Reporting moments and the Playwright
+> journeys below are follow-ups. This document records
 > the agreed design for annotating long videos. Sections are written in the
 > present tense to read as the target contract; the Phases table says what has
 > landed. Update it as phases land, and move settled behaviour into the other
@@ -284,15 +285,30 @@ policies. Every write has a named limiter in `App\Support\RateLimits`.
 | `PUT /api/media/by-ulid/{ulid}/chapters` | uploader | replaces the list; `chapters` `max:200`, keys `start_ms` and `title` only; distinct starts, one at 0; single-line titles of at most 120 characters; starts before the duration; `throttle:30,1,video-chapters` |
 | `GET /api/media/by-ulid/{ulid}/scene-suggestions?min_gap_seconds=` | uploader | `{analysed, suggestions: [{ms, kind, score, thumbnail_url}]}`; gap 1–600 s |
 | `GET /api/media/by-ulid/{ulid}/scene-suggestions/{ms}/thumbnail` | uploader | signed redirect, only for thumbnails the analysis names |
-| `GET /api/media/{ulid}/moments` | viewers | cursor pagination, at most 50 per page |
-| `POST /api/media/{ulid}/moments` | viewers | limiter `video-moments`; caps per user per video (100) and per video (2,000) |
-| `POST /api/moments/{ulid}/provisional/complete` | author | |
-| `PATCH /api/moments/{ulid}` | author | caption, visibility |
-| `DELETE /api/moments/{ulid}` | author or uploader | |
-| `GET /api/moments/{ulid}/image/{full\|thumb}` | per the table above | signed redirect; audited like HLS segment redirects |
-| `POST /api/media/{ulid}/cover` | uploader | from a ready moment |
+| `GET /api/media/by-ulid/{ulid}/moments` | viewers | visible moments in time order; cursor pagination, 100 per page |
+| `POST /api/media/by-ulid/{ulid}/moments` | viewers | `throttle:30,1,video-moments`; caps per user per video (100) and per video (2,000), counted under a row lock |
+| `POST /api/moments/{moment}/provisional/complete` | author | checks the upload is a JPEG or WebP of at most 1.5 MB and 4096 px; deletes it otherwise |
+| `POST /api/moments/{moment}/retry` | author | re-requests a failed frame |
+| `PATCH /api/moments/{moment}` | author | caption, visibility; `throttle:60,1,video-moment-edits` |
+| `DELETE /api/moments/{moment}` | author, uploader, or admin | `throttle:60,1,video-moment-edits` |
+| `GET /api/moments/{moment}/image/{full\|thumb}` | per the table above | signed redirect, `Cache-Control: private, no-store` |
+| `POST /api/media/by-ulid/{ulid}/cover` | uploader | from a ready moment on an approved video; `throttle:10,1,video-cover` |
 
-Moments become a reportable type (`video_moment`) in `AdminReportController`.
+Every moment route resolves the video first (`MediaPolicy@view`, the
+restricted-viewer check, gallery videos only) and then the visibility scope, so
+a moment the viewer cannot see answers 404.
+
+Reporting moments (their captions) is a follow-up. Until then, uploaders can
+remove any moment on their videos, and viewers can block an author.
+
+`media:sync-moment-frames` runs every minute. It checks pending frames in
+batches of 200, publishes ready ones (deleting the author's capture and the
+request object), marks failures, and gives up after 7 days. Moments of the same
+frame share one answer. An error marker older than the moment's latest request
+(`frame_requested_at`) belongs to an earlier attempt and is ignored, matching
+the transcoder's retry rule. Setting `MEDIA_FRAMEGRABBER_WAKE_URL` (and
+`MEDIA_FRAMEGRABBER_WAKE_TOKEN`) makes each new request wake the worker
+directly; without them, the worker's own poll applies.
 
 ### Authorization and visibility
 
@@ -305,9 +321,10 @@ One scope, `VideoMoment::scopeVisibleTo($viewer)`, applies everywhere:
 - the author is not suspended with content hidden (the existing
   `banned_at` / `ban_hides_content` filter in `User`);
 - `visibility = shared`, or the viewer is the author;
-- a viewer whose only access is a Library save sees their own moments and the
-  chapters, but not other people's moments: a save does not carry the
-  publication's discussion. Such viewers may create private moments only.
+- moments live on the media page, so they need access to the publication: a
+  viewer whose only access is a Library save does not reach them. When a
+  publication is released but Library saves keep the video, its moments are
+  deleted, like its discussion (see Cleanup).
 
 Chapters follow video visibility. Editing chapters, reading scene suggestions,
 and "Use as cover" require being the uploader.
@@ -416,7 +433,7 @@ Implementation:
 | 1 (done) | Player controller, deep links, frame stepping, resume, shortcuts | vora |
 | 2 (done) | Chapters: viewing, editing, paste import, WebVTT, cached duration and frame rate | vora |
 | 3 (done) | Scene analysis with cut thumbnails and flagged backfill; suggestions in the editor | transcoder, then vora |
-| 4 | Moments: frame worker, provisional uploads, proxy hardening, cleanup, Use as cover | transcoder and vora |
+| 4 (done) | Moments: frame worker, provisional uploads, proxy hardening, cleanup, Use as cover | transcoder and vora |
 
 Deinterlacing interlaced sources (`bwdif`) is a separate transcoder change. It
 improves playback and frames of interlaced tapes, and the re-encode it requires
