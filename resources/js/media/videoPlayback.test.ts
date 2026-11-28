@@ -13,6 +13,11 @@ describe('frame math', () => {
     expect(snapFrameRate(1 / 0.04)).toBe(25);
     expect(snapFrameRate(59.9)).toBe(60000 / 1001);
     expect(snapFrameRate(15)).toBe(15);
+    // Exact integer rates stay exact rather than snapping to the NTSC rate beside them.
+    expect(snapFrameRate(30)).toBe(30);
+    expect(snapFrameRate(24)).toBe(24);
+    expect(snapFrameRate(60)).toBe(60);
+    expect(snapFrameRate(30.05)).toBe(30);
     expect(formatFrameRate(30000 / 1001)).toBe('29.97');
     expect(formatFrameRate(25)).toBe('25');
   });
@@ -127,6 +132,29 @@ describe('VideoPlayback', () => {
     playback.seek(8);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(fake.video.cancelVideoFrameCallback).toHaveBeenCalledWith(1);
+  });
+
+  it('prefers the server frame rate over stream levels', () => {
+    const { video } = createFakeVideo();
+    const playback = new VideoPlayback(video, { levels: [{ height: 1080, frameRate: 25 }] }, 30000 / 1001);
+
+    expect(playback.frameRate()).toBe(30000 / 1001);
+  });
+
+  it('steps exactly one frame at a time without presented-frame timestamps', () => {
+    const fake = createFakeVideo();
+    Object.defineProperty(fake.video, 'requestVideoFrameCallback', { configurable: true, value: undefined });
+    const playback = new VideoPlayback(fake.video, { levels: [{ height: 480, frameRate: 25 }] });
+
+    for (let step = 0; step < 6; step += 1) {
+      playback.stepFrames(1);
+    }
+    const shownFrames = fake.seeks.map((t) => Math.floor(t * 25 + 1e-6));
+    expect(shownFrames).toEqual([1, 2, 3, 4, 5, 6]);
+
+    playback.stepFrames(-1);
+    playback.stepFrames(-1);
+    expect(fake.seeks.slice(-2).map((t) => Math.floor(t * 25 + 1e-6))).toEqual([5, 4]);
   });
 
   it('works without requestVideoFrameCallback', () => {

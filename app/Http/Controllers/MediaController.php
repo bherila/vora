@@ -29,6 +29,7 @@ use App\Services\Media\MediaDuplicateService;
 use App\Services\Media\MediaResponseService;
 use App\Services\Media\MediaService;
 use App\Services\Media\MediaUploadService;
+use App\Services\Media\VideoChapterService;
 use App\Services\Moderation\RestrictionGate;
 use App\Services\Privacy\PrivacyAuditor;
 use App\Support\MediaFilter;
@@ -59,6 +60,7 @@ class MediaController extends Controller implements HasMiddleware
         private readonly PrivacyAuditor $auditor,
         private readonly FavoriteService $favorites,
         private readonly RestrictionGate $restrictions,
+        private readonly VideoChapterService $chapters,
     ) {}
 
     /**
@@ -399,6 +401,15 @@ class MediaController extends Controller implements HasMiddleware
         }
         // Anyone signed in who isn't the owner can report the item for abuse.
         $payload['can_report'] = $viewer instanceof User && ! $isSelf;
+
+        if ($media->type->isVideo()) {
+            $this->hls->ensureVideoMetadata($media);
+            $payload['video_duration_ms'] = $media->video_duration_ms;
+            $payload['video_frame_rate'] = $media->video_frame_rate;
+            $payload['chapters'] = $this->chapters->present($media->chapters()->get());
+            $payload['can_edit_chapters'] = $viewer instanceof User && $viewer->can('editChapters', $media);
+            $payload['chapters_vtt_url'] = route('media.chapters.vtt', ['ulid' => $media->ulid], false);
+        }
         $discussion = $media->canonicalPost;
         $payload['canonical_post'] = $discussion === null ? null : [
             'id' => $discussion->id,

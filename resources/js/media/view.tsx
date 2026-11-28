@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ListOrdered } from 'lucide-react';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast, Toaster } from 'sonner';
@@ -33,8 +33,11 @@ import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { readInitialData } from '@/initialData';
 import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
+import { ChapterBar } from '@/media/ChapterBar';
+import { ChapterEditor } from '@/media/ChapterEditor';
+import { ChapterList } from '@/media/ChapterList';
 import { MediaPlayer } from '@/media/MediaPlayer';
-import { formatBytes, type MediaItem } from '@/media/types';
+import { formatBytes, type MediaItem, type VideoChapter } from '@/media/types';
 import type { VideoPlayback } from '@/media/videoPlayback';
 import { VideoToolbar } from '@/media/VideoToolbar';
 import { safeInternalUrl } from '@/security/dom-url';
@@ -60,6 +63,10 @@ export function MediaViewPage() {
   const [editBusy, setEditBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [playback, setPlayback] = useState<VideoPlayback | null>(null);
+  const [chapters, setChapters] = useState<VideoChapter[]>(() => item?.chapters ?? []);
+  const [editingChapters, setEditingChapters] = useState(false);
+  // Bumped after each save so the player re-fetches its WebVTT chapters track.
+  const [chaptersVersion, setChaptersVersion] = useState(0);
 
   if (deleted) {
     return (
@@ -76,6 +83,11 @@ export function MediaViewPage() {
     return <div className="mx-auto max-w-3xl px-4 py-8"><p className="text-muted-foreground">This media is unavailable.</p></div>;
   }
 
+  const isVideo = item.type === 'video';
+  const showChapterRail = isVideo && chapters.length > 0;
+  const chaptersTrackSrc = isVideo && chapters.length > 0 && item.chapters_vtt_url !== undefined
+    ? `${item.chapters_vtt_url}?v=${chaptersVersion}`
+    : null;
   const owner = item.owner ?? null;
   const ownerHref = safeInternalUrl(owner?.href);
   const editable = item.editable;
@@ -213,14 +225,52 @@ export function MediaViewPage() {
           {item.can_report && <ReportButton type="media" id={item.id} />}
         </div>
       </div>
-      <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
-        <MediaPlayer
-          item={item}
-          className="mx-auto h-full w-full object-contain"
-          onPlayback={item.type === 'video' ? setPlayback : undefined}
-        />
+      {/* With chapters, a rail beside the stage on wide screens (below it on
+          phones) lists them; the stage keeps its viewport-sized height. */}
+      <div className={showChapterRail ? 'grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]' : undefined}>
+        <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
+          <MediaPlayer
+            item={item}
+            className="mx-auto h-full w-full object-contain"
+            onPlayback={isVideo ? setPlayback : undefined}
+            chaptersTrackSrc={chaptersTrackSrc}
+          />
+        </div>
+        {showChapterRail && playback !== null && (
+          <aside className="lg:h-[78svh] lg:overflow-y-auto">
+            <h2 className="mb-2 px-2 text-sm font-semibold">Chapters</h2>
+            <ChapterList chapters={chapters} playback={playback} />
+          </aside>
+        )}
       </div>
-      {item.type === 'video' && playback !== null && <VideoToolbar playback={playback} mediaUlid={item.ulid} />}
+      {isVideo && playback !== null && (
+        <>
+          <ChapterBar chapters={chapters} playback={playback} durationMs={item.video_duration_ms ?? null} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <VideoToolbar playback={playback} mediaUlid={item.ulid} chapters={chapters} />
+            {item.can_edit_chapters && !editingChapters && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditingChapters(true)}>
+                <ListOrdered aria-hidden="true" /> {chapters.length > 0 ? 'Edit chapters' : 'Add chapters'}
+              </Button>
+            )}
+          </div>
+          {item.can_edit_chapters && editingChapters && (
+            <ChapterEditor
+              mediaUlid={item.ulid}
+              chapters={chapters}
+              playback={playback}
+              durationMs={item.video_duration_ms ?? null}
+              onCancel={() => setEditingChapters(false)}
+              onSaved={(saved) => {
+                setChapters(saved);
+                setChaptersVersion((version) => version + 1);
+                setEditingChapters(false);
+                toast.success('Chapters saved.');
+              }}
+            />
+          )}
+        </>
+      )}
       <p className="text-xs text-muted-foreground">
         {item.type} · {formatBytes(item.size_bytes)}
       </p>

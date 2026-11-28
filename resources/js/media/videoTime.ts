@@ -37,6 +37,35 @@ export function parseTimeFragment(hash: string): number | null {
   return seconds;
 }
 
+/**
+ * Parse a typed time such as `12:31`, `1:02:30.5`, `90`, or `1h2m`. Returns
+ * seconds, or null when the text is not a time.
+ */
+export function parseTimeInput(value: string): number | null {
+  const seconds = parseTimeValue(value.trim().toLowerCase());
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0 || seconds > MAX_FRAGMENT_SECONDS) {
+    return null;
+  }
+  return seconds;
+}
+
+/** Format milliseconds for editing: `0:00`, `12:31`, `1:02:30.500`. */
+export function formatEditTime(ms: number): string {
+  const clock = formatClock(ms / 1000);
+  const fraction = Math.max(0, Math.floor(ms)) % 1000;
+  return fraction === 0 ? clock : `${clock}.${String(fraction).padStart(3, '0')}`;
+}
+
+/** Parse a rational frame rate such as `30000/1001`; null when malformed. */
+export function parseFrameRate(value: string | null | undefined): number | null {
+  const match = /^(\d{1,7})\/(\d{1,7})$/.exec(value ?? '');
+  if (match === null) {
+    return null;
+  }
+  const rate = Number(match[1]) / Number(match[2]);
+  return Number.isFinite(rate) && rate > 0 && rate <= 1000 ? rate : null;
+}
+
 function parseTimeValue(value: string): number | null {
   if (value === '') {
     return null;

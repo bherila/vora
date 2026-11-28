@@ -18,6 +18,10 @@ interface HlsVideoPlayerProps {
    * is torn down (source change, failure, or unmount).
    */
   onPlayback?: ((playback: VideoPlayback | null) => void) | undefined;
+  /** Exact frame rate from the server, used for frame stepping when known. */
+  frameRate?: number | null | undefined;
+  /** Same-origin WebVTT chapters track, for players that show chapter tracks. */
+  chaptersTrackSrc?: string | null | undefined;
 }
 
 /**
@@ -25,15 +29,17 @@ interface HlsVideoPlayerProps {
  * using native HLS when MSE is unavailable. `src` points at the authenticated
  * playback proxy, which serves manifests and redirects segments to signed URLs.
  */
-export function HlsVideoPlayer({ src, className, onError, onPlayback }: HlsVideoPlayerProps) {
+export function HlsVideoPlayer({ src, className, onError, onPlayback, frameRate = null, chaptersTrackSrc = null }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   // Hold the latest callbacks so a fresh identity each render doesn't tear down
   // and re-attach the player.
   const onErrorRef = useRef(onError);
   const onPlaybackRef = useRef(onPlayback);
+  const frameRateRef = useRef(frameRate);
   useEffect(() => {
     onErrorRef.current = onError;
     onPlaybackRef.current = onPlayback;
+    frameRateRef.current = frameRate;
   });
 
   useEffect(() => {
@@ -89,7 +95,7 @@ export function HlsVideoPlayer({ src, className, onError, onPlayback }: HlsVideo
         hls.loadSource(safeSource);
         if (!stopped) {
           hls.attachMedia(video);
-          publish(new VideoPlayback(video, hls));
+          publish(new VideoPlayback(video, hls, frameRateRef.current));
         }
         return;
       }
@@ -98,7 +104,7 @@ export function HlsVideoPlayer({ src, className, onError, onPlayback }: HlsVideo
         video.addEventListener('error', fail);
         cleanup = () => video.removeEventListener('error', fail);
         video.src = safeSource;
-        publish(new VideoPlayback(video));
+        publish(new VideoPlayback(video, null, frameRateRef.current));
         return;
       }
       fail();
@@ -107,5 +113,11 @@ export function HlsVideoPlayer({ src, className, onError, onPlayback }: HlsVideo
     return stop;
   }, [src]);
 
-  return <video ref={videoRef} controls playsInline className={className} />;
+  const trackSrc = chaptersTrackSrc === null ? null : safeSameOriginUrl(chaptersTrackSrc);
+
+  return (
+    <video ref={videoRef} controls playsInline className={className}>
+      {trackSrc !== null && <track kind="chapters" src={trackSrc} srcLang="en" label="Chapters" default />}
+    </video>
+  );
 }

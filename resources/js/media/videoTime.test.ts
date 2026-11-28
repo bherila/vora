@@ -1,4 +1,4 @@
-import { formatClock, formatTimecode, formatTimeFragment, MAX_FRAGMENT_SECONDS, parseTimeFragment } from '@/media/videoTime';
+import { formatClock, formatEditTime, formatTimecode, formatTimeFragment, MAX_FRAGMENT_SECONDS, parseFrameRate, parseTimeFragment, parseTimeInput } from '@/media/videoTime';
 
 describe('parseTimeFragment', () => {
   it.each([
@@ -70,5 +70,29 @@ describe('formatTimecode', () => {
   it('falls back to milliseconds without a frame rate', () => {
     expect(formatTimecode(61.25, null)).toBe('00:01:01.250');
     expect(formatTimecode(Number.NaN, null)).toBe('00:00:00.000');
+  });
+});
+
+describe('editing helpers', () => {
+  it('parses typed times', () => {
+    expect(parseTimeInput(' 12:31 ')).toBe(751);
+    expect(parseTimeInput('1:02:30.5')).toBe(3750.5);
+    expect(parseTimeInput('1H2M')).toBe(3720);
+    expect(parseTimeInput('later')).toBeNull();
+    expect(parseTimeInput('')).toBeNull();
+  });
+
+  it('formats milliseconds for editing', () => {
+    expect(formatEditTime(0)).toBe('0:00');
+    expect(formatEditTime(751_000)).toBe('12:31');
+    expect(formatEditTime(3_750_500)).toBe('1:02:30.500');
+  });
+
+  it('parses rational frame rates', () => {
+    expect(parseFrameRate('30000/1001')).toBeCloseTo(29.97, 2);
+    expect(parseFrameRate('25/1')).toBe(25);
+    expect(parseFrameRate('0/0')).toBeNull();
+    expect(parseFrameRate('25')).toBeNull();
+    expect(parseFrameRate(null)).toBeNull();
   });
 });

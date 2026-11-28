@@ -14,6 +14,7 @@ jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
     patch: jest.fn(),
     delete: jest.fn(),
+    put: jest.fn(),
   },
 }));
 jest.mock('@/media/MediaPlayer', () => {
@@ -171,4 +172,41 @@ it('shows the video toolbar once a video stream is attached, and not for photos'
   mockReadInitialData.mockReturnValue({ mediaView: mediaItem(false) });
   render(<MediaViewPage />);
   expect(screen.queryByRole('toolbar', { name: 'Video controls' })).toBeNull();
+});
+
+it('shows chapters beside the video and lets the uploader edit them', async () => {
+  const chapters = [{ start_ms: 0, title: 'Christmas' }, { start_ms: 60_000, title: 'Birthday' }];
+  mockReadInitialData.mockReturnValue({
+    mediaView: {
+      ...mediaItem(true),
+      type: 'video',
+      video: { status: 'ready', master_url: '/api/media/7/hls/master.m3u8' },
+      chapters,
+      can_edit_chapters: true,
+      chapters_vtt_url: '/api/media/by-ulid/01HZX5MEDIA/chapters.vtt',
+      video_duration_ms: 600_000,
+    },
+  });
+  jest.mocked(fetchWrapper.put).mockResolvedValue({ data: [{ start_ms: 0, title: 'Christmas' }] });
+  render(<MediaViewPage />);
+
+  const nav = await screen.findByRole('navigation', { name: 'Chapters' });
+  expect(within(nav).getAllByRole('button')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('button', { name: /Edit chapters/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete chapter 2' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save chapters' }));
+
+  await waitFor(() => expect(within(screen.getByRole('navigation', { name: 'Chapters' })).getAllByRole('button')).toHaveLength(1));
+  expect(screen.queryByRole('heading', { name: 'Edit chapters' })).toBeNull();
+});
+
+it('offers visitors no chapter editing', async () => {
+  mockReadInitialData.mockReturnValue({
+    mediaView: { ...mediaItem(false), type: 'video', video: { status: 'ready', master_url: '/x.m3u8' }, chapters: [], can_edit_chapters: false },
+  });
+  render(<MediaViewPage />);
+
+  await screen.findByRole('toolbar', { name: 'Video controls' });
+  expect(screen.queryByRole('button', { name: /chapters/i })).toBeNull();
+  expect(screen.queryByRole('navigation', { name: 'Chapters' })).toBeNull();
 });

@@ -109,4 +109,17 @@ class MediaPolicy
 
         return $media->user_id === $user->id;
     }
+
+    /**
+     * Chapters are the uploader's curation of their own video: an authorship
+     * relationship, not a role (admins pass through before()).
+     */
+    public function editChapters(User $user, Media $media): bool
+    {
+        if ($media->trashed() || ! $media->type->isVideo()) {
+            return false;
+        }
+
+        return $media->user_id === $user->id;
+    }
 }

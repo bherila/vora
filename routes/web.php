@@ -62,6 +62,7 @@ use App\Http\Controllers\StaticPageController;
 use App\Http\Controllers\Story\AuthorshipInviteController;
 use App\Http\Controllers\Story\StoryAuthorController;
 use App\Http\Controllers\StoryController;
+use App\Http\Controllers\VideoChapterController;
 use App\Http\Controllers\WaitlistController;
 use App\Services\Account\EmailChangeService;
 use App\Services\Auth\SignIn;
@@ -419,6 +420,9 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/by-ulid/{ulid}/asset/{variant}', [MediaAssetController::class, 'show'])
             ->where('variant', 'original|thumbnail')
             ->name('media.asset');
+        Route::get('/by-ulid/{ulid}/chapters.vtt', [VideoChapterController::class, 'vtt'])->name('media.chapters.vtt');
+        Route::put('/by-ulid/{ulid}/chapters', [VideoChapterController::class, 'update'])
+            ->middleware('throttle:30,1,video-chapters');
         Route::post('/{media}/multipart/init', [MediaController::class, 'initMultipart']);
         Route::post('/{media}/multipart/parts', [MediaController::class, 'presignMultipartParts']);
         Route::post('/{media}/multipart/complete', [MediaController::class, 'completeMultipart']);

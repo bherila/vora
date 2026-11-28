@@ -28,6 +28,12 @@ class HlsService
     /** Lifetime of presigned segment URLs handed to the browser. */
     private const SEGMENT_URL_TTL_MINUTES = 30;
 
+    /**
+     * Re-read metadata.json this often while it lacks a frame rate: the
+     * transcoder's scene backfill can add one to older outputs.
+     */
+    private const METADATA_RECHECK_HOURS = 24;
+
     public function __construct(
         private readonly FileStorageService $storage,
         private readonly MediaDuplicateService $duplicates,
@@ -73,6 +79,37 @@ class HlsService
         }
 
         return $contentId !== null;
+    }
+
+    /**
+     * Copy duration and frame rate from the transcoder's metadata.json onto the
+     * row, once per ready video (and again daily while the frame rate is
+     * unknown). Missing or malformed metadata leaves the columns null.
+     */
+    public function ensureVideoMetadata(Media $video): void
+    {
+        if (! $this->ensureResolved($video)) {
+            return;
+        }
+        $checkedAt = $video->video_metadata_checked_at;
+        if ($checkedAt !== null && ($video->video_frame_rate !== null
+            || $checkedAt->gt(now()->subHours(self::METADATA_RECHECK_HOURS)))) {
+            return;
+        }
+
+        $decoded = json_decode((string) $this->storage->get($this->disk(), $this->objectKey($video, 'metadata.json')), true);
+        $source = is_array($decoded) && is_array($decoded['source'] ?? null) ? $decoded['source'] : [];
+
+        $duration = $source['durationSeconds'] ?? null;
+        if ((is_int($duration) || is_float($duration)) && $duration > 0 && $duration < 4_000_000) {
+            $video->video_duration_ms = (int) round($duration * 1000);
+        }
+        $frameRate = $source['frameRate'] ?? null;
+        if (is_string($frameRate) && preg_match('/^[1-9]\d{0,6}\/[1-9]\d{0,6}$/', $frameRate) === 1) {
+            $video->video_frame_rate = $frameRate;
+        }
+        $video->video_metadata_checked_at = now();
+        $video->saveQuietly();
     }
 
     /**
