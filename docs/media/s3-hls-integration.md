@@ -74,6 +74,29 @@ bucket.
 > (`CLEANUP_DELETED_SOURCES=true` in its environment). If it is off, transcoded
 > output is retained indefinitely after sources are deleted.
 
+## Scene analysis and frames
+
+The chapter editor's scene suggestions read `by-id/<contentId>/scenes.json`
+(through `metadata.json`'s `analysis.scenes` pointer), and moments ask the
+transcoder's frame worker for exact frames. See
+[video annotations](video-annotations.md) and the transcoder's integration
+guide, §7.
+
+> **Operational requirements.**
+>
+> - Suggestions need `SCENE_ANALYSIS=true` on the transcoder, plus
+>   `SCENE_BACKFILL=true` once to analyse videos encoded earlier.
+> - Moments need `cmd/framegrabber` running against the same buckets (it ships
+>   in the transcoder's image), and the scheduler running
+>   `media:sync-moment-frames`. Set `MEDIA_FRAMEGRABBER_WAKE_URL` and
+>   `MEDIA_FRAMEGRABBER_WAKE_TOKEN` to wake it on each request.
+> - Add R2 lifecycle rules as backstops: `frame-requests/` on the video source
+>   bucket (7 days) and `moments/provisional/` on the thumbnail bucket
+>   (30 days).
+>
+> Without the frame worker, moments still save, but other viewers only ever
+> see "Frame being prepared".
+
 ## Playback notes
 
 Approved videos resolve HLS from the reviewed copy key. This prevents an uploader

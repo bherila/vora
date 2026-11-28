@@ -247,6 +247,14 @@ class FileStorageService
         return is_resource($stream) ? $stream : null;
     }
 
+    /**
+     * Write a small object from memory.
+     */
+    public function putString(string $disk, string $key, string $contents, string $contentType): bool
+    {
+        return $this->storage($disk)->put($key, $contents, ['ContentType' => $contentType]);
+    }
+
     public function deleteFile(string $disk, string $key): bool
     {
         return $this->storage($disk)->delete($key);
@@ -255,6 +263,16 @@ class FileStorageService
     public function deleteDirectory(string $disk, string $prefix): bool
     {
         return $this->storage($disk)->deleteDirectory($prefix);
+    }
+
+    /** Last-modified time as a Unix timestamp, or null when the object is missing. */
+    public function lastModified(string $disk, string $key): ?int
+    {
+        try {
+            return $this->storage($disk)->exists($key) ? $this->storage($disk)->lastModified($key) : null;
+        } catch (\Exception) {
+            return null;
+        }
     }
 
     public function fileExists(string $disk, string $key): bool

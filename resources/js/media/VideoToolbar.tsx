@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link as LinkIcon, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link as LinkIcon, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -15,6 +15,8 @@ interface VideoToolbarProps {
   mediaUlid: string;
   /** Chapters in playback order, for previous/next and the current title. */
   chapters?: readonly VideoChapter[] | undefined;
+  /** Opens the moment capture tray (button and S). */
+  onSaveMoment?: (() => void) | undefined;
 }
 
 /** How often, at most, the position is saved while the video plays. */
@@ -39,11 +41,13 @@ export function isShortcutBlocked(target: EventTarget | null): boolean {
  * current moment, and an offer to resume where the viewer stopped. Native
  * player controls stay in charge of play, volume, and fullscreen.
  */
-export function VideoToolbar({ playback, mediaUlid, chapters = [] }: VideoToolbarProps) {
+export function VideoToolbar({ playback, mediaUlid, chapters = [], onSaveMoment }: VideoToolbarProps) {
   const state = usePlaybackState(playback);
   const chaptersRef = useRef(chapters);
+  const onSaveMomentRef = useRef(onSaveMoment);
   useEffect(() => {
     chaptersRef.current = chapters;
+    onSaveMomentRef.current = onSaveMoment;
   });
   const [resumeAt, setResumeAt] = useState<number | null>(() => (
     parseTimeFragment(window.location.hash) === null ? readResumePosition(mediaUlid) : null
@@ -115,6 +119,13 @@ export function VideoToolbar({ playback, mediaUlid, chapters = [] }: VideoToolba
           break;
         case '>':
           playback.stepSeconds(1);
+          break;
+        case 's':
+        case 'S':
+          if (onSaveMomentRef.current === undefined) {
+            return;
+          }
+          onSaveMomentRef.current();
           break;
         case '[':
         case ']': {
@@ -194,6 +205,11 @@ export function VideoToolbar({ playback, mediaUlid, chapters = [] }: VideoToolba
           </Button>
           {currentChapter !== undefined && <span className="truncate text-sm" aria-live="polite">{currentChapter.title}</span>}
         </div>
+      )}
+      {onSaveMoment !== undefined && (
+        <Button type="button" size="sm" variant="outline" onClick={onSaveMoment} aria-keyshortcuts="S" title="Save this frame as a moment (S)">
+          <Camera aria-hidden="true" /> Save moment
+        </Button>
       )}
       <Button type="button" size="sm" variant="ghost" onClick={() => void copyLink()}>
         <LinkIcon aria-hidden="true" /> Copy link at this time

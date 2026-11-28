@@ -18,6 +18,7 @@ class MediaService
         private readonly FileStorageService $storage,
         private readonly PdqImageService $pdq,
         private readonly VideoChapterService $chapters,
+        private readonly VideoMomentService $moments,
     ) {}
 
     /**
@@ -79,8 +80,10 @@ class MediaService
                 ])->save();
                 $media->audienceMembers()->delete();
                 // Chapters stay useful to the people who saved the video, but
-                // no longer name who wrote them.
+                // no longer name who wrote them. Moments belong to the
+                // publication, like its discussion, and go with it.
                 $this->chapters->anonymizeForMedia($media);
+                $this->moments->purgeForMedia($media);
                 $this->softDelete($media);
 
                 return;
@@ -119,6 +122,10 @@ class MediaService
 
         // The PDQ mapping is row-private (just a hash), so it goes with the source.
         $this->pdq->deleteMapping($media);
+
+        // Moment rows cascade with the media row, but their provisional
+        // captures and pending frame requests are storage objects.
+        $this->moments->purgeForMedia($media);
 
         $media->forceDelete();
     }

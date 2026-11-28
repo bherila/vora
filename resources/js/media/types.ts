@@ -12,6 +12,24 @@ export interface VideoStatus {
   master_url: string | null;
 }
 
+/** A saved frame of a video (docs/media/video-annotations.md). */
+export interface VideoMoment {
+  ulid: string;
+  /** Floor of the frame's playback time; seek to time_ms + 1 to show it. */
+  time_ms: number;
+  caption: string | null;
+  visibility: 'shared' | 'private';
+  frame_status: 'pending' | 'ready' | 'failed';
+  is_mine: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_use_as_cover: boolean;
+  author: { id: number | null; display_name: string; avatar_url: string | null } | null;
+  /** Same-origin routes; null when this viewer has no image for it yet. */
+  image: { full_url: string; thumb_url: string; provisional: boolean } | null;
+  created_at: string | null;
+}
+
 /** A suggested chapter start from the transcoder's scene analysis. */
 export interface SceneSuggestion {
   /** Floor of the playback time of the first frame of the new shot. */

@@ -34,6 +34,13 @@ class SceneSuggestionService
             $candidates[] = ['ms' => $black['endMs'], 'kind' => 'black', 'score' => self::BLACK_END_SCORE, 'thumbnail' => $black['thumbnail']];
         }
         foreach ($analysis['cuts'] as $cut) {
+            // A cut into (or within) a black gap would start a chapter on
+            // black; the gap's end is suggested instead.
+            foreach ($analysis['blackSegments'] as $black) {
+                if ($cut['ms'] >= $black['startMs'] && $cut['ms'] < $black['endMs']) {
+                    continue 2;
+                }
+            }
             $candidates[] = ['ms' => $cut['ms'], 'kind' => 'cut', 'score' => $cut['score'], 'thumbnail' => $cut['thumbnail']];
         }
         // Strongest first; among equals, earlier first, so the choice is stable.

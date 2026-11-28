@@ -8,6 +8,7 @@ use App\Models\Media;
 use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\Media\MediaService;
+use App\Services\Media\VideoMomentService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -32,7 +33,7 @@ class PruneOrphanMedia extends Command
 
     protected $description = 'Prune media rows whose upload was never completed, and orphaned profile pictures (and any stray objects they left behind).';
 
-    public function handle(FileStorageService $storage, MediaService $mediaService): int
+    public function handle(FileStorageService $storage, MediaService $mediaService, VideoMomentService $moments): int
     {
         $hours = max(1, (int) $this->option('hours'));
         $dryRun = (bool) $this->option('dry-run');
@@ -105,6 +106,15 @@ class PruneOrphanMedia extends Command
             }
 
             $mediaService->delete($media);
+        }
+
+        // Moment captures whose browser upload never completed. The moment
+        // itself stays; it just never gets a provisional image.
+        if (! $dryRun) {
+            $capturesPruned = $moments->pruneAbandonedProvisionals($cutoff);
+            if ($capturesPruned > 0) {
+                $this->info("Pruned {$capturesPruned} abandoned moment capture(s).");
+            }
         }
 
         $verb = $dryRun ? 'Would prune' : 'Pruned';

@@ -70,6 +70,20 @@ class SceneSuggestionTest extends TestCase
         $this->assertNull($close->json('data.suggestions.1.thumbnail_url'));
     }
 
+    public function test_cuts_into_a_black_gap_are_not_suggested(): void
+    {
+        $owner = User::factory()->approved()->create();
+        $media = $this->analysedVideo($owner);
+        Storage::disk('hls')->put('by-id/sha256:abc/scenes.json', json_encode([
+            'durationMs' => 120_000,
+            'cuts' => [['ms' => 30_000, 'score' => 80], ['ms' => 45_000, 'score' => 60], ['ms' => 90_000, 'score' => 40]],
+            'blackSegments' => [['startMs' => 30_000, 'endMs' => 65_000]],
+        ]));
+
+        $response = $this->actingAs($owner)->getJson("/api/media/by-ulid/{$media->ulid}/scene-suggestions")->assertOk();
+        $this->assertSame([65_000, 90_000], array_column($response->json('data.suggestions'), 'ms'));
+    }
+
     public function test_videos_without_an_analysis_report_none(): void
     {
         $owner = User::factory()->approved()->create();
