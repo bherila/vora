@@ -614,6 +614,11 @@ class MediaController extends Controller implements HasMiddleware
         if (! $this->hls->isSafeRelativePath($path)) {
             return response()->json(['success' => false, 'message' => 'Invalid path.'], 422);
         }
+        // Only playback files: metadata, scene analyses and frames have their
+        // own access rules and must not be reachable by every viewer here.
+        if (! $this->hls->isPlayerAssetPath($path)) {
+            return response()->json(['success' => false, 'message' => 'Not found.'], 404);
+        }
 
         if (! $this->hls->ensureResolved($media)) {
             return response()->json(['success' => false, 'message' => 'HLS not available for this video.'], 404);

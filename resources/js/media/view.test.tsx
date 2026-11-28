@@ -15,6 +15,7 @@ jest.mock('@/fetchWrapper', () => ({
     patch: jest.fn(),
     delete: jest.fn(),
     put: jest.fn(),
+    get: jest.fn().mockResolvedValue({ data: { analysed: false, suggestions: [] } }),
   },
 }));
 jest.mock('@/media/MediaPlayer', () => {

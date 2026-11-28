@@ -12,6 +12,15 @@ export interface VideoStatus {
   master_url: string | null;
 }
 
+/** A suggested chapter start from the transcoder's scene analysis. */
+export interface SceneSuggestion {
+  /** Floor of the playback time of the first frame of the new shot. */
+  ms: number;
+  kind: 'cut' | 'black';
+  score: number;
+  thumbnail_url: string | null;
+}
+
 /** A named start time within a video. */
 export interface VideoChapter {
   start_ms: number;

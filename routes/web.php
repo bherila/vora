@@ -423,6 +423,11 @@ Route::middleware(['auth', 'approved'])->group(function () {
         Route::get('/by-ulid/{ulid}/chapters.vtt', [VideoChapterController::class, 'vtt'])->name('media.chapters.vtt');
         Route::put('/by-ulid/{ulid}/chapters', [VideoChapterController::class, 'update'])
             ->middleware('throttle:30,1,video-chapters');
+        Route::get('/by-ulid/{ulid}/scene-suggestions', [VideoChapterController::class, 'sceneSuggestions'])
+            ->name('media.scene-suggestions');
+        Route::get('/by-ulid/{ulid}/scene-suggestions/{ms}/thumbnail', [VideoChapterController::class, 'sceneThumbnail'])
+            ->where('ms', '[0-9]{1,9}')
+            ->name('media.scene-thumbnail');
         Route::post('/{media}/multipart/init', [MediaController::class, 'initMultipart']);
         Route::post('/{media}/multipart/parts', [MediaController::class, 'presignMultipartParts']);
         Route::post('/{media}/multipart/complete', [MediaController::class, 'completeMultipart']);

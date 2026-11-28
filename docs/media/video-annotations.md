@@ -1,6 +1,6 @@
 # Media: video chapters, moments, and scene suggestions
 
-> **Status: Phases 1–2 implemented; Phases 3–4 designed.** This document records
+> **Status: Phases 1–3 implemented; Phase 4 designed.** This document records
 > the agreed design for annotating long videos. Sections are written in the
 > present tense to read as the target contract; the Phases table says what has
 > landed. Update it as phases land, and move settled behaviour into the other
@@ -215,10 +215,19 @@ the content directory, as specified in its integration guide. vora:
 - reads `scenes.json` through the directory of `hlsRoot` (never by assembling a
   `by-id/` key) and caches it per content ID;
 - serves `GET /api/media/{ulid}/scene-suggestions` to the uploader only;
-- filters raw cuts to the strongest ones with a minimum gap (about 20 s by
-  default, adjustable in the editor), and places a suggestion at the **end** of
-  a black segment rather than at the cut into it;
-- serves cut thumbnails through a dedicated, policy-gated route.
+- filters raw cuts to the strongest ones with a minimum gap (20 s by default;
+  5 s to 2 min in the editor), never within that gap of 0:00, and places a
+  suggestion at the **end** of a black segment (ranked above every cut) rather
+  than at the cut into it;
+- serves cut thumbnails through a dedicated, uploader-only route that redirects
+  to a signed URL, and only for thumbnails the analysis names;
+- in the editor, hides suggestions within 1 s of an existing chapter, and adds
+  an accepted one at `ms + 1` (titled "Scene at 12:31"): a suggestion's `ms` is
+  the floor of the new shot's first frame, so one millisecond later shows it.
+
+All times follow the transcoder's playback timeline (its integration guide,
+"Times"): a frame's presentation time minus the stream's first decode time,
+which is what hls.js reports.
 
 Videos transcoded before scene analysis existed get suggestions once the
 transcoder's flagged backfill reaches them. Until then the editor simply shows
@@ -273,8 +282,8 @@ policies. Every write has a named limiter in `App\Support\RateLimits`.
 | (media page payload) | viewers | `chapters`, `can_edit_chapters`, `chapters_vtt_url`, `video_duration_ms`, `video_frame_rate` on videos |
 | `GET /api/media/by-ulid/{ulid}/chapters.vtt` | viewers | WebVTT chapters track; titles HTML-escaped |
 | `PUT /api/media/by-ulid/{ulid}/chapters` | uploader | replaces the list; `chapters` `max:200`, keys `start_ms` and `title` only; distinct starts, one at 0; single-line titles of at most 120 characters; starts before the duration; `throttle:30,1,video-chapters` |
-| `GET /api/media/{ulid}/scene-suggestions` | uploader | filtered suggestions with thumbnail URLs |
-| `GET /api/media/{ulid}/scene-suggestions/{ms}/thumbnail` | uploader | signed redirect |
+| `GET /api/media/by-ulid/{ulid}/scene-suggestions?min_gap_seconds=` | uploader | `{analysed, suggestions: [{ms, kind, score, thumbnail_url}]}`; gap 1–600 s |
+| `GET /api/media/by-ulid/{ulid}/scene-suggestions/{ms}/thumbnail` | uploader | signed redirect, only for thumbnails the analysis names |
 | `GET /api/media/{ulid}/moments` | viewers | cursor pagination, at most 50 per page |
 | `POST /api/media/{ulid}/moments` | viewers | limiter `video-moments`; caps per user per video (100) and per video (2,000) |
 | `POST /api/moments/{ulid}/provisional/complete` | author | |
@@ -305,12 +314,12 @@ and "Use as cover" require being the uploader.
 
 ### HLS proxy hardening
 
-`MediaController@streamHls` currently signs any safe relative path inside the
-content directory, which already includes `metadata.json`. Once frames and scene
-files live there, it would let any viewer fetch them and bypass moment
-visibility. Before frames ship, the proxy is restricted to playlist (`.m3u8`)
-and media (`.m4s`, init `.mp4`) objects, and frames and scene thumbnails are
-served only through the dedicated routes above.
+`MediaController@streamHls` serves only playlists (`.m3u8`) and media
+(`.m4s`, init `.mp4`, legacy `.ts`); anything else in the content directory
+(`metadata.json`, scene analyses, requested frames) answers 404 there, and is
+served only through the dedicated routes above. (Implemented with scene
+suggestions; before that the proxy signed any safe path, `metadata.json`
+included.)
 
 ### Storage and quota
 
@@ -406,7 +415,7 @@ Implementation:
 | --- | --- | --- |
 | 1 (done) | Player controller, deep links, frame stepping, resume, shortcuts | vora |
 | 2 (done) | Chapters: viewing, editing, paste import, WebVTT, cached duration and frame rate | vora |
-| 3 | Scene analysis with cut thumbnails and flagged backfill; suggestions in the editor | transcoder, then vora |
+| 3 (done) | Scene analysis with cut thumbnails and flagged backfill; suggestions in the editor | transcoder, then vora |
 | 4 | Moments: frame worker, provisional uploads, proxy hardening, cleanup, Use as cover | transcoder and vora |
 
 Deinterlacing interlaced sources (`bwdif`) is a separate transcoder change. It
