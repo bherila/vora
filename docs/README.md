@@ -42,6 +42,7 @@ User-uploaded photos and videos with admin review and privacy controls.
 - [Storage and buckets](media/storage-and-buckets.md)
 - [s3-hls video integration (app contract)](media/s3-hls-integration.md)
 - [Moderation and privacy](media/moderation-and-privacy.md)
+- [Video chapters, moments, and scene suggestions (design)](media/video-annotations.md)
 
 See also [s3-hls-integration.md](s3-hls-integration.md) for the infrastructure
 overview (buckets, token scopes, transcoder host).
