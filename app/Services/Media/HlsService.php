@@ -4,6 +4,7 @@ namespace App\Services\Media;
 
 use App\Models\Media;
 use App\Services\FileStorageService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
@@ -191,6 +192,88 @@ class HlsService
     public function isManifestPath(string $relativePath): bool
     {
         return Str::endsWith(strtolower($relativePath), '.m3u8');
+    }
+
+    /**
+     * Whether a content-relative path is something a player fetches:
+     * playlists, CMAF segments, init segments, or legacy TS segments. The
+     * content directory also holds metadata.json, scene analyses and
+     * requested frames, which have their own access rules and are never
+     * served through the playback proxy.
+     */
+    public function isPlayerAssetPath(string $relativePath): bool
+    {
+        return preg_match('/\.(m3u8|m4s|mp4|ts)$/i', $relativePath) === 1;
+    }
+
+    /**
+     * The transcoder's scene analysis for a ready video (scenes.json), or
+     * null when it has none yet or it is malformed. Content-addressed, so it
+     * is cached per content id; "none yet" is cached briefly because a
+     * backfill can add one.
+     *
+     * @return array{durationMs: ?int, cuts: list<array{ms: int, score: float, thumbnail: ?string}>, blackSegments: list<array{startMs: int, endMs: int, thumbnail: ?string}>}|null
+     */
+    public function sceneAnalysis(Media $video): ?array
+    {
+        if (! $this->ensureResolved($video)) {
+            return null;
+        }
+        $cacheKey = 'hls-scene-analysis:'.$video->hls_content_id;
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return $cached['analysis'];
+        }
+
+        $analysis = $this->readSceneAnalysis($video);
+        Cache::put($cacheKey, ['analysis' => $analysis], $analysis === null ? now()->addMinutes(5) : now()->addHours(6));
+
+        return $analysis;
+    }
+
+    /**
+     * @return array{durationMs: ?int, cuts: list<array{ms: int, score: float, thumbnail: ?string}>, blackSegments: list<array{startMs: int, endMs: int, thumbnail: ?string}>}|null
+     */
+    private function readSceneAnalysis(Media $video): ?array
+    {
+        $metadata = json_decode((string) $this->storage->get($this->disk(), $this->objectKey($video, 'metadata.json')), true);
+        $key = is_array($metadata) ? ($metadata['analysis']['scenes']['key'] ?? null) : null;
+        if (! is_string($key) || ! $this->isSafeRelativePath($key) || ! str_ends_with($key, '.json')) {
+            return null;
+        }
+        $decoded = json_decode((string) $this->storage->get($this->disk(), $this->objectKey($video, $key)), true);
+        if (! is_array($decoded) || ! is_array($decoded['cuts'] ?? null) || ! is_array($decoded['blackSegments'] ?? null)) {
+            return null;
+        }
+
+        $thumbnail = fn (mixed $value): ?string => is_string($value) && preg_match('#^scenes/\d{1,9}\.jpg$#', $value) === 1 ? $value : null;
+        $cuts = [];
+        foreach (array_slice($decoded['cuts'], 0, 5000) as $cut) {
+            if (is_array($cut) && is_int($cut['ms'] ?? null) && $cut['ms'] >= 0 && is_numeric($cut['score'] ?? null)) {
+                $cuts[] = ['ms' => $cut['ms'], 'score' => (float) $cut['score'], 'thumbnail' => $thumbnail($cut['thumbnail'] ?? null)];
+            }
+        }
+        $blacks = [];
+        foreach (array_slice($decoded['blackSegments'], 0, 5000) as $black) {
+            if (is_array($black) && is_int($black['startMs'] ?? null) && is_int($black['endMs'] ?? null) && $black['endMs'] > $black['startMs']) {
+                $blacks[] = ['startMs' => $black['startMs'], 'endMs' => $black['endMs'], 'thumbnail' => $thumbnail($black['thumbnail'] ?? null)];
+            }
+        }
+        $duration = $decoded['durationMs'] ?? null;
+
+        return ['durationMs' => is_int($duration) && $duration > 0 ? $duration : null, 'cuts' => $cuts, 'blackSegments' => $blacks];
+    }
+
+    /**
+     * Short-lived signed URL for one of the analysis's thumbnails.
+     */
+    public function sceneThumbnailUrl(Media $video, string $thumbnail): ?string
+    {
+        if (! $video->isHlsReady() || preg_match('#^scenes/\d{1,9}\.jpg$#', $thumbnail) !== 1) {
+            return null;
+        }
+
+        return $this->storage->getSignedViewUrl($this->disk(), $this->objectKey($video, $thumbnail), 10, 'image/jpeg');
     }
 
     /**

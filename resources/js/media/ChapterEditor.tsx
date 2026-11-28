@@ -6,9 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchWrapper } from '@/fetchWrapper';
 import { chapterListProblems, MAX_CHAPTER_TITLE_LENGTH, MAX_CHAPTERS, parseChapterList } from '@/media/chapters';
-import type { VideoChapter } from '@/media/types';
+import type { SceneSuggestion, VideoChapter } from '@/media/types';
 import { FALLBACK_FRAME_RATE, type VideoPlayback } from '@/media/videoPlayback';
-import { formatEditTime, parseTimeInput } from '@/media/videoTime';
+import { formatClock, formatEditTime, parseTimeInput } from '@/media/videoTime';
 import { isShortcutBlocked } from '@/media/VideoToolbar';
 
 interface ChapterEditorProps {
@@ -48,6 +48,24 @@ function sortDraft(draft: DraftChapter[]): DraftChapter[] {
   return [...draft].sort((a, b) => a.startMs - b.startMs);
 }
 
+/** Suggestion spacing choices, in seconds. */
+const SUGGESTION_GAPS = [5, 10, 20, 60, 120];
+/** Suggestions this close to an existing chapter are hidden. */
+const SUGGESTION_NEAR_MS = 1000;
+
+/**
+ * A suggestion names the first frame of the new shot by the floor of its
+ * playback time; one millisecond later is inside that frame, so a chapter
+ * there (and a seek to it) shows the new shot rather than the old one.
+ */
+function suggestionStartMs(suggestion: SceneSuggestion): number {
+  return suggestion.ms + 1;
+}
+
+interface SuggestionsResponse {
+  data: { analysed: boolean; suggestions: SceneSuggestion[] };
+}
+
 /**
  * Edit a video's chapters in place beside the player: add one at the
  * playhead (M), nudge starts by a second or a frame, paste a whole list, then
@@ -62,6 +80,30 @@ export function ChapterEditor({ mediaUlid, chapters, playback, durationMs, onSav
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusKey, setFocusKey] = useState<number | null>(null);
   const titleRefs = useRef(new Map<number, HTMLInputElement>());
+  const [suggestionGap, setSuggestionGap] = useState(20);
+  const [suggestions, setSuggestions] = useState<SceneSuggestion[] | null>(null);
+  const [analysed, setAnalysed] = useState(false);
+  const [dismissed, setDismissed] = useState<ReadonlySet<number>>(() => new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchWrapper.get(`/api/media/by-ulid/${encodeURIComponent(mediaUlid)}/scene-suggestions?min_gap_seconds=${suggestionGap}`)
+      .then((response: SuggestionsResponse) => {
+        if (!cancelled) {
+          setAnalysed(response.data.analysed);
+          setSuggestions(response.data.suggestions);
+        }
+      })
+      .catch(() => {
+        // Suggestions are optional help; editing works without them.
+        if (!cancelled) {
+          setSuggestions([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaUlid, suggestionGap]);
 
   useEffect(() => {
     if (focusKey !== null) {
@@ -111,6 +153,24 @@ export function ChapterEditor({ mediaUlid, chapters, playback, durationMs, onSav
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   });
+
+  const visibleSuggestions = (suggestions ?? []).filter((suggestion) => !dismissed.has(suggestion.ms)
+    && !draft.some((row) => Math.abs(row.startMs - suggestionStartMs(suggestion)) < SUGGESTION_NEAR_MS));
+
+  const acceptSuggestions = (accepted: readonly SceneSuggestion[]): void => {
+    if (accepted.length === 0) {
+      return;
+    }
+    const added: DraftChapter[] = [];
+    if (draft.length === 0) {
+      added.push({ key: nextKey(), startMs: 0, title: 'Beginning', timeText: formatEditTime(0) });
+    }
+    for (const suggestion of accepted.slice(0, Math.max(0, MAX_CHAPTERS - draft.length - added.length))) {
+      const startMs = suggestionStartMs(suggestion);
+      added.push({ key: nextKey(), startMs, title: `Scene at ${formatClock(startMs / 1000)}`, timeText: formatEditTime(startMs) });
+    }
+    setDraft(sortDraft([...draft, ...added]));
+  };
 
   const applyPastedList = (): void => {
     const parsed = parseChapterList(pasteText);
@@ -249,6 +309,59 @@ export function ChapterEditor({ mediaUlid, chapters, playback, durationMs, onSav
           })}
         </ol>
       )}
+
+      {suggestions !== null && (analysed ? (
+        <section aria-labelledby="chapter-suggestions-heading" className="space-y-2 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="chapter-suggestions-heading" className="text-sm font-semibold">Suggested starts</h3>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 text-sm text-muted-foreground">
+                At least
+                <select
+                  value={suggestionGap}
+                  onChange={(event) => setSuggestionGap(Number(event.target.value))}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
+                >
+                  {SUGGESTION_GAPS.map((gap) => <option key={gap} value={gap}>{gap < 60 ? `${gap} s` : `${gap / 60} min`}</option>)}
+                </select>
+                apart
+              </label>
+              <Button type="button" size="sm" variant="outline" onClick={() => acceptSuggestions(visibleSuggestions)} disabled={visibleSuggestions.length === 0}>
+                Accept all
+              </Button>
+            </div>
+          </div>
+          {visibleSuggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No more suggestions at this spacing.</p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {visibleSuggestions.map((suggestion) => {
+                const label = formatClock(suggestionStartMs(suggestion) / 1000);
+                return (
+                  <li key={suggestion.ms} className="space-y-1 rounded-md border border-border p-1.5">
+                    {suggestion.thumbnail_url !== null ? (
+                      <img src={suggestion.thumbnail_url} alt={`Frame at ${label}`} loading="lazy" className="aspect-video w-full rounded bg-muted object-cover" />
+                    ) : (
+                      <div className="flex aspect-video w-full items-center justify-center rounded bg-muted text-xs text-muted-foreground">No preview</div>
+                    )}
+                    <div className="flex items-center justify-between gap-1">
+                      <button type="button" className="font-mono text-xs tabular-nums underline-offset-2 hover:underline" onClick={() => playback.seek(suggestionStartMs(suggestion) / 1000)} aria-label={`Play from ${label}`}>
+                        {label}{suggestion.kind === 'black' ? ' · after black' : ''}
+                      </button>
+                      <div className="flex gap-1">
+                        <Button type="button" size="sm" variant="outline" onClick={() => acceptSuggestions([suggestion])} aria-label={`Accept the suggestion at ${label}`}>Accept</Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setDismissed((current) => new Set(current).add(suggestion.ms))} aria-label={`Dismiss the suggestion at ${label}`}>Dismiss</Button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : (
+        <p className="text-sm text-muted-foreground">Scene suggestions appear here once the video has been analysed.</p>
+      ))}
 
       {(problems.length > 0 || unreadTimes > 0 || saveError !== null) && (
         <ul className="space-y-1 text-sm text-destructive" aria-live="polite">

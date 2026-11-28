@@ -8,7 +8,7 @@ import type { VideoChapter } from '@/media/types';
 import { VideoPlayback } from '@/media/videoPlayback';
 import { createFakeVideo, type FakeVideo } from '@/media/videoPlaybackTestUtils';
 
-jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { put: jest.fn() } }));
+jest.mock('@/fetchWrapper', () => ({ fetchWrapper: { put: jest.fn(), get: jest.fn() } }));
 
 const chapters: VideoChapter[] = [
   { start_ms: 0, title: 'Christmas' },
@@ -22,6 +22,7 @@ function setup(): { fake: FakeVideo; playback: VideoPlayback } {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.mocked(fetchWrapper.get).mockResolvedValue({ data: { analysed: false, suggestions: [] } });
 });
 
 describe('ChapterBar and ChapterList', () => {
@@ -149,3 +150,67 @@ describe('ChapterEditor', () => {
     expect(fetchWrapper.put).not.toHaveBeenCalled();
   });
 });
+
+describe('ChapterEditor scene suggestions', () => {
+  const suggestions = [
+    { ms: 61_068, kind: 'cut', score: 50, thumbnail_url: '/api/media/by-ulid/01VIDEO/scene-suggestions/61068/thumbnail' },
+    { ms: 125_000, kind: 'black', score: 100, thumbnail_url: null },
+    { ms: 200_500, kind: 'cut', score: 30, thumbnail_url: null },
+  ];
+
+  function renderWith(initial: VideoChapter[]) {
+    jest.mocked(fetchWrapper.get).mockResolvedValue({ data: { analysed: true, suggestions } });
+    const view = setup();
+    render(<ChapterEditor mediaUlid="01VIDEO" chapters={initial} playback={view.playback} durationMs={300_000} onSaved={jest.fn()} onCancel={jest.fn()} />);
+    return view;
+  }
+
+  it('lists suggestions away from existing chapters, and accepts one a millisecond into its frame', async () => {
+    renderWith([{ start_ms: 0, title: 'Christmas' }, { start_ms: 61_500, title: 'Close by' }]);
+
+    expect(await screen.findByRole('heading', { name: 'Suggested starts' })).toBeInTheDocument();
+    expect(fetchWrapper.get).toHaveBeenCalledWith('/api/media/by-ulid/01VIDEO/scene-suggestions?min_gap_seconds=20');
+    // 61.069 s is within a second of "Close by", so it is not offered.
+    expect(screen.queryByRole('button', { name: 'Accept the suggestion at 1:01' })).toBeNull();
+    expect(screen.getByText('2:05 · after black')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept the suggestion at 2:05' }));
+    expect(screen.getByLabelText('Chapter 3 start time')).toHaveValue('2:05.001');
+    expect(screen.getByLabelText('Chapter 3 title')).toHaveValue('Scene at 2:05');
+    expect(screen.queryByRole('button', { name: 'Accept the suggestion at 2:05' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save chapters' })).toBeEnabled();
+  });
+
+  it('accepts all with a beginning chapter, dismisses, and re-fetches at another spacing', async () => {
+    const { fake } = renderWith([]);
+    expect(await screen.findByRole('img', { name: 'Frame at 1:01' })).toHaveAttribute('src', suggestions[0]!.thumbnail_url);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss the suggestion at 3:20' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Play from 1:01' }));
+    expect(fake.seeks.at(-1)).toBeCloseTo(61.069);
+    fireEvent.click(screen.getByRole('button', { name: 'Accept all' }));
+    expect(screen.getAllByLabelText(/start time/)).toHaveLength(3);
+    expect(screen.getByLabelText('Chapter 1 title')).toHaveValue('Beginning');
+    expect(screen.getByText('No more suggestions at this spacing.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenLastCalledWith('/api/media/by-ulid/01VIDEO/scene-suggestions?min_gap_seconds=5'));
+  });
+
+  it('explains when the video has not been analysed, and stays usable if suggestions fail', async () => {
+    renderEditor();
+    expect(await screen.findByText(/Scene suggestions appear here once the video has been analysed/)).toBeInTheDocument();
+
+    jest.mocked(fetchWrapper.get).mockRejectedValueOnce(new Error('offline'));
+    const view = setup();
+    render(<ChapterEditor mediaUlid="01OTHER" chapters={chapters} playback={view.playback} durationMs={300_000} onSaved={jest.fn()} onCancel={jest.fn()} />);
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith(expect.stringContaining('01OTHER')));
+    expect(screen.getAllByRole('button', { name: 'Save chapters' }).at(-1)).toBeEnabled();
+  });
+});
+
+function renderEditor() {
+  const view = setup();
+  render(<ChapterEditor mediaUlid="01VIDEO" chapters={chapters} playback={view.playback} durationMs={300_000} onSaved={jest.fn()} onCancel={jest.fn()} />);
+  return view;
+}
