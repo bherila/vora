@@ -79,6 +79,11 @@ describe('ChapterEditor', () => {
     expect(screen.getByLabelText('Chapter 2 title')).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Save chapters' })).toBeDisabled();
     expect(screen.getByText('Chapter 2 needs a title.')).toBeInTheDocument();
+
+    // A fractional playhead time is still a readable, saveable time.
+    fireEvent.change(screen.getByLabelText('Chapter 2 title'), { target: { value: 'Cake' } });
+    expect(screen.queryByText('Use times like 12:31 or 1:02:30.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save chapters' })).toBeEnabled();
   });
 
   it('adds with the M key, but not while typing', () => {
@@ -98,6 +103,7 @@ describe('ChapterEditor', () => {
     expect(screen.getByLabelText('Chapter 2 start time')).toHaveValue('1:01');
     fireEvent.click(screen.getByRole('button', { name: 'Chapter 2: one frame earlier' }));
     expect(screen.getByLabelText('Chapter 2 start time')).toHaveValue('1:00.960');
+    expect(screen.getByRole('button', { name: 'Save chapters' })).toBeEnabled();
 
     const time = screen.getByLabelText('Chapter 2 start time');
     fireEvent.change(time, { target: { value: 'soon' } });

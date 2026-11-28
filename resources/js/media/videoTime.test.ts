@@ -78,6 +78,8 @@ describe('editing helpers', () => {
     expect(parseTimeInput(' 12:31 ')).toBe(751);
     expect(parseTimeInput('1:02:30.5')).toBe(3750.5);
     expect(parseTimeInput('1H2M')).toBe(3720);
+    expect(parseTimeInput('0:42.500')).toBe(42.5);
+    expect(parseTimeInput('1:02.5:30')).toBeNull();
     expect(parseTimeInput('later')).toBeNull();
     expect(parseTimeInput('')).toBeNull();
   });
@@ -86,6 +88,12 @@ describe('editing helpers', () => {
     expect(formatEditTime(0)).toBe('0:00');
     expect(formatEditTime(751_000)).toBe('12:31');
     expect(formatEditTime(3_750_500)).toBe('1:02:30.500');
+  });
+
+  it('reads back every time it formats', () => {
+    for (const ms of [0, 960, 42_500, 60_960, 751_000, 3_599_999, 3_750_500]) {
+      expect(Math.round((parseTimeInput(formatEditTime(ms)) ?? -1) * 1000)).toBe(ms);
+    }
   });
 
   it('parses rational frame rates', () => {

@@ -8,7 +8,8 @@ export const MAX_FRAGMENT_SECONDS = 48 * 60 * 60;
 
 const SECONDS = /^\d+(?:\.\d+)?$/;
 const UNITS = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/;
-const CLOCK = /^(\d+):([0-5]?\d)(?::([0-5]?\d(?:\.\d+)?))?$/;
+// m:ss[.fff] or h:mm:ss[.fff]; only the seconds may have a fraction.
+const CLOCK = /^(\d+):([0-5]?\d(?:\.\d+)?)(?::([0-5]?\d(?:\.\d+)?))?$/;
 
 /**
  * Parse a start time from a URL fragment such as `#t=1h02m30s`, `#t=3750`,
@@ -83,6 +84,9 @@ function parseTimeValue(value: string): number | null {
   const clock = CLOCK.exec(value);
   if (clock !== null) {
     const [, first, second, third] = clock;
+    if (third !== undefined && second?.includes('.')) {
+      return null;
+    }
     // h:mm:ss when there are three parts, otherwise m:ss.
     return third === undefined
       ? Number(first) * 60 + Number(second)
