@@ -109,6 +109,47 @@ it('copies a link to the current second', async () => {
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not copy the link.'));
 });
 
+it('defers a resume seek until metadata loads', () => {
+  window.localStorage.setItem(KEY, JSON.stringify({ t: 2472, at: Date.now() }));
+  const { fake, playback } = setup({ duration: 3600, readyState: 0 });
+  render(<VideoToolbar playback={playback} mediaUlid="01VIDEO" />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Resume at 41:12' }));
+  expect(fake.seeks).toEqual([]);
+  act(() => {
+    fake.video.dispatchEvent(new Event('loadedmetadata'));
+  });
+  expect(fake.seeks).toEqual([2472]);
+});
+
+it('navigates chapters with buttons and [ ] keys and shows the current title', () => {
+  const chapters = [{ start_ms: 0, title: 'Christmas' }, { start_ms: 60_000, title: 'Birthday' }];
+  const { fake, playback } = setup({ duration: 300 });
+  render(<VideoToolbar playback={playback} mediaUlid="01VIDEO" chapters={chapters} />);
+  act(() => fake.setTime(30));
+
+  expect(screen.getByText('Christmas')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Next chapter' }));
+  expect(fake.seeks.at(-1)).toBe(60);
+  act(() => fake.setTime(75));
+  expect(screen.getByText('Birthday')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Next chapter' })).toBeDisabled();
+
+  fireEvent.keyDown(document.body, { key: '[' });
+  expect(fake.seeks.at(-1)).toBe(60);
+  act(() => fake.setTime(61));
+  fireEvent.keyDown(document.body, { key: '[' });
+  expect(fake.seeks.at(-1)).toBe(0);
+  fireEvent.keyDown(document.body, { key: ']' });
+  expect(fake.seeks.at(-1)).toBe(60);
+});
+
+it('hides chapter controls without chapters', () => {
+  const { playback } = setup();
+  render(<VideoToolbar playback={playback} mediaUlid="01VIDEO" />);
+  expect(screen.queryByRole('button', { name: 'Next chapter' })).toBeNull();
+});
+
 it('offers to resume a saved position and seeks there', () => {
   window.localStorage.setItem(KEY, JSON.stringify({ t: 2472, at: Date.now() }));
   const { fake, playback } = setup({ duration: 3600 });

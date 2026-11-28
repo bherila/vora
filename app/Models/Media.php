@@ -63,6 +63,7 @@ class Media extends Model
         'duplicate_of_media_id',
         'pdq_hash',
         'pdq_checked_at',
+        'video_metadata_checked_at',
     ];
 
     /**
@@ -131,6 +132,8 @@ class Media extends Model
             'photo_metadata' => 'array',
             'captured_at' => 'datetime',
             'gallery_sort_at' => 'datetime',
+            'video_duration_ms' => 'integer',
+            'video_metadata_checked_at' => 'datetime',
         ];
     }
 
@@ -150,6 +153,16 @@ class Media extends Model
     public function isHlsReady(): bool
     {
         return $this->type === MediaType::Video && $this->hls_content_id !== null;
+    }
+
+    /**
+     * Chapters in playback order.
+     *
+     * @return HasMany<VideoChapter, $this>
+     */
+    public function chapters(): HasMany
+    {
+        return $this->hasMany(VideoChapter::class)->orderBy('start_ms');
     }
 
     /**

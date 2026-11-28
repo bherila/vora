@@ -12,6 +12,12 @@ export interface VideoStatus {
   master_url: string | null;
 }
 
+/** A named start time within a video. */
+export interface VideoChapter {
+  start_ms: number;
+  title: string;
+}
+
 export interface MediaInterest {
   id: number;
   name: string;
@@ -77,6 +83,16 @@ export interface MediaItem {
   owner?: MediaOwner | null;
   /** Present on the single-media view: whether the viewer may report this item. */
   can_report?: boolean;
+  /** Videos on the single-media view: chapters in playback order. */
+  chapters?: VideoChapter[];
+  /** Videos on the single-media view: whether the viewer may edit chapters (the uploader). */
+  can_edit_chapters?: boolean;
+  /** Videos on the single-media view: the WebVTT chapters track. */
+  chapters_vtt_url?: string;
+  /** Videos on the single-media view: duration from the transcoder, when known. */
+  video_duration_ms?: number | null;
+  /** Videos on the single-media view: exact frame rate such as `30000/1001`, when known. */
+  video_frame_rate?: string | null;
   /** Owner-management shape; its absence is the visitor authorization boundary. */
   editable?: EditableMedia;
   canonical_post?: { id: number; ulid: string; comment_count: number } | null;

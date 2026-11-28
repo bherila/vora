@@ -1,6 +1,6 @@
 # Media: video chapters, moments, and scene suggestions
 
-> **Status: Phase 1 implemented; Phases 2–4 designed.** This document records
+> **Status: Phases 1–2 implemented; Phases 3–4 designed.** This document records
 > the agreed design for annotating long videos. Sections are written in the
 > present tense to read as the target contract; the Phases table says what has
 > landed. Update it as phases land, and move settled behaviour into the other
@@ -106,7 +106,11 @@ Keyboard shortcuts, ignored while focus is in a text field:
 - A chapter list: in a side rail on wide screens, below the video on phones.
   Each entry shows its start time and a thumbnail (the scene thumbnail nearest
   its start when one exists, otherwise an extracted frame).
-- `GET /api/media/{ulid}/chapters.vtt` is attached as `<track kind="chapters">`.
+- `GET /api/media/by-ulid/{ulid}/chapters.vtt` is attached as `<track kind="chapters">`
+  (re-fetched after each save).
+- Shortcuts `[` and `]` go to the previous and next chapter. Within 3 s of a
+  chapter's start, "previous" goes to the chapter before; later, it restarts
+  the current one.
 
 ### Editing
 
@@ -250,8 +254,11 @@ none.
 | `provisional_key`, `provisional_status`, `provisional_size_bytes` | row-private object on the thumbnail disk |
 | timestamps | |
 
-`media` gains `video_duration_ms` and `video_frame_rate`, cached from
-`metadata.json` by `HlsService::ensureResolved()`.
+`media` gains `video_duration_ms`, `video_frame_rate`, and
+`video_metadata_checked_at`, copied from `metadata.json` by
+`HlsService::ensureVideoMetadata()` when the media page or a chapter save needs
+them. It is read once per video, and again daily while the frame rate is
+unknown, because the transcoder's scene backfill can add one later.
 
 Moments are hard-deleted; reversible states hide them through the visibility
 scope instead (see Cleanup).
@@ -263,9 +270,9 @@ policies. Every write has a named limiter in `App\Support\RateLimits`.
 
 | Route | Who | Notes |
 | --- | --- | --- |
-| `GET /api/media/{ulid}/chapters` | viewers | |
-| `GET /api/media/{ulid}/chapters.vtt` | viewers | WebVTT chapters track |
-| `PUT /api/media/{ulid}/chapters` | uploader | replaces the list; `chapters` `max:200`; `start_ms` within the duration; limiter `video-chapters` |
+| (media page payload) | viewers | `chapters`, `can_edit_chapters`, `chapters_vtt_url`, `video_duration_ms`, `video_frame_rate` on videos |
+| `GET /api/media/by-ulid/{ulid}/chapters.vtt` | viewers | WebVTT chapters track; titles HTML-escaped |
+| `PUT /api/media/by-ulid/{ulid}/chapters` | uploader | replaces the list; `chapters` `max:200`, keys `start_ms` and `title` only; distinct starts, one at 0; single-line titles of at most 120 characters; starts before the duration; `throttle:30,1,video-chapters` |
 | `GET /api/media/{ulid}/scene-suggestions` | uploader | filtered suggestions with thumbnail URLs |
 | `GET /api/media/{ulid}/scene-suggestions/{ms}/thumbnail` | uploader | signed redirect |
 | `GET /api/media/{ulid}/moments` | viewers | cursor pagination, at most 50 per page |
@@ -398,7 +405,7 @@ Implementation:
 | Phase | Scope | Repositories |
 | --- | --- | --- |
 | 1 (done) | Player controller, deep links, frame stepping, resume, shortcuts | vora |
-| 2 | Chapters: viewing, editing, paste import, WebVTT, cached duration and frame rate | vora |
+| 2 (done) | Chapters: viewing, editing, paste import, WebVTT, cached duration and frame rate | vora |
 | 3 | Scene analysis with cut thumbnails and flagged backfill; suggestions in the editor | transcoder, then vora |
 | 4 | Moments: frame worker, provisional uploads, proxy hardening, cleanup, Use as cover | transcoder and vora |
 

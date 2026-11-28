@@ -4,12 +4,15 @@ import { ProtectedImage } from '@/components/protected-image';
 import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
 import type { MediaItem } from '@/media/types';
 import type { VideoPlayback } from '@/media/videoPlayback';
+import { parseFrameRate } from '@/media/videoTime';
 
 interface MediaPlayerProps {
   item: MediaItem;
   className?: string;
   /** Receives the video playback controller while an HLS stream is attached. */
   onPlayback?: ((playback: VideoPlayback | null) => void) | undefined;
+  /** WebVTT chapters track for the video, when it has chapters. */
+  chaptersTrackSrc?: string | null | undefined;
 }
 
 /**
@@ -17,7 +20,7 @@ interface MediaPlayerProps {
  * the authenticated proxy (hls.js / native HLS). Original video files are never
  * used as a playback fallback.
  */
-export function MediaPlayer({ item, className, onPlayback }: MediaPlayerProps) {
+export function MediaPlayer({ item, className, onPlayback, chaptersTrackSrc = null }: MediaPlayerProps) {
   const [hlsFailed, setHlsFailed] = useState(false);
 
   // Reset the HLS failure state when the item (or its readiness) changes.
@@ -40,7 +43,16 @@ export function MediaPlayer({ item, className, onPlayback }: MediaPlayerProps) {
   const masterUrl = item.video?.master_url ?? null;
 
   if (masterUrl && !hlsFailed) {
-    return <HlsVideoPlayer src={masterUrl} className={className} onError={() => setHlsFailed(true)} onPlayback={onPlayback} />;
+    return (
+      <HlsVideoPlayer
+        src={masterUrl}
+        className={className}
+        onError={() => setHlsFailed(true)}
+        onPlayback={onPlayback}
+        frameRate={parseFrameRate(item.video_frame_rate)}
+        chaptersTrackSrc={chaptersTrackSrc}
+      />
+    );
   }
 
   if (item.under_review) {

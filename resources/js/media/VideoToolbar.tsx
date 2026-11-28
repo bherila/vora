@@ -1,8 +1,10 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link as LinkIcon, RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Link as LinkIcon, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { chapterIndexAt, nextChapterStart, previousChapterStart } from '@/media/chapters';
+import type { VideoChapter } from '@/media/types';
 import { formatFrameRate, usePlaybackState,type VideoPlayback } from '@/media/videoPlayback';
 import { MIN_RESUME_SECONDS, readResumePosition, writeResumePosition } from '@/media/videoResume';
 import { formatClock, formatTimecode, formatTimeFragment, parseTimeFragment } from '@/media/videoTime';
@@ -11,6 +13,8 @@ interface VideoToolbarProps {
   playback: VideoPlayback;
   /** Identifies the video for the remembered resume position. */
   mediaUlid: string;
+  /** Chapters in playback order, for previous/next and the current title. */
+  chapters?: readonly VideoChapter[] | undefined;
 }
 
 /** How often, at most, the position is saved while the video plays. */
@@ -35,8 +39,12 @@ export function isShortcutBlocked(target: EventTarget | null): boolean {
  * current moment, and an offer to resume where the viewer stopped. Native
  * player controls stay in charge of play, volume, and fullscreen.
  */
-export function VideoToolbar({ playback, mediaUlid }: VideoToolbarProps) {
+export function VideoToolbar({ playback, mediaUlid, chapters = [] }: VideoToolbarProps) {
   const state = usePlaybackState(playback);
+  const chaptersRef = useRef(chapters);
+  useEffect(() => {
+    chaptersRef.current = chapters;
+  });
   const [resumeAt, setResumeAt] = useState<number | null>(() => (
     parseTimeFragment(window.location.hash) === null ? readResumePosition(mediaUlid) : null
   ));
@@ -89,7 +97,7 @@ export function VideoToolbar({ playback, mediaUlid }: VideoToolbarProps) {
     };
   }, [playback, mediaUlid]);
 
-  // Keyboard: , . step a frame; < > step a second.
+  // Keyboard: , . step a frame; < > step a second; [ ] previous/next chapter.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || isShortcutBlocked(event.target)) {
@@ -108,6 +116,18 @@ export function VideoToolbar({ playback, mediaUlid }: VideoToolbarProps) {
         case '>':
           playback.stepSeconds(1);
           break;
+        case '[':
+        case ']': {
+          const time = playback.getState().time;
+          const target = event.key === '['
+            ? previousChapterStart(chaptersRef.current, time)
+            : nextChapterStart(chaptersRef.current, time);
+          if (target === null) {
+            return;
+          }
+          playback.seek(target);
+          break;
+        }
         default:
           return;
       }
@@ -130,12 +150,16 @@ export function VideoToolbar({ playback, mediaUlid }: VideoToolbarProps) {
 
   const resume = (): void => {
     if (resumeAt !== null) {
-      playback.seek(resumeAt);
+      // Media Source playback ignores seeks before metadata loads.
+      playback.seekWhenReady(resumeAt);
       setResumeAt(null);
     }
   };
 
   const hasDuration = Number.isFinite(state.duration) && state.duration > 0;
+  const currentChapter = chapters[chapterIndexAt(chapters, state.time)];
+  const previousTarget = previousChapterStart(chapters, state.time);
+  const nextTarget = nextChapterStart(chapters, state.time);
   const frameRateHint = state.frameRate === null
     ? 'Frame rate not known yet; frame steps assume 30 fps.'
     : `${formatFrameRate(state.frameRate)} fps`;
@@ -160,6 +184,17 @@ export function VideoToolbar({ playback, mediaUlid }: VideoToolbarProps) {
           <ChevronsRight aria-hidden="true" />
         </Button>
       </div>
+      {chapters.length > 0 && (
+        <div className="flex min-w-0 items-center gap-1">
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => previousTarget !== null && playback.seek(previousTarget)} disabled={previousTarget === null} aria-label="Previous chapter" aria-keyshortcuts="[" title="Previous chapter ([)">
+            <SkipBack aria-hidden="true" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => nextTarget !== null && playback.seek(nextTarget)} disabled={nextTarget === null} aria-label="Next chapter" aria-keyshortcuts="]" title="Next chapter (])">
+            <SkipForward aria-hidden="true" />
+          </Button>
+          {currentChapter !== undefined && <span className="truncate text-sm" aria-live="polite">{currentChapter.title}</span>}
+        </div>
+      )}
       <Button type="button" size="sm" variant="ghost" onClick={() => void copyLink()}>
         <LinkIcon aria-hidden="true" /> Copy link at this time
       </Button>

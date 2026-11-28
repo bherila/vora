@@ -30,12 +30,14 @@ const MIN_MEASURED_SAMPLES = 5;
 
 /** Snap a measured or advertised rate to the nearest common rate within 0.5%. */
 export function snapFrameRate(fps: number): number {
+  let best: number | null = null;
   for (const common of COMMON_FRAME_RATES) {
-    if (Math.abs(fps - common) / common < 0.005) {
-      return common;
+    const error = Math.abs(fps - common) / common;
+    if (error < 0.005 && (best === null || error < Math.abs(fps - best) / best)) {
+      best = common;
     }
   }
-  return Math.round(fps * 1000) / 1000;
+  return best ?? Math.round(fps * 1000) / 1000;
 }
 
 /** A frame rate for display: `29.97`, `25`. */
@@ -68,11 +70,17 @@ export class VideoPlayback {
   private pendingSeek: (() => void) | null = null;
   private disposed = false;
 
+  /**
+   * @param frameRateHint The source's exact frame rate when the server knows it
+   *   (metadata.json's `source.frameRate`); preferred over the stream's levels.
+   */
   constructor(
     readonly video: HTMLVideoElement,
     private readonly levelSource: PlaybackLevelSource | null = null,
+    private readonly frameRateHint: number | null = null,
   ) {
-    this.state = this.read();
+    const { fromPresentedFrame: _fromPresentedFrame, ...initial } = this.read();
+    this.state = initial;
     for (const event of MEDIA_EVENTS) {
       video.addEventListener(event, this.refresh);
     }
@@ -88,8 +96,11 @@ export class VideoPlayback {
 
   getState = (): PlaybackState => this.state;
 
-  /** Frames per second from the stream's playlist, else measured, else null. */
+  /** Frames per second: server hint, else the stream's playlist, else measured, else null. */
   frameRate(): number | null {
+    if (this.frameRateHint !== null && this.frameRateHint > 0) {
+      return this.frameRateHint;
+    }
     const levels = this.levelSource?.levels ?? [];
     let best: { frameRate: number; height: number } | null = null;
     for (const level of levels) {
@@ -146,7 +157,12 @@ export class VideoPlayback {
     const fps = this.frameRate() ?? FALLBACK_FRAME_RATE;
     // Read the position now: during playback the published state only updates
     // on timeupdate, a few times a second.
-    this.seek(frameStepTarget(this.read().time, frames, fps));
+    const shown = this.read();
+    // Without a presented-frame timestamp, currentTime still carries the
+    // previous step's quarter-frame offset; snap it to the frame's start so
+    // repeated steps move exactly one frame each.
+    const base = shown.fromPresentedFrame ? shown.time : Math.floor(shown.time * fps + 1e-6) / fps;
+    this.seek(frameStepTarget(base, frames, fps));
   }
 
   /** Move by `seconds` from the shown position, keeping play/pause state. */
@@ -183,7 +199,7 @@ export class VideoPlayback {
       // A seek or a new source makes the last presented frame stale.
       this.presented = null;
     }
-    const next = this.read();
+    const { fromPresentedFrame: _fromPresentedFrame, ...next } = this.read();
     const current = this.state;
     if (
       next.time === current.time
@@ -199,19 +215,21 @@ export class VideoPlayback {
     }
   };
 
-  private read(): PlaybackState {
+  private read(): PlaybackState & { fromPresentedFrame: boolean } {
     const { video } = this;
     const frameRate = this.frameRate();
     let time = video.currentTime;
+    let fromPresentedFrame = false;
     // While paused, report the frame actually on screen; currentTime can sit
     // part-way through it.
     if (video.paused && this.presented !== null) {
       const tolerance = 1 / (frameRate ?? FALLBACK_FRAME_RATE);
       if (Math.abs(this.presented.mediaTime - video.currentTime) < tolerance) {
         time = this.presented.mediaTime;
+        fromPresentedFrame = true;
       }
     }
-    return { time, duration: video.duration, paused: video.paused, frameRate };
+    return { time, duration: video.duration, paused: video.paused, frameRate, fromPresentedFrame };
   }
 
   private watchFrames(): void {

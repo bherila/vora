@@ -17,6 +17,7 @@ class MediaService
     public function __construct(
         private readonly FileStorageService $storage,
         private readonly PdqImageService $pdq,
+        private readonly VideoChapterService $chapters,
     ) {}
 
     /**
@@ -77,6 +78,9 @@ class MediaService
                     'announce_on_approval' => false,
                 ])->save();
                 $media->audienceMembers()->delete();
+                // Chapters stay useful to the people who saved the video, but
+                // no longer name who wrote them.
+                $this->chapters->anonymizeForMedia($media);
                 $this->softDelete($media);
 
                 return;

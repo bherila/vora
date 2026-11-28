@@ -164,6 +164,23 @@ describe('HlsVideoPlayer', () => {
     expect(onPlayback).toHaveBeenLastCalledWith(null);
   });
 
+  it('attaches a same-origin chapters track and passes the frame rate to the controller', async () => {
+    const onPlayback = jest.fn();
+    const { container, rerender } = render(
+      <HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onPlayback={onPlayback} frameRate={25} chaptersTrackSrc="/api/media/by-ulid/01V/chapters.vtt?v=1" />,
+    );
+    await waitFor(() => expect(onPlayback).toHaveBeenCalledWith(expect.any(VideoPlayback)));
+
+    const track = container.querySelector('track');
+    expect(track).toHaveAttribute('kind', 'chapters');
+    expect(track).toHaveAttribute('src', 'http://localhost/api/media/by-ulid/01V/chapters.vtt?v=1');
+    const playback = onPlayback.mock.calls[0]?.[0] as VideoPlayback;
+    expect(playback.frameRate()).toBe(25);
+
+    rerender(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onPlayback={onPlayback} chaptersTrackSrc="https://other.invalid/x.vtt" />);
+    expect(container.querySelector('track')).toBeNull();
+  });
+
   it.each(['javascript:alert(1)', 'https://other.invalid/master.m3u8'])('rejects unsafe manifest %s before either playback path', async (source) => {
     jest.mocked(Hls.isSupported).mockReturnValue(true);
     const onError = jest.fn();
