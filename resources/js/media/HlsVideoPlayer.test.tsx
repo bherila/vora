@@ -2,6 +2,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import Hls from 'hls.js';
 
 import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
+import { VideoPlayback } from '@/media/videoPlayback';
 
 jest.mock('hls.js', () => ({
   __esModule: true,
@@ -133,6 +134,34 @@ describe('HlsVideoPlayer', () => {
     expect(onError).not.toHaveBeenCalled();
     unmount();
     expect(hlsInstance(1).destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes a playback controller while attached and withdraws it on teardown', async () => {
+    jest.mocked(Hls.isSupported).mockReturnValue(true);
+    const onPlayback = jest.fn();
+    const { container, rerender, unmount } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onPlayback={onPlayback} />);
+    await waitFor(() => expect(onPlayback).toHaveBeenCalledTimes(1));
+    const first = onPlayback.mock.calls[0]?.[0] as VideoPlayback;
+
+    expect(first).toBeInstanceOf(VideoPlayback);
+    expect(first.video).toBe(container.querySelector('video'));
+
+    rerender(<HlsVideoPlayer src="/api/media/8/hls/master.m3u8" onPlayback={onPlayback} />);
+    await waitFor(() => expect(onPlayback).toHaveBeenCalledTimes(3));
+    expect(onPlayback.mock.calls[1]?.[0]).toBeNull();
+    expect(onPlayback.mock.calls[2]?.[0]).toBeInstanceOf(VideoPlayback);
+
+    unmount();
+    expect(onPlayback).toHaveBeenLastCalledWith(null);
+  });
+
+  it('publishes a controller for native HLS and withdraws it on a playback error', async () => {
+    const onPlayback = jest.fn();
+    const { container } = render(<HlsVideoPlayer src="/api/media/7/hls/master.m3u8" onPlayback={onPlayback} onError={jest.fn()} />);
+    await waitFor(() => expect(onPlayback).toHaveBeenCalledWith(expect.any(VideoPlayback)));
+
+    fireEvent.error(container.querySelector('video')!);
+    expect(onPlayback).toHaveBeenLastCalledWith(null);
   });
 
   it.each(['javascript:alert(1)', 'https://other.invalid/master.m3u8'])('rejects unsafe manifest %s before either playback path', async (source) => {

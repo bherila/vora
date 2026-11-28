@@ -1,9 +1,10 @@
 # Media: video chapters, moments, and scene suggestions
 
-> **Status: design, not implemented.** This document records the agreed design
-> for annotating long videos. Nothing described here exists yet; sections are
-> written in the present tense to read as the target contract. Update it as
-> phases land, and move settled behaviour into the other media docs.
+> **Status: Phase 1 implemented; Phases 2–4 designed.** This document records
+> the agreed design for annotating long videos. Sections are written in the
+> present tense to read as the target contract; the Phases table says what has
+> landed. Update it as phases land, and move settled behaviour into the other
+> media docs.
 
 Long videos — digitized camcorder tapes are the motivating case, often an hour
 or more each — are hard to browse with a bare player. This design adds:
@@ -42,7 +43,9 @@ layout) is specified in the transcoder's
 
 ### Controller
 
-`HlsVideoPlayer` exposes a controller (context or callback) with:
+`HlsVideoPlayer` publishes a `VideoPlayback` controller
+(`resources/js/media/videoPlayback.ts`) through its `onPlayback` callback once a
+stream is attached, and null when it is torn down. It offers:
 
 - `currentTime`, `duration`, `seek(seconds)`, `paused`;
 - `presentedMediaTime`: the timestamp of the frame actually on screen, from
@@ -51,8 +54,12 @@ layout) is specified in the transcoder's
 - `frameRate`: from `metadata.json` (`source.frameRate`, see Backend), falling
   back to hls.js `level.frameRate`, then to the spacing of presented frames
   measured during playback;
-- `pinTopQuality()` / `releaseQuality()`: lock hls.js to its highest level while
-  capturing, so the frame being tuned is the one the server will extract.
+- `pinTopQuality()` / `releaseQuality()` (added with moments): lock hls.js to
+  its highest level while capturing, so the frame being tuned is the one the
+  server will extract.
+
+NTSC frame rates are kept as exact rationals (30000/1001 and so on); a rounded
+29.97 drifts a whole frame from real timestamps within seconds.
 
 Native controls stay: they give accessibility, fullscreen, and
 picture-in-picture for free. New UI lives in a toolbar and strip below the
@@ -65,10 +72,16 @@ shows chapter tracks.
 - Deep links: `#t=1h02m30s` (and `#t=3750`) seek on load. "Copy link at this
   time" on the toolbar, and on every chapter and moment.
 - Resume: remember the last position per video in `localStorage` (wrapped in
-  try/catch; never relied on), offered as "Resume at 41:12".
-- Frame stepping while paused: seek to the centre of the target frame
-  (`(n + 0.5) / fps`) to avoid boundary rounding, then confirm the presented
-  frame through `requestVideoFrameCallback` before updating the readout.
+  try/catch; never relied on), offered as "Resume at 41:12". The position is
+  saved only after the viewer has played or moved the video, so opening the
+  page never erases it, and it is cleared near the start or end.
+- Frame stepping pauses, then seeks a quarter frame past the start of the
+  target frame, measured from the presented frame's timestamp
+  (`presented + (n + 0.25) / fps`). Browsers show the frame whose timestamp is
+  at or before the current time, so this selects the right frame even when the
+  stream's first frame is not at exactly 0. The readout then follows the frame
+  `requestVideoFrameCallback` reports. Before the frame rate is known, steps
+  assume 30 fps.
 - Timecode readout `HH:MM:SS.ff`.
 
 Keyboard shortcuts, ignored while focus is in a text field:
@@ -384,7 +397,7 @@ Implementation:
 
 | Phase | Scope | Repositories |
 | --- | --- | --- |
-| 1 | Player controller, deep links, frame stepping, resume, shortcuts | vora |
+| 1 (done) | Player controller, deep links, frame stepping, resume, shortcuts | vora |
 | 2 | Chapters: viewing, editing, paste import, WebVTT, cached duration and frame rate | vora |
 | 3 | Scene analysis with cut thumbnails and flagged backfill; suggestions in the editor | transcoder, then vora |
 | 4 | Moments: frame worker, provisional uploads, proxy hardening, cleanup, Use as cover | transcoder and vora |

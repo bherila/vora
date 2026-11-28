@@ -35,6 +35,8 @@ import { readInitialData } from '@/initialData';
 import { SaveToLibraryButton } from '@/library/SaveToLibraryButton';
 import { MediaPlayer } from '@/media/MediaPlayer';
 import { formatBytes, type MediaItem } from '@/media/types';
+import type { VideoPlayback } from '@/media/videoPlayback';
+import { VideoToolbar } from '@/media/VideoToolbar';
 import { safeInternalUrl } from '@/security/dom-url';
 
 function getErrorMessage(err: unknown): string {
@@ -57,6 +59,7 @@ export function MediaViewPage() {
   const [editDiscoverable, setEditDiscoverable] = useState(true);
   const [editBusy, setEditBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [playback, setPlayback] = useState<VideoPlayback | null>(null);
 
   if (deleted) {
     return (
@@ -211,8 +214,13 @@ export function MediaViewPage() {
         </div>
       </div>
       <div className="flex h-[78svh] items-center justify-center overflow-hidden rounded-md bg-muted">
-        <MediaPlayer item={item} className="mx-auto h-full w-full object-contain" />
+        <MediaPlayer
+          item={item}
+          className="mx-auto h-full w-full object-contain"
+          onPlayback={item.type === 'video' ? setPlayback : undefined}
+        />
       </div>
+      {item.type === 'video' && playback !== null && <VideoToolbar playback={playback} mediaUlid={item.ulid} />}
       <p className="text-xs text-muted-foreground">
         {item.type} · {formatBytes(item.size_bytes)}
       </p>

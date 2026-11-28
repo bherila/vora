@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { VideoPlayback } from '@/media/videoPlayback';
 import { safeSameOriginUrl } from '@/security/dom-url';
 
 interface HlsVideoPlayerProps {
@@ -12,6 +13,11 @@ interface HlsVideoPlayerProps {
    * the stream unavailable without falling back to the original video file.
    */
   onError?: (() => void) | undefined;
+  /**
+   * Receives a playback controller once a stream is attached, and null when it
+   * is torn down (source change, failure, or unmount).
+   */
+  onPlayback?: ((playback: VideoPlayback | null) => void) | undefined;
 }
 
 /**
@@ -19,13 +25,15 @@ interface HlsVideoPlayerProps {
  * using native HLS when MSE is unavailable. `src` points at the authenticated
  * playback proxy, which serves manifests and redirects segments to signed URLs.
  */
-export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps) {
+export function HlsVideoPlayer({ src, className, onError, onPlayback }: HlsVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // Hold the latest onError so a fresh callback identity each render doesn't tear
-  // down and re-attach the player.
+  // Hold the latest callbacks so a fresh identity each render doesn't tear down
+  // and re-attach the player.
   const onErrorRef = useRef(onError);
+  const onPlaybackRef = useRef(onPlayback);
   useEffect(() => {
     onErrorRef.current = onError;
+    onPlaybackRef.current = onPlayback;
   });
 
   useEffect(() => {
@@ -42,10 +50,20 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
 
     let stopped = false;
     let cleanup: (() => void) | undefined;
+    let playback: VideoPlayback | null = null;
+    const publish = (next: VideoPlayback): void => {
+      playback = next;
+      onPlaybackRef.current?.(next);
+    };
     const stop = (): void => {
       stopped = true;
       cleanup?.();
       cleanup = undefined;
+      if (playback !== null) {
+        playback.dispose();
+        playback = null;
+        onPlaybackRef.current?.(null);
+      }
     };
     const fail = (): void => {
       if (!stopped) {
@@ -71,6 +89,7 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
         hls.loadSource(safeSource);
         if (!stopped) {
           hls.attachMedia(video);
+          publish(new VideoPlayback(video, hls));
         }
         return;
       }
@@ -79,6 +98,7 @@ export function HlsVideoPlayer({ src, className, onError }: HlsVideoPlayerProps)
         video.addEventListener('error', fail);
         cleanup = () => video.removeEventListener('error', fail);
         video.src = safeSource;
+        publish(new VideoPlayback(video));
         return;
       }
       fail();

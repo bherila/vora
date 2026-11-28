@@ -3,10 +3,13 @@ import { useEffect, useState } from 'react';
 import { ProtectedImage } from '@/components/protected-image';
 import { HlsVideoPlayer } from '@/media/HlsVideoPlayer';
 import type { MediaItem } from '@/media/types';
+import type { VideoPlayback } from '@/media/videoPlayback';
 
 interface MediaPlayerProps {
   item: MediaItem;
   className?: string;
+  /** Receives the video playback controller while an HLS stream is attached. */
+  onPlayback?: ((playback: VideoPlayback | null) => void) | undefined;
 }
 
 /**
@@ -14,7 +17,7 @@ interface MediaPlayerProps {
  * the authenticated proxy (hls.js / native HLS). Original video files are never
  * used as a playback fallback.
  */
-export function MediaPlayer({ item, className }: MediaPlayerProps) {
+export function MediaPlayer({ item, className, onPlayback }: MediaPlayerProps) {
   const [hlsFailed, setHlsFailed] = useState(false);
 
   // Reset the HLS failure state when the item (or its readiness) changes.
@@ -37,7 +40,7 @@ export function MediaPlayer({ item, className }: MediaPlayerProps) {
   const masterUrl = item.video?.master_url ?? null;
 
   if (masterUrl && !hlsFailed) {
-    return <HlsVideoPlayer src={masterUrl} className={className} onError={() => setHlsFailed(true)} />;
+    return <HlsVideoPlayer src={masterUrl} className={className} onError={() => setHlsFailed(true)} onPlayback={onPlayback} />;
   }
 
   if (item.under_review) {
