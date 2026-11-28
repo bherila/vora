@@ -23,11 +23,13 @@ class VideoMomentTest extends TestCase
 
     private const CONTENT = 'sha256:abc';
 
+    private User $admin;
+
     protected function setUp(): void
     {
         parent::setUp();
-        // User 1 is the primary admin; keep it out of these relationship tests.
-        User::factory()->approved()->create();
+        // The first user is the primary admin; keep it out of these relationship tests.
+        $this->admin = User::factory()->approved()->create();
         foreach (['s3', 'photos', 'hls'] as $disk) {
             Storage::fake($disk);
         }
@@ -305,7 +307,7 @@ class VideoMomentTest extends TestCase
         $key = (string) $moment->provisional_key;
         $this->uploadCapture($moment);
 
-        app(MediaModerationService::class)->reject($video, User::query()->findOrFail(1), 'Takedown');
+        app(MediaModerationService::class)->reject($video, $this->admin, 'Takedown');
         Storage::disk('photos')->assertMissing($key);
         $this->assertNull($moment->refresh()->provisional_key);
         $this->assertSame(1, VideoMoment::query()->count(), 'rejection hides moments; only permanent removal deletes them');
